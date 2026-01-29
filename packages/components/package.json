@@ -1,0 +1,43 @@
+{
+	"type": "module",
+	"name": "@ai-toolkit/components",
+
+	"imports": {
+		"#lib/*": "./src/lib/*",
+		"#hooks/*": "./src/hooks/*",
+		"#components/*": "./src/components/*"
+	},
+
+	"exports": {
+		"./*": "./src/components/*.tsx",
+		"./utils": "./src/lib/utils.tsx",
+		"./theme.css": "./src/theme.css"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"shadcn": "latest",
+
+		"cmdk": "latest",
+		"sonner": "latest",
+		"@base-ui/react": "^1",
+		"lucide-react": "latest",
+
+		"@fontsource-variable/jetbrains-mono": "latest",
+
+		"clsx": "latest",
+		"tailwind-merge": "latest",
+		"tw-animate-css": "latest",
+		"class-variance-authority": "latest"
+	},
+	"peerDependencies": {
+		"react": "^19",
+		"react-dom": "^19",
+
+		"tailwindcss": "^4"
+	}
+}

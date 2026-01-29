@@ -1,0 +1,35 @@
+{
+	"type": "module",
+	"name": "@ai-toolkit/frontend",
+
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+
+	"scripts": {
+		"dev": "vite dev --port 5173",
+		"build": "vite build --emptyOutDir",
+
+		"fix": "biome check --write",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"react": "^19",
+		"react-dom": "^19",
+		"@tanstack/react-router": "latest",
+		"@tanstack/router-plugin": "latest",
+
+		"@ai-toolkit/components": "workspace:*",
+		"@ai-toolkit/opentelemetry": "workspace:*"
+	},
+
+	"devDependencies": {
+		"vite": "^8.0.0-beta",
+		"@vitejs/plugin-react": "latest",
+		"babel-plugin-react-compiler": "latest",
+
+		"tailwindcss": "latest",
+		"@tailwindcss/vite": "latest"
+	}
+}

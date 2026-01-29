@@ -1,0 +1,22 @@
+{
+	"type": "module",
+	"name": "@ai-toolkit/backend",
+
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+
+	"scripts": {
+		"dev": "bun --watch ./src/main.ts",
+		"build": "bun build ./src/main.ts --target=bun --minify --outfile ./dist/server.js",
+
+		"fix": "biome check --write --unsafe",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"@effect/platform-bun": "latest",
+
+		"@ai-toolkit/opentelemetry": "workspace:*"
+	}
+}

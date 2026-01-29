@@ -1,0 +1,15 @@
+{
+	"ui": "tui",
+	"$schema": "https://turbo.build/schema.json",
+
+	"globalEnv": ["NODE_*"],
+	"globalDependencies": ["bun.lock", "biome.json", "tsconfig.json"],
+
+	"tasks": {
+		"dev": { "cache": false, "persistent": true },
+		"build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+
+		"fix": {},
+		"check": {}
+	}
+}

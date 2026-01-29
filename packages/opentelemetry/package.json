@@ -1,0 +1,23 @@
+{
+	"type": "module",
+	"name": "@ai-toolkit/opentelemetry",
+
+	"exports": {
+		"./client": "./src/client.ts",
+		"./server": "./src/server.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"@effect/opentelemetry": "latest",
+
+		"@opentelemetry/sdk-trace-web": "latest",
+		"@opentelemetry/sdk-trace-node": "latest",
+		"@opentelemetry/sdk-trace-base": "latest",
+		"@opentelemetry/exporter-trace-otlp-http": "latest"
+	}
+}

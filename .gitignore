@@ -1,0 +1,12 @@
+# applications
+**/.env
+**/.env.*
+!**/.env.example
+
+# build output & cache
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+
+# packages
+**/node_modules
