@@ -1,0 +1,23 @@
+{
+	"type": "module",
+	"name": "@ai-toolkit/ai",
+
+	"exports": {
+		"./ai-sdk": "./src/ai-sdk.ts",
+		"./opencode": "./src/opencode.ts",
+
+		"./schemas": "./src/schemas.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"ai": "latest",
+		"zod": "latest",
+		"@ai-sdk/openai": "latest",
+		"@opencode-ai/sdk": "latest"
+	}
+}

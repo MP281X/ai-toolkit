@@ -17,6 +17,7 @@
 	"dependencies": {
 		"@effect/platform-bun": "latest",
 
+		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	}
 }

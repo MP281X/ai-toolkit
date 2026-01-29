@@ -20,24 +20,26 @@
 	},
 
 	"dependencies": {
-		"shadcn": "latest",
-
 		"cmdk": "latest",
 		"sonner": "latest",
 		"@base-ui/react": "^1",
 		"lucide-react": "latest",
 
-		"@fontsource-variable/jetbrains-mono": "latest",
+		"shiki": "latest",
+		"marked": "latest",
+		"@ai-toolkit/ai": "workspace:*",
 
 		"clsx": "latest",
 		"tailwind-merge": "latest",
 		"tw-animate-css": "latest",
-		"class-variance-authority": "latest"
+		"class-variance-authority": "latest",
+		"@fontsource-variable/jetbrains-mono": "latest"
 	},
 	"peerDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
 
+		"shadcn": "latest",
 		"tailwindcss": "^4"
 	}
 }
