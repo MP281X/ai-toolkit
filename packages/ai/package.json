@@ -3,9 +3,7 @@
 	"name": "@ai-toolkit/ai",
 
 	"exports": {
-		"./ai-sdk": "./src/ai-sdk.ts",
-		"./opencode": "./src/opencode.ts",
-
+		".": "./src/index.ts",
 		"./schemas": "./src/schemas.ts"
 	},
 
@@ -18,6 +16,6 @@
 		"ai": "latest",
 		"zod": "latest",
 		"@ai-sdk/openai": "latest",
-		"@opencode-ai/sdk": "latest"
+		"@ai-sdk/openai-compatible": "latest"
 	}
 }

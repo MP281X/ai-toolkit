@@ -20,6 +20,10 @@
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 
+		"@effect/platform-browser": "latest",
+
+		"@ai-toolkit/ai": "workspace:*",
+		"@ai-toolkit/backend": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},

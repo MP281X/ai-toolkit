@@ -7,9 +7,9 @@
 
 	"tasks": {
 		"dev": { "cache": false, "persistent": true },
-		"build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+		"build": { "dependsOn": ["^check", "^build"], "outputs": ["dist/**"] },
 
-		"fix": {},
+		"fix": { "dependsOn": ["^check"] },
 		"check": {}
 	}
 }

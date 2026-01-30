@@ -16,6 +16,7 @@
 
 	"dependencies": {
 		"effect": "latest",
+		"@effect/rpc": "latest",
 		"@effect/platform": "latest",
 		"@effect-atom/atom-react": "latest"
 	},

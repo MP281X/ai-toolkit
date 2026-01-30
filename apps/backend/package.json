@@ -3,7 +3,12 @@
 	"name": "@ai-toolkit/backend",
 
 	"imports": {
-		"#lib/*": "./src/lib/*"
+		"#lib/*": "./src/lib/*",
+		"#core/*": "./src/core/*"
+	},
+
+	"exports": {
+		"./rpcs": "./src/rpcs.ts"
 	},
 
 	"scripts": {
