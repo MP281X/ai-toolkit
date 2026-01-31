@@ -6,7 +6,12 @@
 # build output & cache
 **/dist
 **/.turbo
+**/.output
 **/*.tsbuildinfo
 
 # packages
 **/node_modules
+
+# nix
+result
+flake.lock

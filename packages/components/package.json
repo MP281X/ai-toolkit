@@ -21,7 +21,6 @@
 
 	"dependencies": {
 		"cmdk": "latest",
-		"sonner": "latest",
 		"@base-ui/react": "^1",
 		"lucide-react": "latest",
 

@@ -63,7 +63,7 @@ const fromAiSdkStreamPart = (part: TextStreamPart<never>) => {
 	}
 }
 
-export class AiClient extends Effect.Service<AiClient>()('@effect-full-stack-template/ai/AiClient', {
+export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const zen = createOpenAICompatible({

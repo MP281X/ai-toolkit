@@ -32,13 +32,10 @@ export function Error(props: {error: Error; reset: () => void}) {
 			onClick={props.reset}
 			className="flex flex-1 cursor-pointer select-text items-center justify-center px-4 sm:px-0"
 		>
-			<Alert variant="destructive" className="w-full max-w-lg">
+			<Alert variant="destructive" className="w-full max-w-lg p-4">
 				<OctagonAlert />
 				<AlertTitle>Something went wrong</AlertTitle>
-				<AlertDescription>
-					<code className="wrap-break-word whitespace-pre-wrap">{message}</code>
-					<span className="mt-2 block text-muted-foreground/60">Tap to retry</span>
-				</AlertDescription>
+				<AlertDescription className="wrap-break-word whitespace-pre-wrap">{message}</AlertDescription>
 			</Alert>
 		</main>
 	)

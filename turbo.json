@@ -1,15 +1,15 @@
 {
-  "ui": "tui",
-  "$schema": "https://turbo.build/schema.json",
+	"ui": "tui",
+	"$schema": "https://turbo.build/schema.json",
 
-  "globalEnv": ["NODE_*"],
-  "globalDependencies": ["bun.lock", "biome.json", "tsconfig.json"],
+	"globalEnv": ["NODE_*"],
+	"globalDependencies": ["bun.lock", "biome.json", "tsconfig.json"],
 
-  "tasks": {
-    "dev": { "cache": false, "persistent": true },
-    "build": { "dependsOn": ["^check", "^build"], "outputs": ["dist/**"] },
+	"tasks": {
+		"dev": { "cache": false, "persistent": true },
+		"build": { "dependsOn": ["^check", "^build"], "outputs": ["dist/**", ".output/**"] },
 
-    "fix": { "cache": false },
-    "check": { "cache": false }
-  }
+		"fix": { "cache": false },
+		"check": { "cache": false }
+	}
 }

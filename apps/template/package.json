@@ -1,6 +1,6 @@
 {
 	"type": "module",
-	"name": "@ai-toolkit/frontend",
+	"name": "@ai-toolkit/template",
 
 	"imports": {
 		"#lib/*": "./src/lib/*"
@@ -17,19 +17,17 @@
 	"dependencies": {
 		"react": "^19",
 		"react-dom": "^19",
+		"@tanstack/react-start": "latest",
 		"@tanstack/react-router": "latest",
-		"@tanstack/router-plugin": "latest",
-
-		"@effect/platform-browser": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/backend": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},
 
 	"devDependencies": {
-		"vite": "^8.0.0-beta",
+		"nitro": "latest",
+		"vite": "npm:rolldown-vite@latest",
 		"@vitejs/plugin-react": "latest",
 		"babel-plugin-react-compiler": "latest",
 
