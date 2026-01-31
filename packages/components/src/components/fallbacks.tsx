@@ -1,6 +1,7 @@
-import { OctagonAlert } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert.tsx'
-import { formatError } from '#lib/utils.ts'
+import {OctagonAlert} from 'lucide-react'
+
+import {Alert, AlertDescription, AlertTitle} from '#components/ui/alert.tsx'
+import {formatError} from '#lib/utils.ts'
 
 export function NotFound() {
 	return (
@@ -22,7 +23,7 @@ export function Loading() {
 	)
 }
 
-export function Error(props: { error: Error; reset: () => void }) {
+export function Error(props: {error: Error; reset: () => void}) {
 	const message = formatError(props.error)
 
 	return (

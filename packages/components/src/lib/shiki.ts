@@ -1,6 +1,7 @@
-import { flow, Match } from 'effect'
-import { createHighlighterCore } from 'shiki/core'
-import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
+import {flow, Match} from 'effect'
+
+import {createHighlighterCore} from 'shiki/core'
+import {createOnigurumaEngine} from 'shiki/engine/oniguruma'
 
 export const highlighter = await createHighlighterCore({
 	themes: [import('shiki/themes/github-light-default.mjs'), import('shiki/themes/github-dark-default.mjs')],
@@ -19,7 +20,7 @@ export const resolveLanguage = flow(
 export function highlightCode(code: string, lang?: string) {
 	return highlighter.codeToHtml(code, {
 		lang: resolveLanguage(lang),
-		themes: { light: 'github-light-default', dark: 'github-dark-default' },
+		themes: {light: 'github-light-default', dark: 'github-dark-default'},
 		defaultColor: false
 	})
 }

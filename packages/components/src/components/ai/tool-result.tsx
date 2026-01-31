@@ -1,5 +1,6 @@
-import type { ToolResultSchema } from '@ai-toolkit/ai/schemas'
-import { Card, CardContent, CardHeader, CardTitle } from '#components/ui/card.tsx'
+import type {ToolResultSchema} from '@ai-toolkit/ai/schemas'
+
+import {Card, CardContent, CardHeader, CardTitle} from '#components/ui/card.tsx'
 
 export function ToolResult(props: ToolResultSchema) {
 	if (props.isError) {

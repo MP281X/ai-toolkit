@@ -1,5 +1,6 @@
-import type { ToolCallSchema } from '@ai-toolkit/ai/schemas'
-import { Card, CardContent, CardHeader, CardTitle } from '#components/ui/card.tsx'
+import type {ToolCallSchema} from '@ai-toolkit/ai/schemas'
+
+import {Card, CardContent, CardHeader, CardTitle} from '#components/ui/card.tsx'
 
 export function ToolCall(props: ToolCallSchema) {
 	return (

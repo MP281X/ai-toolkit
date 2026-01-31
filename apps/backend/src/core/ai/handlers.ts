@@ -1,6 +1,8 @@
-import { AiClient } from '@ai-toolkit/ai'
-import { Effect } from 'effect'
-import { AiRpcs } from './contracts.ts'
+import {Effect} from 'effect'
+
+import {AiClient} from '@ai-toolkit/ai'
+
+import {AiRpcs} from './contracts.ts'
 
 export const AiHandlers = AiRpcs.toLayer(
 	Effect.gen(function* () {

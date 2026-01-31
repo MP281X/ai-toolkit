@@ -1,7 +1,9 @@
-import type { FinishSchema } from '@ai-toolkit/ai/schemas'
-import { Predicate } from 'effect'
-import { Badge } from '#components/ui/badge.tsx'
-import { formatTokens } from '#lib/utils.ts'
+import {Predicate} from 'effect'
+
+import type {FinishSchema} from '@ai-toolkit/ai/schemas'
+
+import {Badge} from '#components/ui/badge.tsx'
+import {formatTokens} from '#lib/utils.ts'
 
 export function Finish(props: FinishSchema) {
 	return (

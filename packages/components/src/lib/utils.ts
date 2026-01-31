@@ -1,6 +1,7 @@
-import { type ClassValue, clsx } from 'clsx'
-import { Array, Cause, Match, ParseResult, Predicate, pipe } from 'effect'
-import { twMerge } from 'tailwind-merge'
+import {Array, Cause, Match, ParseResult, Predicate, pipe} from 'effect'
+
+import {type ClassValue, clsx} from 'clsx'
+import {twMerge} from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs))

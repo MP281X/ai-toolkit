@@ -1,17 +1,18 @@
-import { HttpMiddleware, HttpRouter, HttpServer } from '@effect/platform'
-import { BunHttpServer, BunRuntime } from '@effect/platform-bun'
-import { RpcSerialization, RpcServer } from '@effect/rpc'
-import { Config, Effect, Function, Layer, pipe } from 'effect'
-import { AiHandlers } from '#core/ai/handlers.ts'
-import { LiveLayers } from '#lib/runtime.ts'
-import { Rpcs } from './rpcs.ts'
+import {HttpMiddleware, HttpRouter, HttpServer} from '@effect/platform'
+import {BunHttpServer, BunRuntime} from '@effect/platform-bun'
+import {RpcSerialization, RpcServer} from '@effect/rpc'
+import {Config, Effect, Function, Layer, pipe} from 'effect'
+
+import {AiHandlers} from '#core/ai/handlers.ts'
+import {LiveLayers} from '#lib/runtime.ts'
+import {Rpcs} from './rpcs.ts'
 
 // RPC handlers layer
 const Handlers = Layer.mergeAll(AiHandlers)
 
 // RPC endpoint - handlers + auth middleware + serialization
 const RpcHandler = pipe(
-	RpcServer.toHttpAppWebsocket(Rpcs, { disableFatalDefects: true }),
+	RpcServer.toHttpAppWebsocket(Rpcs, {disableFatalDefects: true}),
 	Effect.provide(Layer.mergeAll(Handlers, RpcSerialization.layerNdjson))
 )
 
@@ -36,7 +37,7 @@ const Server = pipe(
 	Layer.unwrapScoped,
 	HttpServer.withLogAddress,
 	HttpMiddleware.withTracerDisabledWhen(Function.constTrue),
-	Layer.provide(BunHttpServer.layer({ port: 8080 })),
+	Layer.provide(BunHttpServer.layer({port: 8080})),
 	Layer.provide(LiveLayers)
 )
 

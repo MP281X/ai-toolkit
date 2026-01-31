@@ -1,7 +1,9 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { TextStreamPart } from 'ai'
-import { streamText } from 'ai'
-import { Config, Effect, Predicate, Schema, Stream } from 'effect'
+import {Config, Effect, Predicate, Schema, Stream} from 'effect'
+
+import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
+import type {TextStreamPart} from 'ai'
+import {streamText} from 'ai'
+
 import {
 	ErrorSchema,
 	FinishSchema,
@@ -19,9 +21,9 @@ export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 const fromAiSdkStreamPart = (part: TextStreamPart<never>) => {
 	switch (part.type) {
 		case 'text-delta':
-			return TextDeltaSchema.make({ text: part.text })
+			return TextDeltaSchema.make({text: part.text})
 		case 'reasoning-delta':
-			return ReasoningDeltaSchema.make({ text: part.text })
+			return ReasoningDeltaSchema.make({text: part.text})
 		case 'tool-call':
 			return ToolCallSchema.make({
 				toolCallId: part.toolCallId,
@@ -55,7 +57,7 @@ const fromAiSdkStreamPart = (part: TextStreamPart<never>) => {
 				}
 			})
 		case 'error':
-			return ErrorSchema.make({ error: part.error ?? new Error('Unknown error') })
+			return ErrorSchema.make({error: part.error ?? new Error('Unknown error')})
 		default:
 			return undefined
 	}
@@ -73,10 +75,10 @@ export class AiClient extends Effect.Service<AiClient>()('@effect-full-stack-tem
 		return {
 			stream: Effect.fnUntraced(
 				function* () {
-					const { fullStream } = streamText({
+					const {fullStream} = streamText({
 						model: zen('kimi-k2.5-free'),
 						messages: [
-							{ role: 'assistant', content: [{ type: 'text', text: 'write a 100 line code block of tsx (react)' }] }
+							{role: 'assistant', content: [{type: 'text', text: 'write a 100 line code block of tsx (react)'}]}
 						],
 						tools: {}
 					})
@@ -84,7 +86,7 @@ export class AiClient extends Effect.Service<AiClient>()('@effect-full-stack-tem
 					return fullStream
 				},
 				Stream.fromEffect,
-				Stream.flatMap(stream => Stream.fromAsyncIterable(stream, cause => AiSdkError.make({ cause }))),
+				Stream.flatMap(stream => Stream.fromAsyncIterable(stream, cause => AiSdkError.make({cause}))),
 				Stream.map(fromAiSdkStreamPart),
 				Stream.filter(Predicate.isNotUndefined)
 			)

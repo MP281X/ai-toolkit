@@ -1,8 +1,8 @@
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
-import { cva, type VariantProps } from 'class-variance-authority'
+import {mergeProps} from '@base-ui/react/merge-props'
+import {useRender} from '@base-ui/react/use-render'
+import {cva, type VariantProps} from 'class-variance-authority'
 
-import { cn } from '#lib/utils.ts'
+import {cn} from '#lib/utils.ts'
 
 const badgeVariants = cva(
 	'h-5 gap-1 rounded-none border border-transparent px-2 py-0.5 text-xs font-medium transition-all has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:size-3! inline-flex items-center justify-center w-fit whitespace-nowrap shrink-0 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive overflow-hidden group/badge',
@@ -34,7 +34,7 @@ function Badge({
 		defaultTagName: 'span',
 		props: mergeProps<'span'>(
 			{
-				className: cn(badgeVariants({ className, variant }))
+				className: cn(badgeVariants({className, variant}))
 			},
 			props
 		),
@@ -46,4 +46,4 @@ function Badge({
 	})
 }
 
-export { Badge, badgeVariants }
+export {Badge, badgeVariants}

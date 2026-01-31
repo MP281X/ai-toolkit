@@ -1,6 +1,7 @@
-import { AiClient } from '@ai-toolkit/ai'
-import { OtelLayer } from '@ai-toolkit/opentelemetry/server'
-import { Layer, ManagedRuntime, pipe } from 'effect'
+import {Layer, ManagedRuntime, pipe} from 'effect'
+
+import {AiClient} from '@ai-toolkit/ai'
+import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
 export const LiveLayers = pipe(
 	Layer.empty,

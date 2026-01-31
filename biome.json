@@ -27,7 +27,14 @@
 				"noRestrictedGlobals": {
 					"level": "error",
 					"options": {
-						"deniedGlobals": { "Number": "", "String": "", "Object": "", "Array": "", "global": "", "location": "" }
+						"deniedGlobals": {
+							"global": "use globalThis",
+							"location": "Use Tanstack router",
+							"Array": "Import Array from 'effect' instead",
+							"Number": "Import Number from 'effect' instead",
+							"String": "Import String from 'effect' instead",
+							"Object": "Import Record from 'effect' instead"
+						}
 					}
 				}
 			},
@@ -48,16 +55,47 @@
 	},
 
 	"formatter": { "lineWidth": 120, "formatWithErrors": true },
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": {
+					"level": "on",
+					"options": {
+						"groups": [
+							["side-effect", "side-effect-style"],
+							":BLANK_LINE:",
+							[":NODE:"],
+							":BLANK_LINE:",
+							["@effect/**"],
+							["effect"],
+							":BLANK_LINE:",
+							[":PACKAGE:"],
+							":BLANK_LINE:",
+							["@ai-toolkit/**"],
+							":BLANK_LINE:",
+							["@/", "#", "~"],
+							":BLANK_LINE:",
+							["../"],
+							["./"]
+						]
+					}
+				}
+			}
+		}
+	},
 
 	"html": { "formatter": { "indentScriptAndStyle": true } },
-	"css": { "formatter": { "enabled": true }, "parser": { "cssModules": true, "tailwindDirectives": true } },
+	"css": {
+		"formatter": { "enabled": true },
+		"parser": { "cssModules": true, "tailwindDirectives": true }
+	},
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "single",
 			"semicolons": "asNeeded",
 			"trailingCommas": "none",
-			"arrowParentheses": "asNeeded"
+			"arrowParentheses": "asNeeded",
+			"bracketSpacing": false
 		}
 	},
 

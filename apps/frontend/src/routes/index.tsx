@@ -1,11 +1,13 @@
-import { type AiParts as AiPartsType, ReasoningDeltaSchema, TextDeltaSchema } from '@ai-toolkit/ai/schemas'
-import { AiStream } from '@ai-toolkit/components/ai/ai-stream'
-import { useAtomSuspense } from '@effect-atom/atom-react'
-import { createFileRoute } from '@tanstack/react-router'
-import { Effect, pipe, Stream } from 'effect'
-import { ApiClient, AtomRuntime } from '#lib/runtime.ts'
+import {Effect, pipe, Stream} from 'effect'
 
-export const Route = createFileRoute('/')({ component: RouteComponent })
+import {type AiParts as AiPartsType, ReasoningDeltaSchema, TextDeltaSchema} from '@ai-toolkit/ai/schemas'
+import {AiStream} from '@ai-toolkit/components/ai/ai-stream'
+import {useAtomSuspense} from '@effect-atom/atom-react'
+import {createFileRoute} from '@tanstack/react-router'
+
+import {ApiClient, AtomRuntime} from '#lib/runtime.ts'
+
+export const Route = createFileRoute('/')({component: RouteComponent})
 
 const LLMStream = AtomRuntime.atom(
 	pipe(
@@ -19,11 +21,11 @@ const LLMStream = AtomRuntime.atom(
 					const last = acc[acc.length - 1]
 
 					if (last?._tag === 'TextDeltaSchema' && next._tag === 'TextDeltaSchema') {
-						return [...acc.slice(0, -1), TextDeltaSchema.make({ text: last.text + next.text })]
+						return [...acc.slice(0, -1), TextDeltaSchema.make({text: last.text + next.text})]
 					}
 
 					if (last?._tag === 'ReasoningDeltaSchema' && next._tag === 'ReasoningDeltaSchema') {
-						return [...acc.slice(0, -1), ReasoningDeltaSchema.make({ text: last.text + next.text })]
+						return [...acc.slice(0, -1), ReasoningDeltaSchema.make({text: last.text + next.text})]
 					}
 
 					return [...acc, next]
@@ -35,7 +37,7 @@ const LLMStream = AtomRuntime.atom(
 )
 
 function RouteComponent() {
-	const { value } = useAtomSuspense(LLMStream)
+	const {value} = useAtomSuspense(LLMStream)
 	return (
 		<div className="p-6">
 			<AiStream parts={value} />

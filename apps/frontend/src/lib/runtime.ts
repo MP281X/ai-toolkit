@@ -1,12 +1,13 @@
-import { Rpcs } from '@ai-toolkit/backend/rpcs'
-import { OtelLayer } from '@ai-toolkit/opentelemetry/client'
-import { BrowserSocket } from '@effect/platform-browser'
-import { RpcClient, RpcSerialization } from '@effect/rpc'
-import { Atom, AtomRpc } from '@effect-atom/atom-react'
-import { Config, ConfigProvider, Effect, Layer, pipe, Record } from 'effect'
+import {BrowserSocket} from '@effect/platform-browser'
+import {RpcClient, RpcSerialization} from '@effect/rpc'
+import {Config, ConfigProvider, Effect, Layer, pipe, Record} from 'effect'
+
+import {Rpcs} from '@ai-toolkit/backend/rpcs'
+import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
+import {Atom, AtomRpc} from '@effect-atom/atom-react'
 
 const LiveEnvs = pipe(
-	ConfigProvider.fromMap(new Map(Record.toEntries(import.meta.env)), { pathDelim: '_' }),
+	ConfigProvider.fromMap(new Map(Record.toEntries(import.meta.env)), {pathDelim: '_'}),
 	ConfigProvider.nested('VITE'),
 	Layer.setConfigProvider
 )
@@ -23,7 +24,7 @@ const SocketLayer = Config.url('BACKEND_URL').pipe(
 
 export class ApiClient extends AtomRpc.Tag<ApiClient>()('ApiClient', {
 	group: Rpcs,
-	protocol: RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
+	protocol: RpcClient.layerProtocolSocket({retryTransientErrors: true}).pipe(
 		Layer.provide(SocketLayer),
 		Layer.provide(RpcSerialization.layerNdjson),
 		Layer.provide(LiveEnvs)

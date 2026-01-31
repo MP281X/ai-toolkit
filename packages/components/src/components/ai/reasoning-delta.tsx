@@ -1,6 +1,7 @@
-import type { ReasoningDeltaSchema } from '@ai-toolkit/ai/schemas'
-import { Markdown } from '#components/ai/markdown.tsx'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '#components/ui/collapsible.tsx'
+import type {ReasoningDeltaSchema} from '@ai-toolkit/ai/schemas'
+
+import {Markdown} from '#components/ai/markdown.tsx'
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '#components/ui/collapsible.tsx'
 
 export function ReasoningDelta(props: ReasoningDeltaSchema) {
 	return (

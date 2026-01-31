@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import {Schema} from 'effect'
 
 // Stream Events
 export class TextDeltaSchema extends Schema.TaggedClass<TextDeltaSchema>()('TextDeltaSchema', {
