@@ -8,8 +8,8 @@
 	},
 
 	"scripts": {
-		"fix": "biome check --write --unsafe",
-		"check": "tsgo --noEmit && biome check"
+		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
+		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
 	},
 
 	"dependencies": {
