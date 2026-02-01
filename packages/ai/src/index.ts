@@ -76,10 +76,8 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 			stream: Effect.fnUntraced(
 				function* () {
 					const {fullStream} = streamText({
-						model: zen('kimi-k2.5-free'),
-						messages: [
-							{role: 'assistant', content: [{type: 'text', text: 'write a 100 line code block of tsx (react)'}]}
-						],
+						model: zen('gpt-5-nano'),
+						messages: [{role: 'assistant', content: [{type: 'text', text: 'return a 3 letter word'}]}],
 						tools: {}
 					})
 

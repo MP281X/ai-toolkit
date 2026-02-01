@@ -4,9 +4,14 @@
 	"packageManager": "bun@1.3.6",
 	"workspaces": ["apps/*", "packages/*"],
 
+	"trustedDependencies": ["@rocicorp/zero-sqlite3"],
+
 	"scripts": {
-		"dev": "turbo run dev",
+		"dev": "turbo run dev:vite dev:zero",
 		"build": "NODE_ENV=production turbo run build",
+
+		"db:up": "docker run -d --name zero-postgres -e POSTGRES_PASSWORD='password' -e POSTGRES_INITDB_ARGS='-c wal_level=logical' -p 5432:5432 postgres:16-alpine",
+		"db:down": "docker stop zero-postgres && docker rm zero-postgres",
 
 		"shadcn": "cd packages/components && bunx shadcn@latest",
 

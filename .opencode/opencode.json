@@ -10,7 +10,11 @@
 		"context7": {
 			"type": "local",
 			"command": ["bunx", "-y", "@upstash/context7-mcp"]
-		}
+		},
+    "grep_app": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
 	},
 
 	"permission": {

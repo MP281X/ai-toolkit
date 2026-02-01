@@ -3,11 +3,13 @@
 	"name": "@ai-toolkit/template",
 
 	"imports": {
-		"#lib/*": "./src/lib/*"
+		"#lib/*": "./src/lib/*",
+		"#zero/*": "./src/zero/*"
 	},
 
 	"scripts": {
-		"dev": "vite dev --port 5173",
+		"dev:vite": "vite dev --port 5173",
+		"dev:zero": "zero-cache-dev",
 		"build": "vite build --emptyOutDir",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
@@ -15,6 +17,8 @@
 	},
 
 	"dependencies": {
+		"@rocicorp/zero": "latest",
+
 		"react": "^19",
 		"react-dom": "^19",
 		"@tanstack/react-start": "latest",

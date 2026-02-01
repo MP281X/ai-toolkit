@@ -1,21 +1,21 @@
-// import {pipe, Stream} from 'effect'
-
-// import {AiSdk} from '@ai-toolkit/ai'
+import {useQuery} from '@rocicorp/zero/react'
 import {createFileRoute} from '@tanstack/react-router'
-// import {createServerFn} from '@tanstack/react-start'
 
-// import {ServerRuntime} from '#lib/serverRuntime.ts'
+import {queries} from '#zero/queries.ts'
 
-// const getData = createServerFn().handler(async function* () {
-// 	yield* pipe(
-// 		//
-// 		Stream.unwrap(AiSdk.stream()),
-// 		Stream.toAsyncIterableRuntime(await ServerRuntime.runtime())
-// 	)
-// })
-
-export const Route = createFileRoute('/')({component: RouteComponent})
+export const Route = createFileRoute('/')({
+	ssr: false,
+	component: RouteComponent
+})
 
 function RouteComponent() {
-	return <div className="p-6">"ok"</div>
+	const [users] = useQuery(queries.users.all())
+
+	return (
+		<div>
+			{users.map(u => (
+				<div key={u.id}>{u.name}</div>
+			))}
+		</div>
+	)
 }
