@@ -4,12 +4,12 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#zero/*": "./src/zero/*"
+		"#convex/*": "./convex/_generated/*"
 	},
 
 	"scripts": {
 		"dev:vite": "vite dev --port 5173",
-		"dev:zero": "zero-cache-dev",
+		"dev:convex": "convex dev",
 		"build": "vite build --emptyOutDir",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
@@ -17,12 +17,15 @@
 	},
 
 	"dependencies": {
-		"@rocicorp/zero": "latest",
-
 		"react": "^19",
 		"react-dom": "^19",
 		"@tanstack/react-start": "latest",
+		"@tanstack/react-query": "latest",
 		"@tanstack/react-router": "latest",
+		"@tanstack/react-router-with-query": "latest",
+
+		"convex": "latest",
+		"@convex-dev/react-query": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
