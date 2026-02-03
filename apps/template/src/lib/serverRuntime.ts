@@ -6,7 +6,7 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 export const LiveLayers = pipe(
 	Layer.empty,
 	// base layers
-	Layer.provideMerge(OtelLayer('server')),
+	Layer.provideMerge(OtelLayer('backend')),
 	// application layers
 	Layer.provideMerge(AiSdk.Default)
 )

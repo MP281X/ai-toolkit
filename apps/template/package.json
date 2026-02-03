@@ -1,5 +1,6 @@
 {
 	"type": "module",
+	"sideEffects": false,
 	"name": "@ai-toolkit/template",
 
 	"imports": {
@@ -8,8 +9,8 @@
 	},
 
 	"scripts": {
-		"dev:vite": "vite dev --port 5173",
 		"dev:convex": "convex dev",
+		"dev:vite": "vite dev --port 5173",
 		"build": "vite build --emptyOutDir",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
@@ -19,13 +20,10 @@
 	"dependencies": {
 		"react": "^19",
 		"react-dom": "^19",
-		"@tanstack/react-start": "latest",
-		"@tanstack/react-query": "latest",
 		"@tanstack/react-router": "latest",
-		"@tanstack/react-router-with-query": "latest",
+		"@tanstack/router-plugin": "latest",
 
 		"convex": "latest",
-		"@convex-dev/react-query": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
@@ -33,7 +31,6 @@
 	},
 
 	"devDependencies": {
-		"nitro": "latest",
 		"vite": "npm:rolldown-vite@latest",
 		"@vitejs/plugin-react": "latest",
 		"babel-plugin-react-compiler": "latest",

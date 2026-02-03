@@ -5,6 +5,7 @@
 - Be autonomous—continue to completion
 - Use `question` tool for blocking questions (never ask in response)
 - Never rely on training data—fetch up-to-date docs via context7
+- Always run `bun run fix && bun run check` before yielding back to user
 
 ## Code Style
 
@@ -15,6 +16,7 @@
 - Maximize shadcn usage over custom components
 
 ### TypeScript
+- Never use interfaces, always prefer types
 - Rely on type inference
 - No type casts
 - `any` banned
