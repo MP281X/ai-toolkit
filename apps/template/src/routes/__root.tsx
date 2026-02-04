@@ -1,21 +1,31 @@
 import {Function} from 'effect'
 
-import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
-import {ConvexProvider, ConvexReactClient} from 'convex/react'
+import {ConvexAuthProvider} from '@convex-dev/auth/react'
+import {createRootRoute, HeadContent, Scripts, useRouter} from '@tanstack/react-router'
+import {ConvexReactClient} from 'convex/react'
 
 export const Route = createRootRoute({
 	head: Function.constant({
 		meta: [{title: 'template'}],
 		scripts: [import.meta.env.DEV ? {src: 'https://unpkg.com/react-scan/dist/auto.global.js'} : {}]
 	}),
-	shellComponent: props => (
+	shellComponent: ShellComponent
+})
+
+function ShellComponent(props: {children: React.ReactNode}) {
+	const router = useRouter()
+
+	return (
 		<>
 			<HeadContent />
 			<Scripts />
 
-			<ConvexProvider client={new ConvexReactClient(import.meta.env['VITE_CONVEX_URL'])}>
+			<ConvexAuthProvider
+				client={new ConvexReactClient(import.meta.env['VITE_CONVEX_URL'])}
+				replaceURL={relativeUrl => router.navigate({to: relativeUrl, replace: true})}
+			>
 				{props.children}
-			</ConvexProvider>
+			</ConvexAuthProvider>
 		</>
 	)
-})
+}

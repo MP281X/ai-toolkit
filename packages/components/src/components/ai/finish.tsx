@@ -1,12 +1,12 @@
 import {Match, Predicate} from 'effect'
 
-import type {TextStreamPart} from '@ai-toolkit/ai'
+import type {Finish as FinishSchema} from '@ai-toolkit/ai'
 
 import {Badge} from '#components/ui/badge.tsx'
 import {Separator} from '#components/ui/separator.tsx'
 import {formatTokens} from '#lib/utils.ts'
 
-export function Finish(props: Extract<TextStreamPart<never>, {type: 'finish'}>) {
+export function Finish(props: FinishSchema) {
 	const badgeVariant = Match.value(props.finishReason).pipe(
 		Match.when('stop', () => 'default' as const),
 		Match.when('error', () => 'destructive' as const),
@@ -29,17 +29,17 @@ export function Finish(props: Extract<TextStreamPart<never>, {type: 'finish'}>) 
 					out:{formatTokens(props.totalUsage.outputTokens)}
 				</span>
 			)}
-			{Predicate.isNotNullable(props.totalUsage.outputTokenDetails.reasoningTokens) && (
+			{Predicate.isNotNullable(props.totalUsage.outputTokenDetails?.reasoningTokens) && (
 				<span className="font-mono text-[10px] text-muted-foreground">
 					reasoning:{formatTokens(props.totalUsage.outputTokenDetails.reasoningTokens)}
 				</span>
 			)}
-			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails.cacheReadTokens) && (
+			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails?.cacheReadTokens) && (
 				<span className="font-mono text-[10px] text-muted-foreground">
 					cache-r:{formatTokens(props.totalUsage.inputTokenDetails.cacheReadTokens)}
 				</span>
 			)}
-			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails.cacheWriteTokens) && (
+			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails?.cacheWriteTokens) && (
 				<span className="font-mono text-[10px] text-muted-foreground">
 					cache-w:{formatTokens(props.totalUsage.inputTokenDetails.cacheWriteTokens)}
 				</span>

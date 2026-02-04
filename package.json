@@ -7,6 +7,7 @@
 
 	"scripts": {
 		"dev": "turbo run dev:vite dev:convex",
+
 		"build": "NODE_ENV=production turbo run build",
 
 		"shadcn": "cd packages/components && bunx shadcn@latest",
@@ -17,6 +18,8 @@
 
 	"dependencies": {
 		"effect": "latest",
+		"@effect/rpc": "latest",
+		"@effect/platform": "latest",
 		"@effect-atom/atom-react": "latest"
 	},
 

@@ -1,20 +1,24 @@
+import {HttpServer} from '@effect/platform'
+import {RpcSerialization} from '@effect/rpc'
 import {ConfigProvider, Layer, ManagedRuntime, pipe} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai'
 
-const LiveEnvs = pipe(
-	ConfigProvider.fromJson({
-		AI_OPENCODE_ZEN: process.env['AI_OPENCODE_ZEN']
-	}),
-	Layer.setConfigProvider
-)
-
 export const LiveLayers = pipe(
-	Layer.scope,
+	Layer.empty,
 	// application layers
 	Layer.provideMerge(AiSdk.Default),
 	// base layers
-	Layer.provideMerge(LiveEnvs)
+	Layer.provideMerge(HttpServer.layerContext),
+	Layer.provideMerge(RpcSerialization.layerNdjson),
+	// envs
+	Layer.provideMerge(
+		Layer.setConfigProvider(
+			ConfigProvider.fromJson({
+				AI_OPENCODE_ZEN: process.env['AI_OPENCODE_ZEN']
+			})
+		)
+	)
 )
 
 export const ServerRuntime = ManagedRuntime.make(LiveLayers)

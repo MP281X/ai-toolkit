@@ -5,12 +5,15 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
+		"#rpcs/*": "./src/rpcs/*",
+		"#routes/*": "./src/routes/*",
 		"#convex/*": "./src/convex/_generated/*"
 	},
 
 	"scripts": {
 		"dev:convex": "convex dev",
 		"dev:vite": "vite dev --port 5173",
+
 		"build": "vite build --emptyOutDir",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
@@ -24,13 +27,15 @@
 		"@tanstack/router-plugin": "latest",
 
 		"convex": "latest",
+		"@auth/core": "0.37",
+		"@convex-dev/auth": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/components": "workspace:*"
 	},
 
 	"devDependencies": {
-		"vite": "npm:rolldown-vite@latest",
+		"vite": "^8.0.0-beta",
 		"@vitejs/plugin-react": "latest",
 		"babel-plugin-react-compiler": "latest",
 

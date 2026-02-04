@@ -1,9 +1,9 @@
-import type {TextStreamPart} from '@ai-toolkit/ai'
+import type {ToolCall as ToolCallSchema} from '@ai-toolkit/ai'
 
 import {Badge} from '#components/ui/badge.tsx'
 import {Separator} from '#components/ui/separator.tsx'
 
-export function ToolCall(props: Extract<TextStreamPart<never>, {type: 'tool-call'}>) {
+export function ToolCall(props: ToolCallSchema) {
 	return (
 		<div className="my-2 border border-border">
 			<div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5">

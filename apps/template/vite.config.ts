@@ -6,8 +6,14 @@ import {defineConfig} from 'vite'
 export default defineConfig({
 	plugins: [
 		tanstackRouter({target: 'react', disableLogging: true}),
-		tailwindcss(),
+		tailwindcss({optimize: true}),
 		react({babel: {plugins: [['babel-plugin-react-compiler']]}})
 	],
-	build: {chunkSizeWarningLimit: 2000}
+	build: {
+		chunkSizeWarningLimit: 2000,
+		rolldownOptions: {
+			experimental: {lazyBarrel: true},
+			treeshake: {invalidImportSideEffects: false, moduleSideEffects: false}
+		}
+	}
 })
