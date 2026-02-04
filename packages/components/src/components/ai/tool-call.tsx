@@ -1,21 +1,22 @@
 import type {ToolCall as ToolCallSchema} from '@ai-toolkit/ai'
+import {ChevronRightIcon, WrenchIcon} from 'lucide-react'
 
 import {Badge} from '#components/ui/badge.tsx'
-import {Separator} from '#components/ui/separator.tsx'
 
 export function ToolCall(props: ToolCallSchema) {
 	return (
-		<div className="my-2 border border-border">
-			<div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5">
-				<span className="font-medium text-xs uppercase tracking-wide">{props.toolName}</span>
-				<Separator orientation="vertical" className="h-3" />
-				<Badge variant="outline" className="font-mono text-[10px]">
+		<details className="group border border-border">
+			<summary className="flex w-full list-none items-center gap-1.5 bg-muted/40 px-3 py-1.5 text-left font-medium text-[11px] uppercase leading-none tracking-wide [&::-webkit-details-marker]:hidden [&::marker]:hidden">
+				<ChevronRightIcon className="size-3 text-muted-foreground transition-transform group-open:rotate-90" />
+				<WrenchIcon className="size-3 text-muted-foreground" />
+				<span className="text-foreground">{props.toolName}</span>
+				<Badge variant="outline" className="ml-auto font-mono text-[10px]">
 					{props.toolCallId.slice(0, 8)}
 				</Badge>
-			</div>
-			<pre className="overflow-x-auto p-3 font-mono text-[11px] text-muted-foreground leading-relaxed">
+			</summary>
+			<pre className="overflow-x-auto border-border border-t px-3 py-1.5 font-mono text-[11px] text-muted-foreground leading-snug">
 				{JSON.stringify(props.input, null, 2)}
 			</pre>
-		</div>
+		</details>
 	)
 }

@@ -43,7 +43,7 @@
 
 ```bash
 # List all available components
-bun shadcn list
+bun shadcn list @shadcn
 
 # View component source
 bun shadcn view button

@@ -5,6 +5,9 @@ import {v} from 'convex/values'
 export default defineSchema({
 	...authTables,
 	messages: defineTable({
+		userId: v.id('users'),
+		providerId: v.string(),
+		modelId: v.string(),
 		parts: v.array(
 			v.union(
 				v.object({_tag: v.literal('text-delta'), id: v.string(), text: v.string()}),
@@ -26,7 +29,14 @@ export default defineSchema({
 				}),
 				v.object({
 					_tag: v.literal('finish'),
-					finishReason: v.string(),
+					finishReason: v.union(
+						v.literal('stop'),
+						v.literal('length'),
+						v.literal('content-filter'),
+						v.literal('tool-calls'),
+						v.literal('error'),
+						v.literal('other')
+					),
 					totalUsage: v.object({
 						inputTokens: v.optional(v.number()),
 						outputTokens: v.optional(v.number()),
@@ -44,5 +54,5 @@ export default defineSchema({
 			)
 		),
 		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system'))
-	})
+	}).index('by_userId', ['userId'])
 })

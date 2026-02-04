@@ -11,7 +11,7 @@
 
 	"exports": {
 		"./*": "./src/components/*.tsx",
-		"./utils": "./src/lib/utils.tsx",
+		"./utils": "./src/lib/utils.ts",
 		"./theme.css": "./src/theme.css"
 	},
 

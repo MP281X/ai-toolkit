@@ -5,10 +5,9 @@ import {formatError} from '#lib/utils.ts'
 
 export function Error(props: ErrorSchema) {
 	return (
-		<Alert variant="destructive" className="my-2">
-			<AlertTitle className="uppercase tracking-wide">Error</AlertTitle>
+		<Alert variant="destructive" className="px-3 py-2 text-[11px]">
 			<AlertDescription>
-				<pre className="mt-1 overflow-x-auto font-mono text-[11px] leading-relaxed">{formatError(props.error)}</pre>
+				<pre className="overflow-x-auto font-mono leading-snug">{formatError(props.error)}</pre>
 			</AlertDescription>
 		</Alert>
 	)

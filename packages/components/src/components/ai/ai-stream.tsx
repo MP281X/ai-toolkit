@@ -15,7 +15,7 @@ export namespace AiStream {
 
 export function AiStream(props: AiStream.Props) {
 	return (
-		<div className="flex flex-col">
+		<div className="flex flex-col gap-2">
 			{props.parts.map((part, index) => {
 				switch (part._tag) {
 					case 'text-delta':

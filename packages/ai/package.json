@@ -14,8 +14,14 @@
 
 	"dependencies": {
 		"ai": "latest",
+		"exa-js": "latest",
+
 		"zod": "latest",
+
+		"@ai-sdk/xai": "latest",
 		"@ai-sdk/openai": "latest",
+		"@ai-sdk/google": "latest",
+		"@ai-sdk/anthropic": "latest",
 		"@ai-sdk/openai-compatible": "latest"
 	}
 }

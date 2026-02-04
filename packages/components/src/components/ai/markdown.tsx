@@ -13,7 +13,7 @@ function Code(props: {code: string; lang?: string}) {
 			data-code-block
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output
 			dangerouslySetInnerHTML={{__html: html}}
-			className="my-2 overflow-hidden border bg-muted/30 font-mono text-[11px] leading-relaxed"
+			className="overflow-hidden border bg-muted/30 font-mono text-[11px] leading-relaxed"
 		/>
 	)
 }
@@ -29,7 +29,7 @@ export function Markdown(props: {children: string; className?: string}) {
 	const tokens = marked.lexer(props.children).values()
 
 	return (
-		<div className={cn('markdown wrap-break-word select-text text-wrap', props.className)}>
+		<div className={cn('markdown wrap-break-word select-text text-wrap text-[13px] leading-relaxed', props.className)}>
 			{tokens.map((token, index) => {
 				// biome-ignore lint/suspicious/noArrayIndexKey: markdown
 				if (token.type === 'code') return <Code key={index} code={token.text} lang={resolveLanguage(token.lang)} />

@@ -15,7 +15,8 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(
 		Layer.setConfigProvider(
 			ConfigProvider.fromJson({
-				AI_OPENCODE_ZEN: process.env['AI_OPENCODE_ZEN']
+				AI_OPENCODE_ZEN: process.env['AI_OPENCODE_ZEN'],
+				AI_EXA_API_KEY: process.env['AI_EXA_API_KEY']
 			})
 		)
 	)

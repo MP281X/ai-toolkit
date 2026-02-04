@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-import type {TextStreamPart as AiTextStreamPart} from 'ai'
+import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
 	id: Schema.String,
@@ -33,7 +33,7 @@ export class ToolError extends Schema.TaggedClass<ToolError>()('tool-error', {
 }) {}
 
 export class Finish extends Schema.TaggedClass<Finish>()('finish', {
-	finishReason: Schema.String,
+	finishReason: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'),
 	totalUsage: Schema.Struct({
 		inputTokens: Schema.optional(Schema.Number),
 		outputTokens: Schema.optional(Schema.Number),
@@ -55,7 +55,7 @@ export class Error extends Schema.TaggedClass<Error>()('error', {
 export type TextStreamPart = typeof TextStreamPart.Type
 export const TextStreamPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
 
-export const fromAiTextStreamPart = (part: AiTextStreamPart<any>) => {
+export const fromAiTextStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
 	switch (part.type) {
 		case 'text-delta':
 			return TextDelta.make(part)

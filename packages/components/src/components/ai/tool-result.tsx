@@ -1,30 +1,37 @@
 import type {ToolError, ToolResult as ToolResultSchema} from '@ai-toolkit/ai'
+import {AlertTriangleIcon, CheckCircleIcon, ChevronRightIcon} from 'lucide-react'
 
 import {Badge} from '#components/ui/badge.tsx'
-import {Separator} from '#components/ui/separator.tsx'
 
 export function ToolResult(props: ToolResultSchema | ToolError) {
 	const isError = props._tag === 'tool-error'
+	const StatusIcon = isError ? AlertTriangleIcon : CheckCircleIcon
 
 	return (
-		<div className={`my-2 border ${isError ? 'border-destructive/50' : 'border-border'}`}>
-			<div className={`flex items-center gap-2 px-3 py-1.5 ${isError ? 'bg-destructive/10' : 'bg-muted/30'}`}>
-				<span className={`font-medium text-xs uppercase tracking-wide ${isError ? 'text-destructive' : ''}`}>
-					{props.toolName}
-				</span>
-				<Separator orientation="vertical" className={`h-3 ${isError ? 'bg-destructive/30' : ''}`} />
-				<span className={`text-[10px] uppercase ${isError ? 'text-destructive' : 'text-muted-foreground'}`}>
-					{isError ? 'Error' : 'Result'}
-				</span>
+		<details className={`group border ${isError ? 'border-destructive/50' : 'border-border'}`}>
+			<summary
+				className={`flex w-full list-none items-center gap-1.5 px-3 py-1.5 text-left font-medium text-[11px] uppercase leading-none tracking-wide [&::-webkit-details-marker]:hidden [&::marker]:hidden ${
+					isError ? 'bg-destructive/10 text-destructive' : 'bg-muted/40 text-foreground'
+				}`}
+			>
+				<ChevronRightIcon
+					className={`size-3 transition-transform group-open:rotate-90 ${
+						isError ? 'text-destructive' : 'text-muted-foreground'
+					}`}
+				/>
+				<StatusIcon className={`size-3 ${isError ? 'text-destructive' : 'text-muted-foreground'}`} />
+				<span>{props.toolName}</span>
 				<Badge variant={isError ? 'destructive' : 'outline'} className="ml-auto font-mono text-[10px]">
 					{props.toolCallId.slice(0, 8)}
 				</Badge>
-			</div>
+			</summary>
 			<pre
-				className={`overflow-x-auto p-3 font-mono text-[11px] leading-relaxed ${isError ? 'text-destructive/80' : 'text-muted-foreground'}`}
+				className={`overflow-x-auto border-t px-3 py-1.5 font-mono text-[11px] leading-snug ${
+					isError ? 'border-destructive/50 text-destructive/80' : 'border-border text-muted-foreground'
+				}`}
 			>
 				{JSON.stringify(isError ? props.error : (props as ToolResultSchema).output, null, 2)}
 			</pre>
-		</div>
+		</details>
 	)
 }
