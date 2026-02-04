@@ -1,67 +1,14 @@
-import {Config, Effect, Predicate, Schema, Stream} from 'effect'
+import {Array, Config, Effect, Predicate, pipe, Schema, Stream} from 'effect'
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
-import type {TextStreamPart} from 'ai'
-import {streamText} from 'ai'
+import {streamText, type TextStreamPart, type ToolSet} from 'ai'
 
-import {
-	ErrorSchema,
-	FinishSchema,
-	ReasoningDeltaSchema,
-	TextDeltaSchema,
-	ToolCallSchema,
-	ToolResultSchema
-} from './schemas.ts'
+export type {TextStreamPart}
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.Defect,
 	message: Schema.optional(Schema.String)
 }) {}
-
-const fromAiSdkStreamPart = (part: TextStreamPart<never>) => {
-	switch (part.type) {
-		case 'text-delta':
-			return TextDeltaSchema.make({text: part.text})
-		case 'reasoning-delta':
-			return ReasoningDeltaSchema.make({text: part.text})
-		case 'tool-call':
-			return ToolCallSchema.make({
-				toolCallId: part.toolCallId,
-				toolName: part.toolName,
-				args: 'input' in part ? part.input : {}
-			})
-		case 'tool-result':
-			return ToolResultSchema.make({
-				toolCallId: part.toolCallId,
-				toolName: part.toolName,
-				result: part.output,
-				isError: undefined
-			})
-		case 'tool-error':
-			return ToolResultSchema.make({
-				toolCallId: part.toolCallId,
-				toolName: part.toolName,
-				result: part.error,
-				isError: true
-			})
-		case 'finish':
-			return FinishSchema.make({
-				reason: part.finishReason,
-				status: part.finishReason === 'error' ? 'error' : 'success',
-				usage: {
-					inputTokens: part.totalUsage.inputTokens,
-					outputTokens: part.totalUsage.outputTokens,
-					totalTokens: part.totalUsage.totalTokens,
-					cacheReadTokens: part.totalUsage.inputTokenDetails.cacheReadTokens,
-					cacheWriteTokens: part.totalUsage.inputTokenDetails.cacheWriteTokens
-				}
-			})
-		case 'error':
-			return ErrorSchema.make({error: part.error ?? new Error('Unknown error')})
-		default:
-			return undefined
-	}
-}
 
 export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
 	accessors: true,
@@ -77,7 +24,7 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 				function* () {
 					const {fullStream} = streamText({
 						model: zen('gpt-5-nano'),
-						messages: [{role: 'assistant', content: [{type: 'text', text: 'return a 3 letter word'}]}],
+						messages: [{role: 'assistant', content: [{type: 'text', text: 'return a 10 word phrase'}]}],
 						tools: {}
 					})
 
@@ -85,9 +32,47 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 				},
 				Stream.fromEffect,
 				Stream.flatMap(stream => Stream.fromAsyncIterable(stream, cause => AiSdkError.make({cause}))),
-				Stream.map(fromAiSdkStreamPart),
 				Stream.filter(Predicate.isNotUndefined)
 			)
 		}
 	})
 }) {}
+
+export const StreamToResponse = Effect.fnUntraced(function* <A, E, R>(stream: Stream.Stream<A, E, R>) {
+	const encoder = new TextEncoder()
+
+	const encodedStream = yield* pipe(
+		stream,
+		Stream.map(part => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
+		s => Stream.toReadableStreamEffect(s)
+	)
+
+	return new Response(encodedStream, {
+		headers: {
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache',
+			Connection: 'keep-alive'
+		}
+	})
+})
+
+export const AccumulateTextStream = <Tools extends ToolSet, Error, Requirements>(
+	stream: Stream.Stream<TextStreamPart<Tools>, Error, Requirements>
+) =>
+	Stream.scan(stream, Array.empty<TextStreamPart<Tools>>(), (parts, part) => {
+		if (part.type !== 'text-delta' && part.type !== 'reasoning-delta') return Array.append(parts, part)
+
+		if (!Array.isNonEmptyArray(parts)) return Array.append(parts, part)
+
+		const last = Array.lastNonEmpty(parts)
+
+		if (last.type !== 'text-delta' && last.type !== 'reasoning-delta') return Array.append(parts, part)
+
+		if (last.type !== part.type || last.id !== part.id) return Array.append(parts, part)
+
+		return Array.append(Array.initNonEmpty(parts), {
+			...last,
+			text: last.text + part.text,
+			providerMetadata: part.providerMetadata ?? last.providerMetadata
+		})
+	})

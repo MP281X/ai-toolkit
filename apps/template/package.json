@@ -5,7 +5,7 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#convex/*": "./convex/_generated/*"
+		"#convex/*": "./src/convex/_generated/*"
 	},
 
 	"scripts": {
@@ -26,8 +26,7 @@
 		"convex": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/components": "workspace:*",
-		"@ai-toolkit/opentelemetry": "workspace:*"
+		"@ai-toolkit/components": "workspace:*"
 	},
 
 	"devDependencies": {

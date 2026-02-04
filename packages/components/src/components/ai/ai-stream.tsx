@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
 
-import type {AiParts} from '@ai-toolkit/ai/schemas'
+import type {TextStreamPart} from '@ai-toolkit/ai'
 
 import {Error} from '#components/ai/error.tsx'
 import {Finish} from '#components/ai/finish.tsx'
@@ -10,23 +10,25 @@ import {ToolCall} from '#components/ai/tool-call.tsx'
 import {ToolResult} from '#components/ai/tool-result.tsx'
 
 export namespace AiStream {
-	export type Props = {parts: AiParts[]}
+	export type Props = {parts: TextStreamPart<never>[]}
 }
 
-export function AiStream(props: {parts: AiParts[]}) {
+export function AiStream(props: AiStream.Props) {
 	return props.parts.map((part, index) => {
-		switch (part._tag) {
-			case 'TextDeltaSchema':
+		switch (part.type) {
+			case 'text-delta':
 				return <Markdown key={index}>{part.text}</Markdown>
-			case 'ReasoningDeltaSchema':
+			case 'reasoning-delta':
 				return <ReasoningDelta key={index} {...part} />
-			case 'ToolCallSchema':
+			case 'tool-call':
 				return <ToolCall key={index} {...part} />
-			case 'ToolResultSchema':
+			case 'tool-result':
 				return <ToolResult key={index} {...part} />
-			case 'FinishSchema':
+			case 'tool-error':
+				return <ToolResult key={index} {...part} />
+			case 'finish':
 				return <Finish key={index} {...part} />
-			case 'ErrorSchema':
+			case 'error':
 				return <Error key={index} {...part} />
 			default:
 				return null

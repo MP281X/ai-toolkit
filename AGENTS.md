@@ -5,7 +5,7 @@
 - Be autonomous—continue to completion
 - Use `question` tool for blocking questions (never ask in response)
 - Never rely on training data—fetch up-to-date docs via context7
-- Always run `bun run fix && bun run check` before yielding back to user
+- Always run `bun run fix && bun run check` only in the package(s) you changed (not repo root) before yielding back to user
 
 ## Code Style
 

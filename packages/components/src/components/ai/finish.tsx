@@ -1,38 +1,54 @@
-import {Predicate} from 'effect'
+import {Match, Predicate} from 'effect'
 
-import type {FinishSchema} from '@ai-toolkit/ai/schemas'
+import type {TextStreamPart} from '@ai-toolkit/ai'
 
 import {Badge} from '#components/ui/badge.tsx'
+import {Separator} from '#components/ui/separator.tsx'
 import {formatTokens} from '#lib/utils.ts'
 
-export function Finish(props: FinishSchema) {
+export function Finish(props: Extract<TextStreamPart<never>, {type: 'finish'}>) {
+	const badgeVariant = Match.value(props.finishReason).pipe(
+		Match.when('stop', () => 'default' as const),
+		Match.when('error', () => 'destructive' as const),
+		Match.orElse(() => 'secondary' as const)
+	)
+
 	return (
-		<div>
-			<div>
-				{props.status === 'success' && <Badge variant="default">{props.status.toUpperCase()}</Badge>}
-				{props.status === 'error' && <Badge variant="destructive">{props.status.toUpperCase()}</Badge>}
-				{props.status === 'cancelled' && <Badge variant="outline">{props.status.toUpperCase()}</Badge>}
-				{props.status === 'incomplete' && <Badge variant="secondary">{props.status.toUpperCase()}</Badge>}
-				<span>{props.reason}</span>
-			</div>
-			<div>
-				{Predicate.isNotNullable(props.usage.inputTokens) && <span>in: {formatTokens(props.usage.inputTokens)}</span>}
-				{Predicate.isNotNullable(props.usage.outputTokens) && (
-					<span>out: {formatTokens(props.usage.outputTokens)}</span>
-				)}
-				{Predicate.isNotNullable(props.usage.reasoningTokens) && (
-					<span>reasoning: {formatTokens(props.usage.reasoningTokens)}</span>
-				)}
-				{Predicate.isNotNullable(props.usage.cacheReadTokens) && (
-					<span>cache read: {formatTokens(props.usage.cacheReadTokens)}</span>
-				)}
-				{Predicate.isNotNullable(props.usage.cacheWriteTokens) && (
-					<span>cache write: {formatTokens(props.usage.cacheWriteTokens)}</span>
-				)}
-				{Predicate.isNotNullable(props.usage.totalTokens) && (
-					<span>total: {formatTokens(props.usage.totalTokens)}</span>
-				)}
-			</div>
+		<div className="mt-4 flex flex-wrap items-center gap-2 border-border border-t pt-3">
+			<Badge variant={badgeVariant} className="uppercase">
+				{props.finishReason}
+			</Badge>
+			<Separator orientation="vertical" className="h-3" />
+			{Predicate.isNotNullable(props.totalUsage.inputTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					in:{formatTokens(props.totalUsage.inputTokens)}
+				</span>
+			)}
+			{Predicate.isNotNullable(props.totalUsage.outputTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					out:{formatTokens(props.totalUsage.outputTokens)}
+				</span>
+			)}
+			{Predicate.isNotNullable(props.totalUsage.outputTokenDetails.reasoningTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					reasoning:{formatTokens(props.totalUsage.outputTokenDetails.reasoningTokens)}
+				</span>
+			)}
+			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails.cacheReadTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					cache-r:{formatTokens(props.totalUsage.inputTokenDetails.cacheReadTokens)}
+				</span>
+			)}
+			{Predicate.isNotNullable(props.totalUsage.inputTokenDetails.cacheWriteTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					cache-w:{formatTokens(props.totalUsage.inputTokenDetails.cacheWriteTokens)}
+				</span>
+			)}
+			{Predicate.isNotNullable(props.totalUsage.totalTokens) && (
+				<span className="font-mono text-[10px] text-muted-foreground">
+					total:{formatTokens(props.totalUsage.totalTokens)}
+				</span>
+			)}
 		</div>
 	)
 }
