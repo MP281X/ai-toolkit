@@ -1,11 +1,11 @@
 import {HttpServer} from '@effect/platform'
 import {RpcSerialization} from '@effect/rpc'
-import {ConfigProvider, DefaultServices, Layer, ManagedRuntime, pipe} from 'effect'
+import {ConfigProvider, Layer, ManagedRuntime, pipe} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai'
 
 export const LiveLayers = pipe(
-	Layer.succeedContext(DefaultServices.liveServices),
+	Layer.empty,
 	// application layers
 	Layer.provideMerge(AiSdk.Default),
 	// base layers

@@ -34,9 +34,9 @@ export default defineSchema({
 		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
 		usage: v.optional(
 			v.object({
-				inputTokens: v.optional(v.number()),
-				outputTokens: v.optional(v.number()),
-				totalTokens: v.optional(v.number())
+				input: v.number(),
+				output: v.number(),
+				reasoning: v.number()
 			})
 		),
 		finishReason: v.optional(
