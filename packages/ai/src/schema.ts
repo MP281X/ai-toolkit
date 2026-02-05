@@ -2,10 +2,11 @@ import {Schema} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
-export const FinishReason = Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other')
-export type FinishReason = typeof FinishReason.Type
+export class FinishReason extends Schema.TaggedClass<FinishReason>()('finish-reason', {
+	value: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other')
+}) {}
 
-export const Usage = Schema.Struct({
+export class Usage extends Schema.TaggedClass<Usage>()('usage', {
 	inputTokens: Schema.optional(Schema.Number),
 	inputTokenDetails: Schema.Struct({
 		noCacheTokens: Schema.optional(Schema.Number),
@@ -21,8 +22,7 @@ export const Usage = Schema.Struct({
 	reasoningTokens: Schema.optional(Schema.Number),
 	cachedInputTokens: Schema.optional(Schema.Number),
 	raw: Schema.optional(Schema.Unknown)
-})
-export type Usage = typeof Usage.Type
+}) {}
 
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
 	id: Schema.String,
@@ -55,7 +55,7 @@ export class ToolError extends Schema.TaggedClass<ToolError>()('tool-error', {
 }) {}
 
 export class Finish extends Schema.TaggedClass<Finish>()('finish', {
-	finishReason: FinishReason,
+	finishReason: FinishReason.fields.value,
 	usage: Usage
 }) {}
 
@@ -63,19 +63,36 @@ export class Error extends Schema.TaggedClass<Error>()('error', {
 	error: Schema.Unknown
 }) {}
 
-export type TextStreamPart = typeof TextStreamPart.Type
-export const TextStreamPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
-
-export const Message = Schema.Struct({
+export class Start extends Schema.TaggedClass<Start>()('start', {
 	id: Schema.String,
 	providerId: Schema.String,
 	modelId: Schema.String,
+	startedAt: Schema.Number,
+	role: Schema.Literal('user', 'assistant', 'system')
+}) {}
+
+export type TextStreamPart = typeof TextStreamPart.Type
+export const TextStreamPart = Schema.Union(
+	Start,
+	TextDelta,
+	ReasoningDelta,
+	ToolCall,
+	ToolResult,
+	ToolError,
+	Finish,
+	Error
+)
+
+export class Message extends Schema.TaggedClass<Message>()('message', {
+	id: Schema.String,
+	providerId: Schema.String,
+	modelId: Schema.String,
+	startedAt: Schema.Number,
 	role: Schema.Literal('user', 'assistant', 'system'),
-	parts: Schema.Array(TextStreamPart),
-	finishReason: Schema.optional(FinishReason),
+	parts: Schema.Array(Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Error)),
+	finishReason: Schema.optional(FinishReason.fields.value),
 	usage: Schema.optional(Usage)
-})
-export type Message = typeof Message.Type
+}) {}
 
 export const fromAiTextStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
 	switch (part.type) {
@@ -90,7 +107,7 @@ export const fromAiTextStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T
 		case 'tool-error':
 			return ToolError.make(part)
 		case 'finish':
-			return Finish.make({finishReason: part.finishReason, usage: part.totalUsage})
+			return Finish.make({finishReason: part.finishReason, usage: Usage.make(part.totalUsage)})
 		case 'error':
 			return Error.make(part)
 		default:

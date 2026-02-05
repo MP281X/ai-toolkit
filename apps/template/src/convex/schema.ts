@@ -8,6 +8,7 @@ export default defineSchema({
 		userId: v.id('users'),
 		providerId: v.string(),
 		modelId: v.string(),
+		startedAt: v.number(),
 		parts: v.array(
 			v.union(
 				v.object({_tag: v.literal('text-delta'), id: v.string(), text: v.string()}),

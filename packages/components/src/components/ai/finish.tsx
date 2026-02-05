@@ -5,8 +5,28 @@ import {BookOpenTextIcon, CpuIcon, DatabaseIcon, HashIcon, InboxIcon, PackageIco
 
 import {formatTokens} from '#lib/utils.ts'
 
+type FinishUsage =
+	| Usage
+	| {
+			inputTokens?: number
+			inputTokenDetails: {
+				noCacheTokens?: number
+				cacheReadTokens?: number
+				cacheWriteTokens?: number
+			}
+			outputTokens?: number
+			outputTokenDetails: {
+				textTokens?: number
+				reasoningTokens?: number
+			}
+			totalTokens?: number
+			reasoningTokens?: number
+			cachedInputTokens?: number
+			raw?: unknown
+	  }
+
 export namespace Finish {
-	export type Props = {usage: Usage}
+	export type Props = {usage: FinishUsage}
 }
 
 export function Finish(props: Finish.Props) {

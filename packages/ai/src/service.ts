@@ -1,9 +1,11 @@
+import {randomUUID} from 'node:crypto'
+
 import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
 import {defaultModelKey, type ModelKey, resolveLanguageModel} from './models.ts'
-import {fromAiTextStreamPart, Message, type TextStreamPart} from './schema.ts'
+import {fromAiTextStreamPart, Message, Start, type TextStreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
 
@@ -44,11 +46,35 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 						catch: cause => new AiSdkError({cause})
 					})
 
-					return fullStream
+					const [providerId, modelId] = (modelKey.includes(':') ? modelKey : defaultModelKey).split(':') as [
+						string,
+						string
+					]
+
+					const startPart = Start.make({
+						id: randomUUID(),
+						providerId,
+						modelId,
+						startedAt: Date.now(),
+						role: 'assistant'
+					})
+
+					return {startPart, fullStream}
 				},
 				Stream.fromEffect,
-				Stream.flatMap(stream => Stream.fromAsyncIterable(stream, cause => new AiSdkError({cause}))),
-				Stream.filterMap(part => Option.fromNullable(fromAiTextStreamPart(part)))
+				Stream.flatMap(({startPart, fullStream}) =>
+					Stream.filterMap(
+						Stream.concat(
+							Stream.make(startPart),
+							Stream.fromAsyncIterable(fullStream, cause => new AiSdkError({cause}))
+						),
+						part => {
+							if ('_tag' in part) return Option.some<TextStreamPart>(part)
+
+							return Option.fromNullable(fromAiTextStreamPart(part))
+						}
+					)
+				)
 			)
 		}
 	})
@@ -60,9 +86,9 @@ type TextStreamToMessagesOptions = {
 	role?: Message['role']
 }
 
-const mergeParts = (currentParts: readonly TextStreamPart[], part: TextStreamPart): TextStreamPart[] => {
-	if (part._tag === 'finish') return [...currentParts]
+type ContentPart = Message['parts'][number]
 
+const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart): ContentPart[] => {
 	if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return [...currentParts, part]
 
 	const lastPart = currentParts.at(-1)
@@ -80,31 +106,49 @@ export const TextStreamToMessages = (
 	stream: Stream.Stream<TextStreamPart, never, never>,
 	options: TextStreamToMessagesOptions
 ) =>
-	Stream.scan(stream, [] as Message[], (messages, part) => {
-		const lastMessage = messages.at(-1)
-		const fallbackId = lastMessage ? lastMessage.id : `${options.providerId}:${options.modelId}`
-		const messageId = 'id' in part ? part.id : fallbackId
-		const messageIndex = messages.findIndex(message => message.id === messageId)
-		const existingMessage = messageIndex === -1 ? null : messages[messageIndex]
-		const baseMessage =
-			existingMessage ??
-			Message.make({
-				id: messageId,
-				providerId: options.providerId,
-				modelId: options.modelId,
-				role: options.role ?? 'assistant',
-				parts: []
-			})
-		const nextMessage = Message.make({
-			...baseMessage,
-			parts: mergeParts(baseMessage.parts, part),
-			finishReason: part._tag === 'finish' ? part.finishReason : baseMessage.finishReason,
-			usage: part._tag === 'finish' ? part.usage : baseMessage.usage
-		})
+	Stream.map(
+		Stream.filterMap(
+			Stream.scan(stream, null as Message | null, (current, part) => {
+				if (part._tag === 'start') {
+					return Message.make({
+						id: part.id,
+						providerId: part.providerId,
+						modelId: part.modelId,
+						startedAt: part.startedAt,
+						role: part.role,
+						parts: [],
+						finishReason: undefined,
+						usage: undefined
+					})
+				}
 
-		if (messageIndex === -1) {
-			return [...messages, nextMessage]
-		}
+				if (!current) {
+					return Message.make({
+						id: `${options.providerId}:${options.modelId}`,
+						providerId: options.providerId,
+						modelId: options.modelId,
+						startedAt: Date.now(),
+						role: options.role ?? 'assistant',
+						parts: [],
+						finishReason: undefined,
+						usage: undefined
+					})
+				}
 
-		return messages.map((message, index) => (index === messageIndex ? nextMessage : message))
-	})
+				if (part._tag === 'finish') {
+					return Message.make({
+						...current,
+						finishReason: part.finishReason,
+						usage: part.usage
+					})
+				}
+
+				return Message.make({
+					...current,
+					parts: mergeParts(current.parts, part)
+				})
+			}),
+			message => Option.fromNullable(message)
+		),
+		message => message
+	)

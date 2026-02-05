@@ -1,4 +1,4 @@
-import {AiStream} from '@ai-toolkit/components/ai/ai-stream'
+import {Message} from '@ai-toolkit/components/ai/message'
 import {BotIcon, UserIcon} from '@ai-toolkit/components/icons'
 import {formatRelativeTime} from '@ai-toolkit/components/utils'
 import {createFileRoute} from '@tanstack/react-router'
@@ -49,7 +49,7 @@ function RouteComponent() {
 											<span className="ml-auto">{formatRelativeTime(message._creationTime)}</span>
 										</div>
 										<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-											<AiStream parts={message.parts} usage={message.usage} />
+											<Message message={message} />
 										</div>
 									</div>
 								</div>
