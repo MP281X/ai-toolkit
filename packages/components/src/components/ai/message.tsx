@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
 
-import type {TextStreamPart, Usage} from '@ai-toolkit/ai'
+import type {Message as MessageType, TextStreamPart} from '@ai-toolkit/ai'
 
 import {Error} from '#components/ai/error.tsx'
 import {Finish} from '#components/ai/finish.tsx'
@@ -9,34 +9,7 @@ import {ReasoningDelta} from '#components/ai/reasoning-delta.tsx'
 import {ToolCall} from '#components/ai/tool-call.tsx'
 import {ToolResult} from '#components/ai/tool-result.tsx'
 
-type UsageLike =
-	| Usage
-	| {
-			inputTokens?: number
-			inputTokenDetails: {
-				noCacheTokens?: number
-				cacheReadTokens?: number
-				cacheWriteTokens?: number
-			}
-			outputTokens?: number
-			outputTokenDetails: {
-				textTokens?: number
-				reasoningTokens?: number
-			}
-			totalTokens?: number
-			reasoningTokens?: number
-			cachedInputTokens?: number
-			raw?: unknown
-	  }
-
-type MessageData = {
-	providerId: string
-	modelId: string
-	role: 'user' | 'assistant' | 'system'
-	parts: TextStreamPart[]
-	usage?: UsageLike
-	finishReason?: string
-	startedAt?: number
+type MessageData = MessageType & {
 	_id?: string
 	_creationTime?: number
 }

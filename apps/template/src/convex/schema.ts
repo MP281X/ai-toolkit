@@ -35,20 +35,8 @@ export default defineSchema({
 		usage: v.optional(
 			v.object({
 				inputTokens: v.optional(v.number()),
-				inputTokenDetails: v.object({
-					noCacheTokens: v.optional(v.number()),
-					cacheReadTokens: v.optional(v.number()),
-					cacheWriteTokens: v.optional(v.number())
-				}),
 				outputTokens: v.optional(v.number()),
-				outputTokenDetails: v.object({
-					textTokens: v.optional(v.number()),
-					reasoningTokens: v.optional(v.number())
-				}),
-				totalTokens: v.optional(v.number()),
-				reasoningTokens: v.optional(v.number()),
-				cachedInputTokens: v.optional(v.number()),
-				raw: v.optional(v.any())
+				totalTokens: v.optional(v.number())
 			})
 		),
 		finishReason: v.optional(

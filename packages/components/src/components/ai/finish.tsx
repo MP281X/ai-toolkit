@@ -1,41 +1,18 @@
 import {Predicate} from 'effect'
 
 import type {Usage} from '@ai-toolkit/ai'
-import {BookOpenTextIcon, CpuIcon, DatabaseIcon, HashIcon, InboxIcon, PackageIcon} from 'lucide-react'
+import {BookOpenTextIcon, HashIcon, InboxIcon} from 'lucide-react'
 
 import {formatTokens} from '#lib/utils.ts'
 
-type FinishUsage =
-	| Usage
-	| {
-			inputTokens?: number
-			inputTokenDetails: {
-				noCacheTokens?: number
-				cacheReadTokens?: number
-				cacheWriteTokens?: number
-			}
-			outputTokens?: number
-			outputTokenDetails: {
-				textTokens?: number
-				reasoningTokens?: number
-			}
-			totalTokens?: number
-			reasoningTokens?: number
-			cachedInputTokens?: number
-			raw?: unknown
-	  }
-
 export namespace Finish {
-	export type Props = {usage: FinishUsage}
+	export type Props = {usage: Usage}
 }
 
 export function Finish(props: Finish.Props) {
 	const tokenItems = [
 		{key: 'input', value: props.usage.inputTokens, icon: InboxIcon},
 		{key: 'output', value: props.usage.outputTokens, icon: BookOpenTextIcon},
-		{key: 'reasoning', value: props.usage.outputTokenDetails?.reasoningTokens, icon: CpuIcon},
-		{key: 'cache-r', value: props.usage.inputTokenDetails?.cacheReadTokens, icon: DatabaseIcon},
-		{key: 'cache-w', value: props.usage.inputTokenDetails?.cacheWriteTokens, icon: PackageIcon},
 		{key: 'total', value: props.usage.totalTokens, icon: HashIcon}
 	]
 
