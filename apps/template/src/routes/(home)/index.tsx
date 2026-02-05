@@ -21,8 +21,7 @@ function RouteComponent() {
 						<div className="px-2 py-6 text-muted-foreground text-sm">No messages yet.</div>
 					)}
 					{displayMessages.map(message => {
-						const lastPart = message.parts[message.parts.length - 1]
-						const isStopFinish = lastPart?._tag === 'finish' && lastPart.finishReason === 'stop'
+						const isStopFinish = message.finishReason === 'stop'
 						const highlightVariant = message.role === 'user' ? 'primary' : isStopFinish ? 'stop' : 'none'
 						const RoleIcon = message.role === 'user' ? UserIcon : BotIcon
 						const highlightClassName =
@@ -50,7 +49,7 @@ function RouteComponent() {
 											<span className="ml-auto">{formatRelativeTime(message._creationTime)}</span>
 										</div>
 										<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-											<AiStream parts={message.parts} />
+											<AiStream parts={message.parts} usage={message.usage} />
 										</div>
 									</div>
 								</div>

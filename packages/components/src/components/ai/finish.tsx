@@ -1,18 +1,22 @@
 import {Predicate} from 'effect'
 
-import type {Finish as FinishSchema} from '@ai-toolkit/ai'
+import type {Usage} from '@ai-toolkit/ai'
 import {BookOpenTextIcon, CpuIcon, DatabaseIcon, HashIcon, InboxIcon, PackageIcon} from 'lucide-react'
 
 import {formatTokens} from '#lib/utils.ts'
 
-export function Finish(props: FinishSchema) {
+export namespace Finish {
+	export type Props = {usage: Usage}
+}
+
+export function Finish(props: Finish.Props) {
 	const tokenItems = [
-		{key: 'input', value: props.totalUsage.inputTokens, icon: InboxIcon},
-		{key: 'output', value: props.totalUsage.outputTokens, icon: BookOpenTextIcon},
-		{key: 'reasoning', value: props.totalUsage.outputTokenDetails?.reasoningTokens, icon: CpuIcon},
-		{key: 'cache-r', value: props.totalUsage.inputTokenDetails?.cacheReadTokens, icon: DatabaseIcon},
-		{key: 'cache-w', value: props.totalUsage.inputTokenDetails?.cacheWriteTokens, icon: PackageIcon},
-		{key: 'total', value: props.totalUsage.totalTokens, icon: HashIcon}
+		{key: 'input', value: props.usage.inputTokens, icon: InboxIcon},
+		{key: 'output', value: props.usage.outputTokens, icon: BookOpenTextIcon},
+		{key: 'reasoning', value: props.usage.outputTokenDetails?.reasoningTokens, icon: CpuIcon},
+		{key: 'cache-r', value: props.usage.inputTokenDetails?.cacheReadTokens, icon: DatabaseIcon},
+		{key: 'cache-w', value: props.usage.inputTokenDetails?.cacheWriteTokens, icon: PackageIcon},
+		{key: 'total', value: props.usage.totalTokens, icon: HashIcon}
 	]
 
 	return (

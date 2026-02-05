@@ -1,9 +1,9 @@
-import {Array, Effect, Option, Schema, Stream} from 'effect'
+import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
 import {defaultModelKey, type ModelKey, resolveLanguageModel} from './models.ts'
-import {fromAiTextStreamPart, type TextStreamPart} from './schema.ts'
+import {fromAiTextStreamPart, Message, type TextStreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
 
@@ -54,17 +54,57 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 	})
 }) {}
 
-export const AccumulateTextStream = (stream: Stream.Stream<TextStreamPart, never, never>) =>
-	Stream.scan(stream, Array.empty<TextStreamPart>(), (parts, part) => {
-		if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return Array.append(parts, part)
+type TextStreamToMessagesOptions = {
+	providerId: string
+	modelId: string
+	role?: Message['role']
+}
 
-		if (!Array.isNonEmptyArray(parts)) return Array.append(parts, part)
+const mergeParts = (currentParts: readonly TextStreamPart[], part: TextStreamPart): TextStreamPart[] => {
+	if (part._tag === 'finish') return [...currentParts]
 
-		const last = Array.lastNonEmpty(parts)
+	if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return [...currentParts, part]
 
-		if (last._tag !== 'text-delta' && last._tag !== 'reasoning-delta') return Array.append(parts, part)
+	const lastPart = currentParts.at(-1)
 
-		if (last._tag !== part._tag || last.id !== part.id) return Array.append(parts, part)
+	if (!lastPart) return [...currentParts, part]
 
-		return Array.append(Array.initNonEmpty(parts), {...last, text: last.text + part.text})
+	if (lastPart._tag !== 'text-delta' && lastPart._tag !== 'reasoning-delta') return [...currentParts, part]
+
+	if (lastPart._tag !== part._tag || lastPart.id !== part.id) return [...currentParts, part]
+
+	return [...currentParts.slice(0, -1), {...lastPart, text: lastPart.text + part.text}]
+}
+
+export const TextStreamToMessages = (
+	stream: Stream.Stream<TextStreamPart, never, never>,
+	options: TextStreamToMessagesOptions
+) =>
+	Stream.scan(stream, [] as Message[], (messages, part) => {
+		const lastMessage = messages.at(-1)
+		const fallbackId = lastMessage ? lastMessage.id : `${options.providerId}:${options.modelId}`
+		const messageId = 'id' in part ? part.id : fallbackId
+		const messageIndex = messages.findIndex(message => message.id === messageId)
+		const existingMessage = messageIndex === -1 ? null : messages[messageIndex]
+		const baseMessage =
+			existingMessage ??
+			Message.make({
+				id: messageId,
+				providerId: options.providerId,
+				modelId: options.modelId,
+				role: options.role ?? 'assistant',
+				parts: []
+			})
+		const nextMessage = Message.make({
+			...baseMessage,
+			parts: mergeParts(baseMessage.parts, part),
+			finishReason: part._tag === 'finish' ? part.finishReason : baseMessage.finishReason,
+			usage: part._tag === 'finish' ? part.usage : baseMessage.usage
+		})
+
+		if (messageIndex === -1) {
+			return [...messages, nextMessage]
+		}
+
+		return messages.map((message, index) => (index === messageIndex ? nextMessage : message))
 	})

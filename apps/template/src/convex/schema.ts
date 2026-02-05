@@ -27,32 +27,38 @@ export default defineSchema({
 					input: v.any(),
 					error: v.any()
 				}),
-				v.object({
-					_tag: v.literal('finish'),
-					finishReason: v.union(
-						v.literal('stop'),
-						v.literal('length'),
-						v.literal('content-filter'),
-						v.literal('tool-calls'),
-						v.literal('error'),
-						v.literal('other')
-					),
-					totalUsage: v.object({
-						inputTokens: v.optional(v.number()),
-						outputTokens: v.optional(v.number()),
-						totalTokens: v.optional(v.number()),
-						inputTokenDetails: v.object({
-							cacheReadTokens: v.optional(v.number()),
-							cacheWriteTokens: v.optional(v.number())
-						}),
-						outputTokenDetails: v.object({
-							reasoningTokens: v.optional(v.number())
-						})
-					})
-				}),
 				v.object({_tag: v.literal('error'), error: v.any()})
 			)
 		),
-		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system'))
+		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
+		usage: v.optional(
+			v.object({
+				inputTokens: v.optional(v.number()),
+				inputTokenDetails: v.object({
+					noCacheTokens: v.optional(v.number()),
+					cacheReadTokens: v.optional(v.number()),
+					cacheWriteTokens: v.optional(v.number())
+				}),
+				outputTokens: v.optional(v.number()),
+				outputTokenDetails: v.object({
+					textTokens: v.optional(v.number()),
+					reasoningTokens: v.optional(v.number())
+				}),
+				totalTokens: v.optional(v.number()),
+				reasoningTokens: v.optional(v.number()),
+				cachedInputTokens: v.optional(v.number()),
+				raw: v.optional(v.any())
+			})
+		),
+		finishReason: v.optional(
+			v.union(
+				v.literal('stop'),
+				v.literal('length'),
+				v.literal('content-filter'),
+				v.literal('tool-calls'),
+				v.literal('error'),
+				v.literal('other')
+			)
+		)
 	}).index('by_userId', ['userId'])
 })
