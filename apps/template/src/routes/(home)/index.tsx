@@ -1,3 +1,4 @@
+import {Message as MessageModel, Usage} from '@ai-toolkit/ai'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {BotIcon, UserIcon} from '@ai-toolkit/components/icons'
 import {formatRelativeTime} from '@ai-toolkit/components/utils'
@@ -11,16 +12,30 @@ export const Route = createFileRoute('/(home)/')({component: RouteComponent})
 function RouteComponent() {
 	const messages = useQuery(api.messages.list, {})
 	const displayMessages = messages ? [...messages].reverse() : []
+	const formattedMessages = displayMessages.map(message => ({
+		...MessageModel.make({
+			id: message._id,
+			providerId: message.providerId,
+			modelId: message.modelId,
+			startedAt: message.startedAt,
+			role: message.role,
+			parts: message.parts,
+			finishReason: message.finishReason,
+			usage: message.usage ? Usage.make(message.usage) : undefined
+		}),
+		_id: message._id,
+		_creationTime: message._creationTime
+	}))
 
 	return (
 		<div className="min-h-svh w-full bg-background text-foreground">
 			<div className="flex h-svh flex-col overflow-y-auto">
 				<div className="flex flex-col gap-2 px-3 py-3">
 					{!messages && <div className="px-2 py-6 text-muted-foreground text-sm">Loading messages...</div>}
-					{messages && displayMessages.length === 0 && (
+					{messages && formattedMessages.length === 0 && (
 						<div className="px-2 py-6 text-muted-foreground text-sm">No messages yet.</div>
 					)}
-					{displayMessages.map(message => {
+					{formattedMessages.map(message => {
 						const isStopFinish = message.finishReason === 'stop'
 						const highlightVariant = message.role === 'user' ? 'primary' : isStopFinish ? 'stop' : 'none'
 						const RoleIcon = message.role === 'user' ? UserIcon : BotIcon
