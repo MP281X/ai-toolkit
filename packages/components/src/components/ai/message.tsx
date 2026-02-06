@@ -40,7 +40,7 @@ export function Message(props: Message.Props) {
 					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
 						<span className="flex items-center gap-1">
 							{props.message.role === 'user' ? <UserIcon className="size-3" /> : <BotIcon className="size-3" />}
-							{props.message.providerId}/{props.message.modelId}
+							{props.message.model.provider}/{props.message.model.provider}
 						</span>
 						<span className="ml-auto">{formatRelativeTime(props.message.startedAt)}</span>
 					</div>

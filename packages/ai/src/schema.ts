@@ -2,6 +2,8 @@ import {Match, Option, Predicate, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
+import {Model} from './models.ts'
+
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
 	id: Schema.String,
 	text: Schema.String
@@ -37,8 +39,7 @@ export class Error extends Schema.TaggedClass<Error>()('error', {
 }) {}
 
 export class Start extends Schema.TaggedClass<Start>()('start', {
-	providerId: Schema.String,
-	modelId: Schema.String,
+	model: Model,
 	startedAt: Schema.Number,
 	role: Schema.Literal('user', 'assistant', 'system')
 }) {}
@@ -59,8 +60,7 @@ export type StreamPart = typeof StreamPart.Type
 export const StreamPart = Schema.Union(Start, TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
 
 export class Message extends Schema.Class<Message>('Message')({
-	providerId: Schema.String,
-	modelId: Schema.String,
+	model: Model,
 	startedAt: Schema.Number,
 	role: Schema.Literal('user', 'assistant', 'system'),
 	parts: Schema.Array(ContentPart),
@@ -68,7 +68,7 @@ export class Message extends Schema.Class<Message>('Message')({
 	usage: Schema.optional(Finish.fields.usage)
 }) {}
 
-export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>): StreamPart | null => {
+export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
 	switch (part.type) {
 		case 'text-delta':
 			return TextDelta.make(part)
@@ -92,11 +92,11 @@ export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>): 
 		case 'error':
 			return Error.make(part)
 		default:
-			return null
+			return
 	}
 }
 
-const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart): ContentPart[] => {
+const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart) => {
 	if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return [...currentParts, part]
 
 	const lastPart = currentParts.at(-1)
@@ -112,37 +112,18 @@ const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart): Co
 
 export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 	Stream.filterMap(
-		Stream.scan(stream, null as Message | null, (current, part) =>
+		Stream.scan(stream, undefined as Message | undefined, (current, part) =>
 			Match.value(part).pipe(
-				Match.when({_tag: 'start' as const}, start =>
-					Message.make({
-						providerId: start.providerId,
-						modelId: start.modelId,
-						startedAt: start.startedAt,
-						role: start.role,
-						parts: [],
-						finishReason: undefined,
-						usage: undefined
-					})
-				),
-				Match.when({_tag: 'finish' as const}, finish => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({
-						...current,
-						finishReason: finish.finishReason,
-						usage: finish.usage
-					})
+				Match.when({_tag: 'start'}, start => {
+					return Message.make({model: start.model, startedAt: start.startedAt, role: start.role, parts: []})
+				}),
+				Match.when({_tag: 'finish'}, finish => {
+					if (Predicate.isNullable(current)) return
+					return Message.make({...current, finishReason: finish.finishReason, usage: finish.usage})
 				}),
 				Match.orElse(remainingPart => {
-					if (Predicate.isNullable(current)) {
-						return null
-					}
-
-					return Message.make({
-						...current,
-						parts: mergeParts(current.parts, remainingPart)
-					})
+					if (Predicate.isNullable(current)) return
+					return Message.make({...current, parts: mergeParts(current.parts, remainingPart)})
 				})
 			)
 		),
