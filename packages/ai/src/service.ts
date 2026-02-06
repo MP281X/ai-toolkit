@@ -2,7 +2,7 @@ import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
-import {type ModelKey, resolveLanguageModel} from './models.ts'
+import {type ModelKey, ModelKeySchema, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
@@ -16,17 +16,21 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const registry = createToolRegistry()
-		const defaultGroupId = 'web'
+		const GroupIdSchema = Schema.Literal('default', 'web', 'extreme')
+		const InputSchema = Schema.Struct({
+			prompt: Schema.String,
+			model: ModelKeySchema,
+			group: GroupIdSchema
+		})
+		const decodeInput = Schema.decodeUnknown(InputSchema)
 
 		return {
-			stream: Effect.fnUntraced(function* (input: {prompt: string; model: ModelKey; group?: string}) {
-				const isGroupId = (value: string): value is keyof typeof registry.groups => value in registry.groups
+			stream: Effect.fnUntraced(function* (input: {prompt: string; model: ModelKey; group: string}) {
+				const parsed = yield* decodeInput(input).pipe(Effect.mapError(cause => new AiSdkError({cause})))
+				const group = registry.groups[parsed.group]
+				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${parsed.group}`)})
 
-				const groupId = input.group ?? defaultGroupId
-				if (!isGroupId(groupId)) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${groupId}`)})
-				const group = registry.groups[groupId]
-
-				const modelKey = input.model
+				const modelKey = parsed.model
 				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
 				const repairToolCall = makeRepairToolCall({repairModel: model})
 

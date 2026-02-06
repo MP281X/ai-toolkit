@@ -1,4 +1,4 @@
-import {Option, Schema, Stream} from 'effect'
+import {Match, Option, Predicate, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
@@ -112,30 +112,60 @@ const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart): Co
 
 export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 	Stream.filterMap(
-		Stream.scan(stream, null as Message | null, (current, part) => {
-			if (part._tag === 'start') {
-				return Message.make({
-					providerId: part.providerId,
-					modelId: part.modelId,
-					startedAt: part.startedAt,
-					role: part.role,
-					parts: [],
-					finishReason: undefined,
-					usage: undefined
-				})
-			}
+		Stream.scan(stream, null as Message | null, (current, part) =>
+			Match.value(part).pipe(
+				Match.when({_tag: 'start' as const}, start =>
+					Message.make({
+						providerId: start.providerId,
+						modelId: start.modelId,
+						startedAt: start.startedAt,
+						role: start.role,
+						parts: [],
+						finishReason: undefined,
+						usage: undefined
+					})
+				),
+				Match.when({_tag: 'finish' as const}, finish =>
+					Predicate.isNullable(current)
+						? null
+						: Message.make({
+								...current,
+								finishReason: finish.finishReason,
+								usage: finish.usage
+							})
+				),
+				Match.when({_tag: 'text-delta' as const}, content => {
+					if (Predicate.isNullable(current)) return null
 
-			if (!current) return null
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.when({_tag: 'reasoning-delta' as const}, content => {
+					if (Predicate.isNullable(current)) return null
 
-			if (part._tag === 'finish') {
-				return Message.make({
-					...current,
-					finishReason: part.finishReason,
-					usage: part.usage
-				})
-			}
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.when({_tag: 'tool-call' as const}, content => {
+					if (Predicate.isNullable(current)) return null
 
-			return Message.make({...current, parts: mergeParts(current.parts, part)})
-		}),
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.when({_tag: 'tool-result' as const}, content => {
+					if (Predicate.isNullable(current)) return null
+
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.when({_tag: 'tool-error' as const}, content => {
+					if (Predicate.isNullable(current)) return null
+
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.when({_tag: 'error' as const}, content => {
+					if (Predicate.isNullable(current)) return null
+
+					return Message.make({...current, parts: mergeParts(current.parts, content)})
+				}),
+				Match.exhaustive
+			)
+		),
 		message => Option.fromNullable(message)
 	)
