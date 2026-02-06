@@ -6,9 +6,12 @@ export default defineSchema({
 	...authTables,
 	messages: defineTable({
 		userId: v.id('users'),
-		providerId: v.string(),
-		modelId: v.string(),
+		model: v.object({
+			provider: v.union(v.literal('opencode_zen')),
+			model: v.union(v.literal('glm-4.7-free'), v.literal('kimi-k2.5-free'), v.literal('minimax-m2.1-free'))
+		}),
 		startedAt: v.number(),
+		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
 		parts: v.array(
 			v.union(
 				v.object({_tag: v.literal('text-delta'), id: v.string(), text: v.string()}),
@@ -31,7 +34,6 @@ export default defineSchema({
 				v.object({_tag: v.literal('error'), error: v.any()})
 			)
 		),
-		role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
 		usage: v.optional(
 			v.object({
 				input: v.number(),

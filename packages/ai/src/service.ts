@@ -1,70 +1,45 @@
-import {Effect, Option, Schema, Stream} from 'effect'
+import {Effect, Option, pipe, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
-import {defaultModelKey, type ModelKey, resolveLanguageModel} from './models.ts'
+import {Model, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
-import {createToolRegistry} from './tools/registry.ts'
-import {makeRepairToolCall} from './tools/repair.ts'
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.Defect,
 	message: Schema.optional(Schema.String)
 }) {}
 
+export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
+	prompt: Schema.String,
+	model: Model
+}) {}
+
 export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
 	accessors: true,
 	effect: Effect.gen(function* () {
-		const registry = createToolRegistry()
-		const defaultGroupId = 'web'
-
 		return {
-			stream: Effect.fnUntraced(function* (input: {prompt: string; model?: ModelKey; group?: string}) {
-				const groupId = input.group ?? defaultGroupId
-				const group = registry.groups[groupId as keyof typeof registry.groups]
-
-				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${groupId}`)})
-				const modelKey = input.model ?? defaultModelKey
-				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
-				const repairToolCall = makeRepairToolCall({repairModel: model})
-
+			stream: Effect.fnUntraced(function* (input: AiInput) {
 				const agent = new ToolLoopAgent({
-					model,
-					instructions: group.instructions,
-					tools: registry.tools,
-					activeTools: group.activeTools,
-					experimental_repairToolCall: repairToolCall
+					model: yield* pipe(
+						resolveLanguageModel(input.model),
+						Effect.mapError(cause => AiSdkError.make({cause}))
+					)
 				})
 
 				const {fullStream} = yield* Effect.tryPromise({
 					try: () => agent.stream({prompt: input.prompt}),
-					catch: cause => new AiSdkError({cause})
+					catch: cause => AiSdkError.make({cause})
 				})
 
-				const [providerId, modelId] = (modelKey.includes(':') ? modelKey : defaultModelKey).split(':') as [
-					string,
-					string
-				]
-
-				const startChunk = Start.make({
-					providerId,
-					modelId,
-					startedAt: Date.now(),
-					role: 'assistant'
-				})
-
-				return Stream.filterMap(
-					Stream.concat(
-						Stream.succeed(startChunk),
-						Stream.fromAsyncIterable(fullStream, cause => new AiSdkError({cause}))
-					),
-					part => {
-						if ('_tag' in part) return Option.some<StreamPart>(part)
-
-						return Option.fromNullable(fromAiStreamPart(part))
-					}
+				return Stream.concat(
+					Stream.succeed<StreamPart>(Start.make({model: input.model, startedAt: Date.now(), role: 'assistant'})),
+					Stream.filterMap(
+						Stream.fromAsyncIterable(fullStream, cause => AiSdkError.make({cause})),
+						part => Option.fromNullable(fromAiStreamPart(part))
+					)
 				)
-			}, Stream.fromEffect)
+			}, Stream.unwrap)
 		}
 	})
 }) {}
