@@ -31,8 +31,7 @@ const buildProviders = Effect.gen(function* () {
 	} satisfies Record<ProviderId, unknown>
 })
 
-export const resolveLanguageModel = Effect.fnUntraced(function* (modelKey: Model) {
+export const resolveLanguageModel = Effect.fnUntraced(function* (model: Model) {
 	const providers = yield* buildProviders
-	const config = yield* Schema.decodeUnknown(Model)(modelKey)
-	return providers[config.provider](config.model)
+	return providers[model.provider](model.model)
 })
