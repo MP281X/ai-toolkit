@@ -5,12 +5,15 @@ import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 export const ProviderId = Schema.Literal('opencode_zen')
 export type ProviderId = typeof ProviderId.Type
 
-export const ModelKeySchema = Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), Schema.String)
+export const ModelId = Schema.Literal('glm-4.7-free', 'kimi-k2.5-free', 'minimax-m2.1-free')
+export type ModelId = typeof ModelId.Type
+
+export const ModelKeySchema = Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), ModelId)
 export type ModelKey = typeof ModelKeySchema.Type
 
 export const ModelConfig = Schema.Struct({
 	providerId: ProviderId,
-	modelId: Schema.String
+	modelId: ModelId
 })
 export type ModelConfig = typeof ModelConfig.Type
 
@@ -18,17 +21,15 @@ export class ModelResolutionError extends Schema.TaggedError<ModelResolutionErro
 	providerId: Schema.String
 }) {}
 
-const decodeModelKey = Schema.decodeUnknownSync(ModelKeySchema)
-const toModelConfig = Schema.decodeUnknownSync(ModelConfig)
-
-export const defaultModelKey = decodeModelKey('opencode_zen:gpt-5-nano')
+export const defaultModelKey = Schema.decodeUnknownSync(ModelKeySchema)('opencode_zen:glm-4.7-free')
 
 const parseModelKey = (modelKey: ModelKey): ModelConfig => {
-	const decoded = decodeModelKey(modelKey)
+	const decoded = Schema.decodeUnknownSync(ModelKeySchema)(modelKey)
+	const modelId = Schema.decodeUnknownSync(ModelId)(decoded.slice(decoded.indexOf(':') + 1))
 
-	return toModelConfig({
+	return Schema.decodeUnknownSync(ModelConfig)({
 		providerId: 'opencode_zen',
-		modelId: decoded.slice(decoded.indexOf(':') + 1)
+		modelId
 	})
 }
 

@@ -2,7 +2,7 @@ import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
-import {type ModelKey, ModelKeySchema, resolveLanguageModel} from './models.ts'
+import {ModelKeySchema, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
@@ -12,25 +12,25 @@ export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	message: Schema.optional(Schema.String)
 }) {}
 
+export const GroupIdSchema = Schema.Literal('default', 'web', 'extreme')
+export const AiStreamInputSchema = Schema.Struct({
+	prompt: Schema.String,
+	model: ModelKeySchema,
+	group: GroupIdSchema
+})
+export type AiStreamInput = typeof AiStreamInputSchema.Type
+
 export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const registry = createToolRegistry()
-		const GroupIdSchema = Schema.Literal('default', 'web', 'extreme')
-		const InputSchema = Schema.Struct({
-			prompt: Schema.String,
-			model: ModelKeySchema,
-			group: GroupIdSchema
-		})
-		const decodeInput = Schema.decodeUnknown(InputSchema)
 
 		return {
-			stream: Effect.fnUntraced(function* (input: {prompt: string; model: ModelKey; group: string}) {
-				const parsed = yield* decodeInput(input).pipe(Effect.mapError(cause => new AiSdkError({cause})))
-				const group = registry.groups[parsed.group]
-				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${parsed.group}`)})
+			stream: Effect.fnUntraced(function* (input: AiStreamInput) {
+				const group = registry.groups[input.group]
+				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${input.group}`)})
 
-				const modelKey = parsed.model
+				const modelKey = input.model
 				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
 				const repairToolCall = makeRepairToolCall({repairModel: model})
 

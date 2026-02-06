@@ -134,37 +134,14 @@ export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 								usage: finish.usage
 							})
 				),
-				Match.when({_tag: 'text-delta' as const}, content => {
+				Match.orElse(remainingPart => {
 					if (Predicate.isNullable(current)) return null
 
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.when({_tag: 'reasoning-delta' as const}, content => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.when({_tag: 'tool-call' as const}, content => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.when({_tag: 'tool-result' as const}, content => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.when({_tag: 'tool-error' as const}, content => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.when({_tag: 'error' as const}, content => {
-					if (Predicate.isNullable(current)) return null
-
-					return Message.make({...current, parts: mergeParts(current.parts, content)})
-				}),
-				Match.exhaustive
+					return Message.make({
+						...current,
+						parts: mergeParts(current.parts, remainingPart)
+					})
+				})
 			)
 		),
 		message => Option.fromNullable(message)
