@@ -125,15 +125,15 @@ export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 						usage: undefined
 					})
 				),
-				Match.when({_tag: 'finish' as const}, finish =>
-					Predicate.isNullable(current)
-						? null
-						: Message.make({
-								...current,
-								finishReason: finish.finishReason,
-								usage: finish.usage
-							})
-				),
+				Match.when({_tag: 'finish' as const}, finish => {
+					if (Predicate.isNullable(current)) return null
+
+					return Message.make({
+						...current,
+						finishReason: finish.finishReason,
+						usage: finish.usage
+					})
+				}),
 				Match.orElse(remainingPart => {
 					if (Predicate.isNullable(current)) {
 						return null

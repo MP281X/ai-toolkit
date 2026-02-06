@@ -2,32 +2,36 @@ import {Config, Effect, Record, Schema} from 'effect'
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 
+export type ProviderId = 'opencode_zen'
 export const ProviderId = Schema.Literal('opencode_zen')
-export type ProviderId = typeof ProviderId.Type
 
+export type ModelId = 'glm-4.7-free' | 'kimi-k2.5-free' | 'minimax-m2.1-free'
 export const ModelId = Schema.Literal('glm-4.7-free', 'kimi-k2.5-free', 'minimax-m2.1-free')
-export type ModelId = typeof ModelId.Type
 
-export const ModelKeySchema = Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), ModelId)
-export type ModelKey = typeof ModelKeySchema.Type
-
-export const ModelConfig = Schema.Struct({
+export class ModelConfig extends Schema.Class<ModelConfig>('ModelConfig')({
 	providerId: ProviderId,
 	modelId: ModelId
-})
-export type ModelConfig = typeof ModelConfig.Type
+}) {}
+export type ModelConfigType = typeof ModelConfig.Type
+
+export const ModelKeySchema = Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), ModelId)
+export type ModelKeySchema = typeof ModelKeySchema.Type
 
 export class ModelResolutionError extends Schema.TaggedError<ModelResolutionError>()('ModelResolutionError', {
 	providerId: Schema.String
 }) {}
 
-export const defaultModelKey = Schema.decodeUnknownSync(ModelKeySchema)('opencode_zen:glm-4.7-free')
+export const ModelKey = Schema.transform(ModelKeySchema, ModelConfig, {
+	decode: modelKey =>
+		ModelConfig.make({
+			providerId: 'opencode_zen',
+			modelId: modelKey.split(':')[1] as ModelId
+		}),
+	encode: config => `opencode_zen:${config.modelId}` as ModelKey
+})
+export type ModelKey = `${ProviderId}:${ModelId}`
 
-export const parseModelKey = (modelKey: ModelKey): ModelConfig =>
-	Schema.decodeUnknownSync(ModelConfig)({
-		providerId: 'opencode_zen',
-		modelId: modelKey.split(':')[1] as ModelId
-	})
+export const parseModelKey = (modelKey: ModelKey): ModelConfigType => Schema.decodeUnknownSync(ModelKey)(modelKey)
 
 const buildProviders = Effect.gen(function* () {
 	const opencodeZen = createOpenAICompatible({
