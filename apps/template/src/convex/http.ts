@@ -4,6 +4,7 @@ import {Layer, Record} from 'effect'
 import {httpRouter} from 'convex/server'
 
 import {httpAction} from '#convex/server.js'
+import {convexRequestContext} from '#lib/convexRequestContext.ts'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiRpcs} from '#rpcs/contracts.ts'
 import {AiLive} from '#rpcs/handlers.ts'
@@ -37,8 +38,8 @@ http.route({
 http.route({
 	path: '/',
 	method: 'POST',
-	handler: httpAction(async (_ctx, request) => {
-		const response = await handler(request)
+	handler: httpAction(async (actionContext, request) => {
+		const response = await handler(request, convexRequestContext(actionContext))
 
 		return new Response(response.body, {
 			status: response.status,
