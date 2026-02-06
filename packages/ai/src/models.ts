@@ -23,15 +23,11 @@ export class ModelResolutionError extends Schema.TaggedError<ModelResolutionErro
 
 export const defaultModelKey = Schema.decodeUnknownSync(ModelKeySchema)('opencode_zen:glm-4.7-free')
 
-const parseModelKey = (modelKey: ModelKey): ModelConfig => {
-	const decoded = Schema.decodeUnknownSync(ModelKeySchema)(modelKey)
-	const modelId = Schema.decodeUnknownSync(ModelId)(decoded.slice(decoded.indexOf(':') + 1))
-
-	return Schema.decodeUnknownSync(ModelConfig)({
+export const parseModelKey = (modelKey: ModelKey): ModelConfig =>
+	Schema.decodeUnknownSync(ModelConfig)({
 		providerId: 'opencode_zen',
-		modelId
+		modelId: modelKey.split(':')[1] as ModelId
 	})
-}
 
 const buildProviders = Effect.gen(function* () {
 	const opencodeZen = createOpenAICompatible({

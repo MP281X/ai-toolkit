@@ -135,7 +135,9 @@ export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 							})
 				),
 				Match.orElse(remainingPart => {
-					if (Predicate.isNullable(current)) return null
+					if (Predicate.isNullable(current)) {
+						return null
+					}
 
 					return Message.make({
 						...current,

@@ -2,7 +2,7 @@ import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
-import {ModelKeySchema, resolveLanguageModel} from './models.ts'
+import {ModelKeySchema, parseModelKey, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
@@ -28,7 +28,6 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 		return {
 			stream: Effect.fnUntraced(function* (input: AiStreamInput) {
 				const group = registry.groups[input.group]
-				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${input.group}`)})
 
 				const modelKey = input.model
 				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
@@ -47,9 +46,7 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 					catch: cause => new AiSdkError({cause})
 				})
 				const fullStream = streamResult.fullStream
-				const separatorIndex = modelKey.indexOf(':')
-				const providerId = modelKey.slice(0, separatorIndex)
-				const modelId = modelKey.slice(separatorIndex + 1)
+				const {providerId, modelId} = parseModelKey(modelKey)
 
 				const startChunk = Start.make({
 					providerId,
