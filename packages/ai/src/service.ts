@@ -4,6 +4,7 @@ import {ToolLoopAgent} from 'ai'
 
 import {Model, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
+import {webSearchToolSet} from './tools/web-search.ts'
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.Defect,
@@ -18,13 +19,18 @@ export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
 export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
 	accessors: true,
 	effect: Effect.gen(function* () {
+		const tools = {
+			...(yield* webSearchToolSet)
+		}
+
 		return {
 			stream: Effect.fnUntraced(function* (input: AiInput) {
 				const agent = new ToolLoopAgent({
 					model: yield* pipe(
 						resolveLanguageModel(input.model),
 						Effect.mapError(cause => AiSdkError.make({cause}))
-					)
+					),
+					tools
 				})
 
 				const {fullStream} = yield* Effect.tryPromise({

@@ -1,4 +1,6 @@
+import {ChatInput} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
+import {Conversation} from '@ai-toolkit/components/conversation'
 import {createFileRoute} from '@tanstack/react-router'
 import {useQuery} from 'convex/react'
 
@@ -7,18 +9,22 @@ import {api} from '#convex/api.js'
 export const Route = createFileRoute('/(home)/')({component: RouteComponent})
 
 function RouteComponent() {
-	const messages = useQuery(api.messages.list, {})
+	const messages = useQuery(api.messages.list, {}) ?? []
 
 	return (
-		<div className="min-h-svh w-full bg-background text-foreground">
-			<div className="flex h-svh flex-col overflow-y-auto">
-				<div className="flex flex-col gap-2 px-3 py-3">
-					{!messages && <div className="px-2 py-6 text-muted-foreground text-sm">Loading messages...</div>}
-					{messages?.map(message => (
-						<Message key={message._id} {...message} />
-					))}
-				</div>
-			</div>
+		<div className="flex h-svh w-full flex-col bg-background text-foreground">
+			<Conversation className="min-h-0 flex-1">
+				{messages.map(message => (
+					<Message key={message._id} {...message} />
+				))}
+			</Conversation>
+
+			<ChatInput
+				onSubmit={input => {
+					// biome-ignore lint/suspicious/noConsole: _
+					console.log(input)
+				}}
+			/>
 		</div>
 	)
 }

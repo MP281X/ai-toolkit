@@ -1,11 +1,10 @@
 import {Rpc, RpcGroup} from '@effect/rpc'
-import {Schema} from 'effect'
 
-import {AiSdkError, Model, StreamPart} from '@ai-toolkit/ai'
+import {AiInput, AiSdkError, StreamPart} from '@ai-toolkit/ai'
 
 export class AiRpcs extends RpcGroup.make(
 	Rpc.make('AiStream', {
-		payload: {prompt: Schema.String, model: Model},
+		payload: AiInput,
 		success: StreamPart,
 		error: AiSdkError,
 		stream: true
