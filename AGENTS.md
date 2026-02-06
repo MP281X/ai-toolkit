@@ -20,9 +20,11 @@
 - Rely on type inference
 - No type casts
 - `any` banned
+- Declare type BEFORE const with same name/casing:
 
 ### React
 - React Compiler enabled—never manually memoize
+- Use `cn()` utility from `@packages/components/src/lib/utils.ts` for className composition—never template literals
 
 ### Naming & Structure
 - No abbreviated variable/argument names
@@ -190,26 +192,6 @@ const messages = await ctx.db
 - NEVER use `ctx.db` inside actions — no database access
 - Use `ctx.runQuery`/`ctx.runMutation` to access data
 
-### HTTP Endpoints
-
-Define in `convex/http.ts`:
-
-```typescript
-import { httpRouter } from 'convex/server'
-import { httpAction } from '#convex/server.js'
-
-const http = httpRouter()
-http.route({
-  path: '/echo',
-  method: 'POST',
-  handler: httpAction(async (ctx, req) => {
-    return new Response(await req.bytes(), { status: 200 })
-  }),
-})
-
-export default http
-```
-
 Paths register exactly as specified.
 
 ### Scheduling
@@ -238,3 +220,225 @@ const metadata = await ctx.db.system.get('_storage', fileId)
 ```
 
 - Store as Blob, convert to/from Blob when using
+
+# Effect
+
+### Effect.gen & Effect.fnUntraced
+
+Use `Effect.gen` for sequencing operations:
+
+```typescript
+import { Effect } from 'effect'
+
+const program = Effect.gen(function* () {
+  const data = yield* fetchData
+  yield* Effect.logInfo(`Processing: ${data}`)
+  return yield* processData(data)
+})
+```
+
+Use `Effect.fnUntraced` for named effects:
+
+```typescript
+const processUser = Effect.fnUntraced(function* (userId: string) {
+  const user = yield* getUser(userId)
+  return yield* processData(user)
+})
+```
+
+Add cross-cutting concerns via second argument:
+
+```typescript
+const fetchWithRetry = Effect.fnUntraced(
+  function* (url: string) {
+    return yield* fetchData(url)
+  },
+  flow(
+    Effect.retry(Schedule.recurs(3)),
+    Effect.timeout('5 seconds')
+  )
+)
+```
+
+### Pipe for Instrumentation
+
+Use `.pipe()` for timeouts, retries, logging:
+
+```typescript
+const resilient = apiCall.pipe(
+  Effect.timeout('2 seconds'),
+  Effect.retry(Schedule.exponential('100 millis').pipe(Schedule.compose(Schedule.recurs(3)))),
+  Effect.tap((data) => Effect.logInfo(`Fetched: ${data}`))
+)
+```
+
+### Services & Layers
+
+Define services as `Context.Tag` classes:
+
+```typescript
+import { Context, Effect } from 'effect'
+
+class Database extends Context.Tag('@app/Database')<
+  Database,
+  {
+    readonly query: (sql: string) => Effect.Effect<unknown[]>
+  }
+>() {}
+```
+
+Tag identifiers must be unique (use `@path/ServiceName` pattern). Service methods should have no dependencies (`R = never`).
+
+Implement with Layer:
+
+```typescript
+class Users extends Context.Tag('@app/Users')<
+  Users,
+  { readonly findById: (id: UserId) => Effect.Effect<User, UsersError> }
+>() {
+  static readonly layer = Layer.effect(
+    Users,
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient
+      
+      const findById = Effect.fnUntraced(function* (id: UserId) {
+        const response = yield* http.get(`/users/${id}`)
+        return yield* HttpClientResponse.schemaBodyJson(User)(response)
+      })
+      
+      return Users.of({ findById })
+    })
+  )
+}
+```
+
+**Layer naming:** camelCase with Layer suffix: `layer`, `testLayer`, `postgresLayer`.
+
+**Provide once at the top:**
+
+```typescript
+const appLayer = Layer.mergeAll(
+  Users.layer,
+  Database.layer,
+  Logger.layer
+)
+
+const main = program.pipe(Effect.provide(appLayer))
+```
+
+### Data Modeling with Schema
+
+**Records (AND types):**
+
+```typescript
+export type UserId = typeof UserId.Type
+export const UserId = Schema.String.pipe(Schema.brand('UserId'))
+
+export class User extends Schema.Class<User>('User')({
+  id: UserId,
+  name: Schema.String,
+  email: Schema.String,
+}) {
+  get displayName() { return `${this.name} (${this.email})` }
+}
+```
+
+**Variants (OR types):**
+
+```typescript
+export class Success extends Schema.TaggedClass<Success>()('Success', {
+  value: Schema.Number,
+}) {}
+
+export class Failure extends Schema.TaggedClass<Failure>()('Failure', {
+  error: Schema.String,
+}) {}
+
+export type Result = typeof Result.Type
+export const Result = Schema.Union(Success, Failure)
+
+// Pattern matching
+const render = (result: Result) =>
+  Match.valueTags(result, {
+    Success: ({ value }) => `Got: ${value}`,
+    Failure: ({ error }) => `Error: ${error}`,
+  })
+```
+
+**Branded types** prevent mixing semantically different values:
+
+```typescript
+export type UserId = typeof UserId.Type
+export const UserId = Schema.String.pipe(Schema.brand('UserId'))
+
+export type Email = typeof Email.Type
+export const Email = Schema.String.pipe(Schema.brand('Email'))
+
+export type Port = typeof Port.Type
+export const Port = Schema.Int.pipe(Schema.between(1, 65535), Schema.brand('Port'))
+```
+
+In well-designed domains, nearly all primitives should be branded.
+
+### Error Handling
+
+Define domain errors with `Schema.TaggedError`:
+
+```typescript
+class ValidationError extends Schema.TaggedError<ValidationError>()(
+  'ValidationError',
+  { field: Schema.String, message: Schema.String }
+) {}
+
+class NotFoundError extends Schema.TaggedError<NotFoundError>()(
+  'NotFoundError',
+  { resource: Schema.String, id: Schema.String }
+) {}
+```
+
+Tagged errors are yieldable—no `Effect.fail` needed:
+
+```typescript
+const rollDie = Effect.gen(function* () {
+  const roll = yield* Random.nextIntBetween(1, 6)
+  if (roll === 1) {
+    yield* BadLuck.make({ roll }) // Direct yield
+  }
+  return { roll }
+})
+```
+
+**Recovery:**
+
+```typescript
+// Handle specific error
+Effect.catchTag('HttpError', (error) => fallback)
+
+// Handle multiple errors
+Effect.catchTags({
+  HttpError: () => recoverHttp,
+  ValidationError: () => recoverValidation
+})
+
+// Handle all errors
+Effect.catchAll((error) => fallback)
+```
+
+**Expected errors vs Defects:**
+
+- **Typed errors** for recoverable domain failures: validation, not found, permissions
+- **Defects** for unrecoverable bugs/invariants: use `Effect.orDie` at app entry
+
+Wrap unknown errors with `Schema.Defect`:
+
+```typescript
+class ApiError extends Schema.TaggedError<ApiError>()(
+  'ApiError',
+  { endpoint: Schema.String, statusCode: Schema.Number, error: Schema.Defect }
+) {}
+
+const fetchUser = (id: string) =>
+  Effect.tryPromise({
+    try: () => fetch(`/api/users/${id}`).then(r => r.json()),
+    catch: (error) => ApiError.make({ endpoint: `/api/users/${id}`, statusCode: 500, error })
+  })

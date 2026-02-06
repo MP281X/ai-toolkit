@@ -12,40 +12,34 @@ import {ToolCall} from '#components/ai/tool-call.tsx'
 import {ToolResult} from '#components/ai/tool-result.tsx'
 import {cn, formatRelativeTime, formatTokens} from '#lib/utils.ts'
 
-export namespace Message {
-	export type Props = {message: MessageType}
-}
-
-export function Message(props: Message.Props) {
+export function Message(props: MessageType) {
 	return (
 		<article className="flex items-start gap-2">
 			<div
 				className={cn(
 					'mt-0.5 h-full w-0.5 shrink-0',
-					props.message.role === 'user' && 'bg-primary',
-					props.message.role === 'assistant' && 'bg-muted-foreground/40',
-					props.message.role === 'system' && 'bg-muted-foreground/30'
+					props.role === 'user' && 'bg-primary',
+					props.role === 'assistant' && 'bg-muted-foreground/40',
+					props.role === 'system' && 'bg-muted-foreground/30'
 				)}
 			/>
 			<div className="min-w-0 flex-1">
 				<div
 					className={cn(
 						'w-full px-3',
-						props.message.role === 'user' && 'border border-primary/20 bg-primary/1',
-						props.message.role !== 'user' &&
-							props.message.finishReason === 'stop' &&
-							'border border-blue-500/30 bg-blue-500/1'
+						props.role === 'user' && 'border border-primary/20 bg-primary/1',
+						props.role !== 'user' && props.finishReason === 'stop' && 'border border-blue-500/30 bg-blue-500/1'
 					)}
 				>
 					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
 						<span className="flex items-center gap-1">
-							{props.message.role === 'user' ? <UserIcon className="size-3" /> : <BotIcon className="size-3" />}
-							{props.message.model.provider}/{props.message.model.model}
+							{props.role === 'user' ? <UserIcon className="size-3" /> : <BotIcon className="size-3" />}
+							{props.model.provider}/{props.model.model}
 						</span>
-						<span className="ml-auto">{formatRelativeTime(props.message.startedAt)}</span>
+						<span className="ml-auto">{formatRelativeTime(props.startedAt)}</span>
 					</div>
 					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-						{props.message.parts.map((part, index) => {
+						{props.parts.map((part, index) => {
 							switch (part._tag) {
 								case 'text-delta':
 									return <Markdown key={index}>{part.text}</Markdown>
@@ -64,24 +58,24 @@ export function Message(props: Message.Props) {
 							}
 						})}
 					</div>
-					{props.message.usage && (
+					{props.usage && (
 						<div className="flex flex-wrap items-center gap-1.5 border-border/60 border-t py-2 text-[11px] text-muted-foreground leading-none">
-							{Predicate.isNotNullable(props.message.usage.input) && (
+							{Predicate.isNotNullable(props.usage.input) && (
 								<span className="inline-flex items-center gap-1 font-mono">
 									<InboxIcon className="size-3" />
-									{formatTokens(props.message.usage.input)}
+									{formatTokens(props.usage.input)}
 								</span>
 							)}
-							{Predicate.isNotNullable(props.message.usage.output) && (
+							{Predicate.isNotNullable(props.usage.output) && (
 								<span className="inline-flex items-center gap-1 font-mono">
 									<BookOpenTextIcon className="size-3" />
-									{formatTokens(props.message.usage.output)}
+									{formatTokens(props.usage.output)}
 								</span>
 							)}
-							{Predicate.isNotNullable(props.message.usage.reasoning) && (
+							{Predicate.isNotNullable(props.usage.reasoning) && (
 								<span className="inline-flex items-center gap-1 font-mono">
 									<HashIcon className="size-3" />
-									{formatTokens(props.message.usage.output)}
+									{formatTokens(props.usage.output)}
 								</span>
 							)}
 						</div>

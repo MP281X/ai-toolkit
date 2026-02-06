@@ -1,8 +1,6 @@
 import type {ToolCall as ToolCallSchema} from '@ai-toolkit/ai'
 import {ChevronRightIcon, WrenchIcon} from 'lucide-react'
 
-import {Badge} from '#components/ui/badge.tsx'
-
 export function ToolCall(props: ToolCallSchema) {
 	return (
 		<details className="group border border-border">
@@ -10,9 +8,6 @@ export function ToolCall(props: ToolCallSchema) {
 				<ChevronRightIcon className="size-3 text-muted-foreground transition-transform group-open:rotate-90" />
 				<WrenchIcon className="size-3 text-muted-foreground" />
 				<span className="text-foreground">{props.toolName}</span>
-				<Badge variant="outline" className="ml-auto font-mono text-[10px]">
-					{props.toolCallId.slice(0, 8)}
-				</Badge>
 			</summary>
 			<pre className="overflow-x-auto border-border border-t px-3 py-1.5 font-mono text-[11px] text-muted-foreground leading-snug">
 				{JSON.stringify(props.input, null, 2)}
