@@ -20,10 +20,12 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 
 		return {
 			stream: Effect.fnUntraced(function* (input: {prompt: string; model?: ModelKey; group?: string}) {
-				const groupId = input.group ?? defaultGroupId
-				const group = registry.groups[groupId as keyof typeof registry.groups]
+				const isGroupId = (value: string): value is keyof typeof registry.groups => value in registry.groups
 
-				if (!group) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${groupId}`)})
+				const groupId = input.group ?? defaultGroupId
+				if (!isGroupId(groupId)) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${groupId}`)})
+				const group = registry.groups[groupId]
+
 				const modelKey = input.model ?? defaultModelKey
 				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
 				const repairToolCall = makeRepairToolCall({repairModel: model})
@@ -36,15 +38,14 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 					experimental_repairToolCall: repairToolCall
 				})
 
-				const {fullStream} = yield* Effect.tryPromise({
+				const streamResult = yield* Effect.tryPromise({
 					try: () => agent.stream({prompt: input.prompt}),
 					catch: cause => new AiSdkError({cause})
 				})
-
-				const [providerId, modelId] = (modelKey.includes(':') ? modelKey : defaultModelKey).split(':') as [
-					string,
-					string
-				]
+				const fullStream = streamResult.fullStream
+				const separatorIndex = modelKey.indexOf(':')
+				const providerId = modelKey.slice(0, separatorIndex)
+				const modelId = modelKey.slice(separatorIndex + 1)
 
 				const startChunk = Start.make({
 					providerId,
@@ -53,17 +54,12 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 					role: 'assistant'
 				})
 
-				return Stream.filterMap(
-					Stream.concat(
-						Stream.succeed(startChunk),
-						Stream.fromAsyncIterable(fullStream, cause => new AiSdkError({cause}))
-					),
-					part => {
-						if ('_tag' in part) return Option.some<StreamPart>(part)
-
-						return Option.fromNullable(fromAiStreamPart(part))
-					}
+				const aiStream = Stream.filterMap(
+					Stream.fromAsyncIterable(fullStream, cause => new AiSdkError({cause})),
+					part => Option.fromNullable(fromAiStreamPart(part))
 				)
+
+				return Stream.concat(Stream.succeed<StreamPart>(startChunk), aiStream)
 			}, Stream.fromEffect)
 		}
 	})

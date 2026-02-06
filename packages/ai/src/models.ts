@@ -15,12 +15,13 @@ export class ModelResolutionError extends Schema.TaggedError<ModelResolutionErro
 	providerId: Schema.String
 }) {}
 
-export const defaultModelKey = 'opencode_zen:gpt-5-nano' as const
+export const defaultModelKey: ModelKey = 'opencode_zen:gpt-5-nano'
 
 const parseModelKey = (modelKey: ModelKey): ModelConfig => {
-	const [providerId, modelId] = modelKey.split(':') as [ProviderId, string]
+	const separatorIndex = modelKey.indexOf(':')
+	const modelId = modelKey.slice(separatorIndex + 1)
 
-	return {providerId, modelId}
+	return {providerId: 'opencode_zen', modelId}
 }
 
 const buildProviders = Effect.gen(function* () {

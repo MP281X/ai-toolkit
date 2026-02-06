@@ -80,15 +80,18 @@ export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>): 
 			return ToolResult.make(part)
 		case 'tool-error':
 			return ToolError.make(part)
-		case 'finish':
+		case 'finish': {
+			const outputTokenDetails = part.totalUsage?.outputTokenDetails
+
 			return new Finish({
 				finishReason: part.finishReason,
 				usage: {
-					input: part.totalUsage.inputTokens ?? 0,
-					output: part.totalUsage.outputTokenDetails.textTokens ?? 0,
-					reasoning: part.totalUsage.outputTokenDetails.reasoningTokens ?? 0
+					input: part.totalUsage?.inputTokens ?? 0,
+					output: outputTokenDetails?.textTokens ?? 0,
+					reasoning: outputTokenDetails?.reasoningTokens ?? 0
 				}
 			})
+		}
 		case 'error':
 			return Error.make(part)
 		default:
@@ -125,36 +128,14 @@ export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 				})
 			}
 
-			if (part._tag === 'finish') {
-				const base =
-					current ??
-					Message.make({
-						providerId: '',
-						modelId: '',
-						startedAt: Date.now(),
-						role: 'assistant',
-						parts: [],
-						finishReason: undefined,
-						usage: undefined
-					})
+			if (!current) return null
+
+			if (part._tag === 'finish')
 				return Message.make({
-					...base,
+					...current,
 					finishReason: part.finishReason,
 					usage: part.usage
 				})
-			}
-
-			if (!current) {
-				return Message.make({
-					providerId: '',
-					modelId: '',
-					startedAt: Date.now(),
-					role: 'assistant',
-					parts: [part],
-					finishReason: undefined,
-					usage: undefined
-				})
-			}
 
 			return Message.make({...current, parts: mergeParts(current.parts, part)})
 		}),
