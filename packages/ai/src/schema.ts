@@ -80,18 +80,15 @@ export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>): 
 			return ToolResult.make(part)
 		case 'tool-error':
 			return ToolError.make(part)
-		case 'finish': {
-			const outputTokenDetails = part.totalUsage?.outputTokenDetails
-
+		case 'finish':
 			return new Finish({
 				finishReason: part.finishReason,
 				usage: {
 					input: part.totalUsage?.inputTokens ?? 0,
-					output: outputTokenDetails?.textTokens ?? 0,
-					reasoning: outputTokenDetails?.reasoningTokens ?? 0
+					output: part.totalUsage?.outputTokenDetails?.textTokens ?? 0,
+					reasoning: part.totalUsage?.outputTokenDetails?.reasoningTokens ?? 0
 				}
 			})
-		}
 		case 'error':
 			return Error.make(part)
 		default:
@@ -130,12 +127,13 @@ export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
 
 			if (!current) return null
 
-			if (part._tag === 'finish')
+			if (part._tag === 'finish') {
 				return Message.make({
 					...current,
 					finishReason: part.finishReason,
 					usage: part.usage
 				})
+			}
 
 			return Message.make({...current, parts: mergeParts(current.parts, part)})
 		}),

@@ -2,7 +2,7 @@ import {Effect, Option, Schema, Stream} from 'effect'
 
 import {ToolLoopAgent} from 'ai'
 
-import {defaultModelKey, type ModelKey, resolveLanguageModel} from './models.ts'
+import {type ModelKey, resolveLanguageModel} from './models.ts'
 import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
 import {createToolRegistry} from './tools/registry.ts'
 import {makeRepairToolCall} from './tools/repair.ts'
@@ -19,14 +19,14 @@ export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/
 		const defaultGroupId = 'web'
 
 		return {
-			stream: Effect.fnUntraced(function* (input: {prompt: string; model?: ModelKey; group?: string}) {
+			stream: Effect.fnUntraced(function* (input: {prompt: string; model: ModelKey; group?: string}) {
 				const isGroupId = (value: string): value is keyof typeof registry.groups => value in registry.groups
 
 				const groupId = input.group ?? defaultGroupId
 				if (!isGroupId(groupId)) return yield* new AiSdkError({cause: new Error(`Unknown tool group: ${groupId}`)})
 				const group = registry.groups[groupId]
 
-				const modelKey = input.model ?? defaultModelKey
+				const modelKey = input.model
 				const model = yield* resolveLanguageModel(modelKey).pipe(Effect.mapError(cause => new AiSdkError({cause})))
 				const repairToolCall = makeRepairToolCall({repairModel: model})
 

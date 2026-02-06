@@ -2,26 +2,34 @@ import {Config, Effect, Record, Schema} from 'effect'
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 
-export type ProviderId = 'opencode_zen'
+export const ProviderId = Schema.Literal('opencode_zen')
+export type ProviderId = typeof ProviderId.Type
 
-export type ModelKey = `${ProviderId}:${string}`
+export const ModelKeySchema = Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), Schema.String)
+export type ModelKey = typeof ModelKeySchema.Type
 
-export type ModelConfig = {
-	providerId: ProviderId
-	modelId: string
-}
+export const ModelConfig = Schema.Struct({
+	providerId: ProviderId,
+	modelId: Schema.String
+})
+export type ModelConfig = typeof ModelConfig.Type
 
 export class ModelResolutionError extends Schema.TaggedError<ModelResolutionError>()('ModelResolutionError', {
 	providerId: Schema.String
 }) {}
 
-export const defaultModelKey: ModelKey = 'opencode_zen:gpt-5-nano'
+const decodeModelKey = Schema.decodeUnknownSync(ModelKeySchema)
+const toModelConfig = Schema.decodeUnknownSync(ModelConfig)
+
+export const defaultModelKey = decodeModelKey('opencode_zen:gpt-5-nano')
 
 const parseModelKey = (modelKey: ModelKey): ModelConfig => {
-	const separatorIndex = modelKey.indexOf(':')
-	const modelId = modelKey.slice(separatorIndex + 1)
+	const decoded = decodeModelKey(modelKey)
 
-	return {providerId: 'opencode_zen', modelId}
+	return toModelConfig({
+		providerId: 'opencode_zen',
+		modelId: decoded.slice(decoded.indexOf(':') + 1)
+	})
 }
 
 const buildProviders = Effect.gen(function* () {
