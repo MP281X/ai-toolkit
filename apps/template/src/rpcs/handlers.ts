@@ -1,4 +1,4 @@
-import {Effect, Stream} from 'effect'
+import {Effect} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai'
 
@@ -9,7 +9,7 @@ export const AiLive = AiRpcs.toLayer(
 		const aiSdk = yield* AiSdk
 
 		return AiRpcs.of({
-			AiStream: args => Stream.flatten(aiSdk.stream(args))
+			AiStream: args => aiSdk.stream(args)
 		})
 	})
 )
