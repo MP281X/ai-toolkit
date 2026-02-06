@@ -1,10 +1,11 @@
 import {RpcGroup, RpcServer} from '@effect/rpc'
-import {Layer, Record} from 'effect'
+import {Effect, Layer, Record} from 'effect'
 
+import type {FunctionReference, OptionalRestArgs} from 'convex/server'
 import {httpRouter} from 'convex/server'
 
 import {httpAction} from '#convex/server.js'
-import {convexRequestContext} from '#lib/convexRequestContext.ts'
+import {ConvexRequestContext} from '#lib/convexRequestContext.ts'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiRpcs} from '#rpcs/contracts.ts'
 import {AiLive} from '#rpcs/handlers.ts'
@@ -39,7 +40,25 @@ http.route({
 	path: '/',
 	method: 'POST',
 	handler: httpAction(async (actionContext, request) => {
-		const response = await handler(request, convexRequestContext(actionContext))
+		const response = await handler(
+			request,
+			ConvexRequestContext.context(
+				new ConvexRequestContext({
+					runQuery: <Query extends FunctionReference<'query', 'public' | 'internal'>>(
+						query: Query,
+						...args: OptionalRestArgs<Query>
+					) => Effect.tryPromise(() => actionContext.runQuery(query, ...args)),
+					runMutation: <Mutation extends FunctionReference<'mutation', 'public' | 'internal'>>(
+						mutation: Mutation,
+						...args: OptionalRestArgs<Mutation>
+					) => Effect.tryPromise(() => actionContext.runMutation(mutation, ...args)),
+					runAction: <Action extends FunctionReference<'action', 'public' | 'internal'>>(
+						action: Action,
+						...args: OptionalRestArgs<Action>
+					) => Effect.tryPromise(() => actionContext.runAction(action, ...args))
+				})
+			)
+		)
 
 		return new Response(response.body, {
 			status: response.status,
