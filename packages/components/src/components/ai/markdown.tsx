@@ -26,7 +26,7 @@ function Inline(props: {content: string}) {
 }
 
 export function Markdown(props: {children: string; className?: string}) {
-	const tokens = marked.lexer(props.children).values()
+	const tokens = marked.lexer(props.children)
 
 	return (
 		<div className={cn('markdown wrap-break-word select-text text-wrap text-[13px] leading-relaxed', props.className)}>
