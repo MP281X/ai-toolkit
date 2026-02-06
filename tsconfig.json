@@ -5,8 +5,10 @@
 
 		// type checking
 		"strict": true,
+		"noUnusedLocals": true,
 		"noErrorTruncation": true,
 		"noImplicitReturns": true,
+		"noUnusedParameters": true,
 		"noImplicitOverride": true,
 		"allowUnusedLabels": false,
 		"noUncheckedIndexedAccess": true,

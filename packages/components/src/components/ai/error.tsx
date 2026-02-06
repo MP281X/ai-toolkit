@@ -1,6 +1,6 @@
 import type {Error as ErrorSchema} from '@ai-toolkit/ai'
 
-import {Alert, AlertDescription, AlertTitle} from '#components/ui/alert.tsx'
+import {Alert, AlertDescription} from '#components/ui/alert.tsx'
 import {formatError} from '#lib/utils.ts'
 
 export function Error(props: ErrorSchema) {

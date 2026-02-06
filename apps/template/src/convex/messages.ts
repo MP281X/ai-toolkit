@@ -12,7 +12,7 @@ export const list = query({
 		return await ctx.db
 			.query('messages')
 			.withIndex('by_userId', q => q.eq('userId', userId))
-			.order('desc')
+			.order('asc')
 			.collect()
 	}
 })

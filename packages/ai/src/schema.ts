@@ -1,4 +1,4 @@
-import {Schema} from 'effect'
+import {Option, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
@@ -32,30 +32,43 @@ export class ToolError extends Schema.TaggedClass<ToolError>()('tool-error', {
 	error: Schema.Unknown
 }) {}
 
-export class Finish extends Schema.TaggedClass<Finish>()('finish', {
-	finishReason: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'),
-	totalUsage: Schema.Struct({
-		inputTokens: Schema.optional(Schema.Number),
-		outputTokens: Schema.optional(Schema.Number),
-		totalTokens: Schema.optional(Schema.Number),
-		inputTokenDetails: Schema.Struct({
-			cacheReadTokens: Schema.optional(Schema.Number),
-			cacheWriteTokens: Schema.optional(Schema.Number)
-		}),
-		outputTokenDetails: Schema.Struct({
-			reasoningTokens: Schema.optional(Schema.Number)
-		})
-	})
-}) {}
-
 export class Error extends Schema.TaggedClass<Error>()('error', {
 	error: Schema.Unknown
 }) {}
 
-export type TextStreamPart = typeof TextStreamPart.Type
-export const TextStreamPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
+export class Start extends Schema.TaggedClass<Start>()('start', {
+	providerId: Schema.String,
+	modelId: Schema.String,
+	startedAt: Schema.Number,
+	role: Schema.Literal('user', 'assistant', 'system')
+}) {}
 
-export const fromAiTextStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
+export class Finish extends Schema.TaggedClass<Finish>()('finish', {
+	finishReason: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'),
+	usage: Schema.Struct({
+		input: Schema.Number,
+		output: Schema.Number,
+		reasoning: Schema.Number
+	})
+}) {}
+
+export type ContentPart = typeof ContentPart.Type
+export const ContentPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Error)
+
+export type StreamPart = typeof StreamPart.Type
+export const StreamPart = Schema.Union(Start, TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
+
+export class Message extends Schema.Class<Message>('Message')({
+	providerId: Schema.String,
+	modelId: Schema.String,
+	startedAt: Schema.Number,
+	role: Schema.Literal('user', 'assistant', 'system'),
+	parts: Schema.Array(ContentPart),
+	finishReason: Schema.optional(Finish.fields.finishReason),
+	usage: Schema.optional(Finish.fields.usage)
+}) {}
+
+export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>): StreamPart | null => {
 	switch (part.type) {
 		case 'text-delta':
 			return TextDelta.make(part)
@@ -68,10 +81,82 @@ export const fromAiTextStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T
 		case 'tool-error':
 			return ToolError.make(part)
 		case 'finish':
-			return Finish.make(part)
+			return new Finish({
+				finishReason: part.finishReason,
+				usage: {
+					input: part.totalUsage.inputTokens ?? 0,
+					output: part.totalUsage.outputTokenDetails.textTokens ?? 0,
+					reasoning: part.totalUsage.outputTokenDetails.reasoningTokens ?? 0
+				}
+			})
 		case 'error':
 			return Error.make(part)
 		default:
 			return null
 	}
 }
+
+const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart): ContentPart[] => {
+	if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return [...currentParts, part]
+
+	const lastPart = currentParts.at(-1)
+
+	if (!lastPart) return [...currentParts, part]
+
+	if (lastPart._tag !== 'text-delta' && lastPart._tag !== 'reasoning-delta') return [...currentParts, part]
+
+	if (lastPart._tag !== part._tag || lastPart.id !== part.id) return [...currentParts, part]
+
+	return [...currentParts.slice(0, -1), {...lastPart, text: lastPart.text + part.text}]
+}
+
+export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
+	Stream.filterMap(
+		Stream.scan(stream, null as Message | null, (current, part) => {
+			if (part._tag === 'start') {
+				return Message.make({
+					providerId: part.providerId,
+					modelId: part.modelId,
+					startedAt: part.startedAt,
+					role: part.role,
+					parts: [],
+					finishReason: undefined,
+					usage: undefined
+				})
+			}
+
+			if (part._tag === 'finish') {
+				const base =
+					current ??
+					Message.make({
+						providerId: '',
+						modelId: '',
+						startedAt: Date.now(),
+						role: 'assistant',
+						parts: [],
+						finishReason: undefined,
+						usage: undefined
+					})
+				return Message.make({
+					...base,
+					finishReason: part.finishReason,
+					usage: part.usage
+				})
+			}
+
+			if (!current) {
+				return Message.make({
+					providerId: '',
+					modelId: '',
+					startedAt: Date.now(),
+					role: 'assistant',
+					parts: [part],
+					finishReason: undefined,
+					usage: undefined
+				})
+			}
+
+			return Message.make({...current, parts: mergeParts(current.parts, part)})
+		}),
+		message => Option.fromNullable(message)
+	)
