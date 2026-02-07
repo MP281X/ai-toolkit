@@ -6,7 +6,7 @@
 	"workspaces": ["apps/*", "packages/*"],
 
 	"scripts": {
-		"dev": "turbo run dev:vite dev:convex",
+		"dev": "turbo run dev:client dev:server",
 
 		"build": "NODE_ENV=production turbo run build",
 
@@ -18,9 +18,12 @@
 
 	"dependencies": {
 		"effect": "latest",
+		"@effect-atom/atom-react": "latest",
+
 		"@effect/rpc": "latest",
 		"@effect/platform": "latest",
-		"@effect-atom/atom-react": "latest"
+		"@effect/platform-bun": "latest",
+		"@effect/platform-browser": "latest"
 	},
 
 	"devDependencies": {
