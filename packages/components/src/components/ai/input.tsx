@@ -31,6 +31,8 @@ import {cn} from '#lib/utils.ts'
 type ChatInputProps = {
 	onSubmit: (input: AiInput) => void
 	placeholder?: string
+	actions?: ChatAction[]
+	onActionSelect?: (action: ChatAction) => void
 }
 
 type TriggerType = 'command' | 'insert' | 'mention' | 'tag'
@@ -40,7 +42,7 @@ type TriggerState = {
 	query: string
 }
 
-type MenuAction = {
+type ChatAction = {
 	id: string
 	title: string
 	description: string
@@ -48,7 +50,7 @@ type MenuAction = {
 	trigger: TriggerType
 }
 
-const menuActions: MenuAction[] = [
+const defaultActions: ChatAction[] = [
 	{
 		id: 'mention-agent',
 		title: '@agentname',
@@ -71,24 +73,10 @@ const menuActions: MenuAction[] = [
 		trigger: 'command'
 	},
 	{
-		id: 'command-tool',
-		title: '/tool',
-		description: 'Call a tool or workflow',
-		insert: '/tool ',
-		trigger: 'command'
-	},
-	{
 		id: 'tag-agent',
 		title: '#agent',
 		description: 'Change agent or system prompt',
 		insert: '#agent ',
-		trigger: 'tag'
-	},
-	{
-		id: 'tag-system',
-		title: '#system',
-		description: 'Mark a system prompt section',
-		insert: '#system ',
 		trigger: 'tag'
 	},
 	{
@@ -103,13 +91,6 @@ const menuActions: MenuAction[] = [
 		title: 'XML section',
 		description: 'Wrap content with XML markers',
 		insert: '<section>\n\n</section>\n',
-		trigger: 'insert'
-	},
-	{
-		id: 'insert-divider',
-		title: 'Section divider',
-		description: 'Add a strong boundary between ideas',
-		insert: '-----\n',
 		trigger: 'insert'
 	}
 ]
@@ -129,13 +110,15 @@ export function ChatInput(props: ChatInputProps) {
 	const [textTrigger, setTextTrigger] = useState<TriggerState | null>(null)
 	const [manualTrigger, setManualTrigger] = useState<TriggerState | null>(null)
 	const editorRef = useRef<LexicalEditor | null>(null)
+	const actions = props.actions ?? defaultActions
+	const hasInsertActions = actions.some(action => action.trigger === 'insert')
 
 	const activeTrigger = manualTrigger ?? textTrigger
 
 	const filteredActions =
 		activeTrigger === null
 			? []
-			: menuActions.filter(action => {
+			: actions.filter(action => {
 					if (action.trigger !== activeTrigger.type) return false
 					if (!activeTrigger.query) return true
 					const query = activeTrigger.query.toLowerCase()
@@ -158,7 +141,7 @@ export function ChatInput(props: ChatInputProps) {
 		setManualTrigger(null)
 	}
 
-	function handleActionSelect(action: MenuAction) {
+	function handleActionSelect(action: ChatAction) {
 		const editor = editorRef.current
 		if (!editor) return
 		editor.update(() => {
@@ -173,6 +156,7 @@ export function ChatInput(props: ChatInputProps) {
 			}
 			selection.insertText(action.insert)
 		})
+		props.onActionSelect?.(action)
 		setManualTrigger(null)
 		setTextTrigger(null)
 	}
@@ -184,7 +168,12 @@ export function ChatInput(props: ChatInputProps) {
 			setPrompt(root.getTextContent())
 			const selection = $getSelection()
 			const trigger = readTrigger(selection)
-			setTextTrigger(trigger)
+			if (trigger === null) {
+				setTextTrigger(null)
+				return
+			}
+			const hasActions = actions.some(action => action.trigger === trigger.type)
+			setTextTrigger(hasActions ? trigger : null)
 		})
 	}
 
@@ -217,6 +206,7 @@ export function ChatInput(props: ChatInputProps) {
 								<HotkeyPlugin
 									onSubmit={handleSubmit}
 									onOpenInsertMenu={() => {
+										if (!hasInsertActions) return
 										if (manualTrigger) {
 											setManualTrigger(null)
 											return
@@ -228,6 +218,7 @@ export function ChatInput(props: ChatInputProps) {
 										setTextTrigger(null)
 									}}
 									isMenuOpen={activeTrigger !== null}
+									hasInsertActions={hasInsertActions}
 								/>
 							</div>
 						</LexicalComposer>
@@ -341,6 +332,7 @@ type HotkeyPluginProps = {
 	onOpenInsertMenu: () => void
 	onCloseMenu: () => void
 	isMenuOpen: boolean
+	hasInsertActions: boolean
 }
 
 function HotkeyPlugin(props: HotkeyPluginProps) {
@@ -366,7 +358,7 @@ function HotkeyPlugin(props: HotkeyPluginProps) {
 						props.onCloseMenu()
 						return false
 					}
-					if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+					if (props.hasInsertActions && event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
 						event.preventDefault()
 						props.onOpenInsertMenu()
 						return true
@@ -376,6 +368,14 @@ function HotkeyPlugin(props: HotkeyPluginProps) {
 				COMMAND_PRIORITY_LOW
 			)
 		)
-	}, [editor, props.isMenuOpen, props.onCloseMenu, props.onOpenInsertMenu, props.onSubmit, props])
+	}, [
+		editor,
+		props.hasInsertActions,
+		props.isMenuOpen,
+		props.onCloseMenu,
+		props.onOpenInsertMenu,
+		props.onSubmit,
+		props
+	])
 	return null
 }
