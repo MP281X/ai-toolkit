@@ -24,6 +24,7 @@
 		"cmdk": "latest",
 		"@base-ui/react": "^1",
 		"lucide-react": "latest",
+
 		"lexical": "latest",
 		"@lexical/react": "latest",
 		"@lexical/utils": "latest",
