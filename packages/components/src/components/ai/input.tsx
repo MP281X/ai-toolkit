@@ -337,15 +337,20 @@ type HotkeyPluginProps = {
 
 function HotkeyPlugin(props: HotkeyPluginProps) {
 	const [editor] = useLexicalComposerContext()
+	const onSubmit = props.onSubmit
+	const onOpenInsertMenu = props.onOpenInsertMenu
+	const onCloseMenu = props.onCloseMenu
+	const isMenuOpen = props.isMenuOpen
+	const hasInsertActions = props.hasInsertActions
 	useEffect(() => {
 		return mergeRegister(
 			editor.registerCommand(
 				KEY_ENTER_COMMAND,
 				event => {
 					if (event?.shiftKey) return false
-					if (props.isMenuOpen) return false
+					if (isMenuOpen) return false
 					if (event) event.preventDefault()
-					props.onSubmit()
+					onSubmit()
 					return true
 				},
 				COMMAND_PRIORITY_LOW
@@ -355,12 +360,12 @@ function HotkeyPlugin(props: HotkeyPluginProps) {
 				event => {
 					if (!event) return false
 					if (event.key === 'Escape') {
-						props.onCloseMenu()
+						onCloseMenu()
 						return false
 					}
-					if (props.hasInsertActions && event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+					if (hasInsertActions && event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
 						event.preventDefault()
-						props.onOpenInsertMenu()
+						onOpenInsertMenu()
 						return true
 					}
 					return false
@@ -368,14 +373,6 @@ function HotkeyPlugin(props: HotkeyPluginProps) {
 				COMMAND_PRIORITY_LOW
 			)
 		)
-	}, [
-		editor,
-		props.hasInsertActions,
-		props.isMenuOpen,
-		props.onCloseMenu,
-		props.onOpenInsertMenu,
-		props.onSubmit,
-		props
-	])
+	}, [editor, hasInsertActions, isMenuOpen, onCloseMenu, onOpenInsertMenu, onSubmit])
 	return null
 }
