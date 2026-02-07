@@ -1,0 +1,24 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/opentelemetry",
+
+	"exports": {
+		"./client": "./src/client.ts",
+		"./server": "./src/server.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
+		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
+	},
+
+	"dependencies": {
+		"@effect/opentelemetry": "latest",
+
+		"@opentelemetry/sdk-trace-web": "latest",
+		"@opentelemetry/sdk-trace-node": "latest",
+		"@opentelemetry/sdk-trace-base": "latest",
+		"@opentelemetry/exporter-trace-otlp-http": "latest"
+	}
+}

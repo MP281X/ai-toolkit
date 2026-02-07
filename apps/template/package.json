@@ -11,8 +11,8 @@
 	},
 
 	"scripts": {
-		"dev:convex": "convex dev",
-		"dev:vite": "vite dev --port 5173",
+		"dev:client": "vite dev --port 5173",
+		"dev:server": "bun --watch ./src/main.server.tsx",
 
 		"build": "vite build --emptyOutDir",
 
@@ -26,12 +26,9 @@
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 
-		"convex": "latest",
-		"@auth/core": "0.37",
-		"@convex-dev/auth": "latest",
-
 		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/components": "workspace:*"
+		"@ai-toolkit/components": "workspace:*",
+		"@ai-toolkit/opentelemetry": "workspace:*"
 	},
 
 	"devDependencies": {

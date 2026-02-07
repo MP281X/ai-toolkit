@@ -1,34 +1,43 @@
+import {Effect, Stream} from 'effect'
+
 import type {Model} from '@ai-toolkit/ai'
 import {Autocomplete, AutocompleteOption, ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
+import {useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
-import {useQuery} from 'convex/react'
 import {useState} from 'react'
 
-import {api} from '#convex/api.js'
+import {ApiClient, AtomRuntime} from '#lib/atomRuntime.ts'
 
 export const Route = createFileRoute('/(home)/')({component: RouteComponent})
 
+const listMessagesAtom = AtomRuntime.atom(
+	Effect.gen(function* () {
+		const client = yield* ApiClient
+		return client('ListMessages', void 0)
+	}).pipe(Stream.unwrap)
+)
+
 function RouteComponent() {
-	const messages = useQuery(api.messages.list, {}) ?? []
 	const [model, setModel] = useState<Model>({provider: 'opencode_zen', model: 'kimi-k2.5-free'})
+
+	const {value: messages} = useAtomSuspense(listMessagesAtom)
 
 	return (
 		<div className="flex h-svh w-full flex-col bg-background text-foreground">
 			<Conversation className="min-h-0 flex-1">
-				{messages.map(message => (
-					<Message key={message._id} {...message} />
+				{messages.map((message, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: _
+					<Message key={index} {...message} />
 				))}
 			</Conversation>
 
 			<ChatInput
-				onSubmit={payload => {
-					// biome-ignore lint/suspicious/noConsole: _
-					console.log(payload)
-				}}
+				// biome-ignore lint/suspicious/noConsole: TMP
+				onSubmit={console.log}
 			>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />

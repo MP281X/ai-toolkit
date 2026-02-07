@@ -4,6 +4,15 @@ import react from '@vitejs/plugin-react'
 import {defineConfig} from 'vite'
 
 export default defineConfig({
+	server: {
+		proxy: {
+			'/rpc': {
+				target: 'http://localhost:8080',
+				changeOrigin: true,
+				ws: true
+			}
+		}
+	},
 	plugins: [
 		tanstackRouter({target: 'react', disableLogging: true}),
 		tailwindcss({optimize: true}),
