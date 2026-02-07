@@ -5,7 +5,7 @@ import Exa from 'exa-js'
 import {z} from 'zod'
 
 export const webSearchToolSet = Effect.gen(function* () {
-	const exa = new Exa(yield* Config.string('AI_EXA_API_KEY'))
+	const exa = new Exa(yield* Config.string('AI_EXA'))
 
 	return {
 		web_search: tool({
