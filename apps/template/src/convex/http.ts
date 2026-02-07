@@ -1,7 +1,6 @@
 import {RpcGroup, RpcServer} from '@effect/rpc'
 import {Effect, Layer, Record} from 'effect'
 
-import type {FunctionReference, OptionalRestArgs} from 'convex/server'
 import {httpRouter} from 'convex/server'
 
 import {httpAction} from '#convex/server.js'
@@ -44,18 +43,9 @@ http.route({
 			request,
 			ConvexRequestContext.context(
 				new ConvexRequestContext({
-					runQuery: <Query extends FunctionReference<'query', 'public' | 'internal'>>(
-						query: Query,
-						...args: OptionalRestArgs<Query>
-					) => Effect.tryPromise(() => actionContext.runQuery(query, ...args)),
-					runMutation: <Mutation extends FunctionReference<'mutation', 'public' | 'internal'>>(
-						mutation: Mutation,
-						...args: OptionalRestArgs<Mutation>
-					) => Effect.tryPromise(() => actionContext.runMutation(mutation, ...args)),
-					runAction: <Action extends FunctionReference<'action', 'public' | 'internal'>>(
-						action: Action,
-						...args: OptionalRestArgs<Action>
-					) => Effect.tryPromise(() => actionContext.runAction(action, ...args))
+					runQuery: (query, ...args) => Effect.tryPromise(() => actionContext.runQuery(query, ...args)),
+					runMutation: (mutation, ...args) => Effect.tryPromise(() => actionContext.runMutation(mutation, ...args)),
+					runAction: (action, ...args) => Effect.tryPromise(() => actionContext.runAction(action, ...args))
 				})
 			)
 		)
