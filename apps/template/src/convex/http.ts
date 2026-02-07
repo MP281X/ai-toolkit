@@ -1,10 +1,10 @@
 import {RpcGroup, RpcServer} from '@effect/rpc'
-import {Layer, Record} from 'effect'
+import {Context, Effect, Layer, Record} from 'effect'
 
 import {httpRouter} from 'convex/server'
 
 import {httpAction} from '#convex/server.js'
-import {LiveLayers} from '#lib/serverRuntime.ts'
+import {ConvexCtx, LiveLayers} from '#lib/convexRuntime.ts'
 import {AiRpcs} from '#rpcs/contracts.ts'
 import {AiLive} from '#rpcs/handlers.ts'
 import {auth} from './auth.ts'
@@ -37,8 +37,15 @@ http.route({
 http.route({
 	path: '/',
 	method: 'POST',
-	handler: httpAction(async (_ctx, request) => {
-		const response = await handler(request)
+	handler: httpAction(async (ctx, request) => {
+		const response = await handler(
+			request,
+			Context.make(ConvexCtx, {
+				runQuery: (query, ...args) => Effect.promise(() => ctx.runQuery(query, ...args)),
+				runAction: (action, ...args) => Effect.promise(() => ctx.runAction(action, ...args)),
+				runMutation: (mutation, ...args) => Effect.promise(() => ctx.runMutation(mutation, ...args))
+			})
+		)
 
 		return new Response(response.body, {
 			status: response.status,
