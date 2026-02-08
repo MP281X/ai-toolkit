@@ -146,7 +146,7 @@
 
 	html {
 		/* @apply bg-background font-sans text-foreground select-none; */
-		@apply min-h-dvh bg-background font-sans text-foreground select-text;
+		@apply bg-background font-sans text-foreground select-text;
 	}
 
 	::selection {

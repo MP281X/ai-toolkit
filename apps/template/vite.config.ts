@@ -6,7 +6,7 @@ import {defineConfig} from 'vite'
 export default defineConfig({
 	server: {
 		proxy: {
-			'/rpc': {
+			'/api': {
 				target: 'http://localhost:8080',
 				changeOrigin: true,
 				ws: true

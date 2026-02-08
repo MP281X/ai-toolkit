@@ -14,7 +14,8 @@
 		"dev:client": "vite dev --port 5173",
 		"dev:server": "bun --watch ./src/main.server.tsx",
 
-		"build": "vite build --emptyOutDir",
+		"build:client": "vite build --emptyOutDir",
+		"build:server": "bun build ./src/main.server.tsx --compile --outfile ./dist/backend",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
 		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
@@ -27,6 +28,7 @@
 		"@tanstack/router-plugin": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
+		"@ai-toolkit/oauth": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},

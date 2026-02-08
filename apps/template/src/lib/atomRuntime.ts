@@ -3,6 +3,7 @@ import {BrowserSocket} from '@effect/platform-browser'
 import {RpcClient, RpcGroup, RpcSerialization} from '@effect/rpc'
 import {ConfigProvider, Layer, pipe} from 'effect'
 
+import {OAuth} from '@ai-toolkit/oauth/client'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 import {Atom, AtomRpc} from '@effect-atom/atom-react'
 
@@ -14,14 +15,22 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(OtelLayer('frontend')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(RpcSerialization.layerNdjson),
+	// application layers
+	Layer.provideMerge(OAuth.Default),
 	// envs
-	Layer.provideMerge(Layer.setConfigProvider(ConfigProvider.fromJson({})))
+	Layer.provideMerge(
+		Layer.setConfigProvider(
+			ConfigProvider.fromJson({
+				AUTH_BASE_URL: import.meta.env['VITE_AUTH_BASE_URL']
+			})
+		)
+	)
 )
 
 export class ApiClient extends AtomRpc.Tag<ApiClient>()('ApiClient', {
 	group: RpcGroup.make().merge(AiRpcs).merge(MessagesRpcs),
 	protocol: RpcClient.layerProtocolSocket({retryTransientErrors: true}).pipe(
-		Layer.provide(BrowserSocket.layerWebSocket('/rpc')),
+		Layer.provide(BrowserSocket.layerWebSocket('/api/rpc')),
 		Layer.provide(LiveLayers)
 	)
 }) {}

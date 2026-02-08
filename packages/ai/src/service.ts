@@ -16,7 +16,7 @@ export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
 	model: Model
 }) {}
 
-export class AiSdk extends Effect.Service<AiSdk>()('@effect-full-stack-template/ai/AiClient', {
+export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const tools = {

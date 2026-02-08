@@ -3,6 +3,8 @@ import {BunHttpServer, BunRuntime} from '@effect/platform-bun'
 import {RpcGroup, RpcServer} from '@effect/rpc'
 import {Effect, Function, Layer, pipe} from 'effect'
 
+import {OAuth} from '@ai-toolkit/oauth/server'
+
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiRpcs, MessagesRpcs} from '#rpcs/contracts.ts'
 
@@ -14,7 +16,8 @@ const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs, Me
 // HTTP routes
 const Routes = Effect.gen(function* () {
 	return HttpRouter.empty.pipe(
-		HttpRouter.all('/rpc', yield* RpcHandler),
+		HttpRouter.all('/api/rpc', yield* RpcHandler),
+		HttpRouter.all('/api/auth/*', OAuth.handler),
 		HttpMiddleware.cors({
 			credentials: true,
 			allowedOrigins: ['*'],
