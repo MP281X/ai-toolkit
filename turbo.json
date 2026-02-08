@@ -9,7 +9,8 @@
 		"dev:client": { "cache": false, "persistent": true },
 		"dev:server": { "cache": false, "persistent": true },
 
-		"build": { "dependsOn": ["^check", "^build"], "outputs": ["dist/**", ".output/**"] },
+		"build:client": { "dependsOn": ["^check"], "outputs": ["dist/**", ".output/**"] },
+		"build:server": { "dependsOn": ["^check"], "outputs": ["dist/**", ".output/**"] },
 
 		"fix": { "cache": false },
 		"check": { "cache": false }

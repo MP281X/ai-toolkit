@@ -1,0 +1,19 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/oauth",
+
+	"exports": {
+		"./server": "./src/server.ts",
+		"./client": "./src/client.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
+		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
+	},
+
+	"dependencies": {
+		"better-auth": "latest"
+	}
+}

@@ -3,6 +3,8 @@ import {Schema} from 'effect'
 
 import {AiInput, AiSdkError, Message, StreamPart} from '@ai-toolkit/ai'
 
+import {AuthMiddleware} from '#rpcs/middlewares.ts'
+
 export class AiRpcs extends RpcGroup.make(
 	Rpc.make('AiStream', {
 		payload: AiInput,
@@ -10,11 +12,11 @@ export class AiRpcs extends RpcGroup.make(
 		error: AiSdkError,
 		stream: true
 	})
-) {}
+).middleware(AuthMiddleware) {}
 
 export class MessagesRpcs extends RpcGroup.make(
 	Rpc.make('ListMessages', {
 		success: Schema.Array(Message),
 		stream: true
 	})
-) {}
+).middleware(AuthMiddleware) {}
