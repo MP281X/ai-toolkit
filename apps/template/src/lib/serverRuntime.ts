@@ -6,12 +6,15 @@ import {OAuth} from '@ai-toolkit/oauth/server'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
 import {AiLive, MessagesLive} from '#rpcs/handlers.ts'
+import {AuthMiddlewareLive} from '#rpcs/middlewares.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
 	// rpc handlers
 	Layer.provideMerge(AiLive),
 	Layer.provideMerge(MessagesLive),
+	// rpc middlewares
+	Layer.provideMerge(AuthMiddlewareLive),
 	// application layers
 	Layer.provideMerge(AiSdk.Default),
 	Layer.provideMerge(OAuth.Default),

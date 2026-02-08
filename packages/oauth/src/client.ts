@@ -8,7 +8,7 @@ export class OAuthError extends Schema.TaggedError<OAuthError>()('OAuthError', {
 
 type BetterAuthResult<T> = {data: T; error: null} | {data: null; error: unknown}
 
-export class OAuth extends Effect.Service<OAuth>()('@oauth/GitHubOAuth', {
+export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const client = createAuthClient({baseURL: yield* Config.string('AUTH_BASE_URL')})

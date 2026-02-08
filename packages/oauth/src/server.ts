@@ -1,5 +1,5 @@
-import {HttpServerRequest, HttpServerResponse} from '@effect/platform'
-import {Config, Effect, pipe, Schema} from 'effect'
+import {type Headers, HttpServerRequest, HttpServerResponse} from '@effect/platform'
+import {Config, Context, Effect, Predicate, pipe, Schema} from 'effect'
 
 import {betterAuth} from 'better-auth/minimal'
 
@@ -7,10 +7,9 @@ export class OAuthError extends Schema.TaggedError<OAuthError>()('OAuthError', {
 	cause: Schema.Defect
 }) {}
 
-export class OAuth extends Effect.Service<OAuth>()('@oauth/GitHubOAuth', {
+export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	accessors: true,
 	effect: Effect.gen(function* () {
-		yield* Effect.log('init')
 		const auth = betterAuth({
 			baseURL: yield* Config.string('VITE_AUTH_BASE_URL'),
 			socialProviders: {
@@ -21,7 +20,18 @@ export class OAuth extends Effect.Service<OAuth>()('@oauth/GitHubOAuth', {
 			}
 		})
 
+		const use = Effect.fnUntraced(function* <T>(fn: (betterAuth: typeof auth.api) => Promise<T>) {
+			const result = yield* Effect.tryPromise({
+				try: () => fn(auth.api),
+				catch: cause => new OAuthError({cause})
+			})
+
+			if (Predicate.isNotNullable(result)) return result
+			return yield* new OAuthError({cause: 'Unknown Error'})
+		})
+
 		return {
+			session: (headers: Headers.Headers) => use(client => client.getSession({headers})),
 			handler: pipe(
 				HttpServerRequest.HttpServerRequest,
 				Effect.andThen(HttpServerRequest.toWeb),
@@ -36,3 +46,8 @@ export class OAuth extends Effect.Service<OAuth>()('@oauth/GitHubOAuth', {
 		}
 	})
 }) {}
+
+export class Session extends Context.Tag('@ai-toolkit/oauth/Session')<
+	Session,
+	Effect.Effect.Success<ReturnType<OAuth['session']>>
+>() {}

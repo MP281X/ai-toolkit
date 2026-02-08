@@ -1,39 +1,25 @@
 {
-	"$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/config.json",
 
-	"tools": {
-		"lsp": true,
-		"question": true
-	},
+  "mcp": {
+    "grep_app": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  },
 
-	"mcp": {
-		"context7": {
-			"type": "local",
-			"command": ["bunx", "-y", "@upstash/context7-mcp"]
-		},
-		"grep_app": {
-			"type": "remote",
-			"url": "https://mcp.grep.app"
-		}
-	},
-
-	"permission": {
-		"bash": {
-			"*": "allow",
-			"npm *": "deny",
-			"pnpm *": "deny",
-
-			"gh *": "ask",
-			"git *": "ask",
-			"git *log*": "allow",
-			"git *diff*": "allow",
-			"git *show*": "allow",
-			"git *status*": "allow",
-			"git *rev-parse*": "allow"
-		}
-	},
-
-	"lsp": {
-		"eslint": { "disabled": true }
-	}
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "npm *": "deny",
+      "pnpm *": "deny",
+      "gh *": "ask",
+      "git *": "ask",
+      "git *log*": "allow",
+      "git *diff*": "allow",
+      "git *show*": "allow",
+      "git *status*": "allow",
+      "git *rev-parse*": "allow"
+    }
+  }
 }
