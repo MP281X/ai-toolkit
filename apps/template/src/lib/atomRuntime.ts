@@ -7,13 +7,13 @@ import {OAuth} from '@ai-toolkit/oauth/client'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 import {Atom, AtomRpc} from '@effect-atom/atom-react'
 
-import {AiRpcs} from '#rpcs/ai.ts'
-import {MessagesRpcs} from '#rpcs/messages.ts'
+import {AiRpcs} from '#rpcs/ai/contracts.ts'
+import {MessagesRpcs} from '#rpcs/messages/contracts.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
 	// base layers
-	Layer.provideMerge(OtelLayer('frontend')),
+	Layer.provideMerge(OtelLayer('client')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(RpcSerialization.layerNdjson),
 	// application layers

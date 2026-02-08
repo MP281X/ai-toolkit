@@ -45,5 +45,5 @@
 	},
 
 	"exclude": ["${configDir}/**/node_modules", "${configDir}/**/dist", "${configDir}/**/.output"],
-	"include": ["${configDir}/src/**/*", "${configDir}/convex/**/*", "${configDir}/*.config.*"]
+	"include": ["${configDir}/src/**/*", "${configDir}/*.config.*"]
 }

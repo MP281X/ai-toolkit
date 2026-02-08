@@ -1,4 +1,4 @@
-import type {Error as ErrorSchema} from '@ai-toolkit/ai'
+import type {Error as ErrorSchema} from '@ai-toolkit/ai/schema'
 
 import {Alert, AlertDescription} from '#components/ui/alert.tsx'
 import {formatError} from '#lib/utils.ts'

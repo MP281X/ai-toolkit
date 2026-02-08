@@ -1,6 +1,6 @@
 import {Array as EffectArray} from 'effect'
 
-import {type Model, ModelId, ProviderId} from '@ai-toolkit/ai'
+import {type Model, ModelId, ProviderId} from '@ai-toolkit/ai/schema'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {Command, CommandGroup, CommandInput, CommandItem, CommandList} from '@ai-toolkit/components/ui/command'
 import {Popover, PopoverContent, PopoverTrigger} from '@ai-toolkit/components/ui/popover'

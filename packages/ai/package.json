@@ -4,7 +4,8 @@
 	"name": "@ai-toolkit/ai",
 
 	"exports": {
-		".": "./src/index.ts"
+		"./schema": "./src/schema.ts",
+		"./service": "./src/service.ts"
 	},
 
 	"scripts": {
