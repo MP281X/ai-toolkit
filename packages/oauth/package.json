@@ -1,0 +1,20 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/oauth",
+
+	"exports": {
+		".": "./src/index.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
+		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
+	},
+
+	"dependencies": {
+		"arctic": "latest",
+		"@oslojs/crypto": "latest",
+		"@oslojs/encoding": "latest"
+	}
+}

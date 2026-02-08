@@ -1,9 +1,8 @@
-import {createFileRoute, Outlet} from '@tanstack/react-router'
+import {createFileRoute, redirect} from '@tanstack/react-router'
 
 export const Route = createFileRoute('/(home)')({
-	component: Layout
+	beforeLoad: async () => {
+		const response = await fetch('/api/auth/session', {credentials: 'include'})
+		if (!response.ok) throw redirect({to: '/auth'})
+	}
 })
-
-function Layout() {
-	return <Outlet />
-}

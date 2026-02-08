@@ -8,8 +8,6 @@ export const Route = createFileRoute('/auth/')({
 })
 
 function RouteComponent() {
-	// if (isAuthenticated) return <Navigate to="/" />
-
 	return (
 		<div className="flex h-svh w-full items-center justify-center">
 			<Card className="w-full max-w-sm">
@@ -18,12 +16,7 @@ function RouteComponent() {
 					<CardDescription>Continue with GitHub to access your account</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<Button
-						className="w-full"
-						onClick={() => {
-							// signIn('github', {redirectTo: '/'})
-						}}
-					>
+					<Button className="w-full" onClick={() => (window.location.href = '/api/auth/github')}>
 						<Github className="size-4" />
 						Continue with GitHub
 					</Button>
