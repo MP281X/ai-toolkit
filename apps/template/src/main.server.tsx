@@ -6,7 +6,8 @@ import {Effect, Function, Layer, pipe} from 'effect'
 import {OAuth} from '@ai-toolkit/oauth/server'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
-import {AiRpcs, MessagesRpcs} from '#rpcs/contracts.ts'
+import {AiRpcs} from '#rpcs/ai.ts'
+import {MessagesRpcs} from '#rpcs/messages.ts'
 
 // RPCs
 const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs, MessagesRpcs), {

@@ -5,7 +5,8 @@ import {AiSdk} from '@ai-toolkit/ai'
 import {OAuth} from '@ai-toolkit/oauth/server'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
-import {AiLive, MessagesLive} from '#rpcs/handlers.ts'
+import {AiLive} from '#rpcs/ai.ts'
+import {MessagesLive} from '#rpcs/messages.ts'
 import {AuthMiddlewareLive} from '#rpcs/middlewares.ts'
 
 export const LiveLayers = pipe(

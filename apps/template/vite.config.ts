@@ -20,9 +20,10 @@ export default defineConfig({
 	],
 	build: {
 		chunkSizeWarningLimit: 2000,
+		modulePreload: {polyfill: false},
 		rolldownOptions: {
-			experimental: {lazyBarrel: true},
-			treeshake: {invalidImportSideEffects: false, moduleSideEffects: false}
+			experimental: {lazyBarrel: true, attachDebugInfo: 'none'},
+			treeshake: {moduleSideEffects: false, unknownGlobalSideEffects: false}
 		}
 	}
 })
