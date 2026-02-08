@@ -1,8 +1,19 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
+import {OAuth} from '@ai-toolkit/oauth/client'
+import {Result, useAtomSuspense} from '@effect-atom/atom-react'
+import {createFileRoute, Navigate, Outlet} from '@tanstack/react-router'
+
+import {AtomRuntime} from '#lib/atomRuntime.ts'
 
 export const Route = createFileRoute('/(home)')({
-	beforeLoad: async () => {
-		const response = await fetch('/api/auth/session', {credentials: 'include'})
-		if (!response.ok) throw redirect({to: '/auth'})
-	}
+	component: Layout
 })
+
+const sessionAtom = AtomRuntime.atom(OAuth.session)
+
+function Layout() {
+	const session = useAtomSuspense(sessionAtom, {includeFailure: true})
+	return Result.builder(session)
+		.onErrorTag('OAuthError', () => <Navigate to="/auth" />)
+		.onSuccess(() => <Outlet />)
+		.render()
+}

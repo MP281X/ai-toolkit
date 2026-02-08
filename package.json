@@ -8,7 +8,7 @@
 	"scripts": {
 		"dev": "turbo run dev:client dev:server",
 
-		"build": "NODE_ENV=production turbo run build",
+		"build": "NODE_ENV=production turbo run build:client build:server",
 
 		"shadcn": "cd packages/components && bunx shadcn@latest",
 

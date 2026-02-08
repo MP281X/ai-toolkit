@@ -4,7 +4,8 @@
 	"name": "@ai-toolkit/oauth",
 
 	"exports": {
-		".": "./src/index.ts"
+		"./server": "./src/server.ts",
+		"./client": "./src/client.ts"
 	},
 
 	"scripts": {
@@ -13,8 +14,6 @@
 	},
 
 	"dependencies": {
-		"arctic": "latest",
-		"@oslojs/crypto": "latest",
-		"@oslojs/encoding": "latest"
+		"better-auth": "latest"
 	}
 }
