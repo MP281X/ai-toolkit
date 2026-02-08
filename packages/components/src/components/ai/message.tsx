@@ -2,7 +2,7 @@
 
 import {Predicate} from 'effect'
 
-import type {Message as MessageType} from '@ai-toolkit/ai'
+import type {Message as MessageType} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, UserIcon} from 'lucide-react'
 
 import {Error} from '#components/ai/error.tsx'

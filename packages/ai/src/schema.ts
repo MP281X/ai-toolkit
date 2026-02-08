@@ -2,7 +2,34 @@ import {Match, Option, Predicate, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
-import {Model} from './models.ts'
+export type ProviderId = 'opencode_zen'
+export const ProviderId = Schema.Literal('opencode_zen')
+
+export type ModelId = Schema.Schema.Type<typeof ModelId>
+export const ModelId = Schema.Literal('glm-4.7-free', 'kimi-k2.5-free', 'minimax-m2.1-free')
+
+export type Model = Schema.Schema.Type<typeof Model>
+export const Model = Schema.transform(
+	Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), ModelId),
+	Schema.Struct({provider: ProviderId, model: ModelId}),
+	{
+		decode: modelKey => {
+			const [provider, model] = modelKey.split(':') as [ProviderId, ModelId]
+			return {provider, model}
+		},
+		encode: config => `${config.provider}:${config.model}` as const
+	}
+)
+
+export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
+	cause: Schema.Defect,
+	message: Schema.optional(Schema.String)
+}) {}
+
+export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
+	prompt: Schema.String,
+	model: Model
+}) {}
 
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
 	id: Schema.String,

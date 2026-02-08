@@ -1,4 +1,4 @@
-import {Config, Effect, Predicate, Schema} from 'effect'
+import {Effect, Predicate, Schema} from 'effect'
 
 import {createAuthClient} from 'better-auth/client'
 
@@ -11,7 +11,7 @@ type BetterAuthResult<T> = {data: T; error: null} | {data: null; error: unknown}
 export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	accessors: true,
 	effect: Effect.gen(function* () {
-		const client = createAuthClient({baseURL: yield* Config.string('AUTH_BASE_URL')})
+		const client = createAuthClient({baseURL: `${window.location.origin}/api/auth`})
 
 		const use = Effect.fnUntraced(function* <T>(fn: (betterAuth: typeof client) => Promise<BetterAuthResult<T>>) {
 			const result = yield* Effect.tryPromise({

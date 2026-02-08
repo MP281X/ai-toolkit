@@ -1,20 +1,26 @@
-import {Effect, Option, pipe, Schema, Stream} from 'effect'
+import {Config, Effect, Option, pipe, Stream} from 'effect'
 
+import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 import {ToolLoopAgent} from 'ai'
 
-import {Model, resolveLanguageModel} from './models.ts'
-import {fromAiStreamPart, Start, type StreamPart} from './schema.ts'
+import type {AiInput, Model, ProviderId, StreamPart} from './schema.ts'
+import {AiSdkError, fromAiStreamPart, Start} from './schema.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
 
-export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
-	cause: Schema.Defect,
-	message: Schema.optional(Schema.String)
-}) {}
+const buildProviders = Effect.gen(function* () {
+	return {
+		opencode_zen: createOpenAICompatible({
+			name: 'opencode_zen',
+			baseURL: 'https://opencode.ai/zen/v1',
+			apiKey: yield* Config.string('AI_OPENCODE_ZEN')
+		})
+	} satisfies Record<ProviderId, unknown>
+})
 
-export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
-	prompt: Schema.String,
-	model: Model
-}) {}
+export const resolveLanguageModel = Effect.fnUntraced(function* (model: Model) {
+	const providers = yield* buildProviders
+	return providers[model.provider](model.model)
+})
 
 export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 	accessors: true,

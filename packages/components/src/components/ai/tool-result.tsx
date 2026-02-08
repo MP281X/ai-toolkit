@@ -1,4 +1,4 @@
-import type {ToolError, ToolResult as ToolResultSchema} from '@ai-toolkit/ai'
+import type {ToolError, ToolResult as ToolResultSchema} from '@ai-toolkit/ai/schema'
 import {AlertTriangleIcon, CheckCircleIcon, ChevronRightIcon} from 'lucide-react'
 
 import {cn, formatError} from '#lib/utils.ts'

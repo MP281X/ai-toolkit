@@ -1,6 +1,6 @@
 import {Effect, Stream} from 'effect'
 
-import type {Model} from '@ai-toolkit/ai'
+import type {Model} from '@ai-toolkit/ai/schema'
 import {Autocomplete, AutocompleteOption, ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'

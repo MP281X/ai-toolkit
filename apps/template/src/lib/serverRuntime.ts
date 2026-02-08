@@ -1,13 +1,13 @@
 import {RpcSerialization} from '@effect/rpc'
 import {Layer, pipe} from 'effect'
 
-import {AiSdk} from '@ai-toolkit/ai'
+import {AiSdk} from '@ai-toolkit/ai/service'
 import {OAuth} from '@ai-toolkit/oauth/server'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
-import {AiLive} from '#rpcs/ai.ts'
-import {MessagesLive} from '#rpcs/messages.ts'
-import {AuthMiddlewareLive} from '#rpcs/middlewares.ts'
+import {AiLive} from '#rpcs/ai/handler.ts'
+import {MessagesLive} from '#rpcs/messages/handlers.ts'
+import {AuthMiddlewareLive} from '#rpcs/middlewares/handlers.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,

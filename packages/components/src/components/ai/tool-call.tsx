@@ -1,4 +1,4 @@
-import type {ToolCall as ToolCallSchema} from '@ai-toolkit/ai'
+import type {ToolCall as ToolCallSchema} from '@ai-toolkit/ai/schema'
 import {ChevronRightIcon, WrenchIcon} from 'lucide-react'
 
 export function ToolCall(props: ToolCallSchema) {
