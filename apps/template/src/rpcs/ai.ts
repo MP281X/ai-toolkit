@@ -1,7 +1,7 @@
 import {Rpc, RpcGroup} from '@effect/rpc'
-import {Schema} from 'effect'
+import {Effect} from 'effect'
 
-import {AiInput, AiSdkError, Message, StreamPart} from '@ai-toolkit/ai'
+import {AiInput, AiSdk, AiSdkError, StreamPart} from '@ai-toolkit/ai'
 
 import {AuthMiddleware} from '#rpcs/middlewares.ts'
 
@@ -14,9 +14,12 @@ export class AiRpcs extends RpcGroup.make(
 	})
 ).middleware(AuthMiddleware) {}
 
-export class MessagesRpcs extends RpcGroup.make(
-	Rpc.make('ListMessages', {
-		success: Schema.Array(Message),
-		stream: true
+export const AiLive = AiRpcs.toLayer(
+	Effect.gen(function* () {
+		const aiSdk = yield* AiSdk
+
+		return AiRpcs.of({
+			AiStream: args => aiSdk.stream(args)
+		})
 	})
-).middleware(AuthMiddleware) {}
+)
