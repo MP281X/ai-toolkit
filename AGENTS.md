@@ -10,9 +10,15 @@ ALWAYS FOLLOW these directives. ZERO exceptions.
 - MUST use the `question` tool for blocking questions (NEVER ask inline)
 - NEVER rely on training data; ALWAYS use up-to-date docs via `webfetch`, `codesearch`, or `grep_app_searchGitHub` for ANY library/API work
 - MUST implement happy-path ONLY; do NOT add speculative edge-case handling unless explicitly requested
-- MUST use the `explore` sub-agent for codebase discovery early
-- MUST spawn multiple sub-agents in parallel for independent work
+- MUST use the `explore` sub-agent for codebase discovery (early and often)
+- MUST spawn multiple sub-agents in parallel for independent exploration work ONLY
 - MUST run `bun run fix && bun run check` ONLY in the specific package(s) you changed (NOT at repo root) BEFORE yielding control back to user
+
+## SUB-AGENT USAGE
+
+- Use the `explore` sub-agent for codebase discovery
+- Spawn multiple `explore` sub-agents in parallel for independent exploration tasks
+- All editing, planning, and implementation work is done by the main agent
 
 ## REFERENCE SOURCES
 
@@ -186,42 +192,48 @@ const resilient = apiCall.pipe(
 
 ### SERVICES & LAYERS
 
-MUST define services as `Context.Tag` classes:
+MUST define services using `Effect.Service`:
 
 ```typescript
-import { Context, Effect } from 'effect'
+import { Effect } from 'effect'
 
-class Database extends Context.Tag('@app/Database')<
-  Database,
-  {
-    readonly query: (statement: string) => Effect.Effect<unknown[]>
-  }
->() {}
+class Database extends Effect.Service<Database>()('@app/Database', {
+  effect: Effect.gen(function* () {
+    const connection = yield* createConnection
+    
+    const query = Effect.fnUntraced(function* (statement: string) {
+      return yield* executeQuery(connection, statement)
+    })
+    
+    return { query }
+  })
+}) {}
 ```
 
-Tag identifiers MUST be unique. Use the `@path/ServiceName` pattern. Service methods MUST have no dependencies (`R = never`).
+Service identifiers MUST be unique. Use the `@path/ServiceName` pattern. Service methods MUST have no dependencies (`R = never`).
 
-MUST implement with Layer:
+Use `accessors: true` to enable direct access:
 
 ```typescript
-class Users extends Context.Tag('@app/Users')<
-  Users,
-  { readonly findById: (userId: UserId) => Effect.Effect<User, UsersError> }
->() {
-  static readonly layer = Layer.effect(
-    Users,
-    Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient
+class Users extends Effect.Service<Users>()('@app/Users', {
+  accessors: true,
+  effect: Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient
 
-      const findById = Effect.fnUntraced(function* (userId: UserId) {
-        const response = yield* httpClient.get(`/users/${userId}`)
-        return yield* HttpClientResponse.schemaBodyJson(User)(response)
-      })
-
-      return Users.of({ findById })
+    const findById = Effect.fnUntraced(function* (userId: UserId) {
+      const response = yield* httpClient.get(`/users/${userId}`)
+      return yield* HttpClientResponse.schemaBodyJson(User)(response)
     })
-  )
-}
+
+    return { findById }
+  })
+}) {}
+
+// With accessors: true, can use yield* Users.findById(userId)
+const program = Effect.gen(function* () {
+  const user = yield* Users.findById(userId)
+  return user
+})
 ```
 
 **LAYER NAMING CONVENTION:** Use camelCase with the Layer suffix: `layer`, `testLayer`, `postgresLayer`.
