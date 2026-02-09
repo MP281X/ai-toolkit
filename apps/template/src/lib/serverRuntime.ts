@@ -8,12 +8,14 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 import {AiLive} from '#rpcs/ai/handler.ts'
 import {MessagesLive} from '#rpcs/messages/handlers.ts'
 import {AuthMiddlewareLive} from '#rpcs/middlewares/handlers.ts'
+import {SearchLive} from '#rpcs/search/handlers.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
 	// rpc handlers
 	Layer.provideMerge(AiLive),
 	Layer.provideMerge(MessagesLive),
+	Layer.provideMerge(SearchLive),
 	// rpc middlewares
 	Layer.provideMerge(AuthMiddlewareLive),
 	// application layers

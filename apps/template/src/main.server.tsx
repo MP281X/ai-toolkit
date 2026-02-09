@@ -8,9 +8,10 @@ import {OAuth} from '@ai-toolkit/oauth/server'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiRpcs} from '#rpcs/ai/contracts.ts'
 import {MessagesRpcs} from '#rpcs/messages/contracts.ts'
+import {SearchRpcs} from '#rpcs/search/contracts.ts'
 
 // RPCs
-const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs, MessagesRpcs), {
+const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs, MessagesRpcs, SearchRpcs), {
 	disableFatalDefects: true
 })
 

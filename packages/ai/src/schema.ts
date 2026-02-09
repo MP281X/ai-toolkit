@@ -21,6 +21,35 @@ export const Model = Schema.transform(
 	}
 )
 
+export type ModelMetadata = Schema.Schema.Type<typeof ModelMetadata>
+export const ModelMetadata = Schema.Struct({
+	id: Model,
+	label: Schema.String,
+	description: Schema.String,
+	strengths: Schema.Array(Schema.String)
+})
+
+export const modelCatalog: readonly ModelMetadata[] = [
+	{
+		id: {provider: 'opencode_zen', model: 'glm-4.7-free'},
+		label: 'GLM 4.7 Free',
+		description: 'Balanced generalist model suited for research synthesis and tooling.',
+		strengths: ['general reasoning', 'balanced speed', 'tool-use friendly']
+	},
+	{
+		id: {provider: 'opencode_zen', model: 'kimi-k2.5-free'},
+		label: 'Kimi K2.5 Free',
+		description: 'Long-context model tuned for retrieval-heavy responses.',
+		strengths: ['long context', 'citation heavy', 'summaries']
+	},
+	{
+		id: {provider: 'opencode_zen', model: 'minimax-m2.1-free'},
+		label: 'MiniMax M2.1 Free',
+		description: 'Fast, concise answers and model-council diversity.',
+		strengths: ['fast drafts', 'concise answers', 'diverse council voice']
+	}
+]
+
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.Defect,
 	message: Schema.optional(Schema.String)

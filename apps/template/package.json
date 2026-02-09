@@ -25,6 +25,8 @@
 		"react-dom": "^19",
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
+		"ai": "latest",
+		"exa-js": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/oauth": "workspace:*",

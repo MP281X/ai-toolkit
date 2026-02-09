@@ -1,6 +1,6 @@
 import {Array as EffectArray} from 'effect'
 
-import {type Model, ModelId, ProviderId} from '@ai-toolkit/ai/schema'
+import {type Model, modelCatalog} from '@ai-toolkit/ai/schema'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {Command, CommandGroup, CommandInput, CommandItem, CommandList} from '@ai-toolkit/components/ui/command'
 import {Popover, PopoverContent, PopoverTrigger} from '@ai-toolkit/components/ui/popover'
@@ -17,7 +17,14 @@ export namespace ModelSelector {
 
 export function ModelSelector(props: ModelSelector.Props) {
 	const [open, setOpen] = useState(false)
-	const groups = EffectArray.map(ProviderId.literals, provider => ({provider, models: ModelId.literals}))
+	const providers = EffectArray.dedupeWith(
+		modelCatalog.map(entry => entry.id.provider),
+		(left, right) => left === right
+	)
+	const groups = EffectArray.map(providers, provider => ({
+		provider,
+		models: modelCatalog.filter(entry => entry.id.provider === provider)
+	}))
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -33,20 +40,34 @@ export function ModelSelector(props: ModelSelector.Props) {
 					<CommandList>
 						{groups.map(group => (
 							<CommandGroup key={group.provider} heading={group.provider}>
-								{group.models.map(modelId => {
-									const key = `${group.provider}:${modelId}`
-									const isSelected = props.model.provider === group.provider && props.model.model === modelId
+								{group.models.map(entry => {
+									const key = `${entry.id.provider}:${entry.id.model}`
+									const isSelected = props.model.provider === entry.id.provider && props.model.model === entry.id.model
 									return (
 										<CommandItem
 											key={key}
 											value={key}
 											onSelect={() => {
-												props.onModelChange({provider: group.provider, model: modelId})
+												props.onModelChange({provider: entry.id.provider, model: entry.id.model})
 												setOpen(false)
 											}}
+											className="items-start gap-2"
 										>
 											<CheckIcon className={cn('opacity-0', isSelected && 'opacity-100')} />
-											{modelId}
+											<div className="flex flex-col gap-1">
+												<span className="font-semibold text-sm">{entry.label}</span>
+												<span className="text-muted-foreground text-xs">{entry.description}</span>
+												<div className="flex flex-wrap gap-1">
+													{entry.strengths.map(strength => (
+														<span
+															key={strength}
+															className="rounded-sm border border-border/60 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+														>
+															{strength}
+														</span>
+													))}
+												</div>
+											</div>
 										</CommandItem>
 									)
 								})}

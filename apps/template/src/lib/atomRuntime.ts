@@ -9,6 +9,7 @@ import {Atom, AtomRpc} from '@effect-atom/atom-react'
 
 import {AiRpcs} from '#rpcs/ai/contracts.ts'
 import {MessagesRpcs} from '#rpcs/messages/contracts.ts'
+import {SearchRpcs} from '#rpcs/search/contracts.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
@@ -29,7 +30,7 @@ export const LiveLayers = pipe(
 )
 
 export class ApiClient extends AtomRpc.Tag<ApiClient>()('ApiClient', {
-	group: RpcGroup.make().merge(AiRpcs, MessagesRpcs),
+	group: RpcGroup.make().merge(AiRpcs, MessagesRpcs, SearchRpcs),
 	protocol: RpcClient.layerProtocolSocket({retryTransientErrors: true}).pipe(
 		Layer.provide(BrowserSocket.layerWebSocket('/api/rpc')),
 		Layer.provide(LiveLayers)

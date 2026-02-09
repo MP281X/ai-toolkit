@@ -1,9 +1,9 @@
 import {Config, Effect, Option, pipe, Stream} from 'effect'
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
-import {ToolLoopAgent} from 'ai'
+import {type LanguageModel, ToolLoopAgent} from 'ai'
 
-import type {AiInput, Model, ProviderId, StreamPart} from './schema.ts'
+import type {AiInput, Model, ModelId, ProviderId, StreamPart} from './schema.ts'
 import {AiSdkError, fromAiStreamPart, Start} from './schema.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
 
@@ -14,13 +14,15 @@ const buildProviders = Effect.gen(function* () {
 			baseURL: 'https://opencode.ai/zen/v1',
 			apiKey: yield* Config.string('AI_OPENCODE_ZEN')
 		})
-	} satisfies Record<ProviderId, unknown>
+	} satisfies Record<ProviderId, (model: ModelId) => LanguageModel>
 })
 
-export const resolveLanguageModel = Effect.fnUntraced(function* (model: Model) {
-	const providers = yield* buildProviders
-	return providers[model.provider](model.model)
-})
+export const resolveLanguageModel = (model: Model) =>
+	Effect.gen(function* () {
+		const providers = yield* buildProviders
+		const provider: (model: ModelId) => LanguageModel = providers[model.provider]
+		return provider(model.model)
+	})
 
 export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 	accessors: true,
