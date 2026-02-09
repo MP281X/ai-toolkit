@@ -1,0 +1,26 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/review",
+
+	"exports": {
+		"./schema": "./src/schema.ts",
+		"./store": "./src/store.ts",
+		"./git": "./src/git.ts",
+		"./agent": "./src/agent.ts",
+		"./commit": "./src/commit.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
+		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
+	},
+
+	"dependencies": {
+		"effect": "latest",
+		"@ai-toolkit/ai": "workspace:*",
+		"@effect/platform": "latest",
+		"@effect/platform-bun": "latest",
+		"@effect/rpc": "latest"
+	}
+}
