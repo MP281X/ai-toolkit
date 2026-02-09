@@ -1,5 +1,6 @@
-import * as KeyValueStore from '@effect/platform/KeyValueStore'
-import {Effect, Option, pipe, Schema} from 'effect'
+import {Effect, pipe, Schema} from 'effect'
+
+import {JsonStore} from '@ai-toolkit/storage/json'
 
 import {
 	FeedItem,
@@ -27,7 +28,7 @@ const emptySubscriptions: readonly SubscriptionValue[] = []
 export class ResearchStore extends Effect.Service<ResearchStore>()('@ai-toolkit/research/ResearchStore', {
 	accessors: true,
 	effect: Effect.gen(function* () {
-		const keyValueStore = yield* KeyValueStore.KeyValueStore
+		const jsonStore = yield* JsonStore
 
 		const decodeSessions = Schema.decodeUnknownSync(Schema.Array(ResearchSession))
 		const decodeEvents = Schema.decodeUnknownSync(Schema.Array(StoredEvent))
@@ -35,17 +36,9 @@ export class ResearchStore extends Effect.Service<ResearchStore>()('@ai-toolkit/
 		const decodeSubscriptions = Schema.decodeUnknownSync(Schema.Array(TopicSubscription))
 
 		const readJson = <A>(key: string, decoder: (input: unknown) => A, fallback: A) =>
-			pipe(
-				keyValueStore.get(key),
-				Effect.map(option =>
-					Option.match(option, {
-						onNone: () => fallback,
-						onSome: value => decoder(JSON.parse(value))
-					})
-				)
-			)
+			jsonStore.read(key, decoder, fallback)
 
-		const writeJson = (key: string, value: unknown) => keyValueStore.set(key, JSON.stringify(value))
+		const writeJson = (key: string, value: unknown) => jsonStore.write(key, value)
 
 		const upsertSession = (session: SessionValue) =>
 			pipe(

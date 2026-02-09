@@ -1,21 +1,14 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/research",
+	"name": "@ai-toolkit/storage",
 
 	"exports": {
-		"./schema": "./src/schema.ts",
-		"./storage": "./src/storage.ts",
-		"./service": "./src/service.ts"
+		"./json": "./src/json.ts"
 	},
 
 	"scripts": {
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
 		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
-	},
-
-	"dependencies": {
-		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/storage": "workspace:*"
 	}
 }

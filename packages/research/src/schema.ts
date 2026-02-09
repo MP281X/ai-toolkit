@@ -1,10 +1,9 @@
 import {pipe, Schema} from 'effect'
 
+import {QuestionAnswered, QuestionId, QuestionRaised} from '@ai-toolkit/ai/schema'
+
 export type SessionId = typeof SessionId.Type
 export const SessionId = pipe(Schema.String, Schema.brand('SessionId'))
-
-export type QuestionId = typeof QuestionId.Type
-export const QuestionId = pipe(Schema.String, Schema.brand('QuestionId'))
 
 export type FeedItemId = typeof FeedItemId.Type
 export const FeedItemId = pipe(Schema.String, Schema.brand('FeedItemId'))
@@ -100,20 +99,6 @@ export class TokenEvent extends Schema.TaggedClass<TokenEvent>()('token', {
 	text: Schema.String
 }) {}
 
-export class QuestionRaised extends Schema.TaggedClass<QuestionRaised>()('question', {
-	sessionId: SessionId,
-	questionId: QuestionId,
-	prompt: Schema.String,
-	options: Schema.Array(Schema.String),
-	allowFreeText: Schema.Boolean
-}) {}
-
-export class QuestionAnswered extends Schema.TaggedClass<QuestionAnswered>()('question-answered', {
-	sessionId: SessionId,
-	questionId: QuestionId,
-	answer: Schema.String
-}) {}
-
 export class Checkpointed extends Schema.TaggedClass<Checkpointed>()('checkpoint', {
 	sessionId: SessionId,
 	eventId: Schema.Number
@@ -165,3 +150,5 @@ export class TopicSubscription extends Schema.Class<TopicSubscription>('TopicSub
 	intervalMs: Schema.Number,
 	model: Schema.String
 }) {}
+
+export {QuestionAnswered, QuestionId, QuestionRaised}

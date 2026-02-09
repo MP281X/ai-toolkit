@@ -6,19 +6,21 @@ import {Effect, Function, Layer, pipe} from 'effect'
 import {OAuth} from '@ai-toolkit/oauth/server'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
-import {AiRpcs} from '#rpcs/ai/contracts.ts'
-import {MessagesRpcs} from '#rpcs/messages/contracts.ts'
 import {ResearchRpcs} from '#rpcs/research/contracts.ts'
 
 // RPCs
-const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs).merge(MessagesRpcs).merge(ResearchRpcs), {
-	disableFatalDefects: true
-})
+const RpcHandler = pipe(
+	RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(ResearchRpcs), {
+		disableFatalDefects: true
+	}),
+	Effect.provide(Layer.scope)
+)
 
 // HTTP routes
-const Routes = Effect.gen(function* () {
-	return HttpRouter.empty.pipe(
-		HttpRouter.all('/api/rpc', yield* RpcHandler),
+const Routes = Effect.map(RpcHandler, handler =>
+	pipe(
+		HttpRouter.empty,
+		HttpRouter.all('/api/rpc', handler),
 		HttpRouter.all('/api/auth/*', OAuth.handler),
 		HttpMiddleware.cors({
 			credentials: true,
@@ -28,21 +30,16 @@ const Routes = Effect.gen(function* () {
 		}),
 		HttpMiddleware.xForwardedHeaders
 	)
-})
-
-BunRuntime.runMain(
-	pipe(
-		Layer.launch(
-			pipe(
-				Routes,
-				Effect.map(HttpServer.serve()),
-				Layer.unwrapScoped,
-				HttpServer.withLogAddress,
-				HttpMiddleware.withTracerDisabledWhen(Function.constTrue),
-				Layer.provide(BunHttpServer.layer({port: 8080})),
-				Layer.provide(LiveLayers)
-			)
-		),
-		Effect.provide(Layer.scope)
-	)
 )
+
+const ServerLayer = pipe(
+	Routes,
+	Effect.map(HttpServer.serve()),
+	Layer.unwrapScoped,
+	HttpServer.withLogAddress,
+	HttpMiddleware.withTracerDisabledWhen(Function.constTrue),
+	Layer.provide(BunHttpServer.layer({port: 8080})),
+	Layer.provide(LiveLayers)
+)
+
+BunRuntime.runMain(Effect.provide(Layer.scope)(Layer.launch(ServerLayer)))

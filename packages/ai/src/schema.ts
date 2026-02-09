@@ -1,4 +1,4 @@
-import {Match, Option, Predicate, Schema, Stream} from 'effect'
+import {Match, Option, Predicate, pipe, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
@@ -20,6 +20,26 @@ export const Model = Schema.transform(
 		encode: config => `${config.provider}:${config.model}` as const
 	}
 )
+
+export type QuestionId = typeof QuestionId.Type
+export const QuestionId = pipe(Schema.String, Schema.brand('QuestionId'))
+
+export class QuestionRaised extends Schema.TaggedClass<QuestionRaised>()('question', {
+	sessionId: pipe(Schema.String, Schema.brand('SessionId')),
+	questionId: QuestionId,
+	prompt: Schema.String,
+	options: Schema.Array(Schema.String),
+	allowFreeText: Schema.Boolean
+}) {}
+
+export class QuestionAnswered extends Schema.TaggedClass<QuestionAnswered>()('question-answered', {
+	sessionId: pipe(Schema.String, Schema.brand('SessionId')),
+	questionId: QuestionId,
+	answer: Schema.String
+}) {}
+
+export type QuestionEvent = typeof QuestionEvent.Type
+export const QuestionEvent = Schema.Union(QuestionRaised, QuestionAnswered)
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.Defect,
