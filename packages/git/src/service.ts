@@ -1,4 +1,4 @@
-import {Effect, Option, pipe, Schema} from 'effect'
+import {Effect, Option, Schema, pipe} from 'effect'
 
 import * as Num from 'effect/Number'
 
@@ -7,20 +7,22 @@ import {
 	DiffHunk,
 	type DiffLine,
 	DiffLineAdd,
+	type DiffLineAddType,
 	DiffLineContext,
+	type DiffLineDelType,
 	DiffLineDel,
 	type DiffQuery,
 	type RepoPath,
 	RepoStatus,
-	type StageSelection
+	StageSelection
 } from './schema.ts'
 
-class GitError extends Schema.TaggedError<GitError>()('GitError', {
+export class GitError extends Schema.TaggedError<GitError>()('GitError', {
 	command: Schema.String,
 	stderr: Schema.String
 }) {}
 
-const parseStatus = (stdout: string): RepoStatus => {
+function parseStatus(stdout: string) {
 	let branch: string | undefined
 	let ahead = 0
 	let behind = 0
@@ -75,7 +77,7 @@ const parseStatus = (stdout: string): RepoStatus => {
 	return RepoStatus.make({branch, ahead, behind, staged, unstaged, untracked})
 }
 
-const parseDiff = (output: string): DiffFile[] => {
+function parseDiff(output: string) {
 	const files: DiffFile[] = []
 	let path: string | undefined
 	let oldPath: string | undefined
@@ -219,8 +221,8 @@ const parseDiff = (output: string): DiffFile[] => {
 	return files
 }
 
-const buildPatch = (file: DiffFile, lines: readonly DiffLine[]) => {
-	const filtered = lines.filter((line): line is DiffLineAdd | DiffLineDel => line._tag !== 'context')
+function buildPatch(file: DiffFile, lines: readonly DiffLine[]) {
+	const filtered = lines.filter((line): line is DiffLineAddType | DiffLineDelType => line._tag !== 'context')
 	if (filtered.length === 0) return Option.none<string>()
 
 	const firstOld = filtered.find(line => line._tag !== 'add')?.oldLine ?? 0
@@ -246,8 +248,8 @@ const buildPatch = (file: DiffFile, lines: readonly DiffLine[]) => {
 	return Option.some(patch)
 }
 
-const runGit = (repoPath: RepoPath, args: readonly string[], stdin?: string) =>
-	Effect.tryPromise({
+function runGit(repoPath: RepoPath, args: readonly string[], stdin?: string) {
+	return Effect.tryPromise({
 		try: async () => {
 			const proc = Bun.spawn(['git', ...args], {
 				cwd: repoPath,
@@ -273,8 +275,9 @@ const runGit = (repoPath: RepoPath, args: readonly string[], stdin?: string) =>
 		},
 		catch: cause => GitError.make({command: args.join(' '), stderr: `${cause}`})
 	})
+}
 
-export class GitService extends Effect.Service<GitService>()('@ai-toolkit/review/GitService', {
+export class GitService extends Effect.Service<GitService>()('@ai-toolkit/git/GitService', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		return {
@@ -325,6 +328,11 @@ export class GitService extends Effect.Service<GitService>()('@ai-toolkit/review
 
 				const args = selection.reverse ? ['apply', '--cached', '--reverse'] : ['apply', '--cached']
 				yield* runGit(selection.repoPath, args, patchValue)
+			}),
+
+			raw: Effect.fnUntraced(function* (input: {repoPath: RepoPath; args: readonly string[]; stdin?: string}) {
+				const {stdout} = yield* runGit(input.repoPath, input.args, input.stdin)
+				return stdout
 			})
 		}
 	})

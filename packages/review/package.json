@@ -5,10 +5,7 @@
 
 	"exports": {
 		"./schema": "./src/schema.ts",
-		"./store": "./src/store.ts",
-		"./git": "./src/git.ts",
-		"./agent": "./src/agent.ts",
-		"./commit": "./src/commit.ts"
+		"./store": "./src/store.ts"
 	},
 
 	"scripts": {
@@ -18,9 +15,7 @@
 
 	"dependencies": {
 		"effect": "latest",
-		"@ai-toolkit/ai": "workspace:*",
 		"@effect/platform": "latest",
-		"@effect/platform-bun": "latest",
-		"@effect/rpc": "latest"
+		"@ai-toolkit/git": "workspace:*"
 	}
 }

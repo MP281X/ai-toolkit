@@ -1,30 +1,18 @@
 import * as KeyValueStore from '@effect/platform/KeyValueStore'
-import {Effect, Option, pipe} from 'effect'
-
-import * as Arr from 'effect/Array'
+import {Effect, Option, Schema} from 'effect'
 
 import {
-	type AgentId,
-	AgentState,
 	type CommentId,
-	type RepoPath,
-	Repository,
 	ReviewComment,
 	ReviewSession,
 	ReviewSummary,
-	type SessionId,
-	type StreamId,
-	StreamState
+	type SessionId
 } from './schema.ts'
 
-const repoKey = (path: RepoPath) => `repo:${path}`
 const sessionKey = (id: SessionId) => `session:${id}`
 const commentKey = (id: CommentId) => `comment:${id}`
 const sessionCommentsKey = (id: SessionId) => `session:${id}:comments`
 const summaryKey = (id: SessionId) => `session:${id}:summary`
-const streamKey = (id: StreamId) => `stream:${id}`
-const agentStateKey = (id: AgentId) => `agent:${id}:state`
-const reposIndexKey = 'index:repos'
 const sessionsIndexKey = 'index:sessions'
 
 export class ReviewStore extends Effect.Service<ReviewStore>()('@ai-toolkit/review/ReviewStore', {
@@ -32,57 +20,20 @@ export class ReviewStore extends Effect.Service<ReviewStore>()('@ai-toolkit/revi
 	effect: Effect.gen(function* () {
 		const kv = KeyValueStore.prefix('review:')(yield* KeyValueStore.KeyValueStore)
 
-		const repoStore = kv.forSchema(Repository)
 		const sessionStore = kv.forSchema(ReviewSession)
 		const commentStore = kv.forSchema(ReviewComment)
 		const summaryStore = kv.forSchema(ReviewSummary)
-		const streamStore = kv.forSchema(StreamState)
-		const agentStore = kv.forSchema(AgentState)
+		const indexStore = kv.forSchema(Schema.Array(Schema.String))
 
-		const readIndex = (key: string) =>
-			pipe(
-				kv.get(key),
-				Effect.map(Option.getOrElse(() => '[]')),
-				Effect.map(raw => {
-					try {
-						const parsed = JSON.parse(raw)
-						if (Arr.isArray(parsed)) return parsed.map(value => `${value}`)
-						return []
-					} catch {
-						return []
-					}
-				})
-			)
+		function readIndex(key: string) {
+			return indexStore.get(key).pipe(Effect.map(option => Option.getOrElse(option, () => [] as readonly string[])))
+		}
 
-		const writeIndex = (key: string, values: readonly string[]) => kv.set(key, JSON.stringify(values))
+		function writeIndex(key: string, values: readonly string[]) {
+			return indexStore.set(key, values)
+		}
 
 		return {
-			saveRepository: Effect.fnUntraced(function* (repository: Repository) {
-				yield* repoStore.set(repoKey(repository.path), repository)
-				const current = yield* readIndex(reposIndexKey)
-				const pathString = repository.path as string
-				if (!current.includes(pathString)) yield* writeIndex(reposIndexKey, [...current, pathString])
-				return repository
-			}),
-
-			listRepositories: Effect.fnUntraced(function* () {
-				const paths = yield* readIndex(reposIndexKey)
-				return yield* Effect.forEach(paths, path =>
-					pipe(
-						repoStore.get(repoKey(path as RepoPath)),
-						Effect.map(option =>
-							Option.getOrElse(option, () =>
-								Repository.make({path: path as RepoPath, name: path, lastOpenedAt: Date.now()})
-							)
-						)
-					)
-				)
-			}),
-
-			getRepository: Effect.fnUntraced(function* (path: RepoPath) {
-				return yield* repoStore.get(repoKey(path))
-			}),
-
 			saveSession: Effect.fnUntraced(function* (session: ReviewSession) {
 				yield* sessionStore.set(sessionKey(session.id), session)
 				const current = yield* readIndex(sessionsIndexKey)
@@ -123,24 +74,6 @@ export class ReviewStore extends Effect.Service<ReviewStore>()('@ai-toolkit/revi
 
 			getSummary: Effect.fnUntraced(function* (sessionId: SessionId) {
 				return yield* summaryStore.get(summaryKey(sessionId))
-			}),
-
-			saveStreamState: Effect.fnUntraced(function* (state: StreamState) {
-				yield* streamStore.set(streamKey(state.id), state)
-				return state
-			}),
-
-			getStreamState: Effect.fnUntraced(function* (id: StreamId) {
-				return yield* streamStore.get(streamKey(id))
-			}),
-
-			saveAgentState: Effect.fnUntraced(function* (state: AgentState) {
-				yield* agentStore.set(agentStateKey(state.agentId), state)
-				return state
-			}),
-
-			getAgentState: Effect.fnUntraced(function* (id: AgentId) {
-				return yield* agentStore.get(agentStateKey(id))
 			})
 		}
 	})

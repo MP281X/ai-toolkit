@@ -1,109 +1,144 @@
-import {Effect, Stream} from 'effect'
+import {Effect, Stream, pipe} from 'effect'
 
-import {answerQuestion, runAgent} from '@ai-toolkit/review/agent'
-import {commitSuggestions} from '@ai-toolkit/review/commit'
-import {GitService} from '@ai-toolkit/review/git'
+import {answerQuestion, AgentAnswer, AgentRunRequest, runAgent} from '@ai-toolkit/ai/review'
+import {commitSuggestions} from '@ai-toolkit/ai/commit'
+import {GitService} from '@ai-toolkit/git/service'
+import {GitStore} from '@ai-toolkit/git/store'
+import {DiffQuery, type RepoPath, Repository, StageSelection} from '@ai-toolkit/git/schema'
 import {
-	type AgentAnswer,
-	AgentEvent,
-	AgentRunRequest,
 	type CommentDraft,
-	CommitSuggestion,
-	DiffFile,
-	DiffQuery,
-	type RepoPath,
-	RepoStatus,
-	Repository,
+	type CommentId,
 	ReviewComment,
 	ReviewSession,
 	ReviewSummary,
 	type SessionDraft,
-	type SessionId,
-	StageSelection
+	type SessionId
 } from '@ai-toolkit/review/schema'
 import {ReviewStore} from '@ai-toolkit/review/store'
 
 import {ReviewRpcs} from './contracts.ts'
 
-const now = () => Date.now()
-
-const withTimestamp = (repository: Repository) =>
-	Repository.make({
+function touchRepository(repository: Repository) {
+	return Repository.make({
 		...repository,
-		lastOpenedAt: now()
+		lastOpenedAt: Date.now()
 	})
+}
 
-const buildRepository = (path: RepoPath) => {
+function buildRepository(path: RepoPath) {
 	const name = path.split('/').filter(Boolean).at(-1) ?? `${path}`
 	return Repository.make({
 		path,
 		name,
-		lastOpenedAt: now()
+		lastOpenedAt: Date.now()
 	})
 }
 
-const buildSession = (draft: SessionDraft) =>
-	ReviewSession.make({
+function buildSession(draft: SessionDraft) {
+	return ReviewSession.make({
 		id: crypto.randomUUID() as SessionId,
 		repoPath: draft.repoPath,
 		title: draft.title,
-		createdAt: now(),
-		updatedAt: now(),
+		createdAt: Date.now(),
+		updatedAt: Date.now(),
 		globalSummary: draft.globalSummary
 	})
+}
 
-const buildComment = (draft: CommentDraft) =>
-	ReviewComment.make({
+function buildComment(draft: CommentDraft) {
+	return ReviewComment.make({
 		...draft,
-		id: crypto.randomUUID(),
-		createdAt: now()
+		id: crypto.randomUUID() as CommentId,
+		createdAt: Date.now()
 	})
+}
 
 export const ReviewLive = ReviewRpcs.toLayer(
 	Effect.gen(function* () {
 		const store = yield* ReviewStore
 		const git = yield* GitService
+		const repos = yield* GitStore
 
-		return ReviewRpcs.of({
-			ListRepositories: () => store.listRepositories,
+		function listRepositories() {
+			return pipe(repos.listRepositories(), Effect.orDie)
+		}
 
-			SaveRepository: repository => store.saveRepository(withTimestamp(repository)),
+		function saveRepository(repository: Repository) {
+			return pipe(repos.saveRepository(touchRepository(repository)), Effect.orDie)
+		}
 
-			Status: repoPath => git.status(repoPath).pipe(Effect.tap(() => store.saveRepository(buildRepository(repoPath)))),
+		function status(repoPath: RepoPath) {
+			return pipe(git.status(repoPath), Effect.tap(() => repos.saveRepository(buildRepository(repoPath))), Effect.orDie)
+		}
 
-			Diff: query => git.diff(query),
+		function diff(query: DiffQuery) {
+			return pipe(git.diff(query), Effect.orDie)
+		}
 
-			Stage: selection =>
-				Effect.gen(function* () {
-					const diff =
-						selection.kind === 'file' || selection.kind === 'directory'
-							? undefined
-							: yield* git.diff(DiffQuery.make({repoPath: selection.repoPath, source: 'working'}))
-					return yield* git.stage(selection, diff)
-				}),
+		function stage(selection: StageSelection) {
+			return Effect.gen(function* () {
+				const diffValue =
+					selection.kind === 'file' || selection.kind === 'directory'
+						? undefined
+						: yield* pipe(git.diff(DiffQuery.make({repoPath: selection.repoPath, source: 'working'})), Effect.orDie)
+				return yield* pipe(git.stage(selection, diffValue), Effect.as(null), Effect.orDie)
+			})
+		}
 
-			ListSessions: () => store.listSessions,
+		function listSessions() {
+			return pipe(store.listSessions(), Effect.orDie)
+		}
 
-			CreateSession: draft => store.saveSession(buildSession(draft)),
+		function createSession(draft: SessionDraft) {
+			return pipe(store.saveSession(buildSession(draft)), Effect.orDie)
+		}
 
-			ListComments: sessionId => store.listComments(sessionId),
+		function listComments(sessionId: SessionId) {
+			return pipe(store.listComments(sessionId), Effect.orDie)
+		}
 
-			AddComment: draft => store.saveComment(buildComment(draft)),
+		function addComment(draft: CommentDraft) {
+			return pipe(store.saveComment(buildComment(draft)), Effect.orDie)
+		}
 
-			SaveSummary: summary =>
+		function saveSummary(summary: ReviewSummary) {
+			return pipe(
 				store.saveSummary(
 					ReviewSummary.make({
 						...summary,
-						updatedAt: now()
+						updatedAt: Date.now()
 					})
 				),
+				Effect.orDie
+			)
+		}
 
-			GetSummary: sessionId => store.getSummary(sessionId),
+		function getSummary(sessionId: SessionId) {
+			return pipe(store.getSummary(sessionId), Effect.orDie)
+		}
 
-			CommitSuggestions: repoPath => commitSuggestions(repoPath),
+		function suggestions(repoPath: RepoPath) {
+			return pipe(commitSuggestions(repoPath), Effect.orDie)
+		}
 
-			RunAgent: request => runAgent(request),
+		function runAgentStream(request: AgentRunRequest) {
+			return pipe(runAgent(request), Stream.orDie)
+		}
 
+		return ReviewRpcs.of({
+			ListRepositories: listRepositories,
+			SaveRepository: saveRepository,
+			Status: status,
+			Diff: diff,
+			Stage: stage,
+			ListSessions: listSessions,
+			CreateSession: createSession,
+			ListComments: listComments,
+			AddComment: addComment,
+			SaveSummary: saveSummary,
+			GetSummary: getSummary,
+			CommitSuggestions: suggestions,
+			RunAgent: runAgentStream,
 			AnswerAgent: (answer: AgentAnswer) => answerQuestion(answer)
 		})
 	})

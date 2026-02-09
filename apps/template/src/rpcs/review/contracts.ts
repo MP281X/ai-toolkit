@@ -1,24 +1,10 @@
 import {Rpc, RpcGroup} from '@effect/rpc'
 import {Schema} from 'effect'
 
-import {
-	AgentAnswer,
-	AgentEvent,
-	AgentRunRequest,
-	CommentDraft,
-	CommitSuggestion,
-	DiffFile,
-	DiffQuery,
-	RepoPath,
-	RepoStatus,
-	Repository,
-	ReviewComment,
-	ReviewSession,
-	ReviewSummary,
-	SessionDraft,
-	SessionId,
-	StageSelection
-} from '@ai-toolkit/review/schema'
+import {AgentAnswer, AgentEvent, AgentRunRequest} from '@ai-toolkit/ai/review'
+import {CommitSuggestion} from '@ai-toolkit/ai/commit'
+import {DiffFile, DiffQuery, RepoPath, RepoStatus, Repository, StageSelection} from '@ai-toolkit/git/schema'
+import {CommentDraft, ReviewComment, ReviewSession, ReviewSummary, SessionDraft, SessionId} from '@ai-toolkit/review/schema'
 
 import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
 
@@ -63,7 +49,7 @@ export class ReviewRpcs extends RpcGroup.make(
 	}),
 	Rpc.make('GetSummary', {
 		payload: SessionId,
-		success: Schema.optionFromNullish(ReviewSummary)
+		success: Schema.OptionFromNullishOr(ReviewSummary, null)
 	}),
 	Rpc.make('CommitSuggestions', {
 		payload: RepoPath,

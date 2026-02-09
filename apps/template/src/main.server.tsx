@@ -6,35 +6,36 @@ import {Effect, Function, Layer, pipe} from 'effect'
 import {OAuth} from '@ai-toolkit/oauth/server'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
-import {AiRpcs} from '#rpcs/ai/contracts.ts'
-import {MessagesRpcs} from '#rpcs/messages/contracts.ts'
 import {ReviewRpcs} from '#rpcs/review/contracts.ts'
 
 // RPCs
-const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiRpcs, MessagesRpcs, ReviewRpcs), {
+const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(ReviewRpcs), {
 	disableFatalDefects: true
 })
 
 // HTTP routes
-const Routes = Effect.gen(function* () {
-	return HttpRouter.empty.pipe(
-		HttpRouter.all('/api/rpc', yield* RpcHandler),
-		HttpRouter.all('/api/auth/*', OAuth.handler),
-		HttpMiddleware.cors({
-			credentials: true,
-			allowedOrigins: ['*'],
-			allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-			allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
-		}),
-		HttpMiddleware.xForwardedHeaders
-	)
-})
+const Routes = RpcHandler.pipe(
+	Effect.map(handler =>
+		HttpRouter.empty.pipe(
+			HttpRouter.all('/api/rpc', handler),
+			HttpRouter.all('/api/auth/*', OAuth.handler),
+			HttpMiddleware.cors({
+				credentials: true,
+				allowedOrigins: ['*'],
+				allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+				allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+			}),
+			HttpMiddleware.xForwardedHeaders
+		)
+	),
+	Effect.orDie
+)
 
 BunRuntime.runMain(
 	Layer.launch(
 		pipe(
 			Routes,
-			Effect.map(HttpServer.serve()),
+			Effect.flatMap(HttpServer.serve()),
 			Layer.unwrapScoped,
 			HttpServer.withLogAddress,
 			HttpMiddleware.withTracerDisabledWhen(Function.constTrue),

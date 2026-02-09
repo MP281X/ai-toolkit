@@ -1,13 +1,12 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/ai",
+	"name": "@ai-toolkit/git",
 
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts",
-		"./review": "./src/review.ts",
-		"./commit": "./src/commit.ts"
+		"./store": "./src/store.ts"
 	},
 
 	"scripts": {
@@ -18,19 +17,6 @@
 	"dependencies": {
 		"effect": "latest",
 		"@effect/platform": "latest",
-
-		"ai": "latest",
-		"exa-js": "latest",
-
-		"zod": "latest",
-
-		"@ai-sdk/xai": "latest",
-		"@ai-sdk/openai": "latest",
-		"@ai-sdk/google": "latest",
-		"@ai-sdk/anthropic": "latest",
-		"@ai-sdk/openai-compatible": "latest",
-
-		"@ai-toolkit/git": "workspace:*",
-		"@ai-toolkit/review": "workspace:*"
+		"@effect/platform-bun": "latest"
 	}
 }
