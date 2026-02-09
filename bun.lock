@@ -30,6 +30,7 @@
         "@ai-toolkit/components": "workspace:*",
         "@ai-toolkit/oauth": "workspace:*",
         "@ai-toolkit/opentelemetry": "workspace:*",
+        "@ai-toolkit/research": "workspace:*",
         "@tanstack/react-router": "latest",
         "@tanstack/router-plugin": "latest",
         "react": "^19",
@@ -98,9 +99,15 @@
         "@opentelemetry/sdk-trace-web": "latest",
       },
     },
+    "packages/research": {
+      "name": "@ai-toolkit/research",
+      "dependencies": {
+        "@ai-toolkit/ai": "workspace:*",
+      },
+    },
   },
   "packages": {
-    "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.38", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.14" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-9MchyPRPni0WzrFeIGNevZpQVfWxaS+MQFupIXYQo9VgHnuO1Vyrp9SBmjkkuoAdBs7GomsWqLZCcNMJAVbdFA=="],
+    "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.39", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.14" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-OZXS78H3hgJ31YVlNCLQcM67D7hP5vQyDBGVwBuE20FopQqTRSAQY1nMBPe6aUzuoNthTfROIXtIqqX9Fv65Ww=="],
 
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.39", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.14", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-SeCZBAdDNbWpVUXiYgOAqis22p5MEYfrjRw0hiBa5hM+7sDGYQpMinUjkM8kbPXMkY+AhKLrHleBl+SuqpzlgA=="],
 
@@ -123,6 +130,8 @@
     "@ai-toolkit/oauth": ["@ai-toolkit/oauth@workspace:packages/oauth"],
 
     "@ai-toolkit/opentelemetry": ["@ai-toolkit/opentelemetry@workspace:packages/opentelemetry"],
+
+    "@ai-toolkit/research": ["@ai-toolkit/research@workspace:packages/research"],
 
     "@ai-toolkit/template": ["@ai-toolkit/template@workspace:apps/template"],
 

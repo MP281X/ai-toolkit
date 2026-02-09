@@ -29,6 +29,7 @@
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/oauth": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
+		"@ai-toolkit/research": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},
 
