@@ -31,15 +31,18 @@ const Routes = Effect.gen(function* () {
 })
 
 BunRuntime.runMain(
-	Layer.launch(
-		pipe(
-			Routes,
-			Effect.map(HttpServer.serve()),
-			Layer.unwrapScoped,
-			HttpServer.withLogAddress,
-			HttpMiddleware.withTracerDisabledWhen(Function.constTrue),
-			Layer.provide(BunHttpServer.layer({port: 8080})),
-			Layer.provide(LiveLayers)
-		)
+	pipe(
+		Layer.launch(
+			pipe(
+				Routes,
+				Effect.map(HttpServer.serve()),
+				Layer.unwrapScoped,
+				HttpServer.withLogAddress,
+				HttpMiddleware.withTracerDisabledWhen(Function.constTrue),
+				Layer.provide(BunHttpServer.layer({port: 8080})),
+				Layer.provide(LiveLayers)
+			)
+		),
+		Effect.provide(Layer.scope)
 	)
 )

@@ -1,20 +1,52 @@
-import {Effect, Fiber, Stream, pipe} from 'effect'
+import {Effect, Fiber, pipe, Stream} from 'effect'
 
 import type {Model} from '@ai-toolkit/ai/schema'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
-import {cn} from '@ai-toolkit/components/utils'
 import {Badge} from '@ai-toolkit/components/ui/badge'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@ai-toolkit/components/ui/card'
 import {Input} from '@ai-toolkit/components/ui/input'
 import {Separator} from '@ai-toolkit/components/ui/separator'
 import {Textarea} from '@ai-toolkit/components/ui/textarea'
+import {cn} from '@ai-toolkit/components/utils'
 import type {QuestionId, QuestionRaised, SessionId, StoredEvent} from '@ai-toolkit/research/schema'
 import {useAtomRefresh, useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
 import {useEffect, useMemo, useRef, useState} from 'react'
 
 import {ApiClient, AtomRuntime} from '#lib/atomRuntime.ts'
+
+function isProgressEvent(
+	stored: StoredEvent
+): stored is StoredEvent & {event: {readonly _tag: 'progress'; readonly ratio: number}} {
+	return stored.event._tag === 'progress'
+}
+
+function isTokenEvent(stored: StoredEvent): stored is StoredEvent & {
+	event: {readonly _tag: 'token'; readonly kind: 'text' | 'reasoning'; readonly text: string}
+} {
+	return stored.event._tag === 'token'
+}
+
+function isAgentCompletedEvent(stored: StoredEvent): stored is StoredEvent & {
+	event: {readonly _tag: 'agent-completed'; readonly agentId: string; readonly summary: string}
+} {
+	return stored.event._tag === 'agent-completed'
+}
+
+function isPlanReadyEvent(stored: StoredEvent): stored is StoredEvent & {
+	event: {
+		readonly _tag: 'plan-ready'
+		readonly steps: readonly {
+			readonly id: string
+			readonly title: string
+			readonly detail: string
+			readonly status: string
+		}[]
+	}
+} {
+	return stored.event._tag === 'plan-ready'
+}
 
 const clientAtom = AtomRuntime.atom(
 	Effect.gen(function* () {
@@ -58,26 +90,7 @@ function RouteComponent() {
 	const [selectedSessionId, setSelectedSessionId] = useState<SessionId>()
 	const [subscriptionTopic, setSubscriptionTopic] = useState('')
 	const [intervalMinutes, setIntervalMinutes] = useState('5')
-	const streamFiberRef = useRef<Fiber.RuntimeFiber<unknown, unknown> | undefined>(undefined)
-
-	const isProgressEvent = (stored: StoredEvent): stored is StoredEvent & {event: {readonly _tag: 'progress'; readonly ratio: number}} =>
-		stored.event._tag === 'progress'
-	const isTokenEvent = (
-		stored: StoredEvent
-	): stored is StoredEvent & {event: {readonly _tag: 'token'; readonly kind: 'text' | 'reasoning'; readonly text: string}} =>
-		stored.event._tag === 'token'
-	const isAgentCompletedEvent = (
-		stored: StoredEvent
-	): stored is StoredEvent & {event: {readonly _tag: 'agent-completed'; readonly agentId: string; readonly summary: string}} =>
-		stored.event._tag === 'agent-completed'
-	const isPlanReadyEvent = (
-		stored: StoredEvent
-	): stored is StoredEvent & {
-		event: {
-			readonly _tag: 'plan-ready'
-			readonly steps: readonly {readonly id: string; readonly title: string; readonly detail: string; readonly status: string}[]
-		}
-	} => stored.event._tag === 'plan-ready'
+	const streamFiberRef = useRef<Fiber.RuntimeFiber<void, never> | undefined>(undefined)
 
 	useEffect(() => {
 		return () => {
@@ -87,7 +100,9 @@ function RouteComponent() {
 
 	useEffect(() => {
 		if (sessions.length === 0 || selectedSessionId) return
-		setSelectedSessionId(sessions[0].id)
+		const firstSession = sessions[0]
+		if (!firstSession) return
+		setSelectedSessionId(firstSession.id)
 	}, [sessions, selectedSessionId])
 
 	const activeEvents = useMemo(() => {
@@ -133,17 +148,19 @@ function RouteComponent() {
 
 	const agentFindings = useMemo(
 		() =>
-			activeEvents.filter(isAgentCompletedEvent).map(event => ({agentId: event.event.agentId, summary: event.event.summary})),
+			activeEvents
+				.filter(isAgentCompletedEvent)
+				.map(event => ({agentId: event.event.agentId, summary: event.event.summary})),
 		[activeEvents]
 	)
 
 	function stopStream() {
 		if (!streamFiberRef.current) return
-		Fiber.interrupt(streamFiberRef.current)
+		Effect.runFork(Fiber.interrupt(streamFiberRef.current))
 		streamFiberRef.current = undefined
 	}
 
-	function consumeStream(stream: Stream.Stream<StoredEvent>) {
+	function consumeStream(stream: Stream.Stream<StoredEvent, never, never>) {
 		stopStream()
 
 		streamFiberRef.current = Effect.runFork(
@@ -168,7 +185,9 @@ function RouteComponent() {
 	function startResearch() {
 		if (!topic.trim()) return
 		const payload = {topic, model}
-		const stream = mode === 'fast' ? client('StartFastResearch', payload) : client('StartDeepResearch', payload)
+		const stream = (mode === 'fast' ? client('StartFastResearch', payload) : client('StartDeepResearch', payload)).pipe(
+			Stream.orDie
+		)
 		consumeStream(stream)
 		refreshSessions()
 	}
@@ -176,14 +195,16 @@ function RouteComponent() {
 	function resumeSession(sessionId: SessionId) {
 		const key = globalThis.String(sessionId)
 		const lastEventId = eventsBySession[key]?.at(-1)?.eventId ?? -1
-		const stream = client('ResumeSession', {sessionId, fromEventId: lastEventId})
+		const stream = client('ResumeSession', {sessionId, fromEventId: lastEventId}).pipe(Stream.orDie)
 		setSelectedSessionId(sessionId)
 		consumeStream(stream)
 	}
 
 	function answerQuestion(questionId: QuestionId, answer: string) {
 		if (!selectedSessionId) return
-		const stream = client('AnswerQuestion', {sessionId: selectedSessionId, questionId, answer, model})
+		const stream = client('AnswerQuestion', {sessionId: selectedSessionId, questionId, answer, model}).pipe(
+			Stream.orDie
+		)
 		consumeStream(stream)
 	}
 

@@ -21,8 +21,8 @@ export const ResearchLive = ResearchRpcs.toLayer(
 						model: input.model
 					})
 					.pipe(Stream.orDie),
-			ListSessions: () => research.listSessions.pipe(Effect.orDie),
-			ListFeed: () => research.listFeed.pipe(Effect.orDie),
+			ListSessions: () => research.listSessions().pipe(Effect.orDie),
+			ListFeed: () => research.listFeed().pipe(Effect.orDie),
 			SubscribeTopic: input =>
 				research
 					.subscribeTopics({
