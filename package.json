@@ -18,16 +18,13 @@
 
 	"dependencies": {
 		"effect": "latest",
-		"@effect-atom/atom-react": "latest",
-
-		"@effect/rpc": "latest",
 		"@effect/platform": "latest",
 		"@effect/platform-bun": "latest",
-		"@effect/platform-browser": "latest"
+		"@effect-atom/atom-react": "latest"
 	},
 
 	"devDependencies": {
-		"turbo": "latest",
+		"turbo": "2.8.3",
 		"@biomejs/biome": "latest",
 
 		"typescript": "latest",
