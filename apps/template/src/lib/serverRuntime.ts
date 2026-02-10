@@ -1,25 +1,23 @@
-import {RpcSerialization} from '@effect/rpc'
-import {Layer, pipe} from 'effect'
+import {Effect, Layer, pipe} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai/service'
 import {OAuth} from '@ai-toolkit/oauth/server'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
+import {makeRivetServer} from '@ai-toolkit/rivet/server'
 
-import {AiLive} from '#rpcs/ai/handler.ts'
-import {MessagesLive} from '#rpcs/messages/handlers.ts'
-import {AuthMiddlewareLive} from '#rpcs/middlewares/handlers.ts'
+import {ai} from '#actors/ai.ts'
+
+export class RivetServer extends Effect.Service<RivetServer>()('RivetServer', {
+	accessors: true,
+	effect: makeRivetServer({ai})
+}) {}
 
 export const LiveLayers = pipe(
 	Layer.empty,
-	// rpc handlers
-	Layer.provideMerge(AiLive),
-	Layer.provideMerge(MessagesLive),
-	// rpc middlewares
-	Layer.provideMerge(AuthMiddlewareLive),
 	// application layers
 	Layer.provideMerge(AiSdk.Default),
 	Layer.provideMerge(OAuth.Default),
+	Layer.provideMerge(RivetServer.Default),
 	// base layers
-	Layer.provideMerge(OtelLayer('backend')),
-	Layer.provideMerge(RpcSerialization.layerNdjson)
+	Layer.provideMerge(OtelLayer('backend'))
 )

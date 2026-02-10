@@ -5,15 +5,6 @@ import {defineConfig} from 'vite'
 import {analyzer, unstableRolldownAdapter} from 'vite-bundle-analyzer'
 
 export default defineConfig({
-	server: {
-		proxy: {
-			'/api': {
-				target: 'http://localhost:8080',
-				changeOrigin: true,
-				ws: true
-			}
-		}
-	},
 	plugins: [
 		unstableRolldownAdapter(analyzer({analyzerMode: 'static'})),
 		tanstackRouter({target: 'react', disableLogging: true}),
