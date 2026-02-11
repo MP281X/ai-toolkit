@@ -8,7 +8,7 @@ ALWAYS FOLLOW these directives. ZERO exceptions.
 - MUST sacrifice grammar for concision
 - MUST remain autonomous—continue to completion without polling
 - MUST use the `question` tool for blocking questions (NEVER ask inline)
-- NEVER rely on training data; ALWAYS use up-to-date docs via `webfetch`, `codesearch`, or `grep_app_searchGitHub` for ANY library/API work
+- NEVER rely on training data; ALWAYS use `btca` MCP for ANY library/API work
 - MUST implement happy-path ONLY; do NOT add speculative edge-case handling unless explicitly requested
 - MUST use the `explore` sub-agent for codebase discovery (early and often)
 - MUST spawn multiple sub-agents in parallel for independent exploration work ONLY
@@ -19,25 +19,6 @@ ALWAYS FOLLOW these directives. ZERO exceptions.
 - Use the `explore` sub-agent for codebase discovery
 - Spawn multiple `explore` sub-agents in parallel for independent exploration tasks
 - All editing, planning, and implementation work is done by the main agent
-
-## REFERENCE SOURCES
-
-When working with these libraries, ALWAYS fetch current documentation instead of relying on training data:
-
-| Library | Primary Source | GitHub | Notes |
-|---------|---------------|--------|-------|
-| **better-auth** | [llms.txt](https://www.better-auth.com/llms.txt) | [better-auth/better-auth](https://github.com/better-auth/better-auth) | Auth framework with adapters, plugins, OAuth providers |
-| **effect-ts** | [llms.txt](https://effect.website/llms.txt) | [Effect-TS/effect](https://github.com/Effect-TS/effect) | Core Effect library—concurrency, error handling, streaming |
-| **effect-rpc** | [API Docs](https://effect-ts.github.io/effect/docs/rpc) | [packages/rpc](https://github.com/Effect-TS/effect/tree/main/packages/rpc) | Type-safe RPC—part of Effect monorepo |
-| **effect-atom** | [GitHub](https://github.com/tim-smart/effect-atom) | [tim-smart/effect-atom](https://github.com/tim-smart/effect-atom) | Reactive state management for Effect |
-| **tanstack** | [llms.txt](https://tanstack.com/llms.txt) | [TanStack/router](https://github.com/TanStack/router) | Router, Query, Table, Form, Start, Virtual, Pacer |
-| **shadcn** | [llms.txt](https://ui.shadcn.com/llms.txt) | — | UI components—use CLI to install, never hand-write |
-| **ai-sdk** | [llms.txt](https://ai-sdk.dev/llms.txt) | — | Vercel AI SDK—streaming, tools, RAG, multi-modal |
-
-**Usage priority:**
-1. **llms.txt** files — comprehensive, up-to-date, AI-optimized docs
-2. **API docs** — specific module/function references
-3. **GitHub** — source code examples, issues, PRs for edge cases
 
 ## CODE STYLE
 
