@@ -11,7 +11,8 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const auth = betterAuth({
-			baseURL: yield* Config.string('VITE_AUTH_BASE_URL'),
+			baseURL: `${yield* Config.string('VITE_SERVER_URL')}/api/auth`,
+			trustedOrigins: [yield* Config.string('VITE_CLIENT_URL')],
 			socialProviders: {
 				github: {
 					clientId: yield* Config.string('AUTH_GITHUB_ID'),

@@ -11,7 +11,7 @@ const Routes = HttpRouter.empty.pipe(
 	HttpRouter.all('/api/auth/*', OAuth.handler),
 	HttpMiddleware.cors({
 		credentials: true,
-		allowedOrigins: ['*'],
+		allowedOrigins: ['http://localhost:5173'],
 		allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 		allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 	}),

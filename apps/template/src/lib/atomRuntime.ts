@@ -25,8 +25,9 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(
 		Layer.setConfigProvider(
 			ConfigProvider.fromJson({
-				AUTH_BASE_URL: import.meta.env['VITE_AUTH_BASE_URL'],
-				RIVET_ENDPOINT: import.meta.env['VITE_RIVET_ENDPOINT']
+				VITE_SERVER_URL: import.meta.env['VITE_SERVER_URL'],
+				VITE_RIVET_URL: import.meta.env['VITE_RIVET_URL'],
+				VITE_CLIENT_URL: import.meta.env['VITE_CLIENT_URL']
 			})
 		)
 	)
