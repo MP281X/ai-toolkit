@@ -1,0 +1,43 @@
+{
+	"dataDirectory": ".opencode/btca",
+	"$schema": "https://btca.dev/btca.schema.json",
+
+	"resources": [
+		{
+			"type": "git",
+			"branch": "canary",
+			"name": "better-auth",
+			"url": "https://github.com/better-auth/better-auth"
+		},
+		{
+			"type": "git",
+			"branch": "main",
+			"name": "effect",
+			"url": "https://github.com/Effect-TS/effect"
+		},
+		{
+			"type": "git",
+			"branch": "main",
+			"name": "effect-atom",
+			"url": "https://github.com/tim-smart/effect-atom"
+		},
+		{
+			"type": "git",
+			"branch": "main",
+			"name": "tanstack-router",
+			"url": "https://github.com/TanStack/router"
+		},
+		{
+			"type": "git",
+			"branch": "main",
+			"name": "ai-sdk",
+			"url": "https://github.com/vercel/ai"
+		},
+		{
+			"type": "git",
+			"branch": "main",
+			"name": "rivet",
+			"url": "https://github.com/rivet-dev/rivet"
+		}
+	]
+}

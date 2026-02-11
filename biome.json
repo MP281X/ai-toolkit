@@ -101,7 +101,7 @@
 
 	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
 	"files": {
-		"includes": ["**/*.ts", "**/*.tsx", "**/*.css", "**/*.html", "**/*.json", "!**/*.gen.ts"]
+		"includes": ["**/*.ts", "**/*.tsx", "**/*.css", "**/*.html", "**/*.json", "**/*.jsonc", "!**/*.gen.ts"]
 	},
 
 	"overrides": [
