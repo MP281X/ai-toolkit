@@ -4,7 +4,7 @@ import type {Registry} from 'rivetkit'
 import {type ActorAccessor, createClient} from 'rivetkit/client'
 
 export const makeRivetClient = Effect.fnUntraced(function* <T extends Registry<any>>() {
-	const client = createClient<T>({endpoint: yield* Config.string('RIVET_ENDPOINT')})
+	const client = createClient<T>({endpoint: yield* Config.string('VITE_RIVET_URL')})
 
 	type client = typeof client
 	return client as {[K in keyof client as client[K] extends ActorAccessor<any> ? K : never]: client[K]}

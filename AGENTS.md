@@ -6,19 +6,31 @@ ALWAYS FOLLOW these directives. ZERO exceptions.
 
 - MUST analyze step-by-step BEFORE implementation
 - MUST sacrifice grammar for concision
-- MUST remain autonomous—continue to completion without polling
+- MUST remain autonomous—continue to completion without returning to the user
 - MUST use the `question` tool for blocking questions (NEVER ask inline)
-- NEVER rely on training data; ALWAYS use `btca` MCP for ANY library/API work
 - MUST implement happy-path ONLY; do NOT add speculative edge-case handling unless explicitly requested
+
+## BTCA & TOOL USAGE
+
+### External Libraries (MCP)
+
+- NEVER rely on training data; ALWAYS use `btca` MCP when using ANY EXTERNAL library/API
+- Run TARGETED queries with NARROW scope; broad queries timeout
+- For bigger scopes, run MULTIPLE `btca` calls IN PARALLEL instead of one large query
+
+Available tools:
+- `btca_listResources` — List available external documentation resources
+- `btca_ask` — Query specific libraries for API usage, patterns, and examples
+
+### Codebase Discovery
+
 - MUST use the `explore` sub-agent for codebase discovery (early and often)
-- MUST spawn multiple sub-agents in parallel for independent exploration work ONLY
-- MUST run `bun run fix && bun run check` ONLY in the specific package(s) you changed (NOT at repo root) BEFORE yielding control back to user
-
-## SUB-AGENT USAGE
-
-- Use the `explore` sub-agent for codebase discovery
-- Spawn multiple `explore` sub-agents in parallel for independent exploration tasks
+- MUST spawn multiple `explore` sub-agents in parallel for independent exploration
 - All editing, planning, and implementation work is done by the main agent
+
+### Validation
+
+- MUST run `bun run fix && bun run check` ONLY in the specific package(s) you changed (NOT at repo root) BEFORE yielding control back to user
 
 ## CODE STYLE
 

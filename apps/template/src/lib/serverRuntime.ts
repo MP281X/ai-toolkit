@@ -1,4 +1,4 @@
-import {Effect, Layer, pipe} from 'effect'
+import {Effect, Layer, ManagedRuntime, pipe} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai/service'
 import {OAuth} from '@ai-toolkit/oauth/server'
@@ -21,3 +21,5 @@ export const LiveLayers = pipe(
 	// base layers
 	Layer.provideMerge(OtelLayer('backend'))
 )
+
+export const ServerRuntime = ManagedRuntime.make(LiveLayers)
