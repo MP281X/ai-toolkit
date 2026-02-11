@@ -5,8 +5,6 @@ import {createRoot} from 'react-dom/client'
 
 import {routeTree} from './routeTree.gen.ts'
 
-import './main.css'
-
 const router = createRouter({
 	routeTree,
 	defaultPreload: 'intent',

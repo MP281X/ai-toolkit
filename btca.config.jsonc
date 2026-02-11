@@ -32,12 +32,6 @@
 			"branch": "main",
 			"name": "ai-sdk",
 			"url": "https://github.com/vercel/ai"
-		},
-		{
-			"type": "git",
-			"branch": "main",
-			"name": "rivet",
-			"url": "https://github.com/rivet-dev/rivet"
 		}
 	]
 }
