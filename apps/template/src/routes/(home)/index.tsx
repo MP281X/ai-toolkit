@@ -1,4 +1,4 @@
-import {Effect} from 'effect'
+import {Effect, pipe, Stream} from 'effect'
 
 import type {Model} from '@ai-toolkit/ai/schema'
 import {Autocomplete, AutocompleteOption, ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
@@ -10,21 +10,22 @@ import {useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react'
 
-import {AtomRuntime, Rivet} from '#lib/atomRuntime.ts'
+import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 
 export const Route = createFileRoute('/(home)/')({component: RouteComponent})
 
-const listMessagesAtom = AtomRuntime.atom(
-	Effect.gen(function* () {
-		const client = (yield* Rivet.ai).getOrCreate()
-		return yield* Effect.promise(() => client.listMessages())
-	})
+const messagesAtom = AtomRuntime.atom(
+	pipe(
+		RpcClient,
+		Effect.map(client => client('ai.listMessages', void 0)),
+		Stream.unwrap
+	)
 )
 
 function RouteComponent() {
 	const [model, setModel] = useState<Model>({provider: 'opencode_zen', model: 'kimi-k2.5-free'})
 
-	const {value: messages} = useAtomSuspense(listMessagesAtom)
+	const {value: messages} = useAtomSuspense(messagesAtom)
 
 	return (
 		<div className="flex h-svh w-full flex-col bg-background text-foreground">

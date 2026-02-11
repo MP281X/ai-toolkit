@@ -5,7 +5,7 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#actors/*": "./src/actors/*",
+		"#rpcs/*": "./src/rpcs/*",
 		"#routes/*": "./src/routes/*"
 	},
 
@@ -27,7 +27,6 @@
 		"@tanstack/router-plugin": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/rivet": "workspace:*",
 		"@ai-toolkit/oauth": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"

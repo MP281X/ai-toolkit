@@ -18,9 +18,12 @@
 
 	"dependencies": {
 		"effect": "latest",
+		"@effect-atom/atom-react": "latest",
+
+		"@effect/rpc": "latest",
 		"@effect/platform": "latest",
 		"@effect/platform-bun": "latest",
-		"@effect-atom/atom-react": "latest"
+		"@effect/platform-browser": "latest"
 	},
 
 	"devDependencies": {
