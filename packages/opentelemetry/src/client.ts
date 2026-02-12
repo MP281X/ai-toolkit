@@ -7,7 +7,7 @@ import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-web'
 export const OtelLayer = (serviceName: string) =>
 	Layer.unwrapScoped(
 		Effect.map(
-			Config.option(Config.string('OTEL_URL')),
+			Config.option(Config.string('VITE_OTEL_URL')),
 			Option.match({
 				onNone: () => Layer.empty,
 				onSome: url =>

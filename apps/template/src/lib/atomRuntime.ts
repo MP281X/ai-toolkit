@@ -22,7 +22,8 @@ export const LiveLayers = pipe(
 		Layer.setConfigProvider(
 			ConfigProvider.fromJson({
 				VITE_CLIENT_URL: import.meta.env['VITE_CLIENT_URL'],
-				VITE_SERVER_URL: import.meta.env['VITE_SERVER_URL']
+				VITE_SERVER_URL: import.meta.env['VITE_SERVER_URL'],
+				VITE_OTEL_URL: import.meta.env['VITE_OTEL_URL']
 			})
 		)
 	)

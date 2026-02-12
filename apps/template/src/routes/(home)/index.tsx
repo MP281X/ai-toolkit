@@ -1,4 +1,4 @@
-import {Effect, pipe, Stream} from 'effect'
+import {Effect, pipe, Schema, Stream} from 'effect'
 
 import type {Model} from '@ai-toolkit/ai/schema'
 import {Autocomplete, AutocompleteOption, ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
@@ -6,26 +6,37 @@ import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
-import {useAtomSet, useAtomSuspense} from '@effect-atom/atom-react'
+import {Atom, useAtomSet, useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {SessionId} from '#rpcs/ai/contracts.ts'
 
-export const Route = createFileRoute('/(home)/')({component: RouteComponent})
+export const Route = createFileRoute('/(home)/')({
+	component: RouteComponent,
+	validateSearch: Schema.standardSchemaV1(
+		Schema.Struct({
+			sessionId: Schema.optionalWith(SessionId, {default: () => SessionId.make(crypto.randomUUID())})
+		})
+	)
+})
 
-const messagesAtom = AtomRuntime.atom(
-	pipe(
-		RpcClient,
-		Effect.map(client => client('ai.listMessages', void 0)),
-		Stream.unwrap
+const messagesAtom = Atom.family((sessionId: SessionId) =>
+	AtomRuntime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('ai.listMessages', {sessionId})),
+			Stream.unwrap
+		)
 	)
 )
 
 function RouteComponent() {
-	const [model, setModel] = useState<Model>({provider: 'opencode_zen', model: 'gpt-5-nano'})
+	const {sessionId} = Route.useSearch()
+	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
 
-	const {value: messages} = useAtomSuspense(messagesAtom)
+	const {value: messages} = useAtomSuspense(messagesAtom(sessionId))
 	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
 
 	return (
@@ -37,7 +48,7 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput onSubmit={data => sendMessage({payload: {prompt: data.text, model}})}>
+			<ChatInput onSubmit={data => sendMessage({payload: {sessionId, prompt: data.text, model}})}>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>

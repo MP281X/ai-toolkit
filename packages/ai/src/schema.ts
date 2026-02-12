@@ -1,12 +1,17 @@
-import {Match, Option, Predicate, Schema, Stream} from 'effect'
+import {Chunk, Effect, Option, Predicate, pipe, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
-export type ProviderId = 'opencode_zen'
-export const ProviderId = Schema.Literal('opencode_zen')
+export type ProviderId = Schema.Schema.Type<typeof ProviderId>
+export const ProviderId = Schema.Literal('opencode_zen', 'openrouter')
 
 export type ModelId = Schema.Schema.Type<typeof ModelId>
-export const ModelId = Schema.Literal('gpt-5-nano')
+export const ModelId = Schema.Literal(
+	'gpt-5-nano',
+	'nvidia/nemotron-3-nano-30b-a3b:free',
+	'arcee-ai/trinity-mini:free',
+	'google/gemma-3n-e4b-it:free'
+)
 
 export type Model = Schema.Schema.Type<typeof Model>
 export const Model = Schema.transform(
@@ -14,7 +19,9 @@ export const Model = Schema.transform(
 	Schema.Struct({provider: ProviderId, model: ModelId}),
 	{
 		decode: modelKey => {
-			const [provider, model] = modelKey.split(':') as [ProviderId, ModelId]
+			const separatorIndex = modelKey.indexOf(':')
+			const provider = modelKey.slice(0, separatorIndex) as ProviderId
+			const model = modelKey.slice(separatorIndex + 1) as ModelId
 			return {provider, model}
 		},
 		encode: config => `${config.provider}:${config.model}` as const
@@ -22,7 +29,7 @@ export const Model = Schema.transform(
 )
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
-	cause: Schema.Defect,
+	cause: Schema.optional(Schema.Defect),
 	message: Schema.optional(Schema.String)
 }) {}
 
@@ -123,36 +130,44 @@ export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) =
 	}
 }
 
-const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart) => {
-	if (part._tag !== 'text-delta' && part._tag !== 'reasoning-delta') return [...currentParts, part]
+function appendPart(parts: readonly ContentPart[], part: ContentPart) {
+	const lastPart = parts[parts.length - 1]
 
-	const lastPart = currentParts.at(-1)
+	if (part._tag === 'text-delta' && lastPart?._tag === 'text-delta' && lastPart.id === part.id) {
+		return [...parts.slice(0, -1), TextDelta.make({id: part.id, text: lastPart.text + part.text}, true)]
+	}
 
-	if (!lastPart) return [...currentParts, part]
+	if (part._tag === 'reasoning-delta' && lastPart?._tag === 'reasoning-delta' && lastPart.id === part.id) {
+		return [...parts.slice(0, -1), ReasoningDelta.make({id: part.id, text: lastPart.text + part.text}, true)]
+	}
 
-	if (lastPart._tag !== 'text-delta' && lastPart._tag !== 'reasoning-delta') return [...currentParts, part]
-
-	if (lastPart._tag !== part._tag || lastPart.id !== part.id) return [...currentParts, part]
-
-	return [...currentParts.slice(0, -1), {...lastPart, text: lastPart.text + part.text}]
+	return [...parts, part]
 }
 
-export const streamToMessage = <E>(stream: Stream.Stream<StreamPart, E>) =>
-	Stream.filterMap(
-		Stream.scan(stream, undefined as Message | undefined, (current, part) =>
-			Match.value(part).pipe(
-				Match.when({_tag: 'start'}, start => {
-					return Message.make({model: start.model, startedAt: start.startedAt, role: start.role, parts: []})
-				}),
-				Match.when({_tag: 'finish'}, finish => {
-					if (Predicate.isNullable(current)) return
-					return Message.make({...current, finishReason: finish.finishReason, usage: finish.usage})
-				}),
-				Match.orElse(remainingPart => {
-					if (Predicate.isNullable(current)) return
-					return Message.make({...current, parts: mergeParts(current.parts, remainingPart)})
-				})
-			)
-		),
-		message => Option.fromNullable(message)
+function updateMessage(current: Message | undefined, part: StreamPart) {
+	switch (part._tag) {
+		case 'start':
+			return Message.make({model: part.model, startedAt: part.startedAt, role: part.role, parts: []}, true)
+		case 'finish':
+			if (Predicate.isNotNullable(current))
+				return Message.make({...current, finishReason: part.finishReason, usage: part.usage}, true)
+			return current
+		default:
+			if (Predicate.isNotNullable(current))
+				return Message.make({...current, parts: appendPart(current.parts, part)}, true)
+			return current
+	}
+}
+
+export function streamToMessage<E>(stream: Stream.Stream<StreamPart, E>) {
+	return Stream.filterMap(
+		pipe(stream, Stream.scan(undefined as Message | undefined, updateMessage)),
+		Option.fromNullable
 	)
+}
+
+export function chunkToMessage(parts: Chunk.Chunk<StreamPart>) {
+	const message = pipe(parts, Chunk.reduce(undefined as Message | undefined, updateMessage))
+	if (Predicate.isNotUndefined(message)) return Effect.succeed(message)
+	return AiSdkError.make({message: 'Invalid stream'})
+}
