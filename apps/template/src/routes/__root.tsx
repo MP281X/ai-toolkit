@@ -11,7 +11,7 @@ export const Route = createRootRoute({
 		scripts: [import.meta.env.DEV ? {src: 'https://unpkg.com/react-scan/dist/auto.global.js'} : {}]
 	}),
 	shellComponent: props => (
-		<div className="flex min-h-dvh flex-col">
+		<div className="flex h-dvh flex-col">
 			<HeadContent />
 			<Scripts />
 

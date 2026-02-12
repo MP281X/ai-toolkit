@@ -8,6 +8,7 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 import {Atom, AtomRpc} from '@effect-atom/atom-react'
 
 import {AiContracts} from '#rpcs/ai/contracts.ts'
+import {SessionsContracts} from '#rpcs/sessions/contracts.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
@@ -30,7 +31,7 @@ export const LiveLayers = pipe(
 )
 
 export class RpcClient extends AtomRpc.Tag<RpcClient>()('ApiClient', {
-	group: Rpc.RpcGroup.make().merge(AiContracts),
+	group: Rpc.RpcGroup.make().merge(AiContracts, SessionsContracts),
 	protocol: Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}).pipe(
 		Layer.provide(
 			pipe(

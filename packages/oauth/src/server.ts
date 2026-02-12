@@ -1,5 +1,5 @@
 import {type Headers, HttpServerRequest, HttpServerResponse} from '@effect/platform'
-import {Config, Context, Duration, Effect, Predicate, pipe, Schema} from 'effect'
+import {Config, Duration, Effect, Predicate, pipe, Schema} from 'effect'
 
 import {betterAuth} from 'better-auth/minimal'
 
@@ -57,7 +57,9 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	})
 }) {}
 
-export class Session extends Context.Tag('@ai-toolkit/oauth/Session')<
+export class Session extends Effect.Tag('@ai-toolkit/oauth/Session')<
 	Session,
 	Effect.Effect.Success<ReturnType<OAuth['session']>>
->() {}
+>() {
+	static userId = Effect.andThen(this, session => session.user.id)
+}
