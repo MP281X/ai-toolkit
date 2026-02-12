@@ -6,7 +6,7 @@ export type ProviderId = 'opencode_zen'
 export const ProviderId = Schema.Literal('opencode_zen')
 
 export type ModelId = Schema.Schema.Type<typeof ModelId>
-export const ModelId = Schema.Literal('glm-4.7-free', 'kimi-k2.5-free', 'minimax-m2.1-free')
+export const ModelId = Schema.Literal('gpt-5-nano')
 
 export type Model = Schema.Schema.Type<typeof Model>
 export const Model = Schema.transform(
@@ -62,7 +62,7 @@ export class ToolError extends Schema.TaggedClass<ToolError>()('tool-error', {
 }) {}
 
 export class Error extends Schema.TaggedClass<Error>()('error', {
-	error: Schema.Unknown
+	error: Schema.Defect
 }) {}
 
 export class Start extends Schema.TaggedClass<Start>()('start', {
@@ -137,7 +137,7 @@ const mergeParts = (currentParts: readonly ContentPart[], part: ContentPart) => 
 	return [...currentParts.slice(0, -1), {...lastPart, text: lastPart.text + part.text}]
 }
 
-export const streamToMessage = (stream: Stream.Stream<StreamPart>) =>
+export const streamToMessage = <E>(stream: Stream.Stream<StreamPart, E>) =>
 	Stream.filterMap(
 		Stream.scan(stream, undefined as Message | undefined, (current, part) =>
 			Match.value(part).pipe(

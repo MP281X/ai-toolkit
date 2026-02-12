@@ -6,7 +6,7 @@ import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
-import {useAtomSuspense} from '@effect-atom/atom-react'
+import {useAtomSet, useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react'
 
@@ -23,9 +23,10 @@ const messagesAtom = AtomRuntime.atom(
 )
 
 function RouteComponent() {
-	const [model, setModel] = useState<Model>({provider: 'opencode_zen', model: 'kimi-k2.5-free'})
+	const [model, setModel] = useState<Model>({provider: 'opencode_zen', model: 'gpt-5-nano'})
 
 	const {value: messages} = useAtomSuspense(messagesAtom)
+	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
 
 	return (
 		<div className="flex h-svh w-full flex-col bg-background text-foreground">
@@ -36,10 +37,7 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput
-				// biome-ignore lint/suspicious/noConsole: TMP
-				onSubmit={console.log}
-			>
+			<ChatInput onSubmit={data => sendMessage({payload: {prompt: data.text, model}})}>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>
