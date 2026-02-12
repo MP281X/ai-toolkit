@@ -1,5 +1,5 @@
 import {type Headers, HttpServerRequest, HttpServerResponse} from '@effect/platform'
-import {Config, Context, Effect, Predicate, pipe, Schema} from 'effect'
+import {Config, Context, Duration, Effect, Predicate, pipe, Schema} from 'effect'
 
 import {betterAuth} from 'better-auth/minimal'
 
@@ -17,6 +17,15 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 				github: {
 					clientId: yield* Config.string('AUTH_GITHUB_ID'),
 					clientSecret: yield* Config.string('AUTH_GITHUB_SECRET')
+				}
+			},
+			session: {
+				expiresIn: pipe(Duration.days(7), Duration.toSeconds),
+				updateAge: pipe(Duration.hours(6), Duration.toSeconds),
+				cookieCache: {
+					enabled: true,
+					strategy: 'compact',
+					maxAge: pipe(Duration.minutes(5), Duration.toSeconds)
 				}
 			}
 		})
