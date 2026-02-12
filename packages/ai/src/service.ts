@@ -4,8 +4,8 @@ import {createOpenAI} from '@ai-sdk/openai'
 import {createOpenRouter} from '@openrouter/ai-sdk-provider'
 import {streamText} from 'ai'
 
-import type {AiInput, Model, ProviderId, StreamPart} from './schema.ts'
-import {AiSdkError, fromAiStreamPart, Start} from './schema.ts'
+import type {Model, ProviderId, StreamPart, UserMessage} from './schema.ts'
+import {AiSdkError, File, fromAiStreamPart, Start, TextDelta} from './schema.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
 
 const buildProviders = Effect.gen(function* () {
@@ -35,11 +35,17 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 		}
 
 		return {
-			stream: Effect.fnUntraced(function* (input: AiInput) {
+			stream: Effect.fnUntraced(function* (input: UserMessage) {
 				const model = yield* pipe(
 					resolveLanguageModel(input.model),
 					Effect.mapError(cause => AiSdkError.make({cause}))
 				)
+				const userStartedAt = Date.now()
+				const userParts: StreamPart[] = [
+					Start.make({model: input.model, startedAt: userStartedAt, role: 'user'}),
+					...(input.prompt.length > 0 ? [TextDelta.make({id: 'user', text: input.prompt}, true)] : []),
+					...(input.attachments ?? []).map(attachment => File.make(attachment, true))
+				]
 
 				const {fullStream} = streamText({
 					model,
@@ -50,10 +56,13 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 				})
 
 				return Stream.concat(
-					Stream.succeed<StreamPart>(Start.make({model: input.model, startedAt: Date.now(), role: 'assistant'})),
-					Stream.filterMap(
-						Stream.fromAsyncIterable(fullStream, cause => AiSdkError.make({cause})),
-						part => Option.fromNullable(fromAiStreamPart(part))
+					Stream.fromIterable(userParts),
+					Stream.concat(
+						Stream.succeed<StreamPart>(Start.make({model: input.model, startedAt: Date.now(), role: 'assistant'})),
+						Stream.filterMap(
+							Stream.fromAsyncIterable(fullStream, cause => AiSdkError.make({cause})),
+							part => Option.fromNullable(fromAiStreamPart(part))
+						)
 					)
 				)
 			}, Stream.unwrap)

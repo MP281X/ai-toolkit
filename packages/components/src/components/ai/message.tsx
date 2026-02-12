@@ -5,6 +5,7 @@ import {Predicate} from 'effect'
 import type {Message as MessageType} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, UserIcon} from 'lucide-react'
 
+import {Attachment} from '#components/ai/attachment.tsx'
 import {Error} from '#components/ai/error.tsx'
 import {Markdown} from '#components/ai/markdown.tsx'
 import {ReasoningDelta} from '#components/ai/reasoning-delta.tsx'
@@ -45,6 +46,8 @@ export function Message(props: MessageType) {
 									return <Markdown key={index}>{part.text}</Markdown>
 								case 'reasoning-delta':
 									return <ReasoningDelta key={index} {...part} />
+								case 'file':
+									return <Attachment key={index} {...part} />
 								case 'tool-call':
 									return <ToolCall key={index} {...part} />
 								case 'tool-result':

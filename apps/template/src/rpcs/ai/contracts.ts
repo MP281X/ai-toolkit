@@ -1,7 +1,7 @@
 import {Rpc, RpcGroup} from '@effect/rpc'
 import {Schema} from 'effect'
 
-import {AiInput, AiSdkError, Message} from '@ai-toolkit/ai/schema'
+import {AiSdkError, Message, UserMessage} from '@ai-toolkit/ai/schema'
 
 import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
 import {SessionId} from '#rpcs/sessions/contracts.ts'
@@ -13,7 +13,12 @@ export class AiContracts extends RpcGroup.make(
 		success: Schema.Array(Message)
 	}),
 	Rpc.make('sendMessage', {
-		payload: {sessionId: SessionId, prompt: AiInput.fields.prompt, model: AiInput.fields.model},
+		payload: {
+			sessionId: SessionId,
+			prompt: UserMessage.fields.prompt,
+			model: UserMessage.fields.model,
+			attachments: UserMessage.fields.attachments
+		},
 		success: SessionId,
 		error: AiSdkError
 	})

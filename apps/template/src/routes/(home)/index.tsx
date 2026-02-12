@@ -27,13 +27,12 @@ export const Route = createFileRoute('/(home)/')({
 
 function RouteComponent() {
 	const {sessionId} = Route.useSearch()
-	const navigate = Route.useNavigate()
 	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
 
 	return (
 		<ResizablePanelGroup orientation="horizontal">
 			<ResizablePanel defaultSize="15%" minSize="10%" maxSize="40%">
-				<Sidebar sessionId={sessionId} navigate={navigate} />
+				<Sidebar sessionId={sessionId} />
 			</ResizablePanel>
 			<ResizableHandle />
 			<ResizablePanel className="flex h-full w-full">
@@ -55,7 +54,9 @@ const sessionsAtom = Atom.keepAlive(
 	)
 )
 
-function Sidebar(props: {sessionId: SessionId; navigate: ReturnType<typeof Route.useNavigate>}) {
+function Sidebar(props: {sessionId: SessionId}) {
+	const navigate = Route.useNavigate()
+
 	const {value: sessions} = useAtomSuspense(sessionsAtom)
 	const addSession = useAtomSet(RpcClient.mutation('sessions.add'))
 	const removeSession = useAtomSet(RpcClient.mutation('sessions.remove'))
@@ -66,7 +67,11 @@ function Sidebar(props: {sessionId: SessionId; navigate: ReturnType<typeof Route
 				<div className="font-semibold text-[11px] text-muted-foreground uppercase">Sessions</div>
 				<button
 					type="button"
-					onClick={() => addSession({payload: {name: 'New Session'}})}
+					onClick={() => {
+						const newSessionId = SessionId.make(crypto.randomUUID())
+						addSession({payload: {name: 'New Session', sessionId: newSessionId}})
+						navigate({search: {sessionId: newSessionId}})
+					}}
 					className="text-muted-foreground hover:text-foreground"
 				>
 					<Plus className="size-3.5" />
@@ -74,7 +79,7 @@ function Sidebar(props: {sessionId: SessionId; navigate: ReturnType<typeof Route
 			</div>
 			<TreeExplorer
 				selectedId={props.sessionId}
-				onSelectedIdChange={id => props.navigate({search: {sessionId: SessionId.make(id)}})}
+				onSelectedIdChange={id => navigate({search: {sessionId: SessionId.make(id)}})}
 				className="min-h-0 flex-1 overflow-auto py-2"
 			>
 				<TreeExplorerSection>
@@ -133,7 +138,16 @@ function Session(props: {sessionId: SessionId; model: Model; setModel: (model: M
 			</Conversation>
 
 			<ChatInput
-				onSubmit={data => sendMessage({payload: {sessionId: props.sessionId, prompt: data.text, model: props.model}})}
+				onSubmit={data =>
+					sendMessage({
+						payload: {
+							sessionId: props.sessionId,
+							prompt: data.text,
+							model: props.model,
+							attachments: data.attachments
+						}
+					})
+				}
 			>
 				<Toolbar>
 					<ModelSelector model={props.model} onModelChange={props.setModel} />

@@ -1,5 +1,6 @@
 import {Array as EffectArray, Record as EffectRecord} from 'effect'
 
+import {File as AiFile} from '@ai-toolkit/ai/schema'
 import {ArrowUpIcon, Paperclip} from '@ai-toolkit/components/icons'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
@@ -69,7 +70,7 @@ type SnippetConfig = {
 type ChatInputProps = {
 	value?: string
 	onValueChange?: (value: string) => void
-	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: File[]}) => void
+	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: AiFile[]}) => void
 	placeholder?: string
 	children?: ReactNode
 	disabled?: boolean
@@ -82,7 +83,7 @@ type ResolvedOption = AutocompleteOptionConfig & {color: string}
 
 type CompletionState = AutocompleteEntry & {matchText: string}
 
-type AttachmentState = {file: File; matchText: string}
+type AttachmentState = {attachment: AiFile; matchText: string}
 
 // -- Child parsing --
 
@@ -289,7 +290,7 @@ export function ChatInput(props: ChatInputProps) {
 		props.onSubmit({
 			text: trimmed,
 			completions: activeCompletions.map(({kind, name, char}) => ({kind, name, char})),
-			attachments: activeAttachments.map(a => a.file)
+			attachments: activeAttachments.map(a => a.attachment)
 		})
 
 		editorRef.current?.update(() => {
@@ -309,12 +310,36 @@ export function ChatInput(props: ChatInputProps) {
 		setSelectedIndex(0)
 	}
 
-	function handleAttachFiles(files: File[]) {
+	function readAsBase64(file: globalThis.File) {
+		return new Promise<string>((resolve, reject) => {
+			const reader = new FileReader()
+			reader.onload = () => {
+				if (typeof reader.result !== 'string') {
+					reject(new Error('Attachment read failed'))
+					return
+				}
+				const commaIndex = reader.result.indexOf(',')
+				const content = commaIndex === -1 ? reader.result : reader.result.slice(commaIndex + 1)
+				resolve(content)
+			}
+			reader.onerror = () => reject(reader.error ?? new Error('Attachment read failed'))
+			reader.readAsDataURL(file)
+		})
+	}
+
+	async function handleAttachFiles(files: globalThis.File[]) {
 		if (files.length === 0) return
 		const editor = editorRef.current
 		if (!editor) return
 
-		const entries = files.map(file => ({file, matchText: file.name}))
+		const entries = await Promise.all(
+			files.map(async file => {
+				const name = file.name
+				const base64 = await readAsBase64(file)
+				const attachment = AiFile.make({base64, mediaType: file.type || 'application/octet-stream', name}, true)
+				return {attachment, matchText: name}
+			})
+		)
 		attachmentsRef.current = [...attachmentsRef.current, ...entries]
 
 		editor.update(() => {
@@ -420,7 +445,7 @@ export function ChatInput(props: ChatInputProps) {
 		const files = EffectArray.fromIterable(event.clipboardData.files)
 		if (files.length === 0) return
 		event.preventDefault()
-		handleAttachFiles(files)
+		void handleAttachFiles(files)
 	}
 
 	useEffect(() => {
@@ -554,7 +579,7 @@ export function ChatInput(props: ChatInputProps) {
 								onChange={event => {
 									const files = event.currentTarget.files
 									if (!files) return
-									handleAttachFiles([...files])
+									void handleAttachFiles([...files])
 									event.currentTarget.value = ''
 								}}
 							/>
