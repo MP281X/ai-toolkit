@@ -33,9 +33,16 @@ export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	message: Schema.optional(Schema.String)
 }) {}
 
-export class AiInput extends Schema.Class<AiInput>('AiStreamInput')({
+export class File extends Schema.TaggedClass<File>()('file', {
+	base64: Schema.StringFromBase64,
+	mediaType: Schema.String,
+	name: Schema.optional(Schema.String)
+}) {}
+
+export class UserMessage extends Schema.Class<UserMessage>('UserMessage')({
 	prompt: Schema.String,
-	model: Model
+	model: Model,
+	attachments: Schema.Array(File)
 }) {}
 
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
@@ -88,10 +95,20 @@ export class Finish extends Schema.TaggedClass<Finish>()('finish', {
 }) {}
 
 export type ContentPart = typeof ContentPart.Type
-export const ContentPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Error)
+export const ContentPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, File, Error)
 
 export type StreamPart = typeof StreamPart.Type
-export const StreamPart = Schema.Union(Start, TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, Finish, Error)
+export const StreamPart = Schema.Union(
+	Start,
+	TextDelta,
+	ReasoningDelta,
+	ToolCall,
+	ToolResult,
+	ToolError,
+	File,
+	Finish,
+	Error
+)
 
 export class Message extends Schema.Class<Message>('Message')({
 	model: Model,
@@ -108,6 +125,8 @@ export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) =
 			return TextDelta.make(part)
 		case 'reasoning-delta':
 			return ReasoningDelta.make(part)
+		case 'file':
+			return File.make({base64: part.file.base64, mediaType: part.file.mediaType})
 		case 'tool-call':
 			return ToolCall.make(part)
 		case 'tool-result':

@@ -24,7 +24,7 @@ export const AiLive = AiContracts.toLayer(
 				const session = yield* RcMap.get(msgsMap, sessionId)
 				return session.changes
 			}, Stream.unwrapScoped),
-			'ai.sendMessage': Effect.fnUntraced(function* ({sessionId, prompt, model}) {
+			'ai.sendMessage': Effect.fnUntraced(function* ({sessionId, prompt, model, attachments}) {
 				const userId = yield* Session.userId
 				const sessionsRef = yield* RcMap.get(sessionsMap, UserId.make(userId))
 
@@ -35,10 +35,17 @@ export const AiLive = AiContracts.toLayer(
 
 				const msgSession = yield* RcMap.get(msgsMap, sessionId)
 
+				function upsertMessage(messages: Message[], message: Message) {
+					const last = messages[messages.length - 1]
+					if (last && last.startedAt === message.startedAt && last.role === message.role)
+						return [...messages.slice(0, -1), message]
+					return [...messages, message]
+				}
+
 				yield* pipe(
-					aiSdk.stream({prompt, model}),
+					aiSdk.stream({prompt, model, attachments}),
 					streamToMessage,
-					Stream.flatMap(message => SubscriptionRef.update(msgSession, () => [message])),
+					Stream.flatMap(message => SubscriptionRef.update(msgSession, messages => upsertMessage(messages, message))),
 					Stream.runDrain
 				)
 
