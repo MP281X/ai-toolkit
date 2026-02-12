@@ -7,9 +7,10 @@ import {OAuth} from '@ai-toolkit/oauth/server'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiContracts} from '#rpcs/ai/contracts.ts'
+import {SessionsContracts} from '#rpcs/sessions/contracts.ts'
 
 // RPCs
-const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiContracts), {
+const RpcHandler = RpcServer.toHttpAppWebsocket(RpcGroup.make().merge(AiContracts, SessionsContracts), {
 	disableFatalDefects: true
 })
 

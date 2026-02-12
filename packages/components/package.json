@@ -24,6 +24,7 @@
 		"cmdk": "latest",
 		"@base-ui/react": "^1",
 		"lucide-react": "latest",
+		"react-resizable-panels": "latest",
 
 		"lexical": "latest",
 		"@lexical/react": "latest",

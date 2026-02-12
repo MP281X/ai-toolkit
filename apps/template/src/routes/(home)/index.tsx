@@ -1,17 +1,20 @@
 import {Effect, pipe, Schema, Stream} from 'effect'
 
 import type {Model} from '@ai-toolkit/ai/schema'
-import {Autocomplete, AutocompleteOption, ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
+import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
-import {Code, CodeXml} from '@ai-toolkit/components/icons'
+import {Loading} from '@ai-toolkit/components/fallbacks'
+import {Bot, Code, CodeXml, Plus, Trash2} from '@ai-toolkit/components/icons'
+import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
+import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {Atom, useAtomSet, useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
-import {useState} from 'react'
+import {Suspense, useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
-import {SessionId} from '#rpcs/ai/contracts.ts'
+import {SessionId} from '#rpcs/sessions/contracts.ts'
 
 export const Route = createFileRoute('/(home)/')({
 	component: RouteComponent,
@@ -22,25 +25,106 @@ export const Route = createFileRoute('/(home)/')({
 	)
 })
 
-const messagesAtom = Atom.family((sessionId: SessionId) =>
+function RouteComponent() {
+	const {sessionId} = Route.useSearch()
+	const navigate = Route.useNavigate()
+	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
+
+	return (
+		<ResizablePanelGroup orientation="horizontal">
+			<ResizablePanel defaultSize="15%" minSize="10%" maxSize="40%">
+				<Sidebar sessionId={sessionId} navigate={navigate} />
+			</ResizablePanel>
+			<ResizableHandle />
+			<ResizablePanel className="flex h-full w-full">
+				<Suspense fallback={<Loading />}>
+					<Session sessionId={sessionId} model={model} setModel={setModel} />
+				</Suspense>
+			</ResizablePanel>
+		</ResizablePanelGroup>
+	)
+}
+
+const sessionsAtom = Atom.keepAlive(
 	AtomRuntime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('ai.listMessages', {sessionId})),
+			Effect.map(client => client('sessions.list', void 0)),
 			Stream.unwrap
 		)
 	)
 )
 
-function RouteComponent() {
-	const {sessionId} = Route.useSearch()
-	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
+function Sidebar(props: {sessionId: SessionId; navigate: ReturnType<typeof Route.useNavigate>}) {
+	const {value: sessions} = useAtomSuspense(sessionsAtom)
+	const addSession = useAtomSet(RpcClient.mutation('sessions.add'))
+	const removeSession = useAtomSet(RpcClient.mutation('sessions.remove'))
 
-	const {value: messages} = useAtomSuspense(messagesAtom(sessionId))
+	return (
+		<aside className="flex h-full flex-col border-sidebar-border bg-sidebar text-sidebar-foreground">
+			<div className="flex items-center justify-between border-sidebar-border border-b px-3 py-2">
+				<div className="font-semibold text-[11px] text-muted-foreground uppercase">Sessions</div>
+				<button
+					type="button"
+					onClick={() => addSession({payload: {name: 'New Session'}})}
+					className="text-muted-foreground hover:text-foreground"
+				>
+					<Plus className="size-3.5" />
+				</button>
+			</div>
+			<TreeExplorer
+				selectedId={props.sessionId}
+				onSelectedIdChange={id => props.navigate({search: {sessionId: SessionId.make(id)}})}
+				className="min-h-0 flex-1 overflow-auto py-2"
+			>
+				<TreeExplorerSection>
+					{sessions.map(session => (
+						<TreeExplorerItem
+							key={session.id}
+							id={session.id}
+							icon={<Bot className="size-3.5" />}
+							trailing={
+								<span className="flex items-center gap-1">
+									<button
+										type="button"
+										onClick={event => {
+											event.stopPropagation()
+											removeSession({payload: {sessionId: session.id}})
+										}}
+										className="text-muted-foreground hover:text-foreground"
+									>
+										<Trash2 className="size-3" />
+									</button>
+								</span>
+							}
+						>
+							{session.name}
+						</TreeExplorerItem>
+					))}
+				</TreeExplorerSection>
+			</TreeExplorer>
+		</aside>
+	)
+}
+
+const messagesAtom = Atom.family((sessionId: SessionId) =>
+	Atom.keepAlive(
+		AtomRuntime.atom(
+			pipe(
+				RpcClient,
+				Effect.map(client => client('ai.listMessages', {sessionId})),
+				Stream.unwrap
+			)
+		)
+	)
+)
+
+function Session(props: {sessionId: SessionId; model: Model; setModel: (model: Model) => void}) {
+	const {value: messages} = useAtomSuspense(messagesAtom(props.sessionId))
 	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
 
 	return (
-		<div className="flex h-svh w-full flex-col bg-background text-foreground">
+		<div className="flex h-full w-full flex-col">
 			<Conversation className="min-h-0 flex-1">
 				{messages.map((message, index) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: _
@@ -48,21 +132,12 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput onSubmit={data => sendMessage({payload: {sessionId, prompt: data.text, model}})}>
+			<ChatInput
+				onSubmit={data => sendMessage({payload: {sessionId: props.sessionId, prompt: data.text, model: props.model}})}
+			>
 				<Toolbar>
-					<ModelSelector model={model} onModelChange={setModel} />
+					<ModelSelector model={props.model} onModelChange={props.setModel} />
 				</Toolbar>
-
-				<Autocomplete trigger="@" color="#38bdf8">
-					<AutocompleteOption value="file" description="Attach a file" />
-					<AutocompleteOption value="image" description="Attach an image" />
-				</Autocomplete>
-				<Autocomplete trigger="#" color="#e879f9">
-					<AutocompleteOption value="agent" description="Change agent or system prompt" />
-				</Autocomplete>
-				<Autocomplete trigger="/" color="#34d399">
-					<AutocompleteOption value="command" description="Run a slash command" />
-				</Autocomplete>
 
 				<Snippets>
 					<Snippet insert={'```\n\n```\n'}>
