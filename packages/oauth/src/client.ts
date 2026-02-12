@@ -1,4 +1,4 @@
-import {Config, Effect, Predicate, Schema} from 'effect'
+import {Config, Effect, Predicate, pipe, Schema} from 'effect'
 
 import {createAuthClient} from 'better-auth/client'
 
@@ -25,7 +25,10 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 		})
 
 		return {
-			signIn: use(client => client.signIn.social({provider: 'github', callbackURL: clientUrl})),
+			signIn: pipe(
+				use(client => client.signIn.social({provider: 'github', callbackURL: clientUrl})),
+				Effect.flatMap(() => Effect.never)
+			),
 			signOut: use(client => client.signOut()),
 			session: use(client => client.getSession())
 		}

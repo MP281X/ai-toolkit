@@ -1,7 +1,7 @@
-import {Config, Effect, Option, pipe, Stream} from 'effect'
+import {Config, Effect, Function, Option, pipe, Stream} from 'effect'
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
-import {ToolLoopAgent} from 'ai'
+import {streamText} from 'ai'
 
 import type {AiInput, Model, ProviderId, StreamPart} from './schema.ts'
 import {AiSdkError, fromAiStreamPart, Start} from './schema.ts'
@@ -31,17 +31,16 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 
 		return {
 			stream: Effect.fnUntraced(function* (input: AiInput) {
-				const agent = new ToolLoopAgent({
-					model: yield* pipe(
-						resolveLanguageModel(input.model),
-						Effect.mapError(cause => AiSdkError.make({cause}))
-					),
-					tools
-				})
+				const model = yield* pipe(
+					resolveLanguageModel(input.model),
+					Effect.mapError(cause => AiSdkError.make({cause}))
+				)
 
-				const {fullStream} = yield* Effect.tryPromise({
-					try: () => agent.stream({prompt: input.prompt}),
-					catch: cause => AiSdkError.make({cause})
+				const {fullStream} = streamText({
+					model,
+					tools,
+					prompt: input.prompt,
+					onError: Function.constVoid // already handled in the stream
 				})
 
 				return Stream.concat(
