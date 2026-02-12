@@ -2,10 +2,10 @@ import {Chunk, Effect, Option, Predicate, pipe, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
-export type ProviderId = Schema.Schema.Type<typeof ProviderId>
+export type ProviderId = typeof ProviderId.Type
 export const ProviderId = Schema.Literal('opencode_zen', 'openrouter')
 
-export type ModelId = Schema.Schema.Type<typeof ModelId>
+export type ModelId = typeof ModelId.Type
 export const ModelId = Schema.Literal(
 	'gpt-5-nano',
 	'nvidia/nemotron-3-nano-30b-a3b:free',
@@ -13,7 +13,7 @@ export const ModelId = Schema.Literal(
 	'google/gemma-3n-e4b-it:free'
 )
 
-export type Model = Schema.Schema.Type<typeof Model>
+export type Model = typeof Model.Type
 export const Model = Schema.transform(
 	Schema.TemplateLiteral(ProviderId, Schema.Literal(':'), ModelId),
 	Schema.Struct({provider: ProviderId, model: ModelId}),

@@ -2,271 +2,92 @@
 
 ## META RULES
 
-ALWAYS FOLLOW these directives. ZERO exceptions.
+Zero exceptions. Always follow.
 
-- MUST analyze step-by-step BEFORE implementation
-- MUST sacrifice grammar for concision
-- MUST remain autonomous—continue to completion without returning to the user
-- MUST use the `question` tool for blocking questions (NEVER ask inline)
-- MUST implement happy-path ONLY; do NOT add speculative edge-case handling unless explicitly requested
+- Analyze step-by-step BEFORE implementation
+- Sacrifice grammar for concision
+- Remain autonomous—continue without returning to user
+- Use `question` tool for blocking questions (never inline)
+- Happy-path ONLY; no speculative edge-cases
 
-## BTCA & TOOL USAGE
+## TOOLS
 
 ### External Libraries (MCP)
 
-- NEVER rely on training data; ALWAYS use `btca` MCP when using ANY EXTERNAL library/API
-- Run TARGETED queries with NARROW scope; broad queries timeout
-- For bigger scopes, run MULTIPLE `btca` calls IN PARALLEL instead of one large query
+- NEVER rely on training data; ALWAYS use `btca` MCP for external libraries
+- Run TARGETED queries with NARROW scope (broad queries timeout)
+- Run MULTIPLE `btca` calls IN PARALLEL for bigger scopes
 
-Available tools:
-- `btca_listResources` — List available external documentation resources
-- `btca_ask` — Query specific libraries for API usage, patterns, and examples
+Available: `btca_listResources`, `btca_ask`
 
 ### Codebase Discovery
 
-- MUST use the `explore` sub-agent for codebase discovery (early and often)
-- MUST spawn multiple `explore` sub-agents in parallel for independent exploration
-- All editing, planning, and implementation work is done by the main agent
+- Use `explore` sub-agent early and often
+- Spawn MULTIPLE `explore` agents in parallel
+- Main agent does all editing/planning
 
 ### Validation
 
-- MUST run `bun run fix && bun run check` ONLY in the specific package(s) you changed (NOT at repo root) BEFORE yielding control back to user
+- Run `bun run fix && bun run check` in changed packages ONLY (not root) before yielding
 
 ## CODE STYLE
 
-### PRINCIPLES
+### Principles
 
-- MUST write functional code: flat, pipeable, side-effect free
-- MUST prefer duplication over premature abstractions
-- MUST follow existing codebase patterns
-- MUST maximize shadcn usage over custom components
+- Functional: flat, pipeable, side-effect free
+- Prefer duplication over premature abstractions
+- Follow existing codebase patterns
+- Maximize shadcn usage over custom components
 
-### SHADCN / GENERATED UI
+### TypeScript
 
-- MUST install shadcn components via the CLI: `bun shadcn ...`
-- MUST NEVER hand-write shadcn components
-- MUST NEVER edit files in `packages/components/src/components/ui/` (treat as generated)
-- MUST compose or wrap components in application code for customization
-- MUST create new components OUTSIDE `packages/components/src/components/ui/` when needed
+- Use `type` not `interface`
+- Rely on type inference; never define return types
+- No type casts, no `any`
+- Declare type BEFORE const with matching name
+- Use `function` declarations (not arrows, except callbacks)
+- Avoid `{}` for one-liners; use `{}` when formatter makes unreadable single-lines
+- Inline values; no single-use temp variables
+- Single-expression `return ...`
 
-### TYPESCRIPT
+### React
 
-- MUST NOT use `interface`; use `type` declarations
-- MUST rely on type inference; NEVER DEFINE RETURN TYPES unless strictly necessary
-- MUST NOT use type casts
-- MUST NOT use `any`
-- MUST declare the type BEFORE the const with matching name/casing
-- MUST use `function` declarations over arrow functions (except callbacks and inline arguments)
-- MUST avoid `{}` blocks for one-liners
-- MUST use `{}` when the formatter forces unreadable single-line control flow
-- MUST avoid single-use temporary variables; inline the full property path or value where it is used
-- MUST use single-expression `return ...` over assigning then returning
-- MUST use `async`/`await` over `.then(...)` chains
-- MUST use `Predicate` helpers for nullable checks instead of ad-hoc `== null` or `!value` checks
+- React Compiler enabled—DON'T manually memoize
+- Use `cn()` from `@packages/components/src/lib/utils.ts` for className
+- NO template literals in className
 
-### REACT
+### Naming & Structure
 
-- React Compiler is enabled—MUST NOT manually memoize
-- MUST use the `cn()` utility from `@packages/components/src/lib/utils.ts` for className composition
-- MUST NOT use template literals for className
+- NO abbreviations
+- NO comments—self-documenting code
+- NO destructuring props; use dot notation
+- Early returns
+- Inline 1-2 line functions
+- Duplication over helper functions
 
-### NAMING & STRUCTURE
+### Effect
 
-- MUST NOT abbreviate variable or argument names
-- MUST NOT add comments—code must be self-documenting
-- MUST NOT destructure props; use dot notation
-- MUST use early returns
-- MUST inline 1-2 line functions
-- MUST use duplication over helper functions
+- Use `pipe(value, ...)` for composition
+- Use `.pipe()` ONLY for instrumentation (timeouts, retries, logging)
+- Define services with `Effect.Service` using `@packageName/ServiceName` identifiers
+- Use `accessors: true` for direct access
+- Layer naming: camelCase with Layer suffix (`layer`, `testLayer`)
+- NO redundant layer aliases
+- NO noisy section-divider comments
 
-### EFFECT / COMPOSITION
-
-- MUST use `pipe(value, ...)` over method-chaining `value.pipe(...)`
-- MUST use `.pipe(...)` ONLY for Effect instrumentation (timeouts, retries, logging)
-- MUST avoid noisy section-divider comments; keep modules focused and minimal
-- MUST NOT create redundant layer aliases or exports for Effect services
-- MUST use `Service.Default` directly unless a shared layer export is clearly needed
-
-## UI STYLE: MINIMAL BRUTALIST
-
-### VIBE
-
-Minimal brutalist / neobrutalist—raw, content-first, intentionally "unpolished" while remaining usable. High contrast. Blocky layout. Thick borders and dividers. Bold typography. Minimal decoration.
-
-### LAYOUT
-
-Strong structure with simple columns and sections. Visible separators. Big whitespace. Strict spacing rhythm. Scroll-first pages. AVOID soft cards, gradients, or glass effects.
-
-### TYPOGRAPHY
-
-Typography does the heavy lifting. Oversized headings. Clear hierarchy via size, weight, and spacing. Readable body text. Tight copy.
-
-### COMPONENTS
-
-Keep the shadcn theme. Win via composition—alignment, spacing, dividers—not custom visuals. Keep UI primitives obvious.
-
-### MOTION
-
-Minimal and functional ONLY. NO "smooth for the sake of smooth".
-
-## SHADCN COMMANDS
-
-```bash
-# List all available components
-bun shadcn list @shadcn
-
-# View component source
-bun shadcn view button
-
-# Add single component
-bun shadcn add button --yes --overwrite
-
-# Add multiple components
-bun shadcn add button card dialog --yes --overwrite
-```
-
-## EFFECT PATTERNS
-
-### EFFECT.GEN & EFFECT.FNUNTRACED
-
-MUST use `Effect.gen` for sequencing operations:
+### Data Modeling
 
 ```typescript
-import { Effect } from 'effect'
-
-const program = Effect.gen(function* () {
-  const data = yield* fetchData
-  yield* Effect.logInfo(`Processing: ${data}`)
-  return yield* processData(data)
-})
-```
-
-MUST use `Effect.fnUntraced` for named effects:
-
-```typescript
-const processUser = Effect.fnUntraced(function* (userId: string) {
-  const user = yield* getUser(userId)
-  return yield* processData(user)
-})
-```
-
-Add cross-cutting concerns via the second argument:
-
-```typescript
-const fetchWithRetry = Effect.fnUntraced(
-  function* (requestUrl: string) {
-    return yield* fetchData(requestUrl)
-  },
-  flow(
-    Effect.retry(Schedule.recurs(3)),
-    Effect.timeout('5 seconds')
-  )
-)
-```
-
-### PIPE FOR INSTRUMENTATION
-
-MUST use `.pipe()` for timeouts, retries, and logging:
-
-```typescript
-import { pipe } from 'effect'
-
-const resilient = apiCall.pipe(
-  Effect.timeout('2 seconds'),
-  Effect.retry(
-    pipe(
-      Schedule.exponential('100 millis'),
-      Schedule.compose(Schedule.recurs(3))
-    )
-  ),
-  Effect.tap((data) => Effect.logInfo(`Fetched: ${data}`))
-)
-```
-
-### SERVICES & LAYERS
-
-MUST define services using `Effect.Service`:
-
-```typescript
-import { Effect } from 'effect'
-
-class Database extends Effect.Service<Database>()('@app/Database', {
-  effect: Effect.gen(function* () {
-    const connection = yield* createConnection
-    
-    const query = Effect.fnUntraced(function* (statement: string) {
-      return yield* executeQuery(connection, statement)
-    })
-    
-    return { query }
-  })
-}) {}
-```
-
-Service identifiers MUST be unique. Use the `@path/ServiceName` pattern. Service methods MUST have no dependencies (`R = never`).
-
-Use `accessors: true` to enable direct access:
-
-```typescript
-class Users extends Effect.Service<Users>()('@app/Users', {
-  accessors: true,
-  effect: Effect.gen(function* () {
-    const httpClient = yield* HttpClient.HttpClient
-
-    const findById = Effect.fnUntraced(function* (userId: UserId) {
-      const response = yield* httpClient.get(`/users/${userId}`)
-      return yield* HttpClientResponse.schemaBodyJson(User)(response)
-    })
-
-    return { findById }
-  })
-}) {}
-
-// With accessors: true, can use yield* Users.findById(userId)
-const program = Effect.gen(function* () {
-  const user = yield* Users.findById(userId)
-  return user
-})
-```
-
-**LAYER NAMING CONVENTION:** Use camelCase with the Layer suffix: `layer`, `testLayer`, `postgresLayer`.
-
-**PROVIDE ONCE AT THE TOP:**
-
-```typescript
-import { pipe } from 'effect'
-
-const appLayer = Layer.mergeAll(
-  Users.layer,
-  Database.layer,
-  Logger.layer
-)
-
-const main = pipe(program, Effect.provide(appLayer))
-```
-
-### DATA MODELING WITH SCHEMA
-
-#### RECORDS (AND TYPES)
-
-```typescript
-import { pipe } from 'effect'
-
+// Records
 export type UserId = typeof UserId.Type
 export const UserId = pipe(Schema.String, Schema.brand('UserId'))
 
 export class User extends Schema.Class<User>('User')({
   id: UserId,
   name: Schema.String,
-  email: Schema.String,
-}) {
-  get displayName() { return `${this.name} (${this.email})` }
-}
-```
+}) {}
 
-#### VARIANTS (OR TYPES)
-
-```typescript
+// Variants
 export class Success extends Schema.TaggedClass<Success>()('Success', {
   value: Schema.Number,
 }) {}
@@ -277,94 +98,50 @@ export class Failure extends Schema.TaggedClass<Failure>()('Failure', {
 
 export type Result = typeof Result.Type
 export const Result = Schema.Union(Success, Failure)
-
-function render(result: Result) {
-  return Match.valueTags(result, {
-    Success: (success) => `Got: ${success.value}`,
-    Failure: (failure) => `Error: ${failure.error}`
-  })
-}
 ```
 
-#### BRANDED TYPES
+Brand ALL primitives. Branded types prevent mixing semantically different values.
 
-Branded types prevent mixing semantically different values:
+### Error Handling
 
-```typescript
-import { pipe } from 'effect'
-
-export type UserId = typeof UserId.Type
-export const UserId = pipe(Schema.String, Schema.brand('UserId'))
-
-export type Email = typeof Email.Type
-export const Email = pipe(Schema.String, Schema.brand('Email'))
-
-export type Port = typeof Port.Type
-export const Port = pipe(Schema.Int, Schema.between(1, 65535), Schema.brand('Port'))
-```
-
-In well-designed domains, nearly ALL primitives should be branded.
-
-### ERROR HANDLING
-
-MUST define domain errors with `Schema.TaggedError`:
+- Define domain errors with `Schema.TaggedError`
+- Tagged errors are yieldable—no `Effect.fail` needed
+- **Typed errors**: recoverable failures (validation, not found, permission)
+- **Defects**: unrecoverable bugs—invariants, use `Effect.orDie` at entry
+- Wrap unknown errors with `Schema.Defect`
 
 ```typescript
-class ValidationError extends Schema.TaggedError<ValidationError>()(
-  'ValidationError',
-  { field: Schema.String, message: Schema.String }
-) {}
-
-class NotFoundError extends Schema.TaggedError<NotFoundError>()(
-  'NotFoundError',
-  { resource: Schema.String, id: Schema.String }
-) {}
-```
-
-Tagged errors are yieldable—NO `Effect.fail` needed:
-
-```typescript
-const rollDie = Effect.gen(function* () {
-  const roll = yield* Random.nextIntBetween(1, 6)
-  if (roll === 1) return yield* BadLuck.make({ roll })
-  return { roll }
-})
-```
-
-#### RECOVERY
-
-```typescript
-Effect.catchTags({
-  HttpError: () => recoverHttp,
-  ValidationError: () => recoverValidation
-})
-
+// Recovery
+Effect.catchTags({ HttpError: () => fallback })
 Effect.catchTag('HttpError', () => fallback)
-
 Effect.catchAll(() => fallback)
 ```
 
-#### EXPECTED ERRORS VS DEFECTS
+## UI STYLE: MINIMAL BRUTALIST
 
-- **TYPED ERRORS** for recoverable domain failures: validation errors, not found, permission denied
-- **DEFECTS** for unrecoverable bugs and invariants: use `Effect.orDie` at application entry
+**Vibe**: Raw, content-first, intentionally "unpolished" but usable. High contrast, blocky layout, thick borders, bold typography, minimal decoration.
 
-Wrap unknown errors with `Schema.Defect`:
+**Layout**: Strong structure, simple columns, visible separators, big whitespace, strict spacing rhythm, scroll-first. NO soft cards, gradients, glass effects.
 
-```typescript
-class ApiError extends Schema.TaggedError<ApiError>()(
-  'ApiError',
-  { endpoint: Schema.String, statusCode: Schema.Number, error: Schema.Defect }
-) {}
+**Typography**: Oversized headings, clear hierarchy via size/weight/spacing, readable body, tight copy.
 
-function fetchUser(userId: string) {
-  return Effect.tryPromise({
-    try: async () => {
-      const response = await fetch(`/api/users/${userId}`)
-      return response.json()
-    },
-    catch: (cause) =>
-      ApiError.make({ endpoint: `/api/users/${userId}`, statusCode: 500, error: cause })
-  })
-}
+**Components**: Keep shadcn theme. Win via composition—alignment, spacing, dividers. Keep primitives obvious.
+
+**Motion**: Minimal and functional ONLY. NO "smooth for the sake of smooth".
+
+## SHADCN COMMANDS
+
+```bash
+bun shadcn list @shadcn                              # List components
+bun shadcn view button                               # View source
+bun shadcn add button --yes --overwrite              # Add one
+bun shadcn add button card dialog --yes --overwrite  # Add multiple
 ```
+
+## SHADCN RULES
+
+- Install via CLI: `bun shadcn ...`
+- NEVER hand-write shadcn components
+- NEVER edit `packages/components/src/components/ui/` (treat as generated)
+- Compose/wrap in application code for customization
+- Create new components OUTSIDE that directory
