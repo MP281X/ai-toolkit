@@ -1,6 +1,7 @@
 import {Config, Effect, Function, Option, pipe, Stream} from 'effect'
 
-import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
+import {createOpenAI} from '@ai-sdk/openai'
+import {createOpenRouter} from '@openrouter/ai-sdk-provider'
 import {streamText} from 'ai'
 
 import type {AiInput, Model, ProviderId, StreamPart} from './schema.ts'
@@ -9,10 +10,14 @@ import {webSearchToolSet} from './tools/web-search.ts'
 
 const buildProviders = Effect.gen(function* () {
 	return {
-		opencode_zen: createOpenAICompatible({
+		opencode_zen: createOpenAI({
 			name: 'opencode_zen',
 			baseURL: 'https://opencode.ai/zen/v1',
 			apiKey: yield* Config.string('AI_OPENCODE_ZEN')
+		}),
+		openrouter: createOpenRouter({
+			baseURL: 'https://openrouter.ai/api/v1',
+			apiKey: yield* Config.string('AI_OPENROUTER')
 		})
 	} satisfies Record<ProviderId, unknown>
 })
@@ -39,6 +44,7 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 				const {fullStream} = streamText({
 					model,
 					tools,
+					activeTools: [],
 					prompt: input.prompt,
 					onError: Function.constVoid // already handled in the stream
 				})

@@ -23,6 +23,7 @@
 		"@ai-sdk/openai": "latest",
 		"@ai-sdk/google": "latest",
 		"@ai-sdk/anthropic": "latest",
-		"@ai-sdk/openai-compatible": "latest"
+		"@ai-sdk/openai-compatible": "latest",
+		"@openrouter/ai-sdk-provider": "latest"
 	}
 }
