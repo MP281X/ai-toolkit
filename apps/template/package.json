@@ -12,6 +12,7 @@
 	"scripts": {
 		"dev": "vite dev --port 5173",
 		"build": "vite build",
+		"preview": "vite preview --port 5173",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
 		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
