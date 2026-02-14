@@ -10,11 +10,8 @@
 	},
 
 	"scripts": {
-		"dev:client": "vite dev --port 5173",
-		"dev:server": "bun --watch ./src/main.server.tsx",
-
-		"build:client": "vite build",
-		"build:server": "bun build ./src/main.server.tsx --compile --outfile ./dist/backend",
+		"dev": "vite dev --port 5173",
+		"build": "vite build",
 
 		"fix": "biome check --write --unsafe && effect-language-service quickfixes --project ./tsconfig.json",
 		"check": "tsgo --noEmit && biome check && effect-language-service diagnostics --project ./tsconfig.json"
@@ -23,8 +20,8 @@
 	"dependencies": {
 		"react": "^19",
 		"react-dom": "^19",
+		"@tanstack/react-start": "latest",
 		"@tanstack/react-router": "latest",
-		"@tanstack/router-plugin": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/oauth": "workspace:*",
@@ -33,9 +30,10 @@
 	},
 
 	"devDependencies": {
+		"nitro": "latest",
 		"vite": "^8.0.0-beta",
-		"@vitejs/plugin-react": "latest",
 		"babel-plugin-react-compiler": "latest",
+		"@vitejs/plugin-react": "latest",
 
 		"tailwindcss": "latest",
 		"@tailwindcss/vite": "latest"

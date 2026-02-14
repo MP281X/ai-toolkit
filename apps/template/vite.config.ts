@@ -1,13 +1,15 @@
 import tailwindcss from '@tailwindcss/vite'
-import {tanstackRouter} from '@tanstack/router-plugin/vite'
+import {tanstackStart} from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
+import {nitro} from 'nitro/vite'
 import {defineConfig} from 'vite'
 
 export default defineConfig({
 	plugins: [
-		tanstackRouter({target: 'react', disableLogging: true}),
+		tanstackStart({spa: {enabled: true, prerender: {enabled: true}}}),
+		react({babel: {plugins: [['babel-plugin-react-compiler']]}}),
 		tailwindcss({optimize: true}),
-		react({babel: {plugins: [['babel-plugin-react-compiler']]}})
+		nitro({preset: 'bun'})
 	],
 	build: {
 		chunkSizeWarningLimit: 2000,
