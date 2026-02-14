@@ -6,13 +6,7 @@ import {defineConfig} from 'vite'
 
 export default defineConfig({
 	plugins: [
-		tanstackStart({
-			prerender: {
-				enabled: true,
-				failOnError: true,
-				autoStaticPathsDiscovery: true
-			}
-		}),
+		tanstackStart({spa: {enabled: true}}),
 		react({babel: {plugins: [['babel-plugin-react-compiler']]}}),
 		tailwindcss({optimize: true}),
 		nitro({preset: 'bun'})

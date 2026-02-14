@@ -8,6 +8,7 @@
 	"tasks": {
 		"dev": { "cache": false, "persistent": true },
 		"build": { "dependsOn": ["^check"], "outputs": [".output/**"] },
+		"preview": { "dependsOn": ["build"], "cache": false, "persistent": true },
 
 		"fix": {},
 		"check": {}
