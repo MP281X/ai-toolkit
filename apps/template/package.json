@@ -34,7 +34,6 @@
 
 	"devDependencies": {
 		"vite": "^8.0.0-beta",
-		"vite-bundle-analyzer": "latest",
 		"@vitejs/plugin-react": "latest",
 		"babel-plugin-react-compiler": "latest",
 

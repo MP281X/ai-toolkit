@@ -2,11 +2,9 @@ import tailwindcss from '@tailwindcss/vite'
 import {tanstackRouter} from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import {defineConfig} from 'vite'
-import {analyzer, unstableRolldownAdapter} from 'vite-bundle-analyzer'
 
 export default defineConfig({
 	plugins: [
-		unstableRolldownAdapter(analyzer({analyzerMode: 'static'})),
 		tanstackRouter({target: 'react', disableLogging: true}),
 		tailwindcss({optimize: true}),
 		react({babel: {plugins: [['babel-plugin-react-compiler']]}})

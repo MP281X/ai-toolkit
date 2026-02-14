@@ -1,6 +1,6 @@
 import {Duration, Effect, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
 
-import {type Message, streamToMessage} from '@ai-toolkit/ai/schema'
+import {type Message, partsStreamToMessage} from '@ai-toolkit/ai/schema'
 import {AiSdk} from '@ai-toolkit/ai/service'
 import {Session} from '@ai-toolkit/oauth/server'
 
@@ -44,7 +44,7 @@ export const AiLive = AiContracts.toLayer(
 
 				yield* pipe(
 					aiSdk.stream({prompt, model, attachments}),
-					streamToMessage,
+					partsStreamToMessage,
 					Stream.flatMap(message => SubscriptionRef.update(msgSession, messages => upsertMessage(messages, message))),
 					Stream.runDrain
 				)

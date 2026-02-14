@@ -119,7 +119,7 @@ export class Message extends Schema.Class<Message>('Message')({
 	usage: Schema.optional(Finish.fields.usage)
 }) {}
 
-export const fromAiStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
+export const fromAiSdkStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
 	switch (part.type) {
 		case 'text-delta':
 			return TextDelta.make(part)
@@ -178,7 +178,7 @@ function updateMessage(current: Message | undefined, part: StreamPart) {
 	}
 }
 
-export function streamToMessage<E>(stream: Stream.Stream<StreamPart, E>) {
+export function partsStreamToMessage<E>(stream: Stream.Stream<StreamPart, E>) {
 	return Stream.filterMap(
 		pipe(stream, Stream.scan(undefined as Message | undefined, updateMessage)),
 		Option.fromNullable
