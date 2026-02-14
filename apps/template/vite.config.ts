@@ -6,7 +6,13 @@ import {defineConfig} from 'vite'
 
 export default defineConfig({
 	plugins: [
-		tanstackStart({spa: {enabled: true, prerender: {enabled: true}}}),
+		tanstackStart({
+			prerender: {
+				enabled: true,
+				failOnError: true,
+				autoStaticPathsDiscovery: true
+			}
+		}),
 		react({babel: {plugins: [['babel-plugin-react-compiler']]}}),
 		tailwindcss({optimize: true}),
 		nitro({preset: 'bun'})
@@ -14,9 +20,6 @@ export default defineConfig({
 	build: {
 		chunkSizeWarningLimit: 2000,
 		modulePreload: {polyfill: false},
-		rolldownOptions: {
-			experimental: {lazyBarrel: true, attachDebugInfo: 'none'},
-			treeshake: {moduleSideEffects: false, unknownGlobalSideEffects: false}
-		}
+		rolldownOptions: {experimental: {lazyBarrel: true}}
 	}
 })
