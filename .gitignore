@@ -7,7 +7,6 @@
 **/dist
 **/.turbo
 **/.output
-**/stats.html
 **/*.tsbuildinfo
 
 # packages

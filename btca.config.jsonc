@@ -1,6 +1,9 @@
 {
-	"dataDirectory": ".opencode/btca",
 	"$schema": "https://btca.dev/btca.schema.json",
+
+	"model": "gpt-5-mini",
+	"provider": "github-copilot",
+	"dataDirectory": ".opencode/btca",
 
 	"resources": [
 		{

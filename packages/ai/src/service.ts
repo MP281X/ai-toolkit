@@ -5,7 +5,7 @@ import {createOpenRouter} from '@openrouter/ai-sdk-provider'
 import {streamText} from 'ai'
 
 import type {Model, ProviderId, StreamPart, UserMessage} from './schema.ts'
-import {AiSdkError, File, fromAiStreamPart, Start, TextDelta} from './schema.ts'
+import {AiSdkError, File, fromAiSdkStreamPart, Start, TextDelta} from './schema.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
 
 const buildProviders = Effect.gen(function* () {
@@ -61,7 +61,7 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 						Stream.succeed<StreamPart>(Start.make({model: input.model, startedAt: Date.now(), role: 'assistant'})),
 						Stream.filterMap(
 							Stream.fromAsyncIterable(fullStream, cause => AiSdkError.make({cause})),
-							part => Option.fromNullable(fromAiStreamPart(part))
+							part => Option.fromNullable(fromAiSdkStreamPart(part))
 						)
 					)
 				)
