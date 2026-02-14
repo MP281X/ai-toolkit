@@ -12,36 +12,29 @@ jobs:
       - name: Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Truborepo Cache
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-turbo-
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Build
         run: bun run build
 
-      - name: GitHub Container Registry
+      - name: Docker Login
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: template-backend
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     push: true
-      #     context: ./apps/template
-      #     tags: ghcr.io/${{ github.event.repository.name }}-template:latest
+      - name: Docker Build and Push
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-      # - name: Deploy to Dokploy
-      #   run: |
-      #     curl -X POST https://dev.mp281x.xyz/api/application.deploy \
-      #       -H "Content-Type: application/json" \
-      #       -H "x-api-key: ${{ secrets.DOKPLOY_AUTH_TOKEN }}" \
-      #       -d '{"applicationId": "XEzj6wZF8QqM2KEnU_XBx"}'
+          docker build -t ghcr.io/${REPO}-template:latest ./apps/template
+          docker push ghcr.io/${REPO}-template:latest
+
+      - name: Dokploy Deploy
+        run: |
+          curl -X POST https://dev.mp281x.xyz/api/application.deploy \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.DOKPLOY_AUTH_TOKEN }}" \
+            -d '{"applicationId": "qjFRER0koB-vnn_hjkMm-"}'

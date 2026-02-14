@@ -1,12 +1,12 @@
 import {flow, Match} from 'effect'
 
-import {createHighlighterCore} from 'shiki/core'
+import {createHighlighterCore} from 'shiki/dist/core.mjs'
 import {createOnigurumaEngine} from 'shiki/engine/oniguruma'
 
 export const highlighter = await createHighlighterCore({
 	themes: [import('shiki/themes/github-light-default.mjs'), import('shiki/themes/github-dark-default.mjs')],
 	langs: [import('shiki/langs/tsx.mjs'), import('shiki/langs/shell.mjs'), import('shiki/langs/markdown.mjs')],
-	engine: createOnigurumaEngine(import('shiki/wasm'))
+	engine: createOnigurumaEngine(import('shiki/wasm.mjs'))
 })
 
 export const resolveLanguage = flow(

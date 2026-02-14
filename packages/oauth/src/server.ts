@@ -1,4 +1,4 @@
-import {type Headers, HttpServerRequest, HttpServerResponse} from '@effect/platform'
+import type {Headers} from '@effect/platform'
 import {Config, Duration, Effect, Predicate, pipe, Schema} from 'effect'
 
 import {betterAuth} from 'better-auth/minimal'
@@ -11,8 +11,8 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 	accessors: true,
 	effect: Effect.gen(function* () {
 		const auth = betterAuth({
-			baseURL: `${yield* Config.string('VITE_SERVER_URL')}/api/auth`,
-			trustedOrigins: [yield* Config.string('VITE_CLIENT_URL')],
+			secret: yield* Config.string('AUTH_SECRET'),
+			baseURL: `${yield* Config.string('BASE_URL')}/api/auth`,
 			socialProviders: {
 				github: {
 					clientId: yield* Config.string('AUTH_GITHUB_ID'),
@@ -42,17 +42,7 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 
 		return {
 			session: (headers: Headers.Headers) => use(client => client.getSession({headers})),
-			handler: pipe(
-				HttpServerRequest.HttpServerRequest,
-				Effect.andThen(HttpServerRequest.toWeb),
-				Effect.andThen(req =>
-					Effect.tryPromise({
-						try: () => auth.handler(req),
-						catch: cause => OAuthError.make({cause})
-					})
-				),
-				Effect.andThen(HttpServerResponse.fromWeb)
-			)
+			handler: auth.handler
 		}
 	})
 }) {}

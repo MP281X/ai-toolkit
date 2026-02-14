@@ -6,9 +6,8 @@
 	"workspaces": ["apps/*", "packages/*"],
 
 	"scripts": {
-		"dev": "turbo run dev:client dev:server",
-
-		"build": "NODE_ENV=production turbo run build:client build:server",
+		"dev": "turbo run dev",
+		"build": "NODE_ENV=production turbo run build",
 
 		"shadcn": "cd packages/components && bunx shadcn@latest",
 

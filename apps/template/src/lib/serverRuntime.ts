@@ -1,5 +1,6 @@
+import {HttpServer} from '@effect/platform'
 import {RpcSerialization} from '@effect/rpc'
-import {Layer, pipe} from 'effect'
+import {Layer, ManagedRuntime, pipe} from 'effect'
 
 import {AiSdk} from '@ai-toolkit/ai/service'
 import {OAuth} from '@ai-toolkit/oauth/server'
@@ -21,5 +22,8 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(OAuth.Default),
 	// base layers
 	Layer.provideMerge(OtelLayer('backend')),
+	Layer.provideMerge(HttpServer.layerContext),
 	Layer.provideMerge(RpcSerialization.layerNdjson)
 )
+
+export const ServerRuntime = ManagedRuntime.make(LiveLayers)
