@@ -64,3 +64,8 @@ export function formatDuration(ms: number) {
 
 	return parts.join(' ')
 }
+
+export function formatPrice(value: number) {
+	if (value === 0) return 'free'
+	return `$${value % 1 === 0 ? value.toString() : value.toFixed(2).replace(/\.00$/, '')}`
+}

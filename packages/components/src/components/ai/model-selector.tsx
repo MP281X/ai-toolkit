@@ -1,12 +1,28 @@
-import {Array as EffectArray} from 'effect'
-
-import {type Model, ModelId, ProviderId} from '@ai-toolkit/ai/schema'
+import {Model, type ModelId, ProviderId} from '@ai-toolkit/ai/schema'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
-import {Command, CommandGroup, CommandInput, CommandItem, CommandList} from '@ai-toolkit/components/ui/command'
+import {
+	Command,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+	CommandShortcut
+} from '@ai-toolkit/components/ui/command'
 import {Popover, PopoverContent, PopoverTrigger} from '@ai-toolkit/components/ui/popover'
 import {useState} from 'react'
 
-import {cn} from '#lib/utils.ts'
+import {formatPrice} from '#lib/utils.ts'
+
+function formatModelName(modelId: ModelId) {
+	const hasOrg = modelId.includes('/')
+	const rest = hasOrg ? modelId.slice(modelId.indexOf('/') + 1) : modelId
+	return rest.replace(/:free$/, '').replace(/-free$/, '')
+}
+
+function formatPricing(pricing: {input: number; output: number}) {
+	if (pricing.input === 0 && pricing.output === 0) return 'free'
+	return `${formatPrice(pricing.input)} in · ${formatPrice(pricing.output)} out`
+}
 
 export namespace ModelSelector {
 	export type Props = {
@@ -17,36 +33,45 @@ export namespace ModelSelector {
 
 export function ModelSelector(props: ModelSelector.Props) {
 	const [open, setOpen] = useState(false)
-	const groups = EffectArray.map(ProviderId.literals, provider => ({provider, models: ModelId.literals}))
+	const groups = ProviderId.literals.map(provider => ({provider, models: Model.providers[provider]}))
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger className="flex h-7 w-56 items-center justify-between border border-border/60 bg-background/60 px-2 font-mono text-[11px] text-muted-foreground shadow-none hover:bg-muted/40">
-				<span className="truncate">
-					{props.model.provider} / {props.model.model}
+			<PopoverTrigger className="flex h-7 w-fit max-w-72 items-center gap-2 border border-border/60 bg-background/60 px-2 font-mono text-[11px] text-muted-foreground shadow-none hover:bg-muted/40">
+				<span className="flex min-w-0 items-center gap-1.5">
+					<span className="shrink-0 text-muted-foreground/60">{props.model.provider}</span>
+					<span className="shrink-0 text-muted-foreground/30">/</span>
+					<span className="truncate text-foreground">{formatModelName(props.model.model)}</span>
 				</span>
 				<ChevronsUpDownIcon className="size-3 shrink-0 opacity-50" />
 			</PopoverTrigger>
-			<PopoverContent className="w-56 gap-0 p-0" side="top" align="start">
+			<PopoverContent className="w-72 gap-0 p-0" side="top" align="start">
 				<Command>
 					<CommandInput placeholder="Search models..." />
 					<CommandList>
 						{groups.map(group => (
 							<CommandGroup key={group.provider} heading={group.provider}>
-								{group.models.map(modelId => {
-									const key = `${group.provider}:${modelId}`
-									const isSelected = props.model.provider === group.provider && props.model.model === modelId
+								{group.models.map(pm => {
+									const key = `${group.provider}:${pm.id}`
+									const isSelected = props.model.provider === group.provider && props.model.model === pm.id
+									const name = formatModelName(pm.id)
 									return (
 										<CommandItem
 											key={key}
 											value={key}
+											keywords={[pm.id, group.provider, name]}
 											onSelect={() => {
-												props.onModelChange({provider: group.provider, model: modelId})
+												props.onModelChange(Model.make({provider: group.provider, model: pm.id}))
 												setOpen(false)
 											}}
 										>
-											<CheckIcon className={cn('opacity-0', isSelected && 'opacity-100')} />
-											{modelId}
+											<CheckIcon
+												className={`size-2.5 shrink-0 text-muted-foreground/50 ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+											/>
+											<span className="min-w-0 flex-1 truncate">{name}</span>
+											<CommandShortcut className="text-[9px] text-muted-foreground/40 tracking-normal">
+												{formatPricing(pm.pricing)}
+											</CommandShortcut>
 										</CommandItem>
 									)
 								})}

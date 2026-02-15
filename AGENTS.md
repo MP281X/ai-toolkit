@@ -1,84 +1,111 @@
 # AGENTS.md
 
-## META RULES
+---
 
-Zero exceptions. Always follow.
+## SECTION 0: EXECUTION
 
-- Analyze step-by-step BEFORE implementation
-- Sacrifice grammar for concision
-- Remain autonomous—continue without returning to user
-- Use `question` tool for blocking questions (never inline)
-- Happy-path ONLY; no speculative edge-cases
+Zero exceptions.
 
-## TOOLS
+These rules are intentionally strict because the agent frequently gets these wrong. Assume the rules apply unless the user explicitly says to break them.
 
-### External Libraries (MCP)
+- **MUST** complete the task end-to-end; never stop early.
+- **MUST NOT** ask permission questions.
+- If blocked with no safe default, use the `question` tool (never inline).
 
-- NEVER rely on training data; ALWAYS use `btca` MCP for external libraries
-- Run TARGETED queries with NARROW scope (broad queries timeout)
-- Run MULTIPLE `btca` calls IN PARALLEL for bigger scopes
+Blocked workflow:
+1. Do all non-blocking work first.
+2. Ask exactly ONE targeted question via `question`.
+3. Include a recommended default.
 
-Available: `btca_listResources`, `btca_ask`
+---
 
-### Codebase Discovery
+## SECTION 1: VALIDATION
 
-- Use `explore` sub-agent early and often
-- Spawn MULTIPLE `explore` agents in parallel
-- Main agent does all editing/planning
+**AFTER EVERY CODE CHANGE (not docs):**
 
-### Validation
+```bash
+bun run fix && bun run check
+```
 
-- Run `bun run fix && bun run check` in changed packages ONLY (not root) before yielding
+- Run in each modified package.
+- **MUST NOT** run at repository root.
+- Fix all failures; rerun until passing.
 
-## CODE STYLE
+---
 
-### Principles
+## SECTION 2: COMMUNICATION
 
-- Functional: flat, pipeable, side-effect free
-- Prefer duplication over premature abstractions
-- Follow existing codebase patterns
-- Maximize shadcn usage over custom components
+- Default: 1-2 sentences OR max 3 bullets.
+- Complex: 1 short paragraph, then max 5 bullets (What, Where, Risks, Next, Verify).
+- State outcomes; include the "why" only when it changes decisions.
+- **NEVER** end responses with questions.
 
-### TypeScript
+---
 
-- Use `type` not `interface`
-- Rely on type inference; never define return types
-- No type casts, no `any`
-- Declare type BEFORE const with matching name
-- Use `function` declarations (not arrows, except callbacks)
-- Avoid `{}` for one-liners; use `{}` when formatter makes unreadable single-lines
-- Inline values; no single-use temp variables
-- Single-expression `return ...`
+## SECTION 3: WORKFLOW
 
-### React
+### 3.1 External Libraries (MCP)
 
-- React Compiler enabled—DON'T manually memoize
-- Use `cn()` from `@packages/components/src/lib/utils.ts` for className
-- NO template literals in className
+- **MUST** use `btca_listResources` before `btca_ask`.
+- **MUST NOT** rely on training data.
+- **MUST NOT** query `@ai-toolkit/*` packages via MCP.
+- Keep queries narrow; parallelize independent calls.
 
-### Naming & Structure
+### 3.2 Codebase Discovery
 
-- NO abbreviations
-- NO comments—self-documenting code
-- NO destructuring props; use dot notation
-- Early returns
-- Inline 1-2 line functions
-- Duplication over helper functions
+- Use `explore` sub-agents for open-ended searches.
+- Use `glob`/`grep`/`read` for targeted lookups.
+- **MUST NOT** bloat context with wide scans.
 
-### Effect
+---
 
-- Use `pipe(value, ...)` for composition
-- Use `.pipe()` ONLY for instrumentation (timeouts, retries, logging)
-- Define services with `Effect.Service` using `@packageName/ServiceName` identifiers
-- Use `accessors: true` for direct access
-- Layer naming: camelCase with Layer suffix (`layer`, `testLayer`)
-- NO redundant layer aliases
-- NO noisy section-divider comments
+## SECTION 4: CODE
 
-### Data Modeling
+### 4.1 General
+
+- Prefer simple, explicit code; follow local patterns unless refactoring.
+- Prefer duplication over premature abstraction.
+- **MUST** use early returns.
+- Avoid comments; refactor for clarity.
+- **NEVER** use comments to patch unreadable code; refactor (rename, extract, restructure) until it is self-explaining.
+- Delete unused code; **NEVER** keep "just in case".
+- Remove old patterns; **NEVER** add compatibility layers.
+
+### 4.2 TypeScript
+
+- **MUST** use `type` (not `interface`).
+- **NEVER** declare return types (prefer inference).
+- **NEVER** use `any`, non-null assertions (`!`), or type casts (except `as const`).
+- **MUST** declare types before constants with matching names.
+- **MUST** use `function` declarations (except callbacks).
+- **MUST** use `pipe(value, ...)` for transformations.
+
+### 4.3 React
+
+- React 19 + React Compiler: **NEVER** manually memoize.
+- **NEVER** use `useEffect`.
+- **NEVER** destructure props; use dot notation.
+- `className`: always use `cn()`.
+- `cn()` import: `@ai-toolkit/components/utils` (inside `packages/components`, use `#lib/utils.ts`).
+
+### 4.4 Naming
+
+- **NEVER** use unclear abbreviations.
+- **NEVER** use single-letter variables (except `id`, `url`, `api`, `err`, `ctx`).
+
+### 4.5 Effect
+
+- **MUST** use `pipe(value, ...)` for composition.
+- Use `.pipe()` **ONLY** for instrumentation (timeouts, retries, logging).
+- **MUST** define services with `Effect.Service` using `@ai-toolkit/<package>/<ServiceName>` and `accessors: true`.
+- **MUST** name layers `camelCase` + `Layer` suffix (e.g., `dbLayer`, `testLayer`).
+- **NEVER** create redundant layer aliases.
+
+### 4.6 Data Modeling
+
+- **MUST** brand boundary primitives (ids, money, urls, etc.).
 
 ```typescript
-// Records
 export type UserId = typeof UserId.Type
 export const UserId = pipe(Schema.String, Schema.brand('UserId'))
 
@@ -86,62 +113,55 @@ export class User extends Schema.Class<User>('User')({
   id: UserId,
   name: Schema.String,
 }) {}
-
-// Variants
-export class Success extends Schema.TaggedClass<Success>()('Success', {
-  value: Schema.Number,
-}) {}
-
-export class Failure extends Schema.TaggedClass<Failure>()('Failure', {
-  error: Schema.String,
-}) {}
-
-export type Result = typeof Result.Type
-export const Result = Schema.Union(Success, Failure)
 ```
 
-Brand ALL primitives. Branded types prevent mixing semantically different values.
+### 4.7 Errors
 
-### Error Handling
+- **MUST** define domain errors with `Schema.TaggedError`.
+- Domain errors are yieldable; **NEVER** use `Effect.fail` for domain errors.
+- Use typed errors for recoverable failures; use defects for invariants.
 
-- Define domain errors with `Schema.TaggedError`
-- Tagged errors are yieldable—no `Effect.fail` needed
-- **Typed errors**: recoverable failures (validation, not found, permission)
-- **Defects**: unrecoverable bugs—invariants, use `Effect.orDie` at entry
-- Wrap unknown errors with `Schema.Defect`
-
+Recovery:
 ```typescript
-// Recovery
 Effect.catchTags({ HttpError: () => fallback })
 Effect.catchTag('HttpError', () => fallback)
 Effect.catchAll(() => fallback)
 ```
 
-## UI STYLE: MINIMAL BRUTALIST
+---
 
-**Vibe**: Raw, content-first, intentionally "unpolished" but usable. High contrast, blocky layout, thick borders, bold typography, minimal decoration.
+## SECTION 5: REFACTORING
 
-**Layout**: Strong structure, simple columns, visible separators, big whitespace, strict spacing rhythm, scroll-first. NO soft cards, gradients, glass effects.
+- Refactor architecture, not just local functions.
+- Change signatures freely if it simplifies.
+- Update all call sites.
 
-**Typography**: Oversized headings, clear hierarchy via size/weight/spacing, readable body, tight copy.
+---
 
-**Components**: Keep shadcn theme. Win via composition—alignment, spacing, dividers. Keep primitives obvious.
+## SECTION 6: UI
 
-**Motion**: Minimal and functional ONLY. NO "smooth for the sake of smooth".
+- Use the brutalist shadcn theme from `packages/components/src/theme.css`.
+- Vibe: raw, content-first, intentionally "unpolished" but usable; high contrast; visible borders/separators.
+- Layout: strong structure, simple columns, strict spacing rhythm, scroll-first; avoid soft cards.
+- Typography: clear hierarchy via size/weight/spacing; readable body; tight copy.
+- **MUST** use existing tokens; **NEVER** invent colors/tokens/animations.
+- **NEVER** use gradients, glass, decorative blur, or "marketing" cards.
+- Compose shadcn primitives; **NEVER** reimplement primitives; keep motion minimal and functional.
+- Install via CLI only; **MUST NOT** edit `packages/components/src/components/ui/`.
 
-## SHADCN COMMANDS
+Shadcn commands (use these to discover newly added components):
 
 ```bash
-bun shadcn list @shadcn                              # List components
-bun shadcn view button                               # View source
-bun shadcn add button --yes --overwrite              # Add one
-bun shadcn add button card dialog --yes --overwrite  # Add multiple
+bun shadcn list @shadcn
+bun shadcn view button
+bun shadcn add button --yes --overwrite
 ```
 
-## SHADCN RULES
+---
 
-- Install via CLI: `bun shadcn ...`
-- NEVER hand-write shadcn components
-- NEVER edit `packages/components/src/components/ui/` (treat as generated)
-- Compose/wrap in application code for customization
-- Create new components OUTSIDE that directory
+## SECTION 7: SCOPE
+
+- **MUST** implement exactly what the user requests.
+- When ambiguous: pick the simplest valid interpretation and proceed.
+- **NEVER** add speculative edge-case handling beyond requirements or failing tests.
+- **NEVER** implement extra features.
