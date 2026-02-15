@@ -18,7 +18,6 @@
 
 		"@opentelemetry/sdk-trace-web": "latest",
 		"@opentelemetry/sdk-trace-node": "latest",
-		"@opentelemetry/sdk-trace-base": "latest",
 		"@opentelemetry/exporter-trace-otlp-http": "latest"
 	}
 }

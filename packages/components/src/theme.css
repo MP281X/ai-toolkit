@@ -1,3 +1,5 @@
+/** biome-ignore-all lint/correctness/noUnknownPseudoElement: _ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
