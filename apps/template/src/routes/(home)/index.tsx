@@ -1,6 +1,6 @@
 import {Effect, pipe, Schema, Stream} from 'effect'
 
-import type {Model} from '@ai-toolkit/ai/schema'
+import {Model} from '@ai-toolkit/ai/schema'
 import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/(home)/')({
 
 function RouteComponent() {
 	const {sessionId} = Route.useSearch()
-	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
+	const [model, setModel] = useState(Model.make({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'}))
 
 	return (
 		<ResizablePanelGroup orientation="horizontal">
