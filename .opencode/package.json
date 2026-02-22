@@ -1,12 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/oauth",
-
-	"exports": {
-		"./server": "./src/server.ts",
-		"./client": "./src/client.ts"
-	},
+	"name": "@ai-toolkit/.opencode",
 
 	"scripts": {
 		"fix": "biome check --write --unsafe",
@@ -14,6 +9,6 @@
 	},
 
 	"dependencies": {
-		"better-auth": "latest"
+		"@opencode-ai/plugin": "1.2.10"
 	}
 }

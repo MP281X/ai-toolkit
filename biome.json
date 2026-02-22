@@ -15,7 +15,8 @@
 				"noExplicitAny": "off",
 				"noConfusingVoidType": "off",
 				"noAssignInExpressions": "off",
-				"noShadowRestrictedNames": "off"
+				"noShadowRestrictedNames": "off",
+				"useIterableCallbackReturn": "off"
 			},
 			"style": {
 				"useNumberNamespace": "warn",
@@ -43,6 +44,7 @@
 				"noChildrenProp": "off",
 				"noUnusedImports": "off",
 				"noUnusedVariables": "off",
+				"useHookAtTopLevel": "off",
 				"useImportExtensions": "error",
 				"noUndeclaredDependencies": "off",
 				"noUnusedFunctionParameters": "off"

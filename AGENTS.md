@@ -44,18 +44,12 @@ bun run fix && bun run check
 
 ## SECTION 3: WORKFLOW
 
-### 3.1 External Libraries (MCP)
-
-- **MUST** use `btca_listResources` before `btca_ask`.
-- **MUST NOT** rely on training data.
-- **MUST NOT** query `@ai-toolkit/*` packages via MCP.
-- Keep queries narrow; parallelize independent calls.
-
-### 3.2 Codebase Discovery
-
-- Use `explore` sub-agents for open-ended searches.
-- Use `glob`/`grep`/`read` for targeted lookups.
-- **MUST NOT** bloat context with wide scans.
+- **NEVER rely on training data** — your knowledge is always outdated.
+- Primary source of truth: `.opencode/resources/{reponame}` (cloned repos).
+- Available repos: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`.
+- **MUST** search these repos first for behaviors, APIs, and examples.
+- Use `explore` agents for open-ended research; parallelize independent calls.
+- Use `glob`/`grep`/`read` for targeted lookups in this workspace only after checking resources.
 
 ---
 

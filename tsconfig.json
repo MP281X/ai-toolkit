@@ -1,8 +1,5 @@
 {
 	"compilerOptions": {
-		// effect-ts lsp
-		"plugins": [{ "name": "@effect/language-service" }],
-
 		// type checking
 		"strict": true,
 		"noUnusedLocals": true,

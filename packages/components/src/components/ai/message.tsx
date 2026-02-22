@@ -1,7 +1,5 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
 
-import {Predicate} from 'effect'
-
 import type {Message as MessageType} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, UserIcon} from 'lucide-react'
 
@@ -63,24 +61,18 @@ export function Message(props: MessageType) {
 					</div>
 					{props.usage && (
 						<div className="flex flex-wrap items-center gap-1.5 border-border/60 border-t py-2 text-[11px] text-muted-foreground leading-none">
-							{Predicate.isNotNullable(props.usage.input) && (
-								<span className="inline-flex items-center gap-1 font-mono">
-									<InboxIcon className="size-3" />
-									{formatTokens(props.usage.input)}
-								</span>
-							)}
-							{Predicate.isNotNullable(props.usage.output) && (
-								<span className="inline-flex items-center gap-1 font-mono">
-									<BookOpenTextIcon className="size-3" />
-									{formatTokens(props.usage.output)}
-								</span>
-							)}
-							{Predicate.isNotNullable(props.usage.reasoning) && (
-								<span className="inline-flex items-center gap-1 font-mono">
-									<HashIcon className="size-3" />
-									{formatTokens(props.usage.output)}
-								</span>
-							)}
+							<span className="inline-flex items-center gap-1 font-mono">
+								<InboxIcon className="size-3" />
+								{formatTokens(props.usage.input)}
+							</span>
+							<span className="inline-flex items-center gap-1 font-mono">
+								<BookOpenTextIcon className="size-3" />
+								{formatTokens(props.usage.output)}
+							</span>
+							<span className="inline-flex items-center gap-1 font-mono">
+								<HashIcon className="size-3" />
+								{formatTokens(props.usage.output)}
+							</span>
 						</div>
 					)}
 				</div>

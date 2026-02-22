@@ -17,13 +17,11 @@ export function ToolResult(props: ToolResultSchema | ToolError) {
 			>
 				<ChevronRightIcon
 					className={cn(
-						'size-3 -translate-y-[1px] transition-transform group-open:rotate-90',
+						'size-3 -translate-y-px transition-transform group-open:rotate-90',
 						isError ? 'text-destructive' : 'text-muted-foreground'
 					)}
 				/>
-				<StatusIcon
-					className={cn('size-3 -translate-y-[1px]', isError ? 'text-destructive' : 'text-muted-foreground')}
-				/>
+				<StatusIcon className={cn('size-3 -translate-y-px', isError ? 'text-destructive' : 'text-muted-foreground')} />
 				<span>{props.toolName}</span>
 			</summary>
 			<pre
