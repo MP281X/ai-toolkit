@@ -1,4 +1,4 @@
-import {Model, type ModelId, ProviderId} from '@ai-toolkit/ai/schema'
+import {catalog, type Model, type ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {
 	Command,
@@ -33,7 +33,7 @@ export namespace ModelSelector {
 
 export function ModelSelector(props: ModelSelector.Props) {
 	const [open, setOpen] = useState(false)
-	const groups = ProviderId.literals.map(provider => ({provider, models: Model.providers[provider]}))
+	const groups = ProviderId.literals.map(provider => ({provider, models: catalog[provider].models}))
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -61,7 +61,7 @@ export function ModelSelector(props: ModelSelector.Props) {
 											value={key}
 											keywords={[pm.id, group.provider, name]}
 											onSelect={() => {
-												props.onModelChange(Model.make({provider: group.provider, model: pm.id}))
+												props.onModelChange({provider: group.provider, model: pm.id})
 												setOpen(false)
 											}}
 										>

@@ -2,51 +2,7 @@ import {Chunk, Effect, Option, Predicate, pipe, Schema, Stream} from 'effect'
 
 import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
 
-export type AdapterId = typeof AdapterId.Type
-export const AdapterId = Schema.Literal('openai', 'openai-compatible', 'anthropic', 'openrouter')
-
-export type ProviderId = typeof ProviderId.Type
-export const ProviderId = Schema.Literal('opencode_zen', 'openrouter')
-
-export type ModelId = typeof ModelId.Type
-export const ModelId = Schema.Literal(
-	'gpt-5-nano',
-	'big-pickle',
-	'kimi-k2.5-free',
-	'claude-haiku-4-5',
-	'minimax-m2.5-free',
-	'arcee-ai/trinity-mini:free',
-	'google/gemma-3n-e4b-it:free',
-	'nvidia/nemotron-3-nano-30b-a3b:free'
-)
-
-export class Model extends Schema.Class<Model>('Model')({
-	provider: ProviderId,
-	model: ModelId
-}) {
-	static providers = {
-		opencode_zen: [
-			{id: 'gpt-5-nano', adapter: 'openai', pricing: {input: 0, output: 0}},
-			{id: 'big-pickle', adapter: 'openai-compatible', pricing: {input: 0, output: 0}},
-			{id: 'kimi-k2.5-free', adapter: 'openai-compatible', pricing: {input: 0, output: 0}},
-			{id: 'claude-haiku-4-5', adapter: 'anthropic', pricing: {input: 1, output: 5}},
-			{id: 'minimax-m2.5-free', adapter: 'anthropic', pricing: {input: 0, output: 0}}
-		],
-		openrouter: [
-			{id: 'nvidia/nemotron-3-nano-30b-a3b:free', adapter: 'openrouter', pricing: {input: 0, output: 0}},
-			{id: 'arcee-ai/trinity-mini:free', adapter: 'openrouter', pricing: {input: 0, output: 0}},
-			{id: 'google/gemma-3n-e4b-it:free', adapter: 'openrouter', pricing: {input: 0, output: 0}}
-		]
-	} satisfies {
-		[ProviderId.Type]: {id: ModelId; adapter: AdapterId; pricing: {input: number; output: number}}[]
-	}
-
-	static resolveModel = Effect.fnUntraced(function* (model: Model) {
-		const entry = Model.providers[model.provider].find(m => m.id === model.model)
-		if (Predicate.isNotUndefined(entry)) return entry
-		return yield* AiSdkError.make({message: `Unknown model: ${model.provider}/${model.model}`})
-	})
-}
+import {Model} from './catalog.ts'
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.optional(Schema.Defect),

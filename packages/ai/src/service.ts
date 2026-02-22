@@ -1,31 +1,62 @@
-import {Config, Effect, Function, Option, pipe, Stream} from 'effect'
+import {Array, Effect, Function, Option, Stream} from 'effect'
 
 import {createAnthropic} from '@ai-sdk/anthropic'
 import {createOpenAI} from '@ai-sdk/openai'
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 import {createOpenRouter} from '@openrouter/ai-sdk-provider'
-import {type LanguageModel, streamText} from 'ai'
+import {streamText} from 'ai'
 
-import type {AdapterId, ModelId, StreamPart, UserMessage} from './schema.ts'
-import {AiSdkError, File, fromAiSdkStreamPart, Model, Start, TextDelta} from './schema.ts'
+import {catalog, type Model} from './catalog.ts'
+import type {StreamPart, UserMessage} from './schema.ts'
+import {AiSdkError, File, fromAiSdkStreamPart, Start, TextDelta} from './schema.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
+
+const createModelAdapter = Effect.fnUntraced(
+	function* (model: Model) {
+		const providerConfig = catalog[model.provider]
+		const modelConfig = yield* Array.findFirst(providerConfig.models, modelEntry => modelEntry.id === model.model)
+
+		switch (modelConfig.adapter) {
+			case 'openai': {
+				return createOpenAI({
+					name: model.provider,
+					baseURL: providerConfig.baseUrl,
+					apiKey: yield* providerConfig.apiKey
+				})(model.model)
+			}
+			case 'anthropic': {
+				return createAnthropic({
+					name: model.provider,
+					baseURL: providerConfig.baseUrl,
+					apiKey: yield* providerConfig.apiKey
+				})(model.model)
+			}
+			case 'openrouter': {
+				return createOpenRouter({
+					baseURL: providerConfig.baseUrl,
+					apiKey: yield* providerConfig.apiKey
+				})(model.model)
+			}
+			case 'openai-compatible': {
+				return createOpenAICompatible({
+					name: model.provider,
+					baseURL: providerConfig.baseUrl,
+					apiKey: yield* providerConfig.apiKey
+				})(model.model)
+			}
+		}
+	},
+	Effect.catchTags({
+		ConfigError: cause => new AiSdkError({cause}),
+		NoSuchElementException: cause => new AiSdkError({cause})
+	})
+)
 
 export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 	accessors: true,
 	effect: Effect.gen(function* () {
-		const opencodeKey = yield* Config.string('AI_OPENCODE_ZEN')
-		const openrouterKey = yield* Config.string('AI_OPENROUTER')
-		const tools = {...(yield* webSearchToolSet)}
-
-		const adapters: Record<AdapterId, (modelId: ModelId) => LanguageModel> = {
-			openai: createOpenAI({name: 'opencode_zen', baseURL: 'https://opencode.ai/zen/v1', apiKey: opencodeKey}),
-			openrouter: createOpenRouter({baseURL: 'https://openrouter.ai/api/v1', apiKey: openrouterKey}),
-			anthropic: createAnthropic({baseURL: 'https://openrouter.ai/api/v1', apiKey: opencodeKey}),
-			'openai-compatible': createOpenAICompatible({
-				baseURL: 'https://openrouter.ai/api/v1',
-				apiKey: opencodeKey,
-				name: 'zen'
-			})
+		const tools = {
+			...(yield* webSearchToolSet)
 		}
 
 		return {
@@ -37,10 +68,7 @@ export class AiSdk extends Effect.Service<AiSdk>()('@ai-toolkit/ai/AiSdk', {
 				]
 
 				const {fullStream} = streamText({
-					model: yield* pipe(
-						Model.resolveModel(input.model),
-						Effect.andThen(model => adapters[model.adapter](model.id))
-					),
+					model: yield* createModelAdapter(input.model),
 					tools,
 					activeTools: [],
 					prompt: input.prompt,
