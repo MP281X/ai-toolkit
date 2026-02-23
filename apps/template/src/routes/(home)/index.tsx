@@ -27,7 +27,6 @@ export const Route = createFileRoute('/(home)/')({
 
 function RouteComponent() {
 	const {sessionId} = Route.useSearch()
-	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
 
 	return (
 		<ResizablePanelGroup orientation="horizontal">
@@ -37,7 +36,7 @@ function RouteComponent() {
 			<ResizableHandle />
 			<ResizablePanel className="flex h-full w-full">
 				<Suspense fallback={<Loading />}>
-					<Session sessionId={sessionId} model={model} setModel={setModel} />
+					<Session sessionId={sessionId} />
 				</Suspense>
 			</ResizablePanel>
 		</ResizablePanelGroup>
@@ -124,9 +123,10 @@ const messagesAtom = Atom.family((sessionId: SessionId) =>
 	)
 )
 
-function Session(props: {sessionId: SessionId; model: Model; setModel: (model: Model) => void}) {
+function Session(props: {sessionId: SessionId}) {
 	const {value: messages} = useAtomSuspense(messagesAtom(props.sessionId))
 	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
+	const [model, setModel] = useState<Model>({provider: 'openrouter', model: 'google/gemma-3n-e4b-it:free'})
 
 	return (
 		<div className="flex h-full w-full flex-col">
@@ -143,14 +143,14 @@ function Session(props: {sessionId: SessionId; model: Model; setModel: (model: M
 						payload: {
 							sessionId: props.sessionId,
 							prompt: data.text,
-							model: props.model,
+							model,
 							attachments: data.attachments
 						}
 					})
 				}
 			>
 				<Toolbar>
-					<ModelSelector model={props.model} onModelChange={props.setModel} />
+					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>
 
 				<Snippets>

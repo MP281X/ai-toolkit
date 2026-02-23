@@ -1,22 +1,10 @@
 import {Marked} from 'marked'
 
-import {highlightCode, resolveLanguage} from '#lib/shiki.ts'
+import {resolveLanguage} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
+import {Code} from './code.tsx'
 
 const marked = new Marked({gfm: true, breaks: true, async: false})
-
-function Code(props: {code: string; lang?: string}) {
-	const html = highlightCode(props.code, resolveLanguage(props.lang))
-
-	return (
-		<div
-			data-code-block
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output
-			dangerouslySetInnerHTML={{__html: html}}
-			className="overflow-hidden border bg-muted/30 font-mono text-[11px] leading-relaxed"
-		/>
-	)
-}
 
 function Inline(props: {content: string}) {
 	const html = marked.parse(props.content)

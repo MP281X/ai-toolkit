@@ -1,26 +1,27 @@
 import {flow, Match} from 'effect'
 
-import {createHighlighterCore} from 'shiki/dist/core.mjs'
-import {createOnigurumaEngine} from 'shiki/engine/oniguruma'
+import {getSharedHighlighter} from '@pierre/diffs'
 
-export const highlighter = await createHighlighterCore({
-	themes: [import('shiki/themes/github-light-default.mjs'), import('shiki/themes/github-dark-default.mjs')],
-	langs: [import('shiki/langs/tsx.mjs'), import('shiki/langs/shell.mjs'), import('shiki/langs/markdown.mjs')],
-	engine: createOnigurumaEngine(import('shiki/wasm.mjs'))
+export const HIGHLIGHT_THEMES = {light: 'github-light-default', dark: 'github-dark-default'} as const
+export const HIGHLIGHT_LANGS = ['tsx', 'shell', 'markdown', 'diff'] as const
+
+const highlighter = await getSharedHighlighter({
+	themes: [HIGHLIGHT_THEMES.light, HIGHLIGHT_THEMES.dark],
+	langs: [...HIGHLIGHT_LANGS]
 })
 
 export const resolveLanguage = flow(
 	(lang?: string) => Match.value(lang?.toLowerCase().split('.').pop()),
-	Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx'),
-	Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell'),
-	Match.when(Match.is('md', 'markdown'), () => 'markdown'),
-	Match.orElse(() => 'text')
+	Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx' as const),
+	Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell' as const),
+	Match.when(Match.is('md', 'markdown'), () => 'markdown' as const),
+	Match.orElse(() => 'text' as const)
 )
 
 export function highlightCode(code: string, lang?: string) {
 	return highlighter.codeToHtml(code, {
 		lang: resolveLanguage(lang),
-		themes: {light: 'github-light-default', dark: 'github-dark-default'},
+		themes: HIGHLIGHT_THEMES,
 		defaultColor: false
 	})
 }

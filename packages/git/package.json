@@ -1,0 +1,15 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/git",
+
+	"exports": {
+		"./schema": "./src/schema.ts",
+		"./service": "./src/service.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe",
+		"check": "tsgo --noEmit && biome check"
+	}
+}

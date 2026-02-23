@@ -1,6 +1,7 @@
 import type {Plugin} from '@opencode-ai/plugin'
 
 const resources = [
+	{branch: 'main', name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre.git'},
 	{branch: 'canary', name: 'better-auth', url: 'https://github.com/better-auth/better-auth'},
 	// {branch: 'main', name: 'effect', url: 'https://github.com/Effect-TS/effect-smol.git'},
 	{branch: 'main', name: 'effect', url: 'https://github.com/Effect-TS/effect'},
