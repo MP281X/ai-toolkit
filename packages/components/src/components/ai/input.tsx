@@ -13,7 +13,7 @@ import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {mergeRegister} from '@lexical/utils'
 import * as lexical from 'lexical'
 import type {ReactElement, ReactNode} from 'react'
-import {useEffect, useRef, useState} from 'react'
+import {useLayoutEffect, useRef, useState} from 'react'
 
 import {cn} from '#lib/utils.ts'
 
@@ -188,16 +188,16 @@ function EditorKeyboard(keyboardProps: {
 }) {
 	const [editor] = useLexicalComposerContext()
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		keyboardProps.editorRef.current = editor
 		if (!keyboardProps.disabled) editor.focus()
 	}, [editor, keyboardProps.editorRef, keyboardProps.disabled])
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		editor.setEditable(!keyboardProps.disabled)
 	}, [editor, keyboardProps.disabled])
 
-	useEffect(
+	useLayoutEffect(
 		() =>
 			mergeRegister(
 				editor.registerCommand(
@@ -448,7 +448,7 @@ export function ChatInput(props: ChatInputProps) {
 		void handleAttachFiles(files)
 	}
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (props.value === undefined) return
 		const editor = editorRef.current
 		if (!editor) return
