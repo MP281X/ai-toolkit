@@ -6,13 +6,13 @@
 		"rules": {
 			"complexity": {
 				"useLiteralKeys": "off",
-				"useArrowFunction": "warn",
+				"useArrowFunction": "off",
 				"noUselessStringConcat": "warn",
 				"useSimplifiedLogicExpression": "warn"
 			},
 			"suspicious": {
 				"noConsole": "error",
-				"noExplicitAny": "off",
+				"noExplicitAny": "error",
 				"noConfusingVoidType": "off",
 				"noAssignInExpressions": "off",
 				"noShadowRestrictedNames": "off",
@@ -23,8 +23,21 @@
 				"useAsConstAssertion": "warn",
 				"useEnumInitializers": "warn",
 				"useDefaultParameterLast": "warn",
+				"noNonNullAssertion": "error",
 				"noUnusedTemplateLiteral": "warn",
+				"useConsistentTypeDefinitions": { "level": "error", "options": { "style": "type" } },
 				"useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"react": {
+								"importNames": ["useCallback", "useEffect", "useMemo"],
+								"message": "Do not use useCallback/useEffect/useMemo; prefer alternative patterns."
+							}
+						}
+					}
+				},
 				"noRestrictedGlobals": {
 					"level": "error",
 					"options": {
@@ -44,7 +57,7 @@
 				"noChildrenProp": "off",
 				"noUnusedImports": "off",
 				"noUnusedVariables": "off",
-				"useHookAtTopLevel": "off",
+				"useHookAtTopLevel": "error",
 				"useImportExtensions": "error",
 				"noUndeclaredDependencies": "off",
 				"noUnusedFunctionParameters": "off"
@@ -103,7 +116,16 @@
 
 	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
 	"files": {
-		"includes": ["**/*.ts", "**/*.tsx", "**/*.css", "**/*.html", "**/*.json", "**/*.jsonc", "!**/*.gen.ts"]
+		"includes": [
+			"**/*.ts",
+			"**/*.tsx",
+			"**/*.css",
+			"**/*.html",
+			"**/*.json",
+			"**/*.jsonc",
+			"!**/*.gen.ts",
+			"!**/routeTree.gen.ts"
+		]
 	},
 
 	"overrides": [
@@ -116,9 +138,13 @@
 			"linter": {
 				"rules": {
 					"style": {
-						"noRestrictedGlobals": "off"
+						"noNonNullAssertion": "off",
+						"noRestrictedImports": "off",
+						"noRestrictedGlobals": "off",
+						"useConsistentTypeDefinitions": "off"
 					},
 					"suspicious": {
+						"noExplicitAny": "off",
 						"noDoubleEquals": "off",
 						"noArrayIndexKey": "off"
 					},
@@ -128,8 +154,13 @@
 					"a11y": {
 						"useValidAriaRole": "off",
 						"useSemanticElements": "off",
-						"useKeyWithClickEvents": "off",
-						"noLabelWithoutControl": "off"
+						"noLabelWithoutControl": "off",
+						"useKeyWithClickEvents": "off"
+					},
+					"correctness": {
+						"noUnusedImports": "off",
+						"noUnusedVariables": "off",
+						"noUnusedFunctionParameters": "off"
 					}
 				}
 			}
