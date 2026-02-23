@@ -23,8 +23,10 @@
 	"dependencies": {
 		"cmdk": "latest",
 		"@base-ui/react": "^1",
-		"lucide-react": "latest",
 		"react-resizable-panels": "latest",
+
+		"lucide-react": "latest",
+		"@icons-pack/react-simple-icons": "latest",
 
 		"lexical": "latest",
 		"@lexical/react": "latest",
