@@ -32,8 +32,8 @@
 		"@lexical/react": "latest",
 		"@lexical/utils": "latest",
 
-		"shiki": "latest",
 		"marked": "latest",
+		"@pierre/diffs": "latest",
 		"@ai-toolkit/ai": "workspace:*",
 
 		"clsx": "latest",

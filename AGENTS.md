@@ -31,7 +31,7 @@ Never run at the repository root. Fix all failures and rerun until all checks pa
 
 ## EXTERNAL KNOWLEDGE
 
-Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `effect-atom`, `tanstack-router`, `ai-sdk`.
+Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `effect-atom`, `tanstack-router`, `ai-sdk`, `pierre-diffs`.
 
 - Primary source of truth: `.opencode/resources/<library>/` (cloned repositories).
 - Search these repositories first for behaviors, APIs, and examples.

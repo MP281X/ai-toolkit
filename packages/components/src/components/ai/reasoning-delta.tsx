@@ -1,7 +1,7 @@
 import type {ReasoningDelta as ReasoningDeltaSchema} from '@ai-toolkit/ai/schema'
 import {BrainIcon, ChevronRightIcon} from 'lucide-react'
 
-import {Markdown} from '#components/ai/markdown.tsx'
+import {Markdown} from '#components/render/markdown.tsx'
 
 export function ReasoningDelta(props: ReasoningDeltaSchema) {
 	return (

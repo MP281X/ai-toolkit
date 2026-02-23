@@ -13,6 +13,7 @@ import { Route as homeRouteRouteImport } from './routes/(home)/route'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as homeIndexRouteImport } from './routes/(home)/index'
 import { Route as ApiRpcRouteImport } from './routes/api/rpc'
+import { Route as homeDiffIndexRouteImport } from './routes/(home)/diff/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
 const homeRouteRoute = homeRouteRouteImport.update({
@@ -34,6 +35,11 @@ const ApiRpcRoute = ApiRpcRouteImport.update({
   path: '/api/rpc',
   getParentRoute: () => rootRouteImport,
 } as any)
+const homeDiffIndexRoute = homeDiffIndexRouteImport.update({
+  id: '/diff/',
+  path: '/diff/',
+  getParentRoute: () => homeRouteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -45,12 +51,14 @@ export interface FileRoutesByFullPath {
   '/': typeof homeIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/diff/': typeof homeDiffIndexRoute
 }
 export interface FileRoutesByTo {
   '/api/rpc': typeof ApiRpcRoute
   '/': typeof homeIndexRoute
   '/auth': typeof AuthIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/diff': typeof homeDiffIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,13 @@ export interface FileRoutesById {
   '/(home)/': typeof homeIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/(home)/diff/': typeof homeDiffIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/api/rpc' | '/' | '/auth/' | '/api/auth/$'
+  fullPaths: '/api/rpc' | '/' | '/auth/' | '/api/auth/$' | '/diff/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/rpc' | '/' | '/auth' | '/api/auth/$'
+  to: '/api/rpc' | '/' | '/auth' | '/api/auth/$' | '/diff'
   id:
     | '__root__'
     | '/(home)'
@@ -72,6 +81,7 @@ export interface FileRouteTypes {
     | '/(home)/'
     | '/auth/'
     | '/api/auth/$'
+    | '/(home)/diff/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -111,6 +121,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRpcRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/(home)/diff/': {
+      id: '/(home)/diff/'
+      path: '/diff'
+      fullPath: '/diff/'
+      preLoaderRoute: typeof homeDiffIndexRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -123,10 +140,12 @@ declare module '@tanstack/react-router' {
 
 interface homeRouteRouteChildren {
   homeIndexRoute: typeof homeIndexRoute
+  homeDiffIndexRoute: typeof homeDiffIndexRoute
 }
 
 const homeRouteRouteChildren: homeRouteRouteChildren = {
   homeIndexRoute: homeIndexRoute,
+  homeDiffIndexRoute: homeDiffIndexRoute,
 }
 
 const homeRouteRouteWithChildren = homeRouteRoute._addFileChildren(

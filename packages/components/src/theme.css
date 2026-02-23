@@ -5,7 +5,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/jetbrains-mono";
 
-@import "./components/ai/markdown.css";
+@import "./components/render/markdown.css";
 
 :root {
 	--background: oklch(1 0 0);

@@ -19,7 +19,7 @@ export const Route = createRootRoute({
 		]
 	}),
 	shellComponent: props => (
-		<div className="flex h-dvh flex-col">
+		<div className="flex h-dvh w-dvw flex-col">
 			<HeadContent />
 			<Scripts />
 
