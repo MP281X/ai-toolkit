@@ -17,12 +17,9 @@
 	},
 
 	"dependencies": {
-		"effect": "latest",
-		"@effect-atom/atom-react": "latest",
-
-		"@effect/rpc": "latest",
-		"@effect/platform": "latest",
-		"@effect/platform-bun": "latest"
+		"effect": "^4.0.0-beta",
+		"@effect/atom-react": "^4.0.0-beta",
+		"@effect/platform-bun": "^4.0.0-beta"
 	},
 
 	"devDependencies": {

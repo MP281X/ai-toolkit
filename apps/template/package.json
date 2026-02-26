@@ -10,9 +10,9 @@
 	},
 
 	"scripts": {
-		"dev": "vite dev --port 5173",
-		"build": "vite build",
-		"preview": "vite preview --port 5173",
+		"dev": "bun --bun vite dev --port 5173",
+		"build": "bun --bun vite build",
+		"preview": "bun --bun vite preview --port 5173",
 
 		"fix": "biome check --write --unsafe",
 		"check": "tsgo --noEmit && biome check"

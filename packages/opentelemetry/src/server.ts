@@ -5,9 +5,9 @@ import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'
 import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-node'
 
 export const OtelLayer = (serviceName: string) =>
-	Layer.unwrapScoped(
+	Layer.unwrap(
 		Effect.map(
-			Config.option(Config.string('VITE_OTEL_URL')),
+			Config.option(Config.string('VITE_OTEL_URL')).asEffect(),
 			Option.match({
 				onNone: () => Layer.empty,
 				onSome: url =>

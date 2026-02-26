@@ -1,8 +1,7 @@
-import {RpcMiddleware} from '@effect/rpc'
+import {OAuthError, type Session} from '@ai-toolkit/oauth/server'
+import {RpcMiddleware} from 'effect/unstable/rpc'
 
-import {OAuthError, Session} from '@ai-toolkit/oauth/server'
-
-export class AuthMiddleware extends RpcMiddleware.Tag<AuthMiddleware>()('AuthMiddleware', {
-	provides: Session,
-	failure: OAuthError
+export class AuthMiddleware extends RpcMiddleware.Service<AuthMiddleware, {provides: Session}>()('AuthMiddleware', {
+	error: OAuthError,
+	requiredForClient: false
 }) {}

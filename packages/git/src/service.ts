@@ -1,13 +1,13 @@
-import * as Command from '@effect/platform/Command'
-import {Array, Effect, flow, pipe, String} from 'effect'
+import {Array, Effect, flow, Layer, pipe, ServiceMap, String} from 'effect'
+
+import * as Command from 'effect/unstable/process/ChildProcess'
 
 import {GitDiff, GitError} from './schema.ts'
 
-export class Git extends Effect.Service<Git>()('@ai-toolkit/git/Git', {
-	accessors: true,
-	effect: Effect.gen(function* () {
+export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
+	make: Effect.gen(function* () {
 		const use = flow(
-			(...args: readonly string[]) => Command.string(Command.make('git', ...args)),
+			(...args: readonly string[]) => Command.make('git', args).pipe(Command.string),
 			Effect.mapError(cause => new GitError({cause}))
 		)
 
@@ -21,7 +21,7 @@ export class Git extends Effect.Service<Git>()('@ai-toolkit/git/Git', {
 						pipe(
 							use('diff', '--cached', '--', `:/${filePath}`),
 							Effect.filterOrFail(String.isNonEmpty, () => new GitError({message: `empty diff for ${filePath}`})),
-							Effect.map(patch => GitDiff.make({filePath, patch}, true))
+							Effect.map(patch => new GitDiff({filePath, patch}))
 						)
 					)
 				)
@@ -35,11 +35,13 @@ export class Git extends Effect.Service<Git>()('@ai-toolkit/git/Git', {
 						pipe(
 							use('diff', '--', `:/${filePath}`),
 							Effect.filterOrFail(String.isNonEmpty, () => new GitError({message: `empty diff for ${filePath}`})),
-							Effect.map(patch => GitDiff.make({filePath, patch}, true))
+							Effect.map(patch => new GitDiff({filePath, patch}))
 						)
 					)
 				)
 			)
 		}
 	})
-}) {}
+}) {
+	static layer = Layer.effect(this, this.make)
+}

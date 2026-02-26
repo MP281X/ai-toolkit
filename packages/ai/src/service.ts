@@ -1,4 +1,16 @@
-import {Array, Effect, Function, Match, Option, pipe, Stream, SubscriptionRef} from 'effect'
+import {
+	Array,
+	Effect,
+	Function,
+	Layer,
+	Match,
+	Option,
+	Predicate,
+	pipe,
+	ServiceMap,
+	Stream,
+	SubscriptionRef
+} from 'effect'
 
 import {createAnthropic} from '@ai-sdk/anthropic'
 import {createOpenAI} from '@ai-sdk/openai'
@@ -24,23 +36,22 @@ import {
 import {questionToolSet} from './tools/question.ts'
 import {webSearchToolSet} from './tools/web-search.ts'
 
-export class Model extends Effect.Service<Model>()('@ai-toolkit/ai/Model', {
-	accessors: true,
-	scoped: Effect.fnUntraced(function* (input: {provider: ProviderId; model: ModelId}) {
+export class Model extends ServiceMap.Service<Model>()('@ai-toolkit/ai/Model', {
+	make: Effect.fnUntraced(function* (input: {provider: ProviderId; model: ModelId}) {
 		const {models, baseURL, apiKey} = catalog[input.provider]
 
 		const {adapter} = yield* pipe(
 			Array.findFirst(models, modelEntry => modelEntry.id === input.model),
 			Option.match({
 				onSome: model => Effect.succeed(model),
-				onNone: () => new AiSdkError({message: 'Model not found'})
+				onNone: () => new AiSdkError({message: 'Model not found'}).asEffect()
 			})
 		)
 
 		const config = {
 			baseURL,
 			name: input.provider,
-			apiKey: yield* Effect.mapError(apiKey, cause => new AiSdkError({cause}))
+			apiKey: yield* Effect.mapError(apiKey.asEffect(), cause => new AiSdkError({cause}))
 		}
 
 		const languageModel = Match.value(adapter).pipe(
@@ -53,11 +64,12 @@ export class Model extends Effect.Service<Model>()('@ai-toolkit/ai/Model', {
 
 		return {provider: input.provider, model: input.model, languageModel} as const
 	})
-}) {}
+}) {
+	static layer = (input: {provider: ProviderId; model: ModelId}) => Layer.effect(this, this.make(input))
+}
 
-export class Agent extends Effect.Service<Agent>()('@ai-toolkit/ai/Agent', {
-	accessors: true,
-	effect: Effect.gen(function* () {
+export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/Agent', {
+	make: Effect.gen(function* () {
 		const tools = {
 			...(yield* webSearchToolSet),
 			...(yield* questionToolSet)
@@ -75,7 +87,7 @@ export class Agent extends Effect.Service<Agent>()('@ai-toolkit/ai/Agent', {
 			return pipe(
 				stream,
 				partsStreamToMessage,
-				Stream.flatMap(message => SubscriptionRef.update(messageRef, current => upsertMessage(current, message))),
+				Stream.mapEffect(message => SubscriptionRef.update(messageRef, current => upsertMessage(current, message))),
 				Stream.runDrain
 			)
 		}
@@ -92,17 +104,19 @@ export class Agent extends Effect.Service<Agent>()('@ai-toolkit/ai/Agent', {
 			})
 			return Stream.concat(
 				Stream.succeed(
-					Start.make({
+					new Start({
 						model: {provider: model.provider as ProviderId, model: model.model as ModelId},
 						startedAt: Date.now(),
 						role: 'assistant'
 					})
 				),
 				pipe(
-					Stream.fromAsyncIterable<AiSdkTextStreamPart<ToolSet>, AiSdkError>(fullStream, cause =>
-						AiSdkError.make({cause})
+					Stream.fromAsyncIterable<AiSdkTextStreamPart<ToolSet>, AiSdkError>(
+						fullStream,
+						cause => new AiSdkError({cause})
 					),
-					Stream.filterMap(part => Option.fromNullable(sdkStreamPartToStreamPart(part)))
+					Stream.map(sdkStreamPartToStreamPart),
+					Stream.filter(Predicate.isNotUndefined)
 				)
 			)
 		}
@@ -113,7 +127,7 @@ export class Agent extends Effect.Service<Agent>()('@ai-toolkit/ai/Agent', {
 				const startedAt = Date.now()
 				yield* SubscriptionRef.update(messageRef, current => [
 					...current,
-					ConversationMessage.make({
+					new ConversationMessage({
 						model: {provider: model.provider, model: model.model},
 						startedAt,
 						role: 'user',
@@ -129,11 +143,13 @@ export class Agent extends Effect.Service<Agent>()('@ai-toolkit/ai/Agent', {
 				yield* appendHistory(
 					buildStream(model, [
 						...history.map(conversationMessageToModelMessage),
-						ToolModelMessage.make({content: [response]})
+						new ToolModelMessage({content: [response]})
 					])
 				)
 			}),
-			history: messageRef.changes
+			history: SubscriptionRef.changes(messageRef)
 		}
 	})
-}) {}
+}) {
+	static layer = Layer.effect(this, this.make)
+}

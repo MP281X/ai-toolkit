@@ -1,3 +1,4 @@
+import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
@@ -8,8 +9,8 @@ import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Loading} from '@ai-toolkit/components/fallbacks'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
-import {Atom, useAtomSet, useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
+import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
@@ -29,7 +30,7 @@ function RouteComponent() {
 const messagesAtom = Atom.keepAlive(
 	AtomRuntime.atom(
 		pipe(
-			RpcClient,
+			RpcClient.asEffect(),
 			Effect.map(client => client('ai.listMessages', void 0)),
 			Stream.unwrap
 		)
@@ -63,7 +64,7 @@ function Session() {
 						payload: {
 							model: model.model,
 							provider: model.provider,
-							parts: [TextPart.make({text: data.text}), ...data.attachments]
+							parts: [new TextPart({text: data.text}), ...data.attachments]
 						}
 					})
 				}

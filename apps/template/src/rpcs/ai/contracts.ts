@@ -1,8 +1,8 @@
-import {Rpc, RpcGroup} from '@effect/rpc'
 import {Schema} from 'effect'
 
 import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {AiSdkError, ConversationMessage, ToolContent, UserContentPart} from '@ai-toolkit/ai/schema'
+import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
 

@@ -4,7 +4,7 @@ import type {ModelMessage as AiSdkModelMessage, TextStreamPart as AiSdkTextStrea
 
 import {ModelId, ProviderId} from './catalog.ts'
 
-export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
+export class AiSdkError extends Schema.TaggedErrorClass<AiSdkError>()('AiSdkError', {
 	cause: Schema.optional(Schema.Defect),
 	message: Schema.optional(Schema.String)
 }) {}
@@ -69,13 +69,13 @@ export class ToolApprovalResponsePart extends Schema.TaggedClass<ToolApprovalRes
 }) {}
 
 export type UserContentPart = typeof UserContentPart.Type
-export const UserContentPart = Schema.Union(TextPart, FilePart)
+export const UserContentPart = Schema.Union([TextPart, FilePart])
 
 export type AssistantContentPart = typeof AssistantContentPart.Type
-export const AssistantContentPart = Schema.Union(TextPart, ToolCall, ToolApprovalRequest)
+export const AssistantContentPart = Schema.Union([TextPart, ToolCall, ToolApprovalRequest])
 
 export type ToolContent = typeof ToolContent.Type
-export const ToolContent = Schema.Union(ToolResultResponsePart, ToolApprovalResponsePart)
+export const ToolContent = Schema.Union([ToolResultResponsePart, ToolApprovalResponsePart])
 
 export class SystemModelMessage extends Schema.TaggedClass<SystemModelMessage>()('system', {
 	content: Schema.String
@@ -94,7 +94,12 @@ export class ToolModelMessage extends Schema.TaggedClass<ToolModelMessage>()('to
 }) {}
 
 export type ModelMessage = typeof ModelMessage.Type
-export const ModelMessage = Schema.Union(SystemModelMessage, UserModelMessage, AssistantModelMessage, ToolModelMessage)
+export const ModelMessage = Schema.Union([
+	SystemModelMessage,
+	UserModelMessage,
+	AssistantModelMessage,
+	ToolModelMessage
+])
 
 export class ErrorPart extends Schema.TaggedClass<ErrorPart>()('error', {
 	error: Schema.Defect
@@ -103,16 +108,16 @@ export class ErrorPart extends Schema.TaggedClass<ErrorPart>()('error', {
 export class Start extends Schema.TaggedClass<Start>()('start', {
 	model: Schema.Struct({provider: ProviderId, model: ModelId}),
 	startedAt: Schema.Number,
-	role: Schema.Literal('user', 'assistant', 'system', 'tool')
+	role: Schema.Literals(['user', 'assistant', 'system', 'tool'])
 }) {}
 
 export class Finish extends Schema.TaggedClass<Finish>()('finish', {
-	finishReason: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'),
+	finishReason: Schema.Literals(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other']),
 	usage: Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number})
 }) {}
 
 export type ContentPart = typeof ContentPart.Type
-export const ContentPart = Schema.Union(
+export const ContentPart = Schema.Union([
 	TextPart,
 	ReasoningPart,
 	FilePart,
@@ -122,10 +127,10 @@ export const ContentPart = Schema.Union(
 	ToolResult,
 	ToolError,
 	ErrorPart
-)
+])
 
 export type StreamPart = typeof StreamPart.Type
-export const StreamPart = Schema.Union(Start, ContentPart, Finish)
+export const StreamPart = Schema.Union([Start, ContentPart, Finish])
 
 export class ConversationMessage extends Schema.Class<ConversationMessage>('ConversationMessage')({
 	model: Start.fields.model,
@@ -188,23 +193,23 @@ export function modelMessageToSdk(message: ModelMessage): AiSdkModelMessage {
 export function sdkStreamPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 	switch (part.type) {
 		case 'text-delta':
-			return TextPart.make({id: part.id, text: part.text})
+			return new TextPart({id: part.id, text: part.text})
 		case 'reasoning-delta':
-			return ReasoningPart.make({id: part.id, text: part.text})
+			return new ReasoningPart({id: part.id, text: part.text})
 		case 'file':
-			return FilePart.make({data: part.file.base64, mediaType: part.file.mediaType})
+			return new FilePart({data: part.file.base64, mediaType: part.file.mediaType})
 		case 'tool-call':
-			return ToolCall.make({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input})
+			return new ToolCall({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input})
 		case 'tool-approval-request':
-			return ToolApprovalRequest.make({approvalId: part.approvalId, toolCallId: part.toolCall.toolCallId})
+			return new ToolApprovalRequest({approvalId: part.approvalId, toolCallId: part.toolCall.toolCallId})
 		case 'tool-output-denied':
-			return ToolOutputDenied.make({toolCallId: part.toolCallId, toolName: part.toolName})
+			return new ToolOutputDenied({toolCallId: part.toolCallId, toolName: part.toolName})
 		case 'tool-result':
-			return ToolResult.make(part)
+			return new ToolResult(part)
 		case 'tool-error':
-			return ToolError.make(part)
+			return new ToolError(part)
 		case 'finish':
-			return Finish.make({
+			return new Finish({
 				finishReason: part.finishReason,
 				usage: {
 					input: part.totalUsage?.inputTokens ?? 0,
@@ -213,7 +218,7 @@ export function sdkStreamPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 				}
 			})
 		case 'error':
-			return ErrorPart.make(part)
+			return new ErrorPart(part)
 		default:
 			return undefined
 	}
@@ -221,7 +226,7 @@ export function sdkStreamPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 
 export function conversationMessageToModelMessage(message: ConversationMessage) {
 	if (message.role === 'system') {
-		return SystemModelMessage.make({
+		return new SystemModelMessage({
 			content: message.parts
 				.filter(part => part._tag === 'text-part')
 				.map(part => part.text)
@@ -231,35 +236,35 @@ export function conversationMessageToModelMessage(message: ConversationMessage) 
 	if (message.role === 'user') {
 		const content = []
 		for (const part of message.parts) {
-			if (part._tag === 'text-part') content.push(TextPart.make({text: part.text}))
+			if (part._tag === 'text-part') content.push(new TextPart({text: part.text}))
 			if (part._tag === 'file-part') {
-				content.push(FilePart.make({data: part.data, mediaType: part.mediaType, filename: part.filename}))
+				content.push(new FilePart({data: part.data, mediaType: part.mediaType, filename: part.filename}))
 			}
 		}
-		return UserModelMessage.make({content})
+		return new UserModelMessage({content})
 	}
 	if (message.role === 'assistant') {
 		const content = []
 		for (const part of message.parts) {
-			if (part._tag === 'text-part') content.push(TextPart.make({text: part.text}))
+			if (part._tag === 'text-part') content.push(new TextPart({text: part.text}))
 			if (part._tag === 'tool-call')
-				content.push(ToolCall.make({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input}))
+				content.push(new ToolCall({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input}))
 			if (part._tag === 'tool-approval-request') {
-				content.push(ToolApprovalRequest.make({approvalId: part.approvalId, toolCallId: part.toolCallId}))
+				content.push(new ToolApprovalRequest({approvalId: part.approvalId, toolCallId: part.toolCallId}))
 			}
 		}
-		return AssistantModelMessage.make({content})
+		return new AssistantModelMessage({content})
 	}
 	const content = []
 	for (const part of message.parts) {
 		if (part._tag === 'tool-result') {
 			content.push(
-				ToolResultResponsePart.make({toolCallId: part.toolCallId, toolName: part.toolName, output: part.output})
+				new ToolResultResponsePart({toolCallId: part.toolCallId, toolName: part.toolName, output: part.output})
 			)
 		}
 		if (part._tag === 'tool-output-denied') {
 			content.push(
-				ToolResultResponsePart.make({
+				new ToolResultResponsePart({
 					toolCallId: part.toolCallId,
 					toolName: part.toolName,
 					output: {type: 'execution-denied' as const}
@@ -267,16 +272,16 @@ export function conversationMessageToModelMessage(message: ConversationMessage) 
 			)
 		}
 	}
-	return ToolModelMessage.make({content})
+	return new ToolModelMessage({content})
 }
 
 function appendPart(parts: readonly ContentPart[], part: ContentPart) {
 	const lastPart = parts[parts.length - 1]
 	if (part._tag === 'text-part' && lastPart?._tag === 'text-part' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), TextPart.make({id: part.id, text: lastPart.text + part.text})]
+		return [...parts.slice(0, -1), new TextPart({id: part.id, text: lastPart.text + part.text})]
 	}
 	if (part._tag === 'reasoning-part' && lastPart?._tag === 'reasoning-part' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), ReasoningPart.make({id: part.id, text: lastPart.text + part.text})]
+		return [...parts.slice(0, -1), new ReasoningPart({id: part.id, text: lastPart.text + part.text})]
 	}
 	return [...parts, part]
 }
@@ -285,14 +290,14 @@ export function partsStreamToMessage<E, R>(stream: Stream.Stream<StreamPart, E, 
 	return pipe(
 		Stream.scan(stream, undefined as ConversationMessage | undefined, (current, part) => {
 			if (part._tag === 'start') {
-				return ConversationMessage.make({model: part.model, startedAt: part.startedAt, role: part.role, parts: []})
+				return new ConversationMessage({model: part.model, startedAt: part.startedAt, role: part.role, parts: []})
 			}
 			if (part._tag === 'finish' && Predicate.isNotUndefined(current)) {
-				return ConversationMessage.make({...current, finishReason: part.finishReason, usage: part.usage}, true)
+				return new ConversationMessage({...current, finishReason: part.finishReason, usage: part.usage})
 			}
 
 			if (part._tag !== 'finish' && Predicate.isNotUndefined(current)) {
-				return ConversationMessage.make({...current, parts: appendPart(current.parts, part)}, true)
+				return new ConversationMessage({...current, parts: appendPart(current.parts, part)})
 			}
 
 			return current

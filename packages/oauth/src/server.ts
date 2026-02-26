@@ -1,15 +1,14 @@
-import type {Headers} from '@effect/platform'
-import {Config, Duration, Effect, Predicate, pipe, Schema} from 'effect'
+import {Config, Duration, Effect, Layer, Predicate, pipe, Schema, ServiceMap} from 'effect'
 
 import {betterAuth} from 'better-auth/minimal'
+import type {Headers} from 'effect/unstable/http'
 
-export class OAuthError extends Schema.TaggedError<OAuthError>()('OAuthError', {
+export class OAuthError extends Schema.TaggedErrorClass<OAuthError>()('OAuthError', {
 	cause: Schema.Defect
 }) {}
 
-export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
-	accessors: true,
-	effect: Effect.gen(function* () {
+export class OAuth extends ServiceMap.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
+	make: Effect.gen(function* () {
 		const auth = betterAuth({
 			secret: yield* Config.string('AUTH_SECRET'),
 			baseURL: `${yield* Config.string('BASE_URL')}/api/auth`,
@@ -36,7 +35,7 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 				catch: cause => new OAuthError({cause})
 			})
 
-			if (Predicate.isNotNullable(result)) return result
+			if (Predicate.isNotNullish(result)) return result
 			return yield* new OAuthError({cause: 'Unknown Error'})
 		})
 
@@ -45,11 +44,11 @@ export class OAuth extends Effect.Service<OAuth>()('@ai-toolkit/oauth/OAuth', {
 			handler: auth.handler
 		}
 	})
-}) {}
-
-export class Session extends Effect.Tag('@ai-toolkit/oauth/Session')<
-	Session,
-	Effect.Effect.Success<ReturnType<OAuth['session']>>
->() {
-	static userId = Effect.andThen(this, session => session.user.id)
+}) {
+	static layer = Layer.effect(this, this.make)
+	static handler = (request: Request) => this.use(oauth => Effect.promise(() => oauth.handler(request)))
 }
+
+export class Session extends ServiceMap.Service<Session, Effect.Success<ReturnType<OAuth['Service']['session']>>>()(
+	'@ai-toolkit/oauth/Session'
+) {}

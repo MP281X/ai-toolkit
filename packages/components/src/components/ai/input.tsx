@@ -336,10 +336,11 @@ export function ChatInput(props: ChatInputProps) {
 			files.map(async file => {
 				const name = file.name
 				const base64 = await readAsBase64(file)
-				const attachment = FilePart.make(
-					{data: base64, mediaType: file.type || 'application/octet-stream', filename: name},
-					true
-				)
+				const attachment = new FilePart({
+					data: base64,
+					mediaType: file.type || 'application/octet-stream',
+					filename: name
+				})
 				return {attachment, matchText: name}
 			})
 		)

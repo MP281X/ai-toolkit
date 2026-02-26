@@ -1,13 +1,13 @@
 import {Config, Schema} from 'effect'
 
 export type ProviderId = typeof ProviderId.Type
-export const ProviderId = Schema.Literal('opencode_zen', 'openrouter')
+export const ProviderId = Schema.Literals(['opencode_zen', 'openrouter'])
 
 export type AdapterId = typeof AdapterId.Type
-export const AdapterId = Schema.Literal('openai', 'openai-compatible', 'anthropic', 'openrouter')
+export const AdapterId = Schema.Literals(['openai', 'openai-compatible', 'anthropic', 'openrouter'])
 
 export type ModelId = typeof ModelId.Type
-export const ModelId = Schema.Literal(
+export const ModelId = Schema.Literals([
 	'openrouter/free',
 	'gpt-5-nano',
 	'big-pickle',
@@ -18,7 +18,7 @@ export const ModelId = Schema.Literal(
 	'arcee-ai/trinity-mini:free',
 	'google/gemma-3n-e4b-it:free',
 	'nvidia/nemotron-3-nano-30b-a3b:free'
-)
+])
 
 export const catalog: Record<
 	ProviderId,
