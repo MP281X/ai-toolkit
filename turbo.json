@@ -6,11 +6,13 @@
 	"globalDependencies": ["bun.lock", "biome.json", "tsconfig.json"],
 
 	"tasks": {
-		"dev": { "cache": false, "persistent": true },
-		"build": { "dependsOn": ["^check"], "outputs": [".output/**"] },
-		"preview": { "dependsOn": ["build"], "cache": false, "persistent": true },
+		"dev:client": { "cache": false, "persistent": true },
+		"dev:server": { "cache": false, "persistent": true },
 
-		"fix": {},
-		"check": {}
+		"build:client": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
+		"build:server": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
+
+		"fix": { "cache": false },
+		"check": { "cache": false }
 	}
 }
