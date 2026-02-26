@@ -9,116 +9,53 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as homeRouteRouteImport } from './routes/(home)/route'
-import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as homeIndexRouteImport } from './routes/(home)/index'
-import { Route as ApiRpcRouteImport } from './routes/api/rpc'
 import { Route as homeDiffIndexRouteImport } from './routes/(home)/diff/index'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 
-const homeRouteRoute = homeRouteRouteImport.update({
-  id: '/(home)',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthIndexRoute = AuthIndexRouteImport.update({
-  id: '/auth/',
-  path: '/auth/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const homeIndexRoute = homeIndexRouteImport.update({
-  id: '/',
+  id: '/(home)/',
   path: '/',
-  getParentRoute: () => homeRouteRoute,
-} as any)
-const ApiRpcRoute = ApiRpcRouteImport.update({
-  id: '/api/rpc',
-  path: '/api/rpc',
   getParentRoute: () => rootRouteImport,
 } as any)
 const homeDiffIndexRoute = homeDiffIndexRouteImport.update({
-  id: '/diff/',
+  id: '/(home)/diff/',
   path: '/diff/',
-  getParentRoute: () => homeRouteRoute,
-} as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/api/rpc': typeof ApiRpcRoute
   '/': typeof homeIndexRoute
-  '/auth/': typeof AuthIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/diff/': typeof homeDiffIndexRoute
 }
 export interface FileRoutesByTo {
-  '/api/rpc': typeof ApiRpcRoute
   '/': typeof homeIndexRoute
-  '/auth': typeof AuthIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/diff': typeof homeDiffIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/(home)': typeof homeRouteRouteWithChildren
-  '/api/rpc': typeof ApiRpcRoute
   '/(home)/': typeof homeIndexRoute
-  '/auth/': typeof AuthIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/(home)/diff/': typeof homeDiffIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/api/rpc' | '/' | '/auth/' | '/api/auth/$' | '/diff/'
+  fullPaths: '/' | '/diff/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/rpc' | '/' | '/auth' | '/api/auth/$' | '/diff'
-  id:
-    | '__root__'
-    | '/(home)'
-    | '/api/rpc'
-    | '/(home)/'
-    | '/auth/'
-    | '/api/auth/$'
-    | '/(home)/diff/'
+  to: '/' | '/diff'
+  id: '__root__' | '/(home)/' | '/(home)/diff/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  homeRouteRoute: typeof homeRouteRouteWithChildren
-  ApiRpcRoute: typeof ApiRpcRoute
-  AuthIndexRoute: typeof AuthIndexRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  homeIndexRoute: typeof homeIndexRoute
+  homeDiffIndexRoute: typeof homeDiffIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/(home)': {
-      id: '/(home)'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof homeRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/': {
-      id: '/auth/'
-      path: '/auth'
-      fullPath: '/auth/'
-      preLoaderRoute: typeof AuthIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/(home)/': {
       id: '/(home)/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof homeIndexRouteImport
-      parentRoute: typeof homeRouteRoute
-    }
-    '/api/rpc': {
-      id: '/api/rpc'
-      path: '/api/rpc'
-      fullPath: '/api/rpc'
-      preLoaderRoute: typeof ApiRpcRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(home)/diff/': {
@@ -126,47 +63,15 @@ declare module '@tanstack/react-router' {
       path: '/diff'
       fullPath: '/diff/'
       preLoaderRoute: typeof homeDiffIndexRouteImport
-      parentRoute: typeof homeRouteRoute
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface homeRouteRouteChildren {
-  homeIndexRoute: typeof homeIndexRoute
-  homeDiffIndexRoute: typeof homeDiffIndexRoute
-}
-
-const homeRouteRouteChildren: homeRouteRouteChildren = {
+const rootRouteChildren: RootRouteChildren = {
   homeIndexRoute: homeIndexRoute,
   homeDiffIndexRoute: homeDiffIndexRoute,
-}
-
-const homeRouteRouteWithChildren = homeRouteRoute._addFileChildren(
-  homeRouteRouteChildren,
-)
-
-const rootRouteChildren: RootRouteChildren = {
-  homeRouteRoute: homeRouteRouteWithChildren,
-  ApiRpcRoute: ApiRpcRoute,
-  AuthIndexRoute: AuthIndexRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

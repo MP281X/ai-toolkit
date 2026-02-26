@@ -3,17 +3,13 @@ import {Schema} from 'effect'
 import {GitDiff, GitError} from '@ai-toolkit/git/schema'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
-
 export class GitContracts extends RpcGroup.make(
-	Rpc.make('stagedDiffs', {
+	Rpc.make('git.stagedDiffs', {
 		success: Schema.Array(GitDiff),
 		error: GitError
 	}),
-	Rpc.make('unstagedDiffs', {
+	Rpc.make('git.unstagedDiffs', {
 		success: Schema.Array(GitDiff),
 		error: GitError
 	})
-)
-	.prefix('git.')
-	.middleware(AuthMiddleware) {}
+) {}

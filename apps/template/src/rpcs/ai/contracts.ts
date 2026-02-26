@@ -4,14 +4,12 @@ import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {AiSdkError, ConversationMessage, ToolContent, UserContentPart} from '@ai-toolkit/ai/schema'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
-
 export class AiContracts extends RpcGroup.make(
-	Rpc.make('listMessages', {
+	Rpc.make('ai.listMessages', {
 		stream: true,
 		success: Schema.Array(ConversationMessage)
 	}),
-	Rpc.make('sendMessage', {
+	Rpc.make('ai.sendMessage', {
 		payload: Schema.Struct({
 			provider: ProviderId,
 			model: ModelId,
@@ -19,10 +17,8 @@ export class AiContracts extends RpcGroup.make(
 		}),
 		error: AiSdkError
 	}),
-	Rpc.make('tool', {
+	Rpc.make('ai.tool', {
 		payload: ToolContent,
 		error: AiSdkError
 	})
-)
-	.prefix('ai.')
-	.middleware(AuthMiddleware) {}
+) {}
