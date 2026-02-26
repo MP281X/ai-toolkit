@@ -13,13 +13,13 @@ export const AiLive = AiContracts.toLayer(
 			'ai.sendMessage': input => {
 				return Effect.provide(
 					agent.prompt([...input.parts]),
-					Model.Default({provider: input.provider, model: input.model})
+					Model.layer({provider: input.provider, model: input.model})
 				)
 			},
 			'ai.tool': approval => {
 				return Effect.provide(
 					agent.respond(approval),
-					Model.Default({provider: 'openrouter', model: 'openai/gpt-oss-20b:free'})
+					Model.layer({provider: 'openrouter', model: 'openai/gpt-oss-20b:free'})
 				)
 			}
 		})

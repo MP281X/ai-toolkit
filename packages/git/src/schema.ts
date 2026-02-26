@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-export class GitError extends Schema.TaggedError<GitError>()('GitError', {
+export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
 	message: Schema.optional(Schema.String)
 }) {}

@@ -1,4 +1,4 @@
-import {Array, Cause, Match, ParseResult, Predicate, pipe} from 'effect'
+import {Array, Cause, Match, Predicate, pipe, String} from 'effect'
 
 import {type ClassValue, clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
@@ -10,9 +10,8 @@ export function cn(...inputs: ClassValue[]) {
 export function formatError(error: unknown) {
 	return pipe(
 		Match.value(error),
-		Match.when(Match.instanceOf(ParseResult.ParseError), ParseResult.TreeFormatter.formatErrorSync),
 		Match.when(Predicate.isError, error => {
-			if (Predicate.isNullable(error.message) || error.message === 'Error') return error.name
+			if (String.isEmpty(error.message) || error.message === 'Error') return error.name
 			return error.message
 		}),
 		Match.when(Cause.isCause, cause =>

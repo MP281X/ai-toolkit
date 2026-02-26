@@ -3,9 +3,7 @@ import type {Plugin} from '@opencode-ai/plugin'
 const resources = [
 	{branch: 'main', name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre.git'},
 	{branch: 'canary', name: 'better-auth', url: 'https://github.com/better-auth/better-auth'},
-	// {branch: 'main', name: 'effect', url: 'https://github.com/Effect-TS/effect-smol.git'},
-	{branch: 'main', name: 'effect', url: 'https://github.com/Effect-TS/effect'},
-	{branch: 'main', name: 'effect-atom', url: 'https://github.com/tim-smart/effect-atom'},
+	{branch: 'main', name: 'effect', url: 'https://github.com/Effect-TS/effect-smol.git'},
 	{branch: 'main', name: 'tanstack-router', url: 'https://github.com/TanStack/router'},
 	{branch: 'main', name: 'ai-sdk', url: 'https://github.com/vercel/ai'}
 ]

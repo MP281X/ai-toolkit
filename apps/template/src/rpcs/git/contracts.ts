@@ -1,7 +1,7 @@
-import {Rpc, RpcGroup} from '@effect/rpc'
 import {Schema} from 'effect'
 
 import {GitDiff, GitError} from '@ai-toolkit/git/schema'
+import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
 

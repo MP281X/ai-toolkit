@@ -1,5 +1,6 @@
+import {useAtomSuspense} from '@effect/atom-react'
+
 import {PatchDiff} from '@ai-toolkit/components/render/diff'
-import {useAtomSuspense} from '@effect-atom/atom-react'
 import {createFileRoute} from '@tanstack/react-router'
 
 import {RpcClient} from '#lib/atomRuntime.ts'

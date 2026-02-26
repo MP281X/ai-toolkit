@@ -11,13 +11,11 @@
 
 ## VALIDATION
 
-After every code change, run inside each modified package directory:
+After every code change, run this command in the root:
 
 ```bash
 bun run fix && bun run check
 ```
-
-Never run at the repository root. Fix all failures and rerun until all checks pass.
 
 ## OUTPUT STYLE
 
@@ -31,7 +29,7 @@ Never run at the repository root. Fix all failures and rerun until all checks pa
 
 ## EXTERNAL KNOWLEDGE
 
-Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `effect-atom`, `tanstack-router`, `ai-sdk`, `pierre-diffs`.
+Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`, `pierre-diffs`.
 
 - Primary source of truth: `.opencode/resources/<library>/` (cloned repositories).
 - Search these repositories first for behaviors, APIs, and examples.
