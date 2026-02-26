@@ -8,36 +8,28 @@ export const AdapterId = Schema.Literal('openai', 'openai-compatible', 'anthropi
 
 export type ModelId = typeof ModelId.Type
 export const ModelId = Schema.Literal(
+	'openrouter/free',
 	'gpt-5-nano',
 	'big-pickle',
 	'kimi-k2.5-free',
 	'claude-haiku-4-5',
 	'minimax-m2.5-free',
+	'openai/gpt-oss-20b:free',
 	'arcee-ai/trinity-mini:free',
 	'google/gemma-3n-e4b-it:free',
 	'nvidia/nemotron-3-nano-30b-a3b:free'
 )
 
-export type Model = typeof Model.Type
-export const Model = Schema.Struct({
-	provider: ProviderId,
-	model: ModelId
-})
-
-export type ModelSpec = typeof ModelSpec.Type
-export const ModelSpec = Schema.Struct({
-	id: ModelId,
-	adapter: AdapterId,
-	context: Schema.Number,
-	pricing: Schema.Struct({
-		input: Schema.Number,
-		output: Schema.Number
-	})
-})
-
-export const catalog: Record<ProviderId, {baseUrl: string; apiKey: Config.Config<string>; models: ModelSpec[]}> = {
+export const catalog: Record<
+	ProviderId,
+	{
+		baseURL: string
+		apiKey: Config.Config<string>
+		models: {id: ModelId; adapter: AdapterId; context: number; pricing: {input: number; output: number}}[]
+	}
+> = {
 	opencode_zen: {
-		baseUrl: 'https://opencode.ai/zen/v1',
+		baseURL: 'https://opencode.ai/zen/v1',
 		apiKey: Config.string('AI_OPENCODE_ZEN'),
 		models: [
 			{id: 'gpt-5-nano', adapter: 'openai', context: 128_000, pricing: {input: 0, output: 0}},
@@ -48,9 +40,11 @@ export const catalog: Record<ProviderId, {baseUrl: string; apiKey: Config.Config
 		]
 	},
 	openrouter: {
-		baseUrl: 'https://openrouter.ai/api/v1',
+		baseURL: 'https://openrouter.ai/api/v1',
 		apiKey: Config.string('AI_OPENROUTER'),
 		models: [
+			{id: 'openai/gpt-oss-20b:free', adapter: 'openrouter', context: 32_000, pricing: {input: 0, output: 0}},
+			{id: 'openrouter/free', adapter: 'openrouter', context: 32_000, pricing: {input: 0, output: 0}},
 			{
 				id: 'nvidia/nemotron-3-nano-30b-a3b:free',
 				adapter: 'openrouter',

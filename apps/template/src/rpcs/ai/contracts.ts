@@ -1,25 +1,26 @@
 import {Rpc, RpcGroup} from '@effect/rpc'
 import {Schema} from 'effect'
 
-import {AiSdkError, Message, UserMessage} from '@ai-toolkit/ai/schema'
+import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {AiSdkError, ConversationMessage, ToolContent, UserContentPart} from '@ai-toolkit/ai/schema'
 
 import {AuthMiddleware} from '#rpcs/middlewares/contracts.ts'
-import {SessionId} from '#rpcs/sessions/contracts.ts'
 
 export class AiContracts extends RpcGroup.make(
 	Rpc.make('listMessages', {
 		stream: true,
-		payload: {sessionId: SessionId},
-		success: Schema.Array(Message)
+		success: Schema.Array(ConversationMessage)
 	}),
 	Rpc.make('sendMessage', {
-		payload: {
-			sessionId: SessionId,
-			prompt: UserMessage.fields.prompt,
-			model: UserMessage.fields.model,
-			attachments: UserMessage.fields.attachments
-		},
-		success: SessionId,
+		payload: Schema.Struct({
+			provider: ProviderId,
+			model: ModelId,
+			parts: Schema.Array(UserContentPart)
+		}),
+		error: AiSdkError
+	}),
+	Rpc.make('tool', {
+		payload: ToolContent,
 		error: AiSdkError
 	})
 )

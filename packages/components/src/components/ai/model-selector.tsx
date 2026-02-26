@@ -1,4 +1,4 @@
-import {catalog, type Model, type ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {catalog, type ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {
 	Command,
@@ -26,8 +26,8 @@ function formatPricing(pricing: {input: number; output: number}) {
 
 export namespace ModelSelector {
 	export type Props = {
-		model: Model
-		onModelChange: (model: Model) => void
+		model: {model: ModelId; provider: ProviderId}
+		onModelChange: (model: {model: ModelId; provider: ProviderId}) => void
 	}
 }
 
