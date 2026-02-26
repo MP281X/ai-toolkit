@@ -1,9 +1,9 @@
-import type {Error as ErrorSchema} from '@ai-toolkit/ai/schema'
+import type {ErrorPart} from '@ai-toolkit/ai/schema'
 
 import {Alert, AlertDescription} from '#components/ui/alert.tsx'
 import {formatError} from '#lib/utils.ts'
 
-export function Error(props: ErrorSchema) {
+export function Error(props: ErrorPart) {
 	return (
 		<Alert variant="destructive" className="px-3 py-2 text-[11px]">
 			<AlertDescription>

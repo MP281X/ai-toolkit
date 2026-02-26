@@ -1,56 +1,27 @@
-import {Duration, Effect, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
+import {Effect} from 'effect'
 
-import {type Message, partsStreamToMessage} from '@ai-toolkit/ai/schema'
-import {AiSdk} from '@ai-toolkit/ai/service'
-import {Session} from '@ai-toolkit/oauth/server'
+import {Agent, Model} from '@ai-toolkit/ai/service'
 
 import {AiContracts} from '#rpcs/ai/contracts.ts'
-import {type SessionId, SessionItem, UserId} from '#rpcs/sessions/contracts.ts'
-import {userSessions} from '#rpcs/sessions/handlers.ts'
-
-const messageSessions = RcMap.make({
-	lookup: (_sessionId: SessionId) => SubscriptionRef.make<Message[]>([]),
-	idleTimeToLive: Duration.minutes(5)
-})
 
 export const AiLive = AiContracts.toLayer(
 	Effect.gen(function* () {
-		const aiSdk = yield* AiSdk
-		const msgsMap = yield* messageSessions
-		const sessionsMap = yield* userSessions
+		const agent = yield* Agent
 
 		return AiContracts.of({
-			'ai.listMessages': Effect.fnUntraced(function* ({sessionId}) {
-				const session = yield* RcMap.get(msgsMap, sessionId)
-				return session.changes
-			}, Stream.unwrapScoped),
-			'ai.sendMessage': Effect.fnUntraced(function* ({sessionId, prompt, model, attachments}) {
-				const userId = yield* Session.userId
-				const sessionsRef = yield* RcMap.get(sessionsMap, UserId.make(userId))
-
-				yield* SubscriptionRef.update(sessionsRef, sessions => {
-					if (sessions.some(s => s.id === sessionId)) return sessions
-					return [...sessions, new SessionItem({id: sessionId, name: 'New Session'})]
-				})
-
-				const msgSession = yield* RcMap.get(msgsMap, sessionId)
-
-				function upsertMessage(messages: Message[], message: Message) {
-					const last = messages[messages.length - 1]
-					if (last && last.startedAt === message.startedAt && last.role === message.role)
-						return [...messages.slice(0, -1), message]
-					return [...messages, message]
-				}
-
-				yield* pipe(
-					aiSdk.stream({prompt, model, attachments}),
-					partsStreamToMessage,
-					Stream.flatMap(message => SubscriptionRef.update(msgSession, messages => upsertMessage(messages, message))),
-					Stream.runDrain
+			'ai.listMessages': () => agent.history,
+			'ai.sendMessage': input => {
+				return Effect.provide(
+					agent.prompt([...input.parts]),
+					Model.Default({provider: input.provider, model: input.model})
 				)
-
-				return sessionId
-			}, Effect.scoped)
+			},
+			'ai.tool': approval => {
+				return Effect.provide(
+					agent.respond(approval),
+					Model.Default({provider: 'openrouter', model: 'openai/gpt-oss-20b:free'})
+				)
+			}
 		})
 	})
 )

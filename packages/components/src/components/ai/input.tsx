@@ -1,6 +1,6 @@
 import {Array as EffectArray, Record as EffectRecord} from 'effect'
 
-import {File as AiFile} from '@ai-toolkit/ai/schema'
+import {FilePart} from '@ai-toolkit/ai/schema'
 import {ArrowUpIcon, Paperclip} from '@ai-toolkit/components/icons'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
@@ -70,7 +70,7 @@ type SnippetConfig = {
 type ChatInputProps = {
 	value?: string
 	onValueChange?: (value: string) => void
-	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: AiFile[]}) => void
+	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: FilePart[]}) => void
 	placeholder?: string
 	children?: ReactNode
 	disabled?: boolean
@@ -83,7 +83,7 @@ type ResolvedOption = AutocompleteOptionConfig & {color: string}
 
 type CompletionState = AutocompleteEntry & {matchText: string}
 
-type AttachmentState = {attachment: AiFile; matchText: string}
+type AttachmentState = {attachment: FilePart; matchText: string}
 
 // -- Child parsing --
 
@@ -336,7 +336,10 @@ export function ChatInput(props: ChatInputProps) {
 			files.map(async file => {
 				const name = file.name
 				const base64 = await readAsBase64(file)
-				const attachment = AiFile.make({base64, mediaType: file.type || 'application/octet-stream', name}, true)
+				const attachment = FilePart.make(
+					{data: base64, mediaType: file.type || 'application/octet-stream', filename: name},
+					true
+				)
 				return {attachment, matchText: name}
 			})
 		)

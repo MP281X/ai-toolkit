@@ -1,40 +1,44 @@
-import {Chunk, Effect, Option, Predicate, pipe, Schema, Stream} from 'effect'
+import {Predicate, pipe, Schema, Stream} from 'effect'
 
-import type {TextStreamPart as AiTextStreamPart, ToolSet} from 'ai'
+import type {ModelMessage as AiSdkModelMessage, TextStreamPart as AiSdkTextStreamPart, ToolSet} from 'ai'
 
-import {Model} from './catalog.ts'
+import {ModelId, ProviderId} from './catalog.ts'
 
 export class AiSdkError extends Schema.TaggedError<AiSdkError>()('AiSdkError', {
 	cause: Schema.optional(Schema.Defect),
 	message: Schema.optional(Schema.String)
 }) {}
 
-export class File extends Schema.TaggedClass<File>()('file', {
-	base64: Schema.StringFromBase64,
+export class TextPart extends Schema.TaggedClass<TextPart>()('text-part', {
+	text: Schema.String,
+	id: Schema.optional(Schema.String)
+}) {}
+
+export class ReasoningPart extends Schema.TaggedClass<ReasoningPart>()('reasoning-part', {
+	text: Schema.String,
+	id: Schema.optional(Schema.String)
+}) {}
+
+export class FilePart extends Schema.TaggedClass<FilePart>()('file-part', {
+	data: Schema.String,
 	mediaType: Schema.String,
-	name: Schema.optional(Schema.String)
-}) {}
-
-export class UserMessage extends Schema.Class<UserMessage>('UserMessage')({
-	prompt: Schema.String,
-	model: Model,
-	attachments: Schema.Array(File)
-}) {}
-
-export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
-	id: Schema.String,
-	text: Schema.String
-}) {}
-
-export class ReasoningDelta extends Schema.TaggedClass<ReasoningDelta>()('reasoning-delta', {
-	id: Schema.String,
-	text: Schema.String
+	filename: Schema.optional(Schema.String)
 }) {}
 
 export class ToolCall extends Schema.TaggedClass<ToolCall>()('tool-call', {
 	toolCallId: Schema.String,
 	toolName: Schema.String,
 	input: Schema.Unknown
+}) {}
+
+export class ToolApprovalRequest extends Schema.TaggedClass<ToolApprovalRequest>()('tool-approval-request', {
+	approvalId: Schema.String,
+	toolCallId: Schema.String
+}) {}
+
+export class ToolOutputDenied extends Schema.TaggedClass<ToolOutputDenied>()('tool-output-denied', {
+	toolCallId: Schema.String,
+	toolName: Schema.String
 }) {}
 
 export class ToolResult extends Schema.TaggedClass<ToolResult>()('tool-result', {
@@ -51,66 +55,156 @@ export class ToolError extends Schema.TaggedClass<ToolError>()('tool-error', {
 	error: Schema.Unknown
 }) {}
 
-export class Error extends Schema.TaggedClass<Error>()('error', {
+export class ToolResultResponsePart extends Schema.TaggedClass<ToolResultResponsePart>()('tool-result', {
+	toolCallId: Schema.String,
+	toolName: Schema.String,
+	output: Schema.Unknown
+}) {}
+
+export class ToolApprovalResponsePart extends Schema.TaggedClass<ToolApprovalResponsePart>()('tool-approval-response', {
+	approvalId: Schema.String,
+	approved: Schema.Boolean,
+	reason: Schema.optional(Schema.String),
+	providerExecuted: Schema.optional(Schema.Boolean)
+}) {}
+
+export type UserContentPart = typeof UserContentPart.Type
+export const UserContentPart = Schema.Union(TextPart, FilePart)
+
+export type AssistantContentPart = typeof AssistantContentPart.Type
+export const AssistantContentPart = Schema.Union(TextPart, ToolCall, ToolApprovalRequest)
+
+export type ToolContent = typeof ToolContent.Type
+export const ToolContent = Schema.Union(ToolResultResponsePart, ToolApprovalResponsePart)
+
+export class SystemModelMessage extends Schema.TaggedClass<SystemModelMessage>()('system', {
+	content: Schema.String
+}) {}
+
+export class UserModelMessage extends Schema.TaggedClass<UserModelMessage>()('user', {
+	content: Schema.Array(UserContentPart)
+}) {}
+
+export class AssistantModelMessage extends Schema.TaggedClass<AssistantModelMessage>()('assistant', {
+	content: Schema.Array(AssistantContentPart)
+}) {}
+
+export class ToolModelMessage extends Schema.TaggedClass<ToolModelMessage>()('tool', {
+	content: Schema.Array(ToolContent)
+}) {}
+
+export type ModelMessage = typeof ModelMessage.Type
+export const ModelMessage = Schema.Union(SystemModelMessage, UserModelMessage, AssistantModelMessage, ToolModelMessage)
+
+export class ErrorPart extends Schema.TaggedClass<ErrorPart>()('error', {
 	error: Schema.Defect
 }) {}
 
 export class Start extends Schema.TaggedClass<Start>()('start', {
-	model: Model,
+	model: Schema.Struct({provider: ProviderId, model: ModelId}),
 	startedAt: Schema.Number,
-	role: Schema.Literal('user', 'assistant', 'system')
+	role: Schema.Literal('user', 'assistant', 'system', 'tool')
 }) {}
 
 export class Finish extends Schema.TaggedClass<Finish>()('finish', {
 	finishReason: Schema.Literal('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other'),
-	usage: Schema.Struct({
-		input: Schema.Number,
-		output: Schema.Number,
-		reasoning: Schema.Number
-	})
+	usage: Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number})
 }) {}
 
 export type ContentPart = typeof ContentPart.Type
-export const ContentPart = Schema.Union(TextDelta, ReasoningDelta, ToolCall, ToolResult, ToolError, File, Error)
-
-export type StreamPart = typeof StreamPart.Type
-export const StreamPart = Schema.Union(
-	Start,
-	TextDelta,
-	ReasoningDelta,
+export const ContentPart = Schema.Union(
+	TextPart,
+	ReasoningPart,
+	FilePart,
 	ToolCall,
+	ToolApprovalRequest,
+	ToolOutputDenied,
 	ToolResult,
 	ToolError,
-	File,
-	Finish,
-	Error
+	ErrorPart
 )
 
-export class Message extends Schema.Class<Message>('Message')({
-	model: Model,
+export type StreamPart = typeof StreamPart.Type
+export const StreamPart = Schema.Union(Start, ContentPart, Finish)
+
+export class ConversationMessage extends Schema.Class<ConversationMessage>('ConversationMessage')({
+	model: Start.fields.model,
 	startedAt: Schema.Number,
-	role: Schema.Literal('user', 'assistant', 'system'),
+	role: Start.fields.role,
 	parts: Schema.Array(ContentPart),
 	finishReason: Schema.optional(Finish.fields.finishReason),
 	usage: Schema.optional(Finish.fields.usage)
 }) {}
 
-export const fromAiSdkStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>) => {
+export function modelMessageToSdk(message: ModelMessage): AiSdkModelMessage {
+	if (message._tag === 'system') return {role: 'system', content: message.content}
+	if (message._tag === 'user') {
+		return {
+			role: 'user',
+			content: message.content.map(part =>
+				part._tag === 'text-part'
+					? {type: 'text', text: part.text}
+					: {type: 'file', data: part.data, mediaType: part.mediaType, filename: part.filename}
+			)
+		}
+	}
+	if (message._tag === 'assistant') {
+		return {
+			role: 'assistant',
+			content: message.content.map(part => {
+				if (part._tag === 'text-part') return {type: 'text', text: part.text}
+				if (part._tag === 'tool-call') {
+					return {type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input}
+				}
+				return {type: 'tool-approval-request', approvalId: part.approvalId, toolCallId: part.toolCallId}
+			})
+		}
+	}
+	return {
+		role: 'tool',
+		content: message.content.map(part => {
+			if (part._tag === 'tool-approval-response') {
+				return {
+					type: 'tool-approval-response',
+					approvalId: part.approvalId,
+					approved: part.approved,
+					reason: part.reason,
+					providerExecuted: part.providerExecuted
+				}
+			}
+			return {
+				type: 'tool-result',
+				toolCallId: part.toolCallId,
+				toolName: part.toolName,
+				output: {
+					type: 'text',
+					value: typeof part.output === 'string' ? part.output : JSON.stringify(part.output)
+				}
+			}
+		})
+	}
+}
+
+export function sdkStreamPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 	switch (part.type) {
 		case 'text-delta':
-			return TextDelta.make(part)
+			return TextPart.make({id: part.id, text: part.text})
 		case 'reasoning-delta':
-			return ReasoningDelta.make(part)
+			return ReasoningPart.make({id: part.id, text: part.text})
 		case 'file':
-			return File.make({base64: part.file.base64, mediaType: part.file.mediaType})
+			return FilePart.make({data: part.file.base64, mediaType: part.file.mediaType})
 		case 'tool-call':
-			return ToolCall.make(part)
+			return ToolCall.make({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input})
+		case 'tool-approval-request':
+			return ToolApprovalRequest.make({approvalId: part.approvalId, toolCallId: part.toolCall.toolCallId})
+		case 'tool-output-denied':
+			return ToolOutputDenied.make({toolCallId: part.toolCallId, toolName: part.toolName})
 		case 'tool-result':
 			return ToolResult.make(part)
 		case 'tool-error':
 			return ToolError.make(part)
 		case 'finish':
-			return new Finish({
+			return Finish.make({
 				finishReason: part.finishReason,
 				usage: {
 					input: part.totalUsage?.inputTokens ?? 0,
@@ -119,50 +213,90 @@ export const fromAiSdkStreamPart = <T extends ToolSet>(part: AiTextStreamPart<T>
 				}
 			})
 		case 'error':
-			return Error.make(part)
+			return ErrorPart.make(part)
 		default:
-			return
+			return undefined
 	}
+}
+
+export function conversationMessageToModelMessage(message: ConversationMessage) {
+	if (message.role === 'system') {
+		return SystemModelMessage.make({
+			content: message.parts
+				.filter(part => part._tag === 'text-part')
+				.map(part => part.text)
+				.join('\n')
+		})
+	}
+	if (message.role === 'user') {
+		const content = []
+		for (const part of message.parts) {
+			if (part._tag === 'text-part') content.push(TextPart.make({text: part.text}))
+			if (part._tag === 'file-part') {
+				content.push(FilePart.make({data: part.data, mediaType: part.mediaType, filename: part.filename}))
+			}
+		}
+		return UserModelMessage.make({content})
+	}
+	if (message.role === 'assistant') {
+		const content = []
+		for (const part of message.parts) {
+			if (part._tag === 'text-part') content.push(TextPart.make({text: part.text}))
+			if (part._tag === 'tool-call')
+				content.push(ToolCall.make({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input}))
+			if (part._tag === 'tool-approval-request') {
+				content.push(ToolApprovalRequest.make({approvalId: part.approvalId, toolCallId: part.toolCallId}))
+			}
+		}
+		return AssistantModelMessage.make({content})
+	}
+	const content = []
+	for (const part of message.parts) {
+		if (part._tag === 'tool-result') {
+			content.push(
+				ToolResultResponsePart.make({toolCallId: part.toolCallId, toolName: part.toolName, output: part.output})
+			)
+		}
+		if (part._tag === 'tool-output-denied') {
+			content.push(
+				ToolResultResponsePart.make({
+					toolCallId: part.toolCallId,
+					toolName: part.toolName,
+					output: {type: 'execution-denied' as const}
+				})
+			)
+		}
+	}
+	return ToolModelMessage.make({content})
 }
 
 function appendPart(parts: readonly ContentPart[], part: ContentPart) {
 	const lastPart = parts[parts.length - 1]
-
-	if (part._tag === 'text-delta' && lastPart?._tag === 'text-delta' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), TextDelta.make({id: part.id, text: lastPart.text + part.text}, true)]
+	if (part._tag === 'text-part' && lastPart?._tag === 'text-part' && lastPart.id === part.id) {
+		return [...parts.slice(0, -1), TextPart.make({id: part.id, text: lastPart.text + part.text})]
 	}
-
-	if (part._tag === 'reasoning-delta' && lastPart?._tag === 'reasoning-delta' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), ReasoningDelta.make({id: part.id, text: lastPart.text + part.text}, true)]
+	if (part._tag === 'reasoning-part' && lastPart?._tag === 'reasoning-part' && lastPart.id === part.id) {
+		return [...parts.slice(0, -1), ReasoningPart.make({id: part.id, text: lastPart.text + part.text})]
 	}
-
 	return [...parts, part]
 }
 
-function updateMessage(current: Message | undefined, part: StreamPart) {
-	switch (part._tag) {
-		case 'start':
-			return Message.make({model: part.model, startedAt: part.startedAt, role: part.role, parts: []}, true)
-		case 'finish':
-			if (Predicate.isNotNullable(current))
-				return Message.make({...current, finishReason: part.finishReason, usage: part.usage}, true)
-			return current
-		default:
-			if (Predicate.isNotNullable(current))
-				return Message.make({...current, parts: appendPart(current.parts, part)}, true)
-			return current
-	}
-}
+export function partsStreamToMessage<E, R>(stream: Stream.Stream<StreamPart, E, R>) {
+	return pipe(
+		Stream.scan(stream, undefined as ConversationMessage | undefined, (current, part) => {
+			if (part._tag === 'start') {
+				return ConversationMessage.make({model: part.model, startedAt: part.startedAt, role: part.role, parts: []})
+			}
+			if (part._tag === 'finish' && Predicate.isNotUndefined(current)) {
+				return ConversationMessage.make({...current, finishReason: part.finishReason, usage: part.usage}, true)
+			}
 
-export function partsStreamToMessage<E>(stream: Stream.Stream<StreamPart, E>) {
-	return Stream.filterMap(
-		pipe(stream, Stream.scan(undefined as Message | undefined, updateMessage)),
-		Option.fromNullable
+			if (part._tag !== 'finish' && Predicate.isNotUndefined(current)) {
+				return ConversationMessage.make({...current, parts: appendPart(current.parts, part)}, true)
+			}
+
+			return current
+		}),
+		Stream.filter(Predicate.isNotUndefined)
 	)
-}
-
-export function chunkToMessage(parts: Chunk.Chunk<StreamPart>) {
-	const message = pipe(parts, Chunk.reduce(undefined as Message | undefined, updateMessage))
-	if (Predicate.isNotUndefined(message)) return Effect.succeed(message)
-	return AiSdkError.make({message: 'Invalid stream'})
 }

@@ -1,24 +1,24 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
 
-import type {Message as MessageType} from '@ai-toolkit/ai/schema'
+import type {ConversationMessage, ToolContent} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, UserIcon} from 'lucide-react'
 
 import {Attachment} from '#components/ai/attachment.tsx'
 import {Error} from '#components/ai/error.tsx'
-import {Markdown} from '#components/ai/markdown.tsx'
 import {ReasoningDelta} from '#components/ai/reasoning-delta.tsx'
-import {ToolCall} from '#components/ai/tool-call.tsx'
+import {ToolInteraction} from '#components/ai/tool-interaction.tsx'
 import {ToolResult} from '#components/ai/tool-result.tsx'
+import {Markdown} from '#components/render/markdown.tsx'
 import {cn, formatRelativeTime, formatTokens} from '#lib/utils.ts'
 
-export function Message(props: MessageType) {
+export function Message(props: ConversationMessage & {onToolResponse?: (response: ToolContent) => void}) {
 	return (
 		<article className="flex items-start gap-2">
 			<div
 				className={cn(
 					'mt-0.5 h-full w-0.5 shrink-0',
 					props.role === 'user' && 'bg-primary',
-					props.role === 'assistant' && 'bg-muted-foreground/40',
+					(props.role === 'assistant' || props.role === 'tool') && 'bg-muted-foreground/40',
 					props.role === 'system' && 'bg-muted-foreground/30'
 				)}
 			/>
@@ -40,14 +40,18 @@ export function Message(props: MessageType) {
 					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
 						{props.parts.map((part, index) => {
 							switch (part._tag) {
-								case 'text-delta':
+								case 'text-part':
 									return <Markdown key={index}>{part.text}</Markdown>
-								case 'reasoning-delta':
+								case 'reasoning-part':
 									return <ReasoningDelta key={index} {...part} />
-								case 'file':
+								case 'file-part':
 									return <Attachment key={index} {...part} />
 								case 'tool-call':
-									return <ToolCall key={index} {...part} />
+									return <ToolInteraction key={index} part={part} onResponse={props.onToolResponse} />
+								case 'tool-approval-request':
+									return <ToolInteraction key={index} part={part} onResponse={props.onToolResponse} />
+								case 'tool-output-denied':
+									return <ToolInteraction key={index} part={part} onResponse={props.onToolResponse} />
 								case 'tool-result':
 									return <ToolResult key={index} {...part} />
 								case 'tool-error':
