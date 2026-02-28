@@ -6,8 +6,18 @@
 - Execute exactly what is requested. No additional changes.
 - Act without asking. Ask only when a request is genuinely ambiguous and cannot be reasonably inferred.
 - When blocked: finish all non-blocking work first, then ask one targeted question via the `question` tool with a recommended default.
-- Breaking changes are always acceptable. No backward compatibility.
+- Breaking changes are acceptable.
+- No backward compatibility.
+- No migration layers, no deprecations, no aliases, no compatibility props, no adapter wrappers.
 - Happy path only. No defensive coding. No edge-case handling unless explicitly requested.
+
+## EXECUTION MODE
+
+- Primary goal in normal tasks: ship the requested feature/change with clear and simple code.
+- Keep refactors local to the requested scope unless user asks for broader refactoring.
+- Remove obvious dead code directly related to touched files.
+- Do not run repository-wide simplification by default.
+- Use `/refactor-max` for iterative, cross-cutting, hyper-aggressive simplification and debt removal.
 
 ## VALIDATION
 
@@ -41,8 +51,8 @@ Never rely on training data for the following libraries — it is outdated: `bet
 - Keep code simple and explicit. Follow existing patterns unless the task is a refactor.
 - Use early returns always.
 - No comments. Restructure code until it is self-explanatory.
-- Delete unused code immediately. No "just in case" code. No compatibility layers.
-- Never abstract prematurely — duplicate freely. When refactoring, refactor aggressively: architecture, signatures, all call sites.
+- Delete unused code immediately. No "just in case" code.
+- Never abstract prematurely. Duplicate freely.
 - No short or cryptic abbreviations. Allowed exceptions: `id`, `url`, `api`, `err`, `ctx`.
 
 ### TypeScript
@@ -65,18 +75,20 @@ Never rely on training data for the following libraries — it is outdated: `bet
 
 ### Effect
 
+- The project is using Effect v4. Many APIs have changed. Never rely on training data; always check `.opencode/resources/effect/` for current APIs.
 - Use standalone `pipe(value, ...)` for composition.
 - Use `.pipe()` method only for instrumentation: timeouts, retries, logging.
-- Services: `Effect.Service`, tag `@ai-toolkit/<package>/<ServiceName>`, `accessors: true`.
+- Services: `ServiceMap.Service<...>()('@ai-toolkit/<package>/<ServiceName>', {make: ...})`.
 - Domain errors are yieldable. Never use `Effect.fail` for domain errors.
 
-## UI SYSTEM
+## UI
 
 - Theme file: `packages/components/src/theme.css` (brutalist shadcn).
 - High contrast, visible borders. No gradients, no glass, no decorative blur, no marketing cards.
 - Layout: strong structure, simple columns, strict spacing, scroll-first. Typography: size + weight + spacing hierarchy.
 - Use existing design tokens only. Never invent colors, tokens, or animations.
 - Compose shadcn primitives. Never reimplement them. Motion: minimal and functional.
+- Icons: prefer icons over text; choose the most recognizable icon from `lucide-react` or `@icons-pack/react-simple-icons` that fits the brutalist theme.
 - Never edit files in `packages/components/src/components/ui/`. 
 
 - Use the CLI:
