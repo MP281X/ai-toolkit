@@ -10,7 +10,10 @@ export const GitLive = GitContracts.toLayer(
 
 		return GitContracts.of({
 			'git.stagedDiffs': () => git.stagedDiffs,
-			'git.unstagedDiffs': () => git.unstagedDiffs
+			'git.unstagedDiffs': () => git.unstagedDiffs,
+			'git.stageFile': payload => git.stageFile(payload.filePath),
+			'git.unstageFile': payload => git.unstageFile(payload.filePath),
+			'git.discardFile': payload => git.discardFile(payload.filePath)
 		})
 	})
 )

@@ -7,25 +7,16 @@ import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/i
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
-import {Loading} from '@ai-toolkit/components/fallbacks'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {Suspense, useState} from 'react'
+import {useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 
-export const Route = createFileRoute('/(home)/')({
+export const Route = createFileRoute('/(home)/chat/')({
 	component: RouteComponent
 })
-
-function RouteComponent() {
-	return (
-		<Suspense fallback={<Loading />}>
-			<Session />
-		</Suspense>
-	)
-}
 
 const messagesAtom = Atom.keepAlive(
 	AtomRuntime.atom(
@@ -37,7 +28,7 @@ const messagesAtom = Atom.keepAlive(
 	)
 )
 
-function Session() {
+function RouteComponent() {
 	const {value: messages} = useAtomSuspense(messagesAtom)
 	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
 	const toolInteraction = useAtomSet(RpcClient.mutation('ai.tool'))

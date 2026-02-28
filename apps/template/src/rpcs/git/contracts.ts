@@ -11,5 +11,17 @@ export class GitContracts extends RpcGroup.make(
 	Rpc.make('git.unstagedDiffs', {
 		success: Schema.Array(GitDiff),
 		error: GitError
+	}),
+	Rpc.make('git.stageFile', {
+		payload: Schema.Struct({filePath: Schema.String}),
+		error: GitError
+	}),
+	Rpc.make('git.unstageFile', {
+		payload: Schema.Struct({filePath: Schema.String}),
+		error: GitError
+	}),
+	Rpc.make('git.discardFile', {
+		payload: Schema.Struct({filePath: Schema.String}),
+		error: GitError
 	})
 ) {}
