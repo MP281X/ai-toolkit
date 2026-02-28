@@ -8,11 +8,30 @@ const DIFF_CSS = `
 		--diffs-header-font-family: "JetBrains Mono Variable", monospace;
 		--diffs-font-size: 11px;
 		--diffs-line-height: 1.5;
-		--muted: light-dark(oklch(0.967 0.001 286.375), oklch(0.274 0.006 286.033));
-		--muted-hover: light-dark(oklch(0.92 0.004 286.32), oklch(0.35 0.006 286.033));
+		--muted: light-dark(oklch(0.967 0.001 286.375), oklch(0.25 0.006 286.033));
+		--border: light-dark(oklch(0.92 0.004 286.32), oklch(1 0 0 / 12%));
 		--add: light-dark(#16a34a, #22c55e);
 		--del: light-dark(#dc2626, #ef4444);
+		--diffs-gap-block: 0px;
+		--diffs-gap-inline: 0px;
+		--diffs-gap-fallback: 0px;
 		user-select: text;
+	}
+
+	pre {
+		--diffs-bg: light-dark(oklch(1 0 0), oklch(0.18 0.006 285.885)) !important;
+		background-color: transparent !important;
+		overflow-x: auto !important;
+	}
+
+	[data-code] {
+		padding-top: 0 !important;
+		padding-bottom: 0 !important;
+	}
+
+	[data-content-buffer],
+	[data-gutter-buffer] {
+		display: none !important;
 	}
 
 	[data-column-content],
@@ -20,15 +39,8 @@ const DIFF_CSS = `
 		user-select: text;
 	}
 
-	[data-diffs-header],
-	[data-diffs],
-	[data-diffs-wrapper],
-	[data-error-wrapper],
-	[data-line] {
-		background: transparent !important;
-		--diffs-bg: transparent !important;
-		padding: 0 !important;
-		margin: 0 !important;
+	[data-gutter] {
+		background: var(--muted) !important;
 	}
 
 	[data-column-number] {
@@ -37,6 +49,34 @@ const DIFF_CSS = `
 		left: 0 !important;
 		z-index: 1 !important;
 		user-select: none;
+	}
+
+	[data-separator='line-info'],
+	[data-separator='line-info-basic'],
+	[data-separator='metadata'] {
+		margin-block: 0 !important;
+		padding: 0 !important;
+	}
+
+	[data-separator-content],
+	[data-separator-wrapper],
+	[data-expand-button],
+	[data-separator-wrapper] [data-expand-up],
+	[data-separator-wrapper] [data-expand-down],
+	[data-separator-wrapper] [data-expand-both] {
+		border-radius: 0 !important;
+		overflow: visible !important;
+		background-clip: border-box !important;
+	}
+
+	[data-separator-wrapper] {
+		border-top: 1px solid var(--border) !important;
+		border-bottom: 1px solid var(--border) !important;
+		background: var(--muted) !important;
+	}
+
+	[data-expand-button] {
+		background: var(--muted) !important;
 	}
 
 	[data-line-type='change-addition'] [data-column-content] { background: color-mix(in srgb, var(--add) 8%, transparent) !important; }
@@ -48,16 +88,14 @@ const DIFF_CSS = `
 	}
 	[data-line-type='change-addition'] [data-column-number]::before { color: var(--add); }
 	[data-line-type='change-deletion'] [data-column-number]::before { color: var(--del); }
-
-	[data-separator='line-info'] [data-separator-wrapper], [data-expand-button], [data-separator-content] {
-		border-radius: 0 !important;
-	}
-
-	[data-expand-button], [data-separator-content] { background: var(--muted) !important; }
-	[data-expand-button]:hover { background: var(--muted-hover) !important; }
 `
 
-export function PatchDiff(props: {patch: string}) {
+export function PatchDiff(props: {
+	patch: string
+	onStage?: () => void
+	onUnstage?: () => void
+	onDiscard?: () => void
+}) {
 	return (
 		<Pierre.PatchDiff
 			patch={props.patch}
@@ -76,18 +114,14 @@ export function PatchDiff(props: {patch: string}) {
 	)
 }
 
-export function FileDiff(props: {filePath: string; old: string; new: string}) {
+export function FullFile(props: {filePath: string; content: string}) {
 	return (
-		<Pierre.MultiFileDiff
-			oldFile={{name: props.filePath, contents: props.old, lang: resolveLanguage(props.filePath)}}
-			newFile={{name: props.filePath, contents: props.new, lang: resolveLanguage(props.filePath)}}
+		<Pierre.File
+			file={{name: props.filePath, contents: props.content, lang: resolveLanguage(props.filePath)}}
 			options={{
 				overflow: 'scroll',
 				themeType: 'system',
 				unsafeCSS: DIFF_CSS,
-				lineDiffType: 'char',
-				diffStyle: 'unified',
-				diffIndicators: 'bars',
 				disableFileHeader: true,
 				theme: HIGHLIGHT_THEMES,
 				disableLineNumbers: false

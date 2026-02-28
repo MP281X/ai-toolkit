@@ -7,5 +7,7 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 
 export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 	filePath: Schema.String,
-	patch: Schema.String
+	patch: Schema.String,
+	old: Schema.String,
+	new: Schema.String
 }) {}
