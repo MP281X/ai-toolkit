@@ -1,4 +1,4 @@
-import {Array, Config, Effect, Layer, Match, Option, Predicate, pipe, Stream, SubscriptionRef} from 'effect'
+import {Array, Config, Effect, Layer, Match, Option, Predicate, pipe, Stream, String, SubscriptionRef} from 'effect'
 
 import {createAnthropic} from '@ai-sdk/anthropic'
 import {createOpenAI} from '@ai-sdk/openai'
@@ -6,68 +6,58 @@ import {createOpenAICompatible} from '@ai-sdk/openai-compatible'
 import {createOpenRouter} from '@openrouter/ai-sdk-provider'
 import {type TextStreamPart as AiSdkTextStreamPart, streamText, type ToolSet} from 'ai'
 
-import {type AdapterId, type ModelId, type ModelSelection, offerings, providers} from '../catalog.ts'
+import {type AdapterId, type ModelId, type ModelSelection, offerings, type ProviderId, providers} from '../catalog.ts'
 import type {ConversationMessage, StreamPart, ToolResponsePart, UserContentPart} from '../schema.ts'
 import {
 	AiError,
+	applyPartsStream,
 	ErrorPart,
 	FilePart,
 	Finish,
-	partsStreamToMessage,
+	partsStreamWithStartFinish,
 	ReasoningPart,
 	Start,
 	TextPart,
 	ToolApprovalRequestPart,
 	ToolCallPart,
 	ToolErrorPart,
-	ToolOutputDeniedPart,
 	ToolResultPart
 } from '../schema.ts'
-import {Agent, Model} from '../service.ts'
+import {Agent} from '../service.ts'
 import {questionToolSet} from '../tools/question.ts'
 import {webSearchToolSet} from '../tools/web-search.ts'
 
-function findProvider(providerId: ModelSelection['provider']) {
-	return Array.findFirst(providers, provider => provider.id === providerId)
-}
-
-function findOffering(selection: ModelSelection) {
-	return Array.findFirst(
-		offerings,
-		offering =>
-			Array.contains(offering.agents, 'ai') &&
-			offering.provider === selection.provider &&
-			offering.model === selection.model
+const ensureAiSdkModel = Effect.fnUntraced(function* (selection: ModelSelection) {
+	const provider = yield* pipe(
+		Array.findFirst(providers, provider => provider.id === selection.provider),
+		Option.match({
+			onSome: provider => Effect.succeed(provider),
+			onNone: () => new AiError({message: 'Provider not found'})
+		})
 	)
-}
+	const offering = yield* pipe(
+		Array.findFirst(
+			offerings,
+			offering =>
+				Array.contains(offering.agents, 'ai') &&
+				offering.provider === selection.provider &&
+				offering.model === selection.model
+		),
+		Option.match({
+			onSome: offering => Effect.succeed(offering),
+			onNone: () => new AiError({message: 'Model offering not found'})
+		})
+	)
+	if (Predicate.isUndefined(provider.apiKeyEnv)) {
+		return yield* new AiError({message: 'Provider config is invalid for ai-sdk'})
+	}
+	const apiKey = yield* pipe(
+		Config.string(provider.apiKeyEnv).asEffect(),
+		Effect.mapError(cause => new AiError({cause}))
+	)
 
-function ensureAiSdkModel(selection: ModelSelection) {
-	return Effect.gen(function* () {
-		const provider = yield* pipe(
-			findProvider(selection.provider),
-			Option.match({
-				onSome: provider => Effect.succeed(provider),
-				onNone: () => new AiError({message: 'Provider not found'})
-			})
-		)
-
-		if (!('baseUrl' in provider && 'apiKeyEnv' in provider)) {
-			return yield* new AiError({message: 'Provider config is invalid for ai-sdk'})
-		}
-
-		const offering = yield* pipe(
-			findOffering(selection),
-			Option.match({
-				onSome: offering => Effect.succeed(offering),
-				onNone: () => new AiError({message: 'Model offering not found'})
-			})
-		)
-
-		const apiKey = yield* Effect.mapError(Config.string(provider.apiKeyEnv).asEffect(), cause => new AiError({cause}))
-
-		return {selection, provider, offering, apiKey}
-	})
-}
+	return {provider, offering, apiKey}
+})
 
 function toLanguageModel(runtime: {
 	provider: {baseUrl: string}
@@ -89,65 +79,89 @@ function conversationMessageToSdk(message: ConversationMessage) {
 	if (message.role === 'system') {
 		return {
 			role: 'system' as const,
-			content: message.parts
-				.filter(part => part._tag === 'text-part')
-				.map(part => part.text)
-				.join('\n')
+			content: pipe(
+				Array.filter(message.parts, part => part._tag === 'text-part'),
+				Array.map(part => part.text),
+				Array.join('\n')
+			)
 		}
 	}
 
 	if (message.role === 'user') {
-		const textParts = message.parts
-			.filter(part => part._tag === 'text-part')
-			.map(part => ({type: 'text' as const, text: part.text}))
-		const fileParts = message.parts
-			.filter(part => part._tag === 'file-part')
-			.map(part => ({type: 'file' as const, data: part.data, mediaType: part.mediaType, filename: part.filename}))
-
-		return {role: 'user' as const, content: [...textParts, ...fileParts]}
+		return {
+			role: 'user' as const,
+			content: [
+				...pipe(
+					Array.filter(message.parts, part => part._tag === 'text-part'),
+					Array.map(part => ({type: 'text' as const, text: part.text}))
+				),
+				...pipe(
+					Array.filter(message.parts, part => part._tag === 'file-part'),
+					Array.map(part => ({
+						type: 'file' as const,
+						data: part.data,
+						mediaType: part.mediaType,
+						filename: part.filename
+					}))
+				)
+			]
+		}
 	}
 
 	if (message.role === 'assistant') {
-		const textParts = message.parts
-			.filter(part => part._tag === 'text-part')
-			.map(part => ({type: 'text' as const, text: part.text}))
-		const toolCalls = message.parts
-			.filter(part => part._tag === 'tool-call')
-			.map(part => ({
-				type: 'tool-call' as const,
-				toolCallId: part.toolCallId,
-				toolName: part.toolName,
-				input: part.input
-			}))
-		const approvalRequests = message.parts
-			.filter(part => part._tag === 'tool-approval-request')
-			.map(part => ({type: 'tool-approval-request' as const, approvalId: part.approvalId, toolCallId: part.toolCallId}))
-
-		return {role: 'assistant' as const, content: [...textParts, ...toolCalls, ...approvalRequests]}
+		return {
+			role: 'assistant' as const,
+			content: [
+				...pipe(
+					Array.filter(message.parts, part => part._tag === 'text-part'),
+					Array.map(part => ({type: 'text' as const, text: part.text}))
+				),
+				...pipe(
+					Array.filter(message.parts, part => part._tag === 'tool-call'),
+					Array.map(part => ({
+						type: 'tool-call' as const,
+						toolCallId: part.toolCallId,
+						toolName: part.toolName,
+						input: part.input
+					}))
+				),
+				...pipe(
+					Array.filter(message.parts, part => part._tag === 'tool-approval-request'),
+					Array.map(part => ({
+						type: 'tool-approval-request' as const,
+						approvalId: part.approvalId,
+						toolCallId: part.toolCallId
+					}))
+				)
+			]
+		}
 	}
 
-	const toolResults = message.parts
-		.filter(part => part._tag === 'tool-result-response')
-		.map(part => ({
-			type: 'tool-result' as const,
-			toolCallId: part.toolCallId,
-			toolName: part.toolName,
-			output: {
-				type: 'text' as const,
-				value: typeof part.output === 'string' ? part.output : JSON.stringify(part.output)
-			}
-		}))
-	const approvalResponses = message.parts
-		.filter(part => part._tag === 'tool-approval-response')
-		.map(part => ({
-			type: 'tool-approval-response' as const,
-			approvalId: part.approvalId,
-			approved: part.approved,
-			reason: part.reason,
-			providerExecuted: part.providerExecuted
-		}))
-
-	return {role: 'tool' as const, content: [...toolResults, ...approvalResponses]}
+	return {
+		role: 'tool' as const,
+		content: [
+			...pipe(
+				Array.filter(message.parts, part => part._tag === 'tool-result'),
+				Array.map(part => ({
+					type: 'tool-result' as const,
+					toolCallId: part.toolCallId,
+					toolName: part.toolName,
+					output: {
+						type: 'text' as const,
+						value: String.isString(part.output) ? part.output : JSON.stringify(part.output)
+					}
+				}))
+			),
+			...pipe(
+				Array.filter(message.parts, part => part._tag === 'tool-approval-response'),
+				Array.map(part => ({
+					type: 'tool-approval-response' as const,
+					approvalId: part.approvalId,
+					approved: part.approved
+				}))
+			)
+		]
+	}
 }
 
 function aiPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
@@ -162,29 +176,25 @@ function aiPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 			return new ToolCallPart({toolCallId: part.toolCallId, toolName: part.toolName, input: part.input})
 		case 'tool-approval-request':
 			return new ToolApprovalRequestPart({approvalId: part.approvalId, toolCallId: part.toolCall.toolCallId})
-		case 'tool-output-denied':
-			return new ToolOutputDeniedPart({toolCallId: part.toolCallId, toolName: part.toolName})
 		case 'tool-result':
 			return new ToolResultPart({
 				toolCallId: part.toolCallId,
 				toolName: part.toolName,
-				input: part.input,
 				output: part.output
 			})
 		case 'tool-error':
 			return new ToolErrorPart({
 				toolCallId: part.toolCallId,
 				toolName: part.toolName,
-				input: part.input,
 				error: part.error
 			})
 		case 'finish':
 			return new Finish({
 				finishReason: part.finishReason,
 				usage: {
-					input: part.totalUsage?.inputTokens ?? 0,
-					output: part.totalUsage?.outputTokenDetails?.textTokens ?? 0,
-					reasoning: part.totalUsage?.outputTokenDetails?.reasoningTokens ?? 0
+					input: part.totalUsage.inputTokens ?? 0,
+					output: part.totalUsage.outputTokenDetails.textTokens ?? 0,
+					reasoning: part.totalUsage.outputTokenDetails.reasoningTokens ?? 0
 				}
 			})
 		case 'error':
@@ -194,22 +204,12 @@ function aiPartToStreamPart(part: AiSdkTextStreamPart<ToolSet>) {
 	}
 }
 
-function zeroUsage() {
-	return {input: 0, output: 0, reasoning: 0}
-}
-
 function userStream(selection: ModelSelection, parts: readonly UserContentPart[]) {
-	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'user'})),
-		Stream.concat(Stream.fromIterable(parts), Stream.succeed(new Finish({finishReason: 'stop', usage: zeroUsage()})))
-	)
+	return partsStreamWithStartFinish(selection, 'user', parts)
 }
 
 function toolStream(selection: ModelSelection, parts: readonly ToolResponsePart[]) {
-	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'tool'})),
-		Stream.concat(Stream.fromIterable(parts), Stream.succeed(new Finish({finishReason: 'stop', usage: zeroUsage()})))
-	)
+	return partsStreamWithStartFinish(selection, 'tool', parts)
 }
 
 function assistantStream(
@@ -221,7 +221,7 @@ function assistantStream(
 	const {fullStream} = streamText({model: languageModel, messages, tools})
 
 	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'assistant'})),
+		Stream.succeed(new Start({model: selection, role: 'assistant'})),
 		pipe(
 			Stream.fromAsyncIterable<AiSdkTextStreamPart<ToolSet>, AiError>(fullStream, cause => new AiError({cause})),
 			Stream.map(aiPartToStreamPart),
@@ -230,43 +230,11 @@ function assistantStream(
 	)
 }
 
-function upsertMessage(messages: ConversationMessage[], message: ConversationMessage) {
-	const previous = messages[messages.length - 1]
-	if (!previous) return [...messages, message]
-	if (previous.startedAt !== message.startedAt || previous.role !== message.role) return [...messages, message]
-	return [...messages.slice(0, -1), message]
-}
-
-function applyStream(
-	events: SubscriptionRef.SubscriptionRef<StreamPart | undefined>,
-	history: SubscriptionRef.SubscriptionRef<ConversationMessage[]>,
-	stream: Stream.Stream<StreamPart, AiError>
-) {
-	return pipe(
-		stream,
-		Stream.mapEffect(part => pipe(SubscriptionRef.set(events, part), Effect.as(part))),
-		partsStreamToMessage,
-		Stream.mapEffect(message => SubscriptionRef.update(history, current => upsertMessage(current, message))),
-		Stream.runDrain
-	)
-}
-
-export const AiSdkModel = {
-	layer: (input: ModelSelection) =>
-		Layer.effect(
-			Model,
-			Effect.gen(function* () {
-				yield* ensureAiSdkModel(input)
-				return input
-			})
-		)
-}
-
-export const AiSdkAgent = {
-	layer: Layer.effect(
+export function AiSdkAgentLayer(input: {provider: ProviderId; model: ModelId}) {
+	return Layer.effect(
 		Agent,
-		Effect.gen(function* () {
-			const selection = yield* Model
+		Effect.fnUntraced(function* () {
+			const selection: ModelSelection = {agent: 'ai', provider: input.provider, model: input.model}
 			const runtime = yield* ensureAiSdkModel(selection)
 			const languageModel = toLanguageModel(runtime)
 			const tools = {
@@ -275,35 +243,29 @@ export const AiSdkAgent = {
 			}
 			const events = yield* SubscriptionRef.make<StreamPart | undefined>(undefined)
 			const history = yield* SubscriptionRef.make<ConversationMessage[]>([])
+			const runAssistant = Effect.fnUntraced(function* () {
+				const messages = yield* SubscriptionRef.get(history)
+				yield* applyPartsStream(
+					events,
+					history,
+					assistantStream(selection, languageModel, pipe(messages, Array.map(conversationMessageToSdk)), tools)
+				)
+			})
 
-			return {
-				prompt: Effect.fn(function* (parts) {
-					yield* applyStream(events, history, userStream(selection, parts))
-					const messages = yield* SubscriptionRef.get(history)
-					yield* applyStream(
-						events,
-						history,
-						assistantStream(selection, languageModel, messages.map(conversationMessageToSdk), tools)
-					)
+			return Agent.of({
+				prompt: Effect.fnUntraced(function* (parts) {
+					yield* applyPartsStream(events, history, userStream(selection, parts))
+					yield* runAssistant()
 				}),
-				respond: Effect.fn(function* (parts) {
-					const messagesBefore = yield* SubscriptionRef.get(history)
-					if (Array.isArrayEmpty(messagesBefore)) return yield* new AiError({message: 'No active session'})
-					yield* applyStream(events, history, toolStream(selection, parts))
+				respond: Effect.fnUntraced(function* (part) {
 					const messages = yield* SubscriptionRef.get(history)
-					yield* applyStream(
-						events,
-						history,
-						assistantStream(selection, languageModel, messages.map(conversationMessageToSdk), tools)
-					)
+					if (Array.isArrayEmpty(messages)) return yield* new AiError({message: 'No active session'})
+					yield* applyPartsStream(events, history, toolStream(selection, [part]))
+					yield* runAssistant()
 				}),
 				stream: pipe(SubscriptionRef.changes(events), Stream.filter(Predicate.isNotUndefined)),
-				history: SubscriptionRef.changes(history),
-				reset: Effect.gen(function* () {
-					yield* SubscriptionRef.set(history, [])
-					yield* SubscriptionRef.set(events, undefined)
-				})
-			}
-		})
+				history: SubscriptionRef.changes(history)
+			})
+		})()
 	)
 }

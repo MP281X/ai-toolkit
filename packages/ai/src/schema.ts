@@ -1,4 +1,4 @@
-import {Predicate, pipe, Schema, Stream} from 'effect'
+import {Array, Option, Predicate, pipe, Schema, Stream, SubscriptionRef} from 'effect'
 
 import {ModelSelection} from './catalog.ts'
 
@@ -36,24 +36,10 @@ export class ToolApprovalRequestPart extends Schema.TaggedClass<ToolApprovalRequ
 
 export class ToolApprovalResponsePart extends Schema.TaggedClass<ToolApprovalResponsePart>()('tool-approval-response', {
 	approvalId: Schema.String,
-	approved: Schema.Boolean,
-	reason: Schema.optional(Schema.String),
-	providerExecuted: Schema.optional(Schema.Boolean)
-}) {}
-
-export class ToolOutputDeniedPart extends Schema.TaggedClass<ToolOutputDeniedPart>()('tool-output-denied', {
-	toolCallId: Schema.String,
-	toolName: Schema.String
+	approved: Schema.Boolean
 }) {}
 
 export class ToolResultPart extends Schema.TaggedClass<ToolResultPart>()('tool-result', {
-	toolCallId: Schema.String,
-	toolName: Schema.String,
-	input: Schema.Unknown,
-	output: Schema.Unknown
-}) {}
-
-export class ToolResultResponsePart extends Schema.TaggedClass<ToolResultResponsePart>()('tool-result-response', {
 	toolCallId: Schema.String,
 	toolName: Schema.String,
 	output: Schema.Unknown
@@ -62,7 +48,6 @@ export class ToolResultResponsePart extends Schema.TaggedClass<ToolResultRespons
 export class ToolErrorPart extends Schema.TaggedClass<ToolErrorPart>()('tool-error', {
 	toolCallId: Schema.String,
 	toolName: Schema.String,
-	input: Schema.Unknown,
 	error: Schema.Unknown
 }) {}
 
@@ -74,7 +59,7 @@ export type UserContentPart = typeof UserContentPart.Type
 export const UserContentPart = Schema.Union([TextPart, FilePart])
 
 export type ToolResponsePart = typeof ToolResponsePart.Type
-export const ToolResponsePart = Schema.Union([ToolResultResponsePart, ToolApprovalResponsePart])
+export const ToolResponsePart = Schema.Union([ToolResultPart, ToolApprovalResponsePart])
 
 export type ContentPart = typeof ContentPart.Type
 export const ContentPart = Schema.Union([
@@ -84,22 +69,26 @@ export const ContentPart = Schema.Union([
 	ToolCallPart,
 	ToolApprovalRequestPart,
 	ToolApprovalResponsePart,
-	ToolOutputDeniedPart,
 	ToolResultPart,
-	ToolResultResponsePart,
 	ToolErrorPart,
 	ErrorPart
 ])
 
 export class Start extends Schema.TaggedClass<Start>()('start', {
 	model: ModelSelection,
-	startedAt: Schema.Number,
+	startedAt: Schema.Number.pipe(Schema.withConstructorDefault(() => Option.some(Date.now()))),
 	role: Schema.Literals(['user', 'assistant', 'system', 'tool'])
 }) {}
 
 export class Finish extends Schema.TaggedClass<Finish>()('finish', {
-	finishReason: Schema.Literals(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other']),
-	usage: Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number})
+	finishReason: pipe(
+		Schema.Literals(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other']),
+		Schema.withConstructorDefault(() => Option.some('stop' as const))
+	),
+	usage: pipe(
+		Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number}),
+		Schema.withConstructorDefault(() => Option.some({input: 0, output: 0, reasoning: 0}))
+	)
 }) {}
 
 export type StreamPart = typeof StreamPart.Type
@@ -107,24 +96,18 @@ export const StreamPart = Schema.Union([Start, ContentPart, Finish])
 
 export class ConversationMessage extends Schema.Class<ConversationMessage>('ConversationMessage')({
 	model: ModelSelection,
-	startedAt: Schema.Number,
+	startedAt: Start.fields.startedAt,
 	role: Start.fields.role,
 	parts: Schema.Array(ContentPart),
-	finishReason: Schema.optional(Finish.fields.finishReason),
-	usage: Schema.optional(Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number}))
+	finishReason: Finish.fields.finishReason,
+	usage: Finish.fields.usage
 }) {}
 
-function appendPart(parts: readonly ContentPart[], part: ContentPart) {
-	const lastPart = parts[parts.length - 1]
-	if (part._tag === 'text-part' && lastPart?._tag === 'text-part' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), new TextPart({id: part.id, text: lastPart.text + part.text})]
-	}
-
-	if (part._tag === 'reasoning-part' && lastPart?._tag === 'reasoning-part' && lastPart.id === part.id) {
-		return [...parts.slice(0, -1), new ReasoningPart({id: part.id, text: lastPart.text + part.text})]
-	}
-
-	return [...parts, part]
+export function upsertConversationMessage(messages: readonly ConversationMessage[], message: ConversationMessage) {
+	const previous = messages[messages.length - 1]
+	if (Predicate.isUndefined(previous)) return Array.append(messages, message)
+	if (previous.startedAt !== message.startedAt || previous.role !== message.role) return [...messages, message]
+	return [...messages.slice(0, -1), message]
 }
 
 export function partsStreamToMessage<E, R>(stream: Stream.Stream<StreamPart, E, R>) {
@@ -140,8 +123,54 @@ export function partsStreamToMessage<E, R>(stream: Stream.Stream<StreamPart, E, 
 			}
 
 			if (Predicate.isUndefined(current)) return current
-			return new ConversationMessage({...current, parts: appendPart(current.parts, part)})
+
+			if (part._tag === 'text-part') {
+				const lastPart = current.parts[current.parts.length - 1]
+				if (lastPart?._tag === 'text-part' && lastPart.id === part.id)
+					return new ConversationMessage({
+						...current,
+						parts: [...current.parts.slice(0, -1), new TextPart({id: part.id, text: lastPart.text + part.text})]
+					})
+			}
+
+			if (part._tag === 'reasoning-part') {
+				const lastPart = current.parts[current.parts.length - 1]
+				if (lastPart?._tag === 'reasoning-part' && lastPart.id === part.id)
+					return new ConversationMessage({
+						...current,
+						parts: [...current.parts.slice(0, -1), new ReasoningPart({id: part.id, text: lastPart.text + part.text})]
+					})
+			}
+
+			return new ConversationMessage({...current, parts: Array.append(current.parts, part)})
 		}),
 		Stream.filter(Predicate.isNotUndefined)
+	)
+}
+
+export function partsStreamWithStartFinish(
+	selection: ModelSelection,
+	role: Start['role'],
+	parts: readonly StreamPart[]
+) {
+	return Stream.concat(
+		Stream.succeed(new Start({model: selection, role})),
+		Stream.concat(Stream.fromIterable(parts), Stream.succeed(new Finish({})))
+	)
+}
+
+export function applyPartsStream<E, R>(
+	events: SubscriptionRef.SubscriptionRef<StreamPart | undefined>,
+	history: SubscriptionRef.SubscriptionRef<ConversationMessage[]>,
+	stream: Stream.Stream<StreamPart, E, R>
+) {
+	return pipe(
+		stream,
+		Stream.tap(part => SubscriptionRef.set(events, part)),
+		partsStreamToMessage,
+		Stream.mapEffect(message =>
+			SubscriptionRef.update(history, current => upsertConversationMessage(current, message))
+		),
+		Stream.runDrain
 	)
 }
