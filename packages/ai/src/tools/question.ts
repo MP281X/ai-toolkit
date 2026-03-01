@@ -1,29 +1,30 @@
-import {Effect} from 'effect'
+import {Effect, Schema} from 'effect'
 
 import {type ToolSet, tool} from 'ai'
-import {z} from 'zod'
 
 export const questionToolSet = Effect.succeed({
 	question: tool({
 		description: 'Ask the user a list of questions and collect responses.',
-		inputSchema: z.object({
-			questions: z
-				.array(
-					z.object({
-						header: z.string().min(1),
-						question: z.string().min(1),
-						options: z
-							.array(
-								z.object({
-									label: z.string().min(1),
-									description: z.string().optional()
-								})
-							)
-							.optional(),
-						multiple: z.boolean().optional()
-					})
-				)
-				.min(1)
-		})
+		inputSchema: Schema.toStandardSchemaV1(
+			Schema.toStandardJSONSchemaV1(
+				Schema.Struct({
+					questions: Schema.NonEmptyArray(
+						Schema.Struct({
+							header: Schema.NonEmptyString,
+							question: Schema.NonEmptyString,
+							options: Schema.optional(
+								Schema.NonEmptyArray(
+									Schema.Struct({
+										label: Schema.NonEmptyString,
+										description: Schema.optional(Schema.NonEmptyString)
+									})
+								)
+							),
+							multiple: Schema.optional(Schema.Boolean)
+						})
+					)
+				})
+			)
+		)
 	})
 } satisfies ToolSet)

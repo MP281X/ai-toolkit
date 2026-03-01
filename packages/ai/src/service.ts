@@ -6,17 +6,17 @@ import type {ModelSelection} from './catalog.ts'
 import {
 	AiError,
 	type ConversationMessage,
-	type StreamPart,
-	type ToolResponsePart,
-	type UserContentPart
+	type MessageStreamPart,
+	type ToolMessagePart,
+	type UserMessagePart
 } from './schema.ts'
 
 export class Agent extends ServiceMap.Service<
 	Agent,
 	{
-		prompt: (parts: readonly UserContentPart[]) => Effect.Effect<void, AiError>
-		respond: (part: ToolResponsePart) => Effect.Effect<void, AiError>
-		stream: Stream.Stream<StreamPart>
+		prompt: (parts: readonly UserMessagePart[]) => Effect.Effect<void, AiError>
+		respond: (part: ToolMessagePart) => Effect.Effect<void, AiError>
+		stream: Stream.Stream<MessageStreamPart>
 		history: Stream.Stream<ConversationMessage[]>
 	}
 >()('@ai-toolkit/ai/Agent') {

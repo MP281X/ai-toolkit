@@ -22,8 +22,10 @@ export function formatError(error: unknown) {
 				Array.join('\n')
 			)
 		),
-		Match.when(Predicate.isString, string => string),
 		Match.when(Predicate.hasProperty('message'), error => globalThis.String(error.message)),
+		Match.when(Predicate.isString, string => string),
+		Match.when(Predicate.isNullish, () => 'Error'),
+		Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, null, 2)),
 		Match.orElse(() => 'Unknown Error')
 	)
 }

@@ -1,5 +1,5 @@
-import type {TextPart as TextDeltaPart} from '@ai-toolkit/ai/schema'
+import type {TextPart} from '@ai-toolkit/ai/schema'
 
-export function TextDelta(props: TextDeltaPart) {
+export function TextDelta(props: TextPart) {
 	return <span className="whitespace-pre-wrap">{props.text}</span>
 }

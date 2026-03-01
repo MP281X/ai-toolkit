@@ -1,104 +1,89 @@
-import {Array} from 'effect'
+/** biome-ignore-all lint/suspicious/noArrayIndexKey: question keys */
+import {Array, Predicate} from 'effect'
 
-import {
-	type ToolApprovalRequestPart,
-	ToolApprovalResponsePart,
-	type ToolCallPart,
-	type ToolResponsePart,
-	ToolResultPart
-} from '@ai-toolkit/ai/schema'
-import {CheckCircleIcon, ChevronRightIcon, HelpCircleIcon, WrenchIcon} from 'lucide-react'
+import {type ToolCallPart, type ToolMessagePart, ToolResultPart} from '@ai-toolkit/ai/schema'
+import {CheckCircleIcon, ChevronRightIcon, HelpCircleIcon, SearchIcon, WrenchIcon} from 'lucide-react'
 import {useState} from 'react'
 
+import {Badge} from '#components/ui/badge.tsx'
 import {Button} from '#components/ui/button.tsx'
 import {Checkbox} from '#components/ui/checkbox.tsx'
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '#components/ui/collapsible.tsx'
 import {Input} from '#components/ui/input.tsx'
 import {RadioGroup, RadioGroupItem} from '#components/ui/radio-group.tsx'
 import {Textarea} from '#components/ui/textarea.tsx'
 
 type QuestionOption = {label: string; description?: string}
+type QuestionItem = {header?: string; question?: string; options?: QuestionOption[]; multiple?: boolean}
 
-export function ToolInteraction(props: {
-	part: ToolCallPart | ToolApprovalRequestPart
-	onResponse?: (response: ToolResponsePart) => void
-}) {
-	if (props.part._tag === 'tool-call') {
-		if (props.part.toolName !== 'question') return <ToolCallView part={props.part} />
-		return <QuestionTool part={props.part} onResponse={props.onResponse} />
+export function ToolInteraction(props: {part: ToolCallPart; onResponse?: (response: ToolMessagePart) => void}) {
+	switch (props.part.toolName) {
+		case 'question':
+			return <QuestionTool part={props.part} onResponse={props.onResponse} />
+		case 'web_search':
+			return <WebSearchTool part={props.part} />
+		default:
+			return <DefaultToolCall part={props.part} />
 	}
-
-	return <ToolApproval part={props.part} onResponse={props.onResponse} />
 }
 
-function ToolCallView(props: {part: ToolCallPart}) {
-	return (
-		<details className="group border border-border">
-			<summary className="flex w-full list-none items-center gap-1.5 bg-muted/40 px-3 py-1.5 text-left font-medium text-[11px] uppercase leading-none tracking-wide [&::-webkit-details-marker]:hidden [&::marker]:hidden">
-				<ChevronRightIcon className="size-3 -translate-y-px text-muted-foreground transition-transform group-open:rotate-90" />
-				<WrenchIcon className="size-3 -translate-y-px text-muted-foreground" />
+function DefaultToolCall(props: {part: ToolCallPart}) {
+	if (Predicate.isNullish(props.part.input)) {
+		return (
+			<div className="flex items-center gap-1.5 border border-border bg-muted/40 px-3 py-1.5 text-[11px] uppercase leading-none tracking-wide">
+				<WrenchIcon className="size-3 text-muted-foreground" />
 				<span className="text-foreground">{props.part.toolName}</span>
-			</summary>
-			<pre className="overflow-x-auto border-border border-t px-3 py-1.5 font-mono text-[11px] text-muted-foreground leading-snug">
-				{JSON.stringify(props.part.input, null, 2)}
-			</pre>
-		</details>
+			</div>
+		)
+	}
+
+	return (
+		<Collapsible className="border border-border">
+			<CollapsibleTrigger className="group/collapsible flex w-full items-center gap-1.5 bg-muted/40 px-3 py-1.5 text-[11px] uppercase leading-none tracking-wide">
+				<ChevronRightIcon className="size-3 text-muted-foreground transition-transform group-aria-expanded/collapsible:rotate-90" />
+				<WrenchIcon className="size-3 text-muted-foreground" />
+				<span className="text-foreground">{props.part.toolName}</span>
+			</CollapsibleTrigger>
+			<CollapsibleContent>
+				<pre className="overflow-x-auto border-border border-t px-3 py-1.5 font-mono text-[11px] text-muted-foreground leading-snug">
+					{JSON.stringify(props.part.input, null, 2)}
+				</pre>
+			</CollapsibleContent>
+		</Collapsible>
 	)
 }
 
-function ToolApproval(props: {part: ToolApprovalRequestPart; onResponse?: (response: ToolResponsePart) => void}) {
+function WebSearchTool(props: {part: ToolCallPart}) {
+	const query = (props.part.input as {query?: string} | null)?.query
 	return (
-		<div className="flex items-start gap-2 border border-border bg-muted/40 px-3 py-2 text-xs">
-			<HelpCircleIcon className="mt-0.5 size-3.5 text-muted-foreground" />
-			<div className="flex-1 space-y-2">
-				<div className="font-semibold text-[11px] uppercase tracking-wide">Approval required</div>
-				<div className="text-[11px] text-muted-foreground">Tool call: {props.part.toolCallId}</div>
-				<div className="flex items-center gap-2">
-					<Button
-						size="xs"
-						variant="outline"
-						onClick={() =>
-							props.onResponse?.({
-								_tag: 'tool-approval-response',
-								approvalId: props.part.approvalId,
-								approved: true
-							})
-						}
-					>
-						Allow
-					</Button>
-					<Button
-						size="xs"
-						variant="outline"
-						onClick={() => {
-							props.onResponse?.(
-								new ToolApprovalResponsePart({
-									approvalId: props.part.approvalId,
-									approved: false
-								})
-							)
-						}}
-					>
-						Deny
-					</Button>
-				</div>
-			</div>
+		<div className="flex items-center gap-1.5 border border-border bg-muted/40 px-3 py-1.5 text-[11px] leading-none">
+			<SearchIcon className="size-3 shrink-0 text-muted-foreground" />
+			<span className="font-medium text-foreground uppercase tracking-wide">web_search</span>
+			{query && <span className="truncate text-muted-foreground">{query}</span>}
 		</div>
 	)
 }
 
-function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolResponsePart) => void}) {
-	const data = props.part.input as {
-		questions?: ReadonlyArray<{header?: string; question?: string; options?: QuestionOption[]; multiple?: boolean}>
-	}
-	const questions = data.questions ?? []
+function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolMessagePart) => void}) {
+	const questions: readonly QuestionItem[] = (props.part.input as {questions?: QuestionItem[]} | null)?.questions ?? []
+	const [submitted, setSubmitted] = useState(false)
 	const [responses, setResponsesEntry, setSingleResponse, setResponsesFromText] = useQuestionState(questions)
 
-	if (Array.isReadonlyArrayEmpty(questions)) return <ToolCallView part={props.part} />
+	if (Array.isReadonlyArrayEmpty(questions)) return <DefaultToolCall part={props.part} />
+
+	if (submitted) {
+		return (
+			<div className="flex items-center gap-2 border border-border bg-muted/40 px-3 py-1.5 text-[11px] leading-none">
+				<CheckCircleIcon className="size-3 text-primary" />
+				<Badge variant="secondary">answered</Badge>
+			</div>
+		)
+	}
 
 	return (
-		<div className="space-y-3 border border-border bg-muted/20 px-3 py-2">
-			<div className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
-				<HelpCircleIcon className="size-3.5" />
+		<div className="space-y-3 border border-border px-3 py-2">
+			<div className="flex items-center gap-1.5 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
+				<HelpCircleIcon className="size-3" />
 				Questions
 			</div>
 			<div className="space-y-3">
@@ -107,7 +92,7 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 						<div className="font-semibold text-xs uppercase tracking-wide">
 							{question.header ?? `Question ${index + 1}`}
 						</div>
-						{question.question ? <div className="text-muted-foreground text-xs">{question.question}</div> : null}
+						{question.question && <div className="text-muted-foreground text-xs">{question.question}</div>}
 						{question.options && question.options.length > 0 ? (
 							question.multiple ? (
 								<div className="space-y-2">
@@ -120,9 +105,9 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 											/>
 											<div className="space-y-0.5">
 												<div className="font-medium">{option.label}</div>
-												{option.description ? (
+												{option.description && (
 													<div className="text-[11px] text-muted-foreground">{option.description}</div>
-												) : null}
+												)}
 											</div>
 										</div>
 									))}
@@ -144,7 +129,7 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 							)
 						) : (
 							<Input
-								value={responses[index]?.[0]}
+								value={responses[index]?.[0] ?? ''}
 								onChange={event => setSingleResponse(index, event.currentTarget.value)}
 								placeholder="Type your answer"
 							/>
@@ -160,15 +145,12 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 					</div>
 				))}
 			</div>
-			<div className="flex items-center justify-between border-border/60 border-t pt-2">
-				<div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-					<CheckCircleIcon className="size-3" />
-					Responses ready
-				</div>
+			<div className="flex items-center justify-end border-border/60 border-t pt-2">
 				<Button
 					size="xs"
 					variant="outline"
 					onClick={() => {
+						setSubmitted(true)
 						props.onResponse?.(
 							new ToolResultPart({
 								toolCallId: props.part.toolCallId,
