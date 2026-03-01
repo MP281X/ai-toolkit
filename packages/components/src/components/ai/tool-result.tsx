@@ -1,9 +1,9 @@
-import type {ToolError, ToolResult as ToolResultSchema} from '@ai-toolkit/ai/schema'
+import type {ToolErrorPart, ToolResultPart} from '@ai-toolkit/ai/schema'
 import {AlertTriangleIcon, CheckCircleIcon, ChevronRightIcon} from 'lucide-react'
 
 import {cn, formatError} from '#lib/utils.ts'
 
-export function ToolResult(props: ToolResultSchema | ToolError) {
+export function ToolResult(props: ToolResultPart | ToolErrorPart) {
 	const isError = props._tag === 'tool-error'
 	const StatusIcon = isError ? AlertTriangleIcon : CheckCircleIcon
 

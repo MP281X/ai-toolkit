@@ -1,4 +1,4 @@
-import {catalog, type ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {type ModelId, offerings, type ProviderId, providers} from '@ai-toolkit/ai/catalog'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {
 	Command,
@@ -33,7 +33,10 @@ export namespace ModelSelector {
 
 export function ModelSelector(props: ModelSelector.Props) {
 	const [open, setOpen] = useState(false)
-	const groups = ProviderId.literals.map(provider => ({provider, models: catalog[provider].models}))
+	const groups = providers.map(provider => ({
+		provider: provider.id,
+		models: offerings.filter(o => o.provider === provider.id)
+	}))
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -52,16 +55,16 @@ export function ModelSelector(props: ModelSelector.Props) {
 						{groups.map(group => (
 							<CommandGroup key={group.provider} heading={group.provider}>
 								{group.models.map(pm => {
-									const key = `${group.provider}:${pm.id}`
-									const isSelected = props.model.provider === group.provider && props.model.model === pm.id
-									const name = formatModelName(pm.id)
+									const key = `${group.provider}:${pm.model}`
+									const isSelected = props.model.provider === group.provider && props.model.model === pm.model
+									const name = formatModelName(pm.model)
 									return (
 										<CommandItem
 											key={key}
 											value={key}
-											keywords={[pm.id, group.provider, name]}
+											keywords={[pm.model, group.provider, name]}
 											onSelect={() => {
-												props.onModelChange({provider: group.provider, model: pm.id})
+												props.onModelChange({provider: group.provider, model: pm.model})
 												setOpen(false)
 											}}
 										>

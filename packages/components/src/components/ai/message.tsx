@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
 
-import type {ConversationMessage, ToolContent} from '@ai-toolkit/ai/schema'
+import type {ConversationMessage, ToolResponsePart} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, UserIcon} from 'lucide-react'
 
 import {Attachment} from '#components/ai/attachment.tsx'
@@ -11,7 +11,7 @@ import {ToolResult} from '#components/ai/tool-result.tsx'
 import {Markdown} from '#components/render/markdown.tsx'
 import {cn, formatRelativeTime, formatTokens} from '#lib/utils.ts'
 
-export function Message(props: ConversationMessage & {onToolResponse?: (response: ToolContent) => void}) {
+export function Message(props: ConversationMessage & {onToolResponse?: (response: ToolResponsePart) => void}) {
 	return (
 		<article className="flex items-start gap-2">
 			<div

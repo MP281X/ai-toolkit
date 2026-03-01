@@ -38,7 +38,7 @@ function FileIcon(props: {filePath: string; className?: string}) {
 
 function FileEntry(props: {
 	filePath: string
-	patch: string
+	old: string
 	next: string
 	onStage?: () => void
 	onUnstage?: () => void
@@ -133,7 +133,9 @@ function FileEntry(props: {
 				<div className="border-t bg-background">
 					{view === 'diff' ? (
 						<PatchDiff
-							patch={props.patch}
+							filePath={props.filePath}
+							old={props.old}
+							new={props.next}
 							onStage={props.onStage}
 							onUnstage={props.onUnstage}
 							onDiscard={props.onDiscard}
@@ -149,7 +151,7 @@ function FileEntry(props: {
 
 function GitSection(props: {
 	label: string
-	diffs: readonly {filePath: string; patch: string; new: string}[]
+	diffs: readonly {filePath: string; old: string; new: string}[]
 	onStage?: (filePath: string) => void
 	onUnstage?: (filePath: string) => void
 	onDiscard?: (filePath: string) => void
@@ -170,7 +172,7 @@ function GitSection(props: {
 						<FileEntry
 							key={diff.filePath}
 							filePath={diff.filePath}
-							patch={diff.patch}
+							old={diff.old}
 							next={diff.new}
 							onStage={props.onStage != null ? () => props.onStage?.(diff.filePath) : undefined}
 							onUnstage={props.onUnstage != null ? () => props.onUnstage?.(diff.filePath) : undefined}

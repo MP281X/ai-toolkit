@@ -3,7 +3,7 @@ import {flow, Match} from 'effect'
 import {getSharedHighlighter} from '@pierre/diffs'
 
 export const HIGHLIGHT_THEMES = {light: 'github-light-default', dark: 'github-dark-default'} as const
-export const HIGHLIGHT_LANGS = ['tsx', 'shell', 'markdown', 'diff'] as const
+export const HIGHLIGHT_LANGS = ['tsx', 'shell', 'markdown', 'diff', 'jsonc'] as const
 
 const highlighter = await getSharedHighlighter({
 	themes: [HIGHLIGHT_THEMES.light, HIGHLIGHT_THEMES.dark],
@@ -15,6 +15,7 @@ export const resolveLanguage = flow(
 	Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx' as const),
 	Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell' as const),
 	Match.when(Match.is('md', 'markdown'), () => 'markdown' as const),
+	Match.when(Match.is('json', 'jsonc', 'json5'), () => 'jsonc' as const),
 	Match.orElse(() => 'text' as const)
 )
 

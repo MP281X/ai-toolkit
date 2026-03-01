@@ -49,17 +49,7 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput
-				onSubmit={data =>
-					sendMessage({
-						payload: {
-							model: model.model,
-							provider: model.provider,
-							parts: [new TextPart({text: data.text}), ...data.attachments]
-						}
-					})
-				}
-			>
+			<ChatInput onSubmit={data => sendMessage({payload: [new TextPart({text: data.text}), ...data.attachments]})}>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>

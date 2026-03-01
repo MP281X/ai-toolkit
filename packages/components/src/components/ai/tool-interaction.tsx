@@ -1,6 +1,6 @@
 import {Array as EffectArray} from 'effect'
 
-import type {ToolApprovalRequest, ToolCall, ToolContent, ToolOutputDenied} from '@ai-toolkit/ai/schema'
+import type {ToolApprovalRequestPart, ToolCallPart, ToolOutputDeniedPart, ToolResponsePart} from '@ai-toolkit/ai/schema'
 import {AlertTriangleIcon, CheckCircleIcon, ChevronRightIcon, HelpCircleIcon, WrenchIcon} from 'lucide-react'
 import {useState} from 'react'
 
@@ -13,8 +13,8 @@ import {Textarea} from '#components/ui/textarea.tsx'
 type QuestionOption = {label: string; description?: string}
 
 export function ToolInteraction(props: {
-	part: ToolCall | ToolApprovalRequest | ToolOutputDenied
-	onResponse?: (response: ToolContent) => void
+	part: ToolCallPart | ToolApprovalRequestPart | ToolOutputDeniedPart
+	onResponse?: (response: ToolResponsePart) => void
 }) {
 	if (props.part._tag === 'tool-call') {
 		if (props.part.toolName !== 'question') return <ToolCallView part={props.part} />
@@ -28,7 +28,7 @@ export function ToolInteraction(props: {
 	return <ToolDenied part={props.part} />
 }
 
-function ToolCallView(props: {part: ToolCall}) {
+function ToolCallView(props: {part: ToolCallPart}) {
 	return (
 		<details className="group border border-border">
 			<summary className="flex w-full list-none items-center gap-1.5 bg-muted/40 px-3 py-1.5 text-left font-medium text-[11px] uppercase leading-none tracking-wide [&::-webkit-details-marker]:hidden [&::marker]:hidden">
@@ -43,7 +43,7 @@ function ToolCallView(props: {part: ToolCall}) {
 	)
 }
 
-function ToolDenied(props: {part: ToolOutputDenied}) {
+function ToolDenied(props: {part: ToolOutputDeniedPart}) {
 	return (
 		<div className="flex items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
 			<AlertTriangleIcon className="mt-0.5 size-3.5" />
@@ -55,7 +55,7 @@ function ToolDenied(props: {part: ToolOutputDenied}) {
 	)
 }
 
-function ToolApproval(props: {part: ToolApprovalRequest; onResponse?: (response: ToolContent) => void}) {
+function ToolApproval(props: {part: ToolApprovalRequestPart; onResponse?: (response: ToolResponsePart) => void}) {
 	return (
 		<div className="flex items-start gap-2 border border-border bg-muted/40 px-3 py-2 text-xs">
 			<HelpCircleIcon className="mt-0.5 size-3.5 text-muted-foreground" />
@@ -95,7 +95,7 @@ function ToolApproval(props: {part: ToolApprovalRequest; onResponse?: (response:
 	)
 }
 
-function QuestionTool(props: {part: ToolCall; onResponse?: (response: ToolContent) => void}) {
+function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolResponsePart) => void}) {
 	const data = props.part.input as {
 		questions?: ReadonlyArray<{header?: string; question?: string; options?: QuestionOption[]; multiple?: boolean}>
 	}
@@ -182,7 +182,7 @@ function QuestionTool(props: {part: ToolCall; onResponse?: (response: ToolConten
 					variant="outline"
 					onClick={() =>
 						props.onResponse?.({
-							_tag: 'tool-result',
+							_tag: 'tool-result-response',
 							toolCallId: props.part.toolCallId,
 							toolName: props.part.toolName,
 							output: responses.map((response, index) => ({

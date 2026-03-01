@@ -31,7 +31,7 @@ export function Error(props: {error: Error; reset: () => void}) {
 		<Button
 			variant="ghost"
 			onClick={props.reset}
-			className="flex flex-1 cursor-pointer select-text items-center justify-center p-4"
+			className="flex h-full w-full cursor-pointer select-text items-center justify-center p-4"
 		>
 			<Alert variant="destructive" className="w-full max-w-lg">
 				<OctagonAlert />

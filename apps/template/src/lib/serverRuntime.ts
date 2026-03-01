@@ -1,7 +1,6 @@
 import {BunServices} from '@effect/platform-bun'
 import {Layer, pipe} from 'effect'
 
-import {Agent} from '@ai-toolkit/ai/service'
 import {Git} from '@ai-toolkit/git/service'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 import {RpcSerialization} from 'effect/unstable/rpc'
@@ -15,7 +14,6 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(AiLive),
 	Layer.provideMerge(GitLive),
 	// application layers
-	Layer.provideMerge(Agent.layer),
 	Layer.provideMerge(Git.layer),
 	// base layers
 	Layer.provideMerge(OtelLayer('backend')),
