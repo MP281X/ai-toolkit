@@ -6,9 +6,7 @@
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./catalog": "./src/catalog.ts",
-		"./service": "./src/service.ts",
-		"./agents/ai-sdk": "./src/agents/ai-sdk.ts",
-		"./agents/copilot-sdk": "./src/agents/copilot-sdk.ts"
+		"./service": "./src/service.ts"
 	},
 
 	"scripts": {

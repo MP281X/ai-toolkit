@@ -1,7 +1,13 @@
-import {Array as EffectArray} from 'effect'
+import {Array} from 'effect'
 
-import type {ToolApprovalRequestPart, ToolCallPart, ToolOutputDeniedPart, ToolResponsePart} from '@ai-toolkit/ai/schema'
-import {AlertTriangleIcon, CheckCircleIcon, ChevronRightIcon, HelpCircleIcon, WrenchIcon} from 'lucide-react'
+import {
+	type ToolApprovalRequestPart,
+	ToolApprovalResponsePart,
+	type ToolCallPart,
+	type ToolResponsePart,
+	ToolResultPart
+} from '@ai-toolkit/ai/schema'
+import {CheckCircleIcon, ChevronRightIcon, HelpCircleIcon, WrenchIcon} from 'lucide-react'
 import {useState} from 'react'
 
 import {Button} from '#components/ui/button.tsx'
@@ -13,7 +19,7 @@ import {Textarea} from '#components/ui/textarea.tsx'
 type QuestionOption = {label: string; description?: string}
 
 export function ToolInteraction(props: {
-	part: ToolCallPart | ToolApprovalRequestPart | ToolOutputDeniedPart
+	part: ToolCallPart | ToolApprovalRequestPart
 	onResponse?: (response: ToolResponsePart) => void
 }) {
 	if (props.part._tag === 'tool-call') {
@@ -21,11 +27,7 @@ export function ToolInteraction(props: {
 		return <QuestionTool part={props.part} onResponse={props.onResponse} />
 	}
 
-	if (props.part._tag === 'tool-approval-request') {
-		return <ToolApproval part={props.part} onResponse={props.onResponse} />
-	}
-
-	return <ToolDenied part={props.part} />
+	return <ToolApproval part={props.part} onResponse={props.onResponse} />
 }
 
 function ToolCallView(props: {part: ToolCallPart}) {
@@ -40,18 +42,6 @@ function ToolCallView(props: {part: ToolCallPart}) {
 				{JSON.stringify(props.part.input, null, 2)}
 			</pre>
 		</details>
-	)
-}
-
-function ToolDenied(props: {part: ToolOutputDeniedPart}) {
-	return (
-		<div className="flex items-start gap-2 border border-destructive/40 bg-destructive/10 px-3 py-2 text-destructive text-xs">
-			<AlertTriangleIcon className="mt-0.5 size-3.5" />
-			<div className="space-y-1">
-				<div className="font-semibold uppercase tracking-wide">Execution denied</div>
-				<div className="text-[11px]">{props.part.toolName}</div>
-			</div>
-		</div>
 	)
 }
 
@@ -79,13 +69,14 @@ function ToolApproval(props: {part: ToolApprovalRequestPart; onResponse?: (respo
 					<Button
 						size="xs"
 						variant="outline"
-						onClick={() =>
-							props.onResponse?.({
-								_tag: 'tool-approval-response',
-								approvalId: props.part.approvalId,
-								approved: false
-							})
-						}
+						onClick={() => {
+							props.onResponse?.(
+								new ToolApprovalResponsePart({
+									approvalId: props.part.approvalId,
+									approved: false
+								})
+							)
+						}}
 					>
 						Deny
 					</Button>
@@ -99,10 +90,10 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 	const data = props.part.input as {
 		questions?: ReadonlyArray<{header?: string; question?: string; options?: QuestionOption[]; multiple?: boolean}>
 	}
-	const questions = EffectArray.isArray(data?.questions) ? data.questions : []
+	const questions = data.questions ?? []
 	const [responses, setResponsesEntry, setSingleResponse, setResponsesFromText] = useQuestionState(questions)
 
-	if (questions.length === 0) return <ToolCallView part={props.part} />
+	if (Array.isReadonlyArrayEmpty(questions)) return <ToolCallView part={props.part} />
 
 	return (
 		<div className="space-y-3 border border-border bg-muted/20 px-3 py-2">
@@ -137,18 +128,15 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 									))}
 								</div>
 							) : (
-								<RadioGroup
-									value={responses[index]?.[0] ?? ''}
-									onValueChange={value => setSingleResponse(index, value)}
-								>
+								<RadioGroup value={responses[index]?.[0]} onValueChange={value => setSingleResponse(index, value)}>
 									{question.options.map(option => (
 										<div key={option.label} className="flex items-start gap-2 text-xs">
 											<RadioGroupItem value={option.label} aria-label={option.label} />
 											<div className="space-y-0.5">
 												<div className="font-medium">{option.label}</div>
-												{option.description ? (
+												{option.description && (
 													<div className="text-[11px] text-muted-foreground">{option.description}</div>
-												) : null}
+												)}
 											</div>
 										</div>
 									))}
@@ -156,19 +144,19 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 							)
 						) : (
 							<Input
-								value={responses[index]?.[0] ?? ''}
+								value={responses[index]?.[0]}
 								onChange={event => setSingleResponse(index, event.currentTarget.value)}
 								placeholder="Type your answer"
 							/>
 						)}
-						{question.options && question.options.length > 0 && question.multiple ? (
+						{question.options && question.options.length > 0 && question.multiple && (
 							<Textarea
 								value={responses[index]?.join(', ') ?? ''}
 								onChange={event => setResponsesFromText(index, event.currentTarget.value)}
 								placeholder="Optional notes"
 								className="min-h-20"
 							/>
-						) : null}
+						)}
 					</div>
 				))}
 			</div>
@@ -180,18 +168,19 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolRe
 				<Button
 					size="xs"
 					variant="outline"
-					onClick={() =>
-						props.onResponse?.({
-							_tag: 'tool-result-response',
-							toolCallId: props.part.toolCallId,
-							toolName: props.part.toolName,
-							output: responses.map((response, index) => ({
-								header: questions[index]?.header,
-								question: questions[index]?.question,
-								response
-							}))
-						})
-					}
+					onClick={() => {
+						props.onResponse?.(
+							new ToolResultPart({
+								toolCallId: props.part.toolCallId,
+								toolName: props.part.toolName,
+								output: responses.map((response, index) => ({
+									header: questions[index]?.header,
+									question: questions[index]?.question,
+									response
+								}))
+							})
+						)
+					}}
 				>
 					Submit
 				</Button>
@@ -220,7 +209,7 @@ function useQuestionState(questions: ReadonlyArray<{multiple?: boolean}>) {
 			const currentValues = new Set(next[index] ?? [])
 			if (checked) currentValues.add(label)
 			else currentValues.delete(label)
-			next[index] = EffectArray.fromIterable(currentValues)
+			next[index] = Array.fromIterable(currentValues)
 			return next
 		})
 	}

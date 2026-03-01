@@ -1,16 +1,5 @@
 import {Schema} from 'effect'
 
-export const agents = [
-	{id: 'ai', name: 'AI'},
-	{id: 'copilot', name: 'GitHub Copilot'},
-	{id: 'codex', name: 'OpenAI Codex'},
-	{id: 'claude-code', name: 'Claude Code'},
-	{id: 'opencode', name: 'OpenCode'}
-] as const
-
-export type AgentId = typeof AgentId.Type
-export const AgentId = Schema.Literals(agents.map(a => a.id))
-
 export const providers = [
 	{
 		id: 'opencode_zen',
@@ -28,9 +17,6 @@ export const providers = [
 		apiKeyEnv: undefined
 	}
 ] as const
-
-export type ProviderId = typeof ProviderId.Type
-export const ProviderId = Schema.Literals(providers.map(p => p.id))
 
 export const offerings = [
 	{
@@ -82,13 +68,19 @@ export const offerings = [
 		pricing: {input: 0, output: 0}
 	}
 ] as const satisfies {
-	agents: AgentId[]
+	agents: string[]
 	provider: ProviderId
 	model: string
 	adapter: string
 	contextWindow: number
 	pricing: {input: number; output: number}
 }[]
+
+export type ProviderId = typeof ProviderId.Type
+export const ProviderId = Schema.Literals(providers.map(p => p.id))
+
+export type AgentId = typeof AgentId.Type
+export const AgentId = Schema.Literals(offerings.flatMap(o => o.agents))
 
 export type ModelId = typeof ModelId.Type
 export const ModelId = Schema.Literals(offerings.map(o => o.model))

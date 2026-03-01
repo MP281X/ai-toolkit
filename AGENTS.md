@@ -14,6 +14,7 @@
 ## EXECUTION MODE
 
 - Primary goal in normal tasks: ship the requested feature/change with clear and simple code.
+- First pass should be production-usable, not a placeholder.
 - Keep refactors local to the requested scope unless user asks for broader refactoring.
 - Remove obvious dead code directly related to touched files.
 - Do not run repository-wide simplification by default.
@@ -53,6 +54,7 @@ Never rely on training data for the following libraries — it is outdated: `bet
 - No comments. Restructure code until it is self-explanatory.
 - Delete unused code immediately. No "just in case" code.
 - Never abstract prematurely. Duplicate freely.
+- Prefer local, direct logic over creating new helpers.
 - No short or cryptic abbreviations. Allowed exceptions: `id`, `url`, `api`, `err`, `ctx`.
 
 ### TypeScript

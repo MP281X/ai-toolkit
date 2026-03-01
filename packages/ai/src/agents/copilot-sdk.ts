@@ -2,136 +2,70 @@ import {Array, Effect, Layer, Option, Predicate, pipe, Queue, Ref, Stream, Subsc
 
 import {CopilotClient, type SessionEvent} from '@github/copilot-sdk'
 
-import {type ModelSelection, offerings, providers} from '../catalog.ts'
+import {type ModelId, type ModelSelection, offerings, providers} from '../catalog.ts'
 import type {ConversationMessage, StreamPart, ToolResponsePart, UserContentPart} from '../schema.ts'
 import {
 	AiError,
+	applyPartsStream,
 	ErrorPart,
 	Finish,
-	partsStreamToMessage,
+	partsStreamWithStartFinish,
 	ReasoningPart,
 	Start,
 	TextPart,
 	ToolApprovalRequestPart,
 	ToolCallPart,
 	ToolErrorPart,
-	ToolResultPart,
-	ToolResultResponsePart
+	ToolResultPart
 } from '../schema.ts'
-import {Agent, Model} from '../service.ts'
+import {Agent} from '../service.ts'
 
-function findProvider(providerId: ModelSelection['provider']) {
-	return Array.findFirst(providers, provider => provider.id === providerId)
-}
-
-function findOffering(selection: ModelSelection) {
-	return Array.findFirst(
-		offerings,
-		offering =>
-			Array.contains(offering.agents, 'copilot') &&
-			offering.provider === selection.provider &&
-			offering.model === selection.model
+const ensureCopilotModel = Effect.fnUntraced(function* (selection: ModelSelection) {
+	yield* pipe(
+		Array.findFirst(providers, provider => provider.id === selection.provider),
+		Option.match({
+			onSome: () => Effect.void,
+			onNone: () => new AiError({message: 'Provider not found'})
+		})
 	)
-}
-
-function ensureCopilotModel(selection: ModelSelection) {
-	return Effect.gen(function* () {
-		const provider = yield* pipe(
-			findProvider(selection.provider),
-			Option.match({
-				onSome: provider => Effect.succeed(provider),
-				onNone: () => new AiError({message: 'Provider not found'}).asEffect()
-			})
-		)
-		yield* pipe(
-			findOffering(selection),
-			Option.match({
-				onSome: () => Effect.void,
-				onNone: () => new AiError({message: 'Model offering not found'})
-			})
-		)
-
-		return {selection, provider}
-	})
-}
-
-function zeroUsage() {
-	return {input: 0, output: 0, reasoning: 0}
-}
+	yield* pipe(
+		Array.findFirst(
+			offerings,
+			offering =>
+				Array.contains(offering.agents, 'copilot') &&
+				offering.provider === selection.provider &&
+				offering.model === selection.model
+		),
+		Option.match({
+			onSome: () => Effect.void,
+			onNone: () => new AiError({message: 'Model offering not found'})
+		})
+	)
+})
 
 function userPartsToPrompt(parts: readonly UserContentPart[]) {
-	return parts
-		.map(part => {
-			if (part._tag === 'text-part') return part.text
-			return `file:${part.filename ?? 'attachment'}`
-		})
-		.join('\n')
+	return pipe(
+		parts,
+		Array.map(part => (part._tag === 'text-part' ? part.text : `file:${part.filename ?? 'attachment'}`)),
+		Array.join('')
+	)
 }
 
 function outputToAnswer(output: unknown) {
 	if (typeof output === 'string') return output
-	if (!Array.isArray(output)) return JSON.stringify(output)
-
-	const values = output
-		.map(item => {
-			if (typeof item !== 'object' || item === null || !('response' in item)) return ''
-			const response = item.response
-			if (!Array.isArray(response)) return ''
-			return response.join(', ')
-		})
-		.filter(Boolean)
-
-	if (values.length > 0) return values.join('\n')
 	return JSON.stringify(output)
 }
 
 function userStream(selection: ModelSelection, parts: readonly UserContentPart[]) {
-	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'user'})),
-		Stream.concat(Stream.fromIterable(parts), Stream.succeed(new Finish({finishReason: 'stop', usage: zeroUsage()})))
-	)
+	return partsStreamWithStartFinish(selection, 'user', parts)
 }
 
 function toolStream(selection: ModelSelection, parts: readonly ToolResponsePart[]) {
-	const values = parts.map(part => {
-		if (part._tag === 'tool-result-response') {
-			return new ToolResultResponsePart({toolCallId: part.toolCallId, toolName: part.toolName, output: part.output})
-		}
-		return part
-	})
-
-	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'tool'})),
-		Stream.concat(Stream.fromIterable(values), Stream.succeed(new Finish({finishReason: 'stop', usage: zeroUsage()})))
-	)
+	return partsStreamWithStartFinish(selection, 'tool', parts)
 }
 
-function assistantSinglePartStream(selection: ModelSelection, part: StreamPart) {
-	return Stream.concat(
-		Stream.succeed(new Start({model: selection, startedAt: Date.now(), role: 'assistant'})),
-		Stream.concat(Stream.succeed(part), Stream.succeed(new Finish({finishReason: 'stop', usage: zeroUsage()})))
-	)
-}
-
-function upsertMessage(messages: readonly ConversationMessage[], message: ConversationMessage) {
-	const previous = messages[messages.length - 1]
-	if (!previous) return [...messages, message]
-	if (previous.startedAt !== message.startedAt || previous.role !== message.role) return [...messages, message]
-	return [...messages.slice(0, -1), message]
-}
-
-function applyStream(
-	events: SubscriptionRef.SubscriptionRef<StreamPart | undefined>,
-	history: SubscriptionRef.SubscriptionRef<ConversationMessage[]>,
-	stream: Stream.Stream<StreamPart, AiError>
-) {
-	return pipe(
-		stream,
-		Stream.mapEffect(part => pipe(SubscriptionRef.set(events, part), Effect.as(part))),
-		partsStreamToMessage,
-		Stream.mapEffect(message => SubscriptionRef.update(history, current => upsertMessage(current, message))),
-		Stream.runDrain
-	)
+function singleAssistantPartStream(selection: ModelSelection, part: StreamPart) {
+	return partsStreamWithStartFinish(selection, 'assistant', [part])
 }
 
 function promptStream(
@@ -141,86 +75,61 @@ function promptStream(
 ) {
 	return Stream.callback<StreamPart>(
 		Effect.fnUntraced(function* (queue) {
-			const usage = {input: 0, output: 0, reasoning: 0}
-			const toolNameByCallId = new Map<string, string>()
-			const deltaMessageIds = new Set<string>()
-			let finished = false
+			const promptUsage = {input: 0, output: 0, reasoning: 0}
+			const messageIdsWithDeltas = new Set<string>()
+			let isFinished = false
 
 			function finishWith(part: Finish) {
-				if (finished) return
-				finished = true
+				if (isFinished) return
+				isFinished = true
 				Queue.offerUnsafe(queue, part)
 				Queue.endUnsafe(queue)
 			}
 
 			function onEvent(event: SessionEvent) {
-				if (event.type === 'assistant.message_delta') {
-					deltaMessageIds.add(event.data.messageId)
-					Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.deltaContent}))
-					return
-				}
-
-				if (event.type === 'assistant.reasoning_delta') {
-					Queue.offerUnsafe(queue, new ReasoningPart({id: event.data.reasoningId, text: event.data.deltaContent}))
-					return
-				}
-
-				if (event.type === 'assistant.message') {
-					if (!deltaMessageIds.has(event.data.messageId) && event.data.content) {
-						Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.content}))
-					}
-
-					for (const request of event.data.toolRequests ?? []) {
-						toolNameByCallId.set(request.toolCallId, request.name)
+				switch (event.type) {
+					case 'assistant.message_delta':
+						messageIdsWithDeltas.add(event.data.messageId)
+						Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.deltaContent}))
+						return
+					case 'assistant.reasoning_delta':
+						Queue.offerUnsafe(queue, new ReasoningPart({id: event.data.reasoningId, text: event.data.deltaContent}))
+						return
+					case 'assistant.message':
+						if (event.data.content && !messageIdsWithDeltas.has(event.data.messageId))
+							Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.content}))
+						for (const request of event.data.toolRequests ?? []) {
+							Queue.offerUnsafe(
+								queue,
+								new ToolCallPart({toolCallId: request.toolCallId, toolName: request.name, input: request.arguments})
+							)
+						}
+						return
+					case 'tool.execution_complete': {
+						if (event.data.success) {
+							Queue.offerUnsafe(
+								queue,
+								new ToolResultPart({toolCallId: event.data.toolCallId, toolName: 'tool', output: event.data.result})
+							)
+							return
+						}
 						Queue.offerUnsafe(
 							queue,
-							new ToolCallPart({toolCallId: request.toolCallId, toolName: request.name, input: request.arguments})
-						)
-					}
-					return
-				}
-
-				if (event.type === 'tool.execution_start') {
-					toolNameByCallId.set(event.data.toolCallId, event.data.toolName)
-					return
-				}
-
-				if (event.type === 'tool.execution_complete') {
-					const toolName = toolNameByCallId.get(event.data.toolCallId) ?? 'tool'
-					if (event.data.success) {
-						Queue.offerUnsafe(
-							queue,
-							new ToolResultPart({
-								toolCallId: event.data.toolCallId,
-								toolName,
-								input: undefined,
-								output: event.data.result
-							})
+							new ToolErrorPart({toolCallId: event.data.toolCallId, toolName: 'tool', error: event.data.error})
 						)
 						return
 					}
-
-					Queue.offerUnsafe(
-						queue,
-						new ToolErrorPart({toolCallId: event.data.toolCallId, toolName, input: undefined, error: event.data.error})
-					)
-					return
-				}
-
-				if (event.type === 'assistant.usage') {
-					usage.input += event.data.inputTokens ?? 0
-					usage.output += event.data.outputTokens ?? 0
-					return
-				}
-
-				if (event.type === 'session.error') {
-					Queue.offerUnsafe(queue, new ErrorPart({error: new Error(event.data.message)}))
-					finishWith(new Finish({finishReason: 'error', usage}))
-					return
-				}
-
-				if (event.type === 'session.idle') {
-					finishWith(new Finish({finishReason: 'stop', usage}))
+					case 'assistant.usage':
+						promptUsage.input += event.data.inputTokens ?? 0
+						promptUsage.output += event.data.outputTokens ?? 0
+						return
+					case 'session.error':
+						Queue.offerUnsafe(queue, new ErrorPart({error: new Error(event.data.message)}))
+						finishWith(new Finish({finishReason: 'error', usage: promptUsage}))
+						return
+					case 'session.idle':
+						finishWith(new Finish({finishReason: 'stop', usage: promptUsage}))
+						return
 				}
 			}
 
@@ -229,31 +138,20 @@ function promptStream(
 				unsubscribe => Effect.sync(unsubscribe)
 			)
 
-			Queue.offerUnsafe(queue, new Start({model: selection, startedAt: Date.now(), role: 'assistant'}))
+			Queue.offerUnsafe(queue, new Start({model: selection, role: 'assistant'}))
 			void session.send({prompt: userPartsToPrompt(parts)}).catch(cause => {
 				Queue.offerUnsafe(queue, new ErrorPart({error: cause}))
-				finishWith(new Finish({finishReason: 'error', usage}))
+				finishWith(new Finish({finishReason: 'error', usage: promptUsage}))
 			})
 		})
 	)
 }
 
-export const CopilotSdkModel = {
-	layer: (input: ModelSelection) =>
-		Layer.effect(
-			Model,
-			Effect.gen(function* () {
-				yield* ensureCopilotModel(input)
-				return input
-			})
-		)
-}
-
-export const CopilotSdkAgent = {
-	layer: Layer.effect(
+export function CopilotSdkAgentLayer(input: {model: ModelId}) {
+	return Layer.effect(
 		Agent,
-		Effect.gen(function* () {
-			const selection = yield* Model
+		Effect.fnUntraced(function* () {
+			const selection: ModelSelection = {agent: 'copilot', provider: 'copilot', model: input.model}
 			yield* ensureCopilotModel(selection)
 
 			const client = new CopilotClient()
@@ -271,36 +169,35 @@ export const CopilotSdkAgent = {
 			let questionIdSequence = 0
 
 			const ensureSession = Effect.fnUntraced(function* () {
-				const existing = yield* Ref.get(sessionRef)
-				if (existing) return existing
+				const existingSession = yield* Ref.get(sessionRef)
+				if (!Predicate.isUndefined(existingSession)) return existingSession
 
-				const session = yield* Effect.tryPromise({
+				const createdSession = yield* Effect.tryPromise({
 					try: () =>
 						client.createSession({
 							model: selection.model,
 							streaming: true,
 							onPermissionRequest: async (request: {toolCallId?: string}) => {
 								const approvalId = `approval-${++approvalIdSequence}`
-								const toolCallId =
-									typeof request.toolCallId === 'string' ? request.toolCallId : `tool-call-${approvalIdSequence}`
+								const toolCallId = Predicate.isString(request.toolCallId)
+									? request.toolCallId
+									: `tool-call-${approvalIdSequence}`
 								await Effect.runPromise(
-									applyStream(
+									applyPartsStream(
 										events,
 										history,
-										assistantSinglePartStream(selection, new ToolApprovalRequestPart({approvalId, toolCallId}))
+										singleAssistantPartStream(selection, new ToolApprovalRequestPart({approvalId, toolCallId}))
 									)
 								)
-								return await new Promise(resolve => {
-									pendingApprovals.set(approvalId, resolve)
-								})
+								return await new Promise(resolve => pendingApprovals.set(approvalId, resolve))
 							},
 							onUserInputRequest: async (request: {question: string; choices?: string[]}) => {
 								const toolCallId = `question-${++questionIdSequence}`
 								await Effect.runPromise(
-									applyStream(
+									applyPartsStream(
 										events,
 										history,
-										assistantSinglePartStream(
+										singleAssistantPartStream(
 											selection,
 											new ToolCallPart({
 												toolCallId,
@@ -310,7 +207,10 @@ export const CopilotSdkAgent = {
 														{
 															header: 'Question',
 															question: request.question,
-															options: request.choices?.map(choice => ({label: choice})),
+															options: pipe(
+																request.choices ?? [],
+																Array.map(choice => ({label: choice}))
+															),
 															multiple: false
 														}
 													]
@@ -327,47 +227,36 @@ export const CopilotSdkAgent = {
 					catch: cause => new AiError({cause})
 				})
 
-				yield* Ref.set(sessionRef, session)
-				return session
+				yield* Ref.set(sessionRef, createdSession)
+				return createdSession
 			})
 
-			return {
-				prompt: Effect.fn(function* (parts) {
-					yield* applyStream(events, history, userStream(selection, parts))
+			return Agent.of({
+				prompt: Effect.fnUntraced(function* (parts) {
+					yield* applyPartsStream(events, history, userStream(selection, parts))
 					const session = yield* ensureSession()
-					yield* applyStream(events, history, promptStream(session, selection, parts))
+					yield* applyPartsStream(events, history, promptStream(session, selection, parts))
 				}),
-				respond: Effect.fn(function* (parts) {
+				respond: Effect.fnUntraced(function* (part) {
 					const messages = yield* SubscriptionRef.get(history)
-					if (messages.length === 0) return yield* new AiError({message: 'No active session'}).asEffect()
+					if (Array.isArrayEmpty(messages)) return yield* new AiError({message: 'No active session'})
 
-					yield* applyStream(events, history, toolStream(selection, parts))
+					yield* applyPartsStream(events, history, toolStream(selection, [part]))
 
-					for (const part of parts) {
-						if (part._tag === 'tool-approval-response') {
-							const pending = pendingApprovals.get(part.approvalId)
-							if (!pending) return yield* new AiError({message: 'Approval not found'}).asEffect()
-							pendingApprovals.delete(part.approvalId)
-							pending(part.approved ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'})
-							continue
-						}
-
-						const pending = pendingQuestions.get(part.toolCallId)
-						if (!pending) return yield* new AiError({message: 'User input request not found'}).asEffect()
-						pendingQuestions.delete(part.toolCallId)
-						pending({answer: outputToAnswer(part.output), wasFreeform: true})
+					if (part._tag === 'tool-approval-response') {
+						const pendingApproval = pendingApprovals.get(part.approvalId)
+						pendingApprovals.delete(part.approvalId)
+						pendingApproval?.(part.approved ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'})
+						return
 					}
+
+					const pendingQuestion = pendingQuestions.get(part.toolCallId)
+					pendingQuestions.delete(part.toolCallId)
+					pendingQuestion?.({answer: outputToAnswer(part.output), wasFreeform: true})
 				}),
 				stream: pipe(SubscriptionRef.changes(events), Stream.filter(Predicate.isNotUndefined)),
-				history: SubscriptionRef.changes(history),
-				reset: Effect.gen(function* () {
-					yield* SubscriptionRef.set(history, [])
-					yield* SubscriptionRef.set(events, undefined)
-					yield* Ref.set(sessionRef, undefined)
-					pendingApprovals.clear()
-					pendingQuestions.clear()
-				})
-			}
-		})
+				history: SubscriptionRef.changes(history)
+			})
+		})()
 	)
 }
