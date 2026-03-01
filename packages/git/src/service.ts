@@ -1,19 +1,25 @@
 import {join} from 'node:path'
 
-import {Array, Effect, FileSystem, flow, Layer, pipe, ServiceMap, String} from 'effect'
+import {Array, Effect, FileSystem, Layer, pipe, ServiceMap, String} from 'effect'
 
 import * as Command from 'effect/unstable/process/ChildProcess'
+import {ChildProcessSpawner} from 'effect/unstable/process/ChildProcessSpawner'
 
 import {GitDiff, GitError} from './schema.ts'
 
 export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
 	make: Effect.gen(function* () {
-		const use = flow(
-			(...args: readonly string[]) => Command.make('git', args).pipe(Command.string),
-			Effect.mapError(cause => new GitError({cause})),
-			Effect.map(String.split('\n')),
-			Effect.map(Array.filter(String.isNonEmpty))
-		)
+		function use(...args: readonly string[]) {
+			return Effect.gen(function* () {
+				const childProcess = yield* ChildProcessSpawner
+				const output = yield* pipe(
+					childProcess.string(Command.make('git', args)),
+					Effect.mapError(cause => new GitError({cause}))
+				)
+
+				return pipe(output, String.split('\n'), Array.filter(String.isNonEmpty))
+			})
+		}
 
 		const fs = yield* FileSystem.FileSystem
 

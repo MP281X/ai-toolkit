@@ -38,7 +38,7 @@ function Layout() {
 				</TreeExplorer>
 			</ResizablePanel>
 			<ResizableHandle />
-			<ResizablePanel className="flex h-full w-full">
+			<ResizablePanel className="flex h-full flex-1">
 				<Outlet />
 			</ResizablePanel>
 		</ResizablePanelGroup>

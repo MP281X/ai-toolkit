@@ -1,7 +1,6 @@
 import {Schema} from 'effect'
 
-import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {AiSdkError, ConversationMessage, ToolContent, UserContentPart} from '@ai-toolkit/ai/schema'
+import {AiError, ConversationMessage, ToolResponsePart, UserContentPart} from '@ai-toolkit/ai/schema'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export class AiContracts extends RpcGroup.make(
@@ -10,15 +9,11 @@ export class AiContracts extends RpcGroup.make(
 		success: Schema.Array(ConversationMessage)
 	}),
 	Rpc.make('ai.sendMessage', {
-		payload: Schema.Struct({
-			provider: ProviderId,
-			model: ModelId,
-			parts: Schema.Array(UserContentPart)
-		}),
-		error: AiSdkError
+		payload: Schema.Array(UserContentPart),
+		error: AiError
 	}),
 	Rpc.make('ai.tool', {
-		payload: ToolContent,
-		error: AiSdkError
+		payload: ToolResponsePart,
+		error: AiError
 	})
 ) {}

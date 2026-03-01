@@ -6,7 +6,9 @@
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./catalog": "./src/catalog.ts",
-		"./service": "./src/service.ts"
+		"./service": "./src/service.ts",
+		"./agents/ai-sdk": "./src/agents/ai-sdk.ts",
+		"./agents/copilot-sdk": "./src/agents/copilot-sdk.ts"
 	},
 
 	"scripts": {
@@ -16,9 +18,12 @@
 
 	"dependencies": {
 		"ai": "latest",
-		"exa-js": "latest",
+		"@openai/codex-sdk": "latest",
+		"@github/copilot-sdk": "latest",
+		"@anthropic-ai/claude-agent-sdk": "latest",
 
 		"zod": "latest",
+		"exa-js": "latest",
 
 		"@ai-sdk/xai": "latest",
 		"@ai-sdk/openai": "latest",

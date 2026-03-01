@@ -39,7 +39,7 @@ bun run fix && bun run check
 
 ## EXTERNAL KNOWLEDGE
 
-Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`, `pierre-diffs`.
+Never rely on training data for the following libraries — it is outdated: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`, `pierre-diffs`, `copilot-sdk`, `codex`.
 
 - Primary source of truth: `.opencode/resources/<library>/` (cloned repositories).
 - Search these repositories first for behaviors, APIs, and examples.
