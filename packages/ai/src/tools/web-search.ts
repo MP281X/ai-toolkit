@@ -1,8 +1,7 @@
-import {Config, Effect} from 'effect'
+import {Config, Effect, Schema} from 'effect'
 
 import {type ToolSet, tool} from 'ai'
 import Exa from 'exa-js'
-import {z} from 'zod'
 
 export const webSearchToolSet = Effect.gen(function* () {
 	const exa = new Exa(yield* Config.string('AI_EXA'))
@@ -12,7 +11,13 @@ export const webSearchToolSet = Effect.gen(function* () {
 			description: `
       Search the web for up-to-date information. Returns a short list of results with url, title, publishedDate and excerpted text.
       `,
-			inputSchema: z.object({query: z.string().min(1)}),
+			inputSchema: Schema.toStandardSchemaV1(
+				Schema.toStandardJSONSchemaV1(
+					Schema.Struct({
+						query: Schema.NonEmptyString
+					})
+				)
+			),
 			execute: async input => {
 				const response = await exa.searchAndContents(input.query, {
 					numResults: 3,

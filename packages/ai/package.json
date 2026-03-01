@@ -20,7 +20,6 @@
 		"@github/copilot-sdk": "latest",
 		"@anthropic-ai/claude-agent-sdk": "latest",
 
-		"zod": "latest",
 		"exa-js": "latest",
 
 		"@ai-sdk/xai": "latest",

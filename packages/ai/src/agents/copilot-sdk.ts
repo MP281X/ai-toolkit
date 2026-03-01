@@ -1,17 +1,32 @@
-import {Array, Effect, Layer, Option, Predicate, pipe, Queue, Ref, Stream, SubscriptionRef} from 'effect'
+import type {Scope} from 'effect'
+import {
+	Array,
+	Deferred,
+	Effect,
+	flow,
+	Layer,
+	MutableHashMap,
+	Option,
+	Predicate,
+	pipe,
+	Queue,
+	Ref,
+	Stream,
+	SubscriptionRef
+} from 'effect'
 
-import {CopilotClient, type SessionEvent} from '@github/copilot-sdk'
+import {CopilotClient, type PermissionRequestResult, type SessionEvent} from '@github/copilot-sdk'
 
-import {type ModelId, type ModelSelection, offerings, providers} from '../catalog.ts'
-import type {ConversationMessage, StreamPart, ToolResponsePart, UserContentPart} from '../schema.ts'
+import type {ModelId, ModelSelection} from '../catalog.ts'
+import type {ConversationMessage, MessageStreamPart} from '../schema.ts'
 import {
 	AiError,
 	applyPartsStream,
 	ErrorPart,
-	Finish,
+	FinishPart,
 	partsStreamWithStartFinish,
 	ReasoningPart,
-	Start,
+	StartPart,
 	TextPart,
 	ToolApprovalRequestPart,
 	ToolCallPart,
@@ -20,129 +35,83 @@ import {
 } from '../schema.ts'
 import {Agent} from '../service.ts'
 
-const ensureCopilotModel = Effect.fnUntraced(function* (selection: ModelSelection) {
-	yield* pipe(
-		Array.findFirst(providers, provider => provider.id === selection.provider),
-		Option.match({
-			onSome: () => Effect.void,
-			onNone: () => new AiError({message: 'Provider not found'})
-		})
-	)
-	yield* pipe(
-		Array.findFirst(
-			offerings,
-			offering =>
-				Array.contains(offering.agents, 'copilot') &&
-				offering.provider === selection.provider &&
-				offering.model === selection.model
-		),
-		Option.match({
-			onSome: () => Effect.void,
-			onNone: () => new AiError({message: 'Model offering not found'})
-		})
-	)
-})
-
-function userPartsToPrompt(parts: readonly UserContentPart[]) {
-	return pipe(
-		parts,
-		Array.map(part => (part._tag === 'text-part' ? part.text : `file:${part.filename ?? 'attachment'}`)),
-		Array.join('')
-	)
-}
-
-function outputToAnswer(output: unknown) {
-	if (typeof output === 'string') return output
-	return JSON.stringify(output)
-}
-
-function userStream(selection: ModelSelection, parts: readonly UserContentPart[]) {
-	return partsStreamWithStartFinish(selection, 'user', parts)
-}
-
-function toolStream(selection: ModelSelection, parts: readonly ToolResponsePart[]) {
-	return partsStreamWithStartFinish(selection, 'tool', parts)
-}
-
-function singleAssistantPartStream(selection: ModelSelection, part: StreamPart) {
-	return partsStreamWithStartFinish(selection, 'assistant', [part])
-}
-
-function promptStream(
+function assistantStream(
 	session: Awaited<ReturnType<CopilotClient['createSession']>>,
 	selection: ModelSelection,
-	parts: readonly UserContentPart[]
+	prompt: string
 ) {
-	return Stream.callback<StreamPart>(
+	return Stream.callback<MessageStreamPart, AiError>(
 		Effect.fnUntraced(function* (queue) {
-			const promptUsage = {input: 0, output: 0, reasoning: 0}
-			const messageIdsWithDeltas = new Set<string>()
-			let isFinished = false
+			const usage = yield* Ref.make({input: 0, output: 0, reasoning: 0})
+			const toolNames = MutableHashMap.empty<string, string>()
+			const runFork = Effect.runForkWith(yield* Effect.services<Scope.Scope>())
 
-			function finishWith(part: Finish) {
-				if (isFinished) return
-				isFinished = true
-				Queue.offerUnsafe(queue, part)
-				Queue.endUnsafe(queue)
-			}
-
-			function onEvent(event: SessionEvent) {
+			const onEvent = Effect.fnUntraced(function* (event: SessionEvent) {
 				switch (event.type) {
+					case 'assistant.turn_start':
+						return yield* Queue.offer(queue, new StartPart({model: selection, role: 'assistant'}))
 					case 'assistant.message_delta':
-						messageIdsWithDeltas.add(event.data.messageId)
-						Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.deltaContent}))
-						return
+						return yield* Queue.offer(queue, new TextPart({id: event.data.messageId, text: event.data.deltaContent}))
 					case 'assistant.reasoning_delta':
-						Queue.offerUnsafe(queue, new ReasoningPart({id: event.data.reasoningId, text: event.data.deltaContent}))
-						return
-					case 'assistant.message':
-						if (event.data.content && !messageIdsWithDeltas.has(event.data.messageId))
-							Queue.offerUnsafe(queue, new TextPart({id: event.data.messageId, text: event.data.content}))
-						for (const request of event.data.toolRequests ?? []) {
-							Queue.offerUnsafe(
-								queue,
-								new ToolCallPart({toolCallId: request.toolCallId, toolName: request.name, input: request.arguments})
-							)
-						}
-						return
-					case 'tool.execution_complete': {
-						if (event.data.success) {
-							Queue.offerUnsafe(
-								queue,
-								new ToolResultPart({toolCallId: event.data.toolCallId, toolName: 'tool', output: event.data.result})
-							)
-							return
-						}
-						Queue.offerUnsafe(
+						return yield* Queue.offer(
 							queue,
-							new ToolErrorPart({toolCallId: event.data.toolCallId, toolName: 'tool', error: event.data.error})
+							new ReasoningPart({id: event.data.reasoningId, text: event.data.deltaContent})
 						)
-						return
+					case 'tool.execution_start':
+						MutableHashMap.set(toolNames, event.data.toolCallId, event.data.toolName)
+						return yield* Queue.offer(
+							queue,
+							new ToolCallPart({
+								toolCallId: event.data.toolCallId,
+								toolName: event.data.toolName,
+								input: event.data.arguments
+							})
+						)
+					case 'tool.execution_complete': {
+						const toolName = Option.getOrElse(MutableHashMap.get(toolNames, event.data.toolCallId), () => 'tool')
+						if (event.data.success) {
+							const output =
+								event.data.result?.detailedContent ??
+								event.data.result?.content ??
+								event.data.result?.contents ??
+								event.data.result ??
+								null
+							return yield* Queue.offer(
+								queue,
+								new ToolResultPart({toolCallId: event.data.toolCallId, toolName, output})
+							)
+						}
+						return yield* Queue.offer(
+							queue,
+							new ToolErrorPart({toolCallId: event.data.toolCallId, toolName, error: event.data.error})
+						)
 					}
 					case 'assistant.usage':
-						promptUsage.input += event.data.inputTokens ?? 0
-						promptUsage.output += event.data.outputTokens ?? 0
+						yield* Ref.update(usage, u => ({
+							input: u.input + (event.data.inputTokens ?? 0),
+							output: u.output + (event.data.outputTokens ?? 0),
+							reasoning: u.reasoning
+						}))
 						return
+					case 'assistant.turn_end':
+						return yield* Queue.offer(queue, new FinishPart({finishReason: 'stop', usage: yield* Ref.get(usage)}))
 					case 'session.error':
-						Queue.offerUnsafe(queue, new ErrorPart({error: new Error(event.data.message)}))
-						finishWith(new Finish({finishReason: 'error', usage: promptUsage}))
-						return
+						yield* Queue.offer(queue, new ErrorPart({error: new Error(event.data.message)}))
+						yield* Queue.offer(queue, new FinishPart({finishReason: 'error', usage: yield* Ref.get(usage)}))
+						return yield* Queue.end(queue)
 					case 'session.idle':
-						finishWith(new Finish({finishReason: 'stop', usage: promptUsage}))
+						return yield* Queue.end(queue)
+					default:
 						return
 				}
-			}
+			})
 
 			yield* Effect.acquireRelease(
-				Effect.sync(() => session.on(onEvent)),
+				Effect.sync(() => session.on(event => void runFork(onEvent(event)))),
 				unsubscribe => Effect.sync(unsubscribe)
 			)
 
-			Queue.offerUnsafe(queue, new Start({model: selection, role: 'assistant'}))
-			void session.send({prompt: userPartsToPrompt(parts)}).catch(cause => {
-				Queue.offerUnsafe(queue, new ErrorPart({error: cause}))
-				finishWith(new Finish({finishReason: 'error', usage: promptUsage}))
-			})
+			yield* Effect.tryPromise({try: () => session.send({prompt}), catch: cause => new AiError({cause})})
 		})
 	)
 }
@@ -152,107 +121,118 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 		Agent,
 		Effect.fnUntraced(function* () {
 			const selection: ModelSelection = {agent: 'copilot', provider: 'copilot', model: input.model}
-			yield* ensureCopilotModel(selection)
-
-			const client = new CopilotClient()
-			yield* Effect.tryPromise({
-				try: () => client.start(),
-				catch: cause => new AiError({cause})
-			})
-
-			const events = yield* SubscriptionRef.make<StreamPart | undefined>(undefined)
-			const history = yield* SubscriptionRef.make<ConversationMessage[]>([])
-			const sessionRef = yield* Ref.make<Awaited<ReturnType<CopilotClient['createSession']>> | undefined>(undefined)
-			const pendingApprovals = new Map<string, (result: {kind: 'approved' | 'denied-interactively-by-user'}) => void>()
-			const pendingQuestions = new Map<string, (result: {answer: string; wasFreeform: boolean}) => void>()
-			let approvalIdSequence = 0
-			let questionIdSequence = 0
-
-			const ensureSession = Effect.fnUntraced(function* () {
-				const existingSession = yield* Ref.get(sessionRef)
-				if (!Predicate.isUndefined(existingSession)) return existingSession
-
-				const createdSession = yield* Effect.tryPromise({
-					try: () =>
-						client.createSession({
-							model: selection.model,
-							streaming: true,
-							onPermissionRequest: async (request: {toolCallId?: string}) => {
-								const approvalId = `approval-${++approvalIdSequence}`
-								const toolCallId = Predicate.isString(request.toolCallId)
-									? request.toolCallId
-									: `tool-call-${approvalIdSequence}`
-								await Effect.runPromise(
-									applyPartsStream(
-										events,
-										history,
-										singleAssistantPartStream(selection, new ToolApprovalRequestPart({approvalId, toolCallId}))
-									)
-								)
-								return await new Promise(resolve => pendingApprovals.set(approvalId, resolve))
-							},
-							onUserInputRequest: async (request: {question: string; choices?: string[]}) => {
-								const toolCallId = `question-${++questionIdSequence}`
-								await Effect.runPromise(
-									applyPartsStream(
-										events,
-										history,
-										singleAssistantPartStream(
-											selection,
-											new ToolCallPart({
-												toolCallId,
-												toolName: 'question',
-												input: {
-													questions: [
-														{
-															header: 'Question',
-															question: request.question,
-															options: pipe(
-																request.choices ?? [],
-																Array.map(choice => ({label: choice}))
-															),
-															multiple: false
-														}
-													]
-												}
-											})
-										)
-									)
-								)
-								return await new Promise(resolve => {
-									pendingQuestions.set(toolCallId, resolve)
-								})
-							}
-						}),
+			const client = yield* Effect.acquireRelease(
+				Effect.tryPromise({
+					try: async () => {
+						const client = new CopilotClient({logLevel: 'error'})
+						await client.start()
+						return client
+					},
 					catch: cause => new AiError({cause})
-				})
+				}),
+				flow(
+					client => Effect.tryPromise({try: () => client.stop(), catch: cause => new AiError({cause})}),
+					Effect.ignore
+				)
+			)
 
-				yield* Ref.set(sessionRef, createdSession)
-				return createdSession
+			const events = yield* SubscriptionRef.make<MessageStreamPart | undefined>(undefined)
+			const history = yield* SubscriptionRef.make<ConversationMessage[]>([])
+			const pendingApprovals = MutableHashMap.empty<string, Deferred.Deferred<PermissionRequestResult>>()
+			const pendingQuestions = MutableHashMap.empty<string, Deferred.Deferred<{answer: string; wasFreeform: boolean}>>()
+
+			const session = yield* Effect.tryPromise({
+				try: () =>
+					client.createSession({
+						model: selection.model,
+						streaming: true,
+						onPermissionRequest: async request => {
+							const part = new ToolApprovalRequestPart({toolCallId: request.toolCallId})
+							const deferred = await Effect.runPromise(
+								Effect.gen(function* () {
+									const deferred = yield* Deferred.make<PermissionRequestResult>()
+									MutableHashMap.set(pendingApprovals, part.approvalId, deferred)
+									return deferred
+								})
+							)
+							await Effect.runPromise(
+								applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'assistant', [part]))
+							)
+							return await Effect.runPromise(Deferred.await(deferred))
+						},
+						onUserInputRequest: async request => {
+							const part = new ToolCallPart({
+								toolName: 'question',
+								input: {
+									questions: [
+										{
+											header: 'Question',
+											question: request.question,
+											options: pipe(
+												request.choices ?? [],
+												Array.map(choice => ({label: choice}))
+											)
+										}
+									]
+								}
+							})
+							const deferred = await Effect.runPromise(
+								Effect.gen(function* () {
+									const deferred = yield* Deferred.make<{answer: string; wasFreeform: boolean}>()
+									MutableHashMap.set(pendingQuestions, part.toolCallId, deferred)
+									return deferred
+								})
+							)
+							await Effect.runPromise(
+								applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'assistant', [part]))
+							)
+							return await Effect.runPromise(Deferred.await(deferred))
+						}
+					}),
+				catch: cause => new AiError({cause})
 			})
 
 			return Agent.of({
 				prompt: Effect.fnUntraced(function* (parts) {
-					yield* applyPartsStream(events, history, userStream(selection, parts))
-					const session = yield* ensureSession()
-					yield* applyPartsStream(events, history, promptStream(session, selection, parts))
+					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'user', parts))
+					yield* applyPartsStream(
+						events,
+						history,
+						assistantStream(
+							session,
+							selection,
+							pipe(
+								parts,
+								Array.filter(part => part._tag === 'text'),
+								Array.map(part => part.text),
+								Array.join('\n')
+							)
+						)
+					)
 				}),
 				respond: Effect.fnUntraced(function* (part) {
-					const messages = yield* SubscriptionRef.get(history)
-					if (Array.isArrayEmpty(messages)) return yield* new AiError({message: 'No active session'})
-
-					yield* applyPartsStream(events, history, toolStream(selection, [part]))
+					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'tool', [part]))
 
 					if (part._tag === 'tool-approval-response') {
-						const pendingApproval = pendingApprovals.get(part.approvalId)
-						pendingApprovals.delete(part.approvalId)
-						pendingApproval?.(part.approved ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'})
+						const deferred = MutableHashMap.get(pendingApprovals, part.approvalId)
+						MutableHashMap.remove(pendingApprovals, part.approvalId)
+						if (Option.isSome(deferred)) {
+							yield* Deferred.succeed(
+								deferred.value,
+								part.approved ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'}
+							)
+						}
 						return
 					}
 
-					const pendingQuestion = pendingQuestions.get(part.toolCallId)
-					pendingQuestions.delete(part.toolCallId)
-					pendingQuestion?.({answer: outputToAnswer(part.output), wasFreeform: true})
+					const deferred = MutableHashMap.get(pendingQuestions, part.toolCallId)
+					MutableHashMap.remove(pendingQuestions, part.toolCallId)
+					if (Option.isSome(deferred)) {
+						yield* Deferred.succeed(deferred.value, {
+							answer: Predicate.isString(part.output) ? part.output : JSON.stringify(part.output),
+							wasFreeform: true
+						})
+					}
 				}),
 				stream: pipe(SubscriptionRef.changes(events), Stream.filter(Predicate.isNotUndefined)),
 				history: SubscriptionRef.changes(history)
