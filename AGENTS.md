@@ -53,7 +53,7 @@ bun run fix && bun run check
 
 ## EXTERNAL KNOWLEDGE
 
-NEVER rely on training data for: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`, `pierre-diffs`, `copilot-sdk`, `codex`.
+NEVER rely on training data for: `better-auth`, `effect`, `tanstack-router`, `ai-sdk`, `pierre-diffs`, `copilot-sdk`, `codex`, `opencode`.
 
 Source of truth is `.opencode/resources/<library>/` (cloned repos). Search these FIRST for APIs, behaviors, and examples.
 

@@ -56,6 +56,7 @@
         "@anthropic-ai/claude-agent-sdk": "latest",
         "@github/copilot-sdk": "latest",
         "@openai/codex-sdk": "latest",
+        "@opencode-ai/sdk": "latest",
         "@openrouter/ai-sdk-provider": "latest",
         "ai": "latest",
         "exa-js": "latest",

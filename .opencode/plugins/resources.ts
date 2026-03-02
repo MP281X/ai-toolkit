@@ -8,7 +8,8 @@ const resources = [
 	// ai
 	{branch: 'main', name: 'ai-sdk', url: 'https://github.com/vercel/ai'},
 	{branch: 'main', name: 'codex', url: 'https://github.com/openai/codex'},
-	{branch: 'main', name: 'copilot-sdk', url: 'https://github.com/github/copilot-sdk'}
+	{branch: 'main', name: 'copilot-sdk', url: 'https://github.com/github/copilot-sdk'},
+	{branch: 'main', name: 'opencode', url: 'https://github.com/anomalyco/opencode.git'}
 ]
 
 export const plugin: Plugin = async ({client, $}) => {
