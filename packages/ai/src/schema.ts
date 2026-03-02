@@ -135,16 +135,20 @@ export function partsStreamToMessage<E, R>(stream: Stream.Stream<MessageStreamPa
 			}
 
 			if (Predicate.isUndefined(current)) return current
+			const prevPart = current.parts[current.parts.length - 1]
 
-			if (part._tag === 'text' || part._tag === 'reasoning') {
-				const lastPart = current.parts[current.parts.length - 1]
-				if (lastPart?._tag === part._tag && lastPart.id === part.id) {
-					const mergedPart =
-						part._tag === 'text'
-							? new TextPart({id: part.id, text: lastPart.text + part.text})
-							: new ReasoningPart({id: part.id, text: lastPart.text + part.text})
-					return new ConversationMessage({...current, parts: [...current.parts.slice(0, -1), mergedPart]})
-				}
+			if (part._tag === 'text' && prevPart?._tag === 'text' && part.id === prevPart.id) {
+				return new ConversationMessage({
+					...current,
+					parts: [...current.parts.slice(0, -1), new TextPart({id: part.id, text: prevPart.text + part.text})]
+				})
+			}
+
+			if (part._tag === 'reasoning' && prevPart?._tag === 'reasoning' && part.id === prevPart.id) {
+				return new ConversationMessage({
+					...current,
+					parts: [...current.parts.slice(0, -1), new ReasoningPart({id: part.id, text: prevPart.text + part.text})]
+				})
 			}
 
 			return new ConversationMessage({...current, parts: Array.append(current.parts, part)})
