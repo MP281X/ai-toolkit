@@ -24,7 +24,6 @@ import {
 	applyPartsStream,
 	ErrorPart,
 	FinishPart,
-	partsStreamWithStartFinish,
 	ReasoningPart,
 	StartPart,
 	TextPart,
@@ -141,60 +140,70 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 			const pendingApprovals = MutableHashMap.empty<string, Deferred.Deferred<PermissionRequestResult>>()
 			const pendingQuestions = MutableHashMap.empty<string, Deferred.Deferred<{answer: string; wasFreeform: boolean}>>()
 
+			const runPromise = Effect.runPromiseWith(yield* Effect.services<Scope.Scope>())
+
 			const session = yield* Effect.tryPromise({
 				try: () =>
 					client.createSession({
 						model: selection.model,
 						streaming: true,
-						onPermissionRequest: async request => {
-							const part = new ToolApprovalRequestPart({toolCallId: request.toolCallId})
-							const deferred = await Effect.runPromise(
+						onPermissionRequest: request =>
+							runPromise(
 								Effect.gen(function* () {
+									const part = new ToolApprovalRequestPart({toolCallId: request.toolCallId})
 									const deferred = yield* Deferred.make<PermissionRequestResult>()
 									MutableHashMap.set(pendingApprovals, part.approvalId, deferred)
-									return deferred
+									yield* applyPartsStream(
+										events,
+										history,
+										Stream.fromIterable([
+											new StartPart({model: selection, role: 'assistant'}),
+											part,
+											new FinishPart({finishReason: 'tool-calls'})
+										])
+									)
+									return yield* Deferred.await(deferred)
 								})
-							)
-							await Effect.runPromise(
-								applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'assistant', [part]))
-							)
-							return await Effect.runPromise(Deferred.await(deferred))
-						},
-						onUserInputRequest: async request => {
-							const part = new ToolCallPart({
-								toolName: 'question',
-								input: {
-									questions: [
-										{
-											header: 'Question',
-											question: request.question,
-											options: pipe(
-												request.choices ?? [],
-												Array.map(choice => ({label: choice}))
-											)
-										}
-									]
-								}
-							})
-							const deferred = await Effect.runPromise(
+							),
+						onUserInputRequest: request =>
+							runPromise(
 								Effect.gen(function* () {
+									const part = new ToolCallPart({
+										toolName: 'question',
+										input: {
+											questions: [
+												{
+													header: 'Question',
+													question: request.question,
+													options: pipe(
+														request.choices ?? [],
+														Array.map(choice => ({label: choice}))
+													)
+												}
+											]
+										}
+									})
 									const deferred = yield* Deferred.make<{answer: string; wasFreeform: boolean}>()
 									MutableHashMap.set(pendingQuestions, part.toolCallId, deferred)
-									return deferred
+									yield* applyPartsStream(events, history, Stream.fromIterable([part]))
+									return yield* Deferred.await(deferred)
 								})
 							)
-							await Effect.runPromise(
-								applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'assistant', [part]))
-							)
-							return await Effect.runPromise(Deferred.await(deferred))
-						}
 					}),
 				catch: cause => new AiError({cause})
 			})
 
 			return Agent.of({
 				prompt: Effect.fnUntraced(function* (parts) {
-					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'user', parts))
+					yield* applyPartsStream(
+						events,
+						history,
+						Stream.fromIterable([
+							new StartPart({model: selection, role: 'user'}),
+							...parts,
+							new FinishPart({finishReason: 'stop'})
+						])
+					)
 					yield* applyPartsStream(
 						events,
 						history,
@@ -211,7 +220,7 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 					)
 				}),
 				respond: Effect.fnUntraced(function* (part) {
-					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'tool', [part]))
+					yield* applyPartsStream(events, history, Stream.fromIterable([part]))
 
 					if (part._tag === 'tool-approval-response') {
 						const deferred = MutableHashMap.get(pendingApprovals, part.approvalId)

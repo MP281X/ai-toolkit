@@ -22,7 +22,7 @@ export function Message(props: ConversationMessage & {onToolResponse?: (response
 			<div
 				className={cn(
 					'w-0.5 shrink-0',
-					props.finishReason === 'stop' ? 'bg-blue-500/60' : 'bg-muted-foreground/40',
+					props.state === 'stop' ? 'bg-blue-500/60' : 'bg-muted-foreground/40',
 					hasApproval && 'bg-violet-500/60',
 					props.role === 'user' && 'bg-primary'
 				)}
@@ -31,7 +31,7 @@ export function Message(props: ConversationMessage & {onToolResponse?: (response
 				<div
 					className={cn(
 						'w-full border-2 px-3',
-						props.finishReason === 'stop' ? 'border-blue-500/30 bg-blue-500/1' : 'border-border',
+						props.state === 'stop' ? 'border-blue-500/30 bg-blue-500/1' : 'border-border',
 						hasApproval && 'border-violet-500/30',
 						props.role === 'user' && 'border-primary/20 bg-primary/1'
 					)}
@@ -46,7 +46,7 @@ export function Message(props: ConversationMessage & {onToolResponse?: (response
 						<span className="ml-auto">{formatRelativeTime(props.startedAt)}</span>
 					</div>
 					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-						{Array.isReadonlyArrayEmpty(props.parts) ? (
+						{props.state === 'loading' && Array.isReadonlyArrayEmpty(props.parts) ? (
 							<div className="flex gap-1 py-0.5">
 								<div className="size-1.5 animate-pulse bg-muted-foreground/60" style={{animationDelay: '0ms'}} />
 								<div className="size-1.5 animate-pulse bg-muted-foreground/60" style={{animationDelay: '200ms'}} />
