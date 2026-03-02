@@ -119,7 +119,7 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 	return Layer.effect(
 		Agent,
 		Effect.fnUntraced(function* () {
-			const selection: ModelSelection = {agent: 'copilot', provider: 'copilot', model: input.model}
+			const selection: ModelSelection = {agent: 'copilot', provider: 'github-copilot', model: input.model}
 			const client = yield* Effect.acquireRelease(
 				Effect.tryPromise({
 					try: async () => {

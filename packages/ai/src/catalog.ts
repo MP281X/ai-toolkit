@@ -12,7 +12,7 @@ export const providers = [
 		apiKeyEnv: 'AI_OPENROUTER'
 	},
 	{
-		id: 'copilot',
+		id: 'github-copilot',
 		baseUrl: 'https://api.githubcopilot.com',
 		apiKeyEnv: undefined
 	}
@@ -61,7 +61,7 @@ export const offerings = [
 	},
 	{
 		agents: ['copilot', 'opencode'],
-		provider: 'copilot',
+		provider: 'github-copilot',
 		model: 'gpt-5-mini',
 		adapter: 'openai',
 		contextWindow: 192_000,
