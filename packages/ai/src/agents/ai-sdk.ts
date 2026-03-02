@@ -14,7 +14,6 @@ import {
 	ErrorPart,
 	FilePart,
 	FinishPart,
-	partsStreamWithStartFinish,
 	ReasoningPart,
 	StartPart,
 	TextPart,
@@ -231,11 +230,19 @@ export function AiSdkAgentLayer(input: {provider: ProviderId; model: ModelId}) {
 
 			return Agent.of({
 				prompt: Effect.fnUntraced(function* (parts) {
-					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'user', parts))
+					yield* applyPartsStream(
+						events,
+						history,
+						Stream.fromIterable([
+							new StartPart({model: selection, role: 'user'}),
+							...parts,
+							new FinishPart({finishReason: 'stop'})
+						])
+					)
 					yield* runAssistant()
 				}),
 				respond: Effect.fnUntraced(function* (part) {
-					yield* applyPartsStream(events, history, partsStreamWithStartFinish(selection, 'tool', [part]))
+					yield* applyPartsStream(events, history, Stream.fromIterable([part]))
 					yield* runAssistant()
 				}),
 				stream: pipe(SubscriptionRef.changes(events), Stream.filter(Predicate.isNotUndefined)),

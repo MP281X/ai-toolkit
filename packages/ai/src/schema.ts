@@ -95,10 +95,7 @@ export class StartPart extends Schema.TaggedClass<StartPart>()('start', {
 }) {}
 
 export class FinishPart extends Schema.TaggedClass<FinishPart>()('finish', {
-	finishReason: pipe(
-		Schema.Literals(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other']),
-		Schema.withConstructorDefault(() => Option.some('stop' as const))
-	),
+	finishReason: Schema.Literals(['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other']),
 	usage: pipe(
 		Schema.Struct({input: Schema.Number, output: Schema.Number, reasoning: Schema.Number}),
 		Schema.withConstructorDefault(() => Option.some({input: 0, output: 0, reasoning: 0}))
@@ -113,27 +110,28 @@ export class ConversationMessage extends Schema.Class<ConversationMessage>('Conv
 	startedAt: StartPart.fields.startedAt,
 	role: StartPart.fields.role,
 	parts: Schema.Array(MessagePart),
-	finishReason: FinishPart.fields.finishReason,
+	state: pipe(
+		Schema.Literals(['loading', 'stop', 'tool-calls', 'error']),
+		Schema.withConstructorDefault(() => Option.some('loading' as const))
+	),
 	usage: FinishPart.fields.usage
 }) {}
 
-export function upsertConversationMessage(messages: readonly ConversationMessage[], message: ConversationMessage) {
-	const previous = messages[messages.length - 1]
-	if (Predicate.isUndefined(previous)) return Array.append(messages, message)
-	if (previous.startedAt !== message.startedAt || previous.role !== message.role) return [...messages, message]
-	return [...messages.slice(0, -1), message]
-}
-
 export function partsStreamToMessage<E, R>(stream: Stream.Stream<MessageStreamPart, E, R>) {
 	return pipe(
-		Stream.scan(stream, undefined as ConversationMessage | undefined, (current, part) => {
+		stream,
+		Stream.scan(undefined as ConversationMessage | undefined, (current, part) => {
 			if (part._tag === 'start') {
 				return new ConversationMessage({model: part.model, startedAt: part.startedAt, role: part.role, parts: []})
 			}
 
 			if (part._tag === 'finish') {
 				if (Predicate.isUndefined(current)) return current
-				return new ConversationMessage({...current, finishReason: part.finishReason, usage: part.usage})
+				return new ConversationMessage({
+					...current,
+					usage: part.usage,
+					state: part.finishReason === 'stop' || part.finishReason === 'tool-calls' ? part.finishReason : 'error'
+				})
 			}
 
 			if (Predicate.isUndefined(current)) return current
@@ -155,17 +153,6 @@ export function partsStreamToMessage<E, R>(stream: Stream.Stream<MessageStreamPa
 	)
 }
 
-export function partsStreamWithStartFinish(
-	selection: ModelSelection,
-	role: StartPart['role'],
-	parts: readonly MessageStreamPart[]
-) {
-	return Stream.concat(
-		Stream.succeed(new StartPart({model: selection, role})),
-		Stream.concat(Stream.fromIterable(parts), Stream.succeed(new FinishPart({})))
-	)
-}
-
 export function applyPartsStream<E, R>(
 	events: SubscriptionRef.SubscriptionRef<MessageStreamPart | undefined>,
 	history: SubscriptionRef.SubscriptionRef<ConversationMessage[]>,
@@ -176,7 +163,16 @@ export function applyPartsStream<E, R>(
 		Stream.tap(part => SubscriptionRef.set(events, part)),
 		partsStreamToMessage,
 		Stream.mapEffect(message =>
-			SubscriptionRef.update(history, current => upsertConversationMessage(current, message))
+			SubscriptionRef.update(history, messages =>
+				pipe(
+					Array.last(messages),
+					Option.filter(prev => prev.startedAt === message.startedAt && prev.role === message.role),
+					Option.match({
+						onNone: () => Array.append(messages, message),
+						onSome: () => [...Array.dropRight(messages, 1), message]
+					})
+				)
+			)
 		),
 		Stream.runDrain
 	)
