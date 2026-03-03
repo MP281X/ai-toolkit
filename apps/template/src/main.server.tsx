@@ -7,6 +7,7 @@ import {RpcGroup, RpcServer} from 'effect/unstable/rpc'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiContracts} from '#rpcs/ai/contracts.ts'
 import {GitContracts} from '#rpcs/git/contracts.ts'
+import {RealtimeContracts} from '#rpcs/realtime/contracts.ts'
 
 BunRuntime.runMain(
 	pipe(
@@ -15,7 +16,7 @@ BunRuntime.runMain(
 				RpcServer.layerHttp({
 					path: '/api/rpc',
 					protocol: 'websocket',
-					group: RpcGroup.make().merge(AiContracts, GitContracts)
+					group: RpcGroup.make().merge(AiContracts, GitContracts, RealtimeContracts)
 				}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)

@@ -479,6 +479,7 @@ export function ChatInput(props: ChatInputProps) {
 							>
 								{matched.map((entry, index) => (
 									<button
+										// biome-ignore lint/suspicious/noArrayIndexKey: _
 										key={`${entry.value}-${index}`}
 										type="button"
 										role="option"
@@ -555,6 +556,7 @@ export function ChatInput(props: ChatInputProps) {
 						<div className="flex items-center gap-2">
 							{snippets.map((entry, index) => (
 								<Button
+									// biome-ignore lint/suspicious/noArrayIndexKey: _
 									key={`snippet-${entry.insert}-${index}`}
 									type="button"
 									variant="outline"

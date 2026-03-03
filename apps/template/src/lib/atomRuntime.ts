@@ -8,6 +8,7 @@ import {Socket} from 'effect/unstable/socket'
 
 import {AiContracts} from '#rpcs/ai/contracts.ts'
 import {GitContracts} from '#rpcs/git/contracts.ts'
+import {RealtimeContracts} from '#rpcs/realtime/contracts.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
@@ -26,7 +27,7 @@ export const LiveLayers = pipe(
 )
 
 export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
-	group: Rpc.RpcGroup.make().merge(AiContracts, GitContracts),
+	group: Rpc.RpcGroup.make().merge(AiContracts, GitContracts, RealtimeContracts),
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
 		Layer.provideMerge(Socket.layerWebSocket(`${window.origin}/api/rpc`)),
