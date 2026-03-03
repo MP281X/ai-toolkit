@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as homeRouteRouteImport } from './routes/(home)/route'
+import { Route as homeRealtimeIndexRouteImport } from './routes/(home)/realtime/index'
 import { Route as homeDiffIndexRouteImport } from './routes/(home)/diff/index'
 import { Route as homeChatIndexRouteImport } from './routes/(home)/chat/index'
 
 const homeRouteRoute = homeRouteRouteImport.update({
   id: '/(home)',
   getParentRoute: () => rootRouteImport,
+} as any)
+const homeRealtimeIndexRoute = homeRealtimeIndexRouteImport.update({
+  id: '/realtime/',
+  path: '/realtime/',
+  getParentRoute: () => homeRouteRoute,
 } as any)
 const homeDiffIndexRoute = homeDiffIndexRouteImport.update({
   id: '/diff/',
@@ -31,23 +37,31 @@ const homeChatIndexRoute = homeChatIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/chat/': typeof homeChatIndexRoute
   '/diff/': typeof homeDiffIndexRoute
+  '/realtime/': typeof homeRealtimeIndexRoute
 }
 export interface FileRoutesByTo {
   '/chat': typeof homeChatIndexRoute
   '/diff': typeof homeDiffIndexRoute
+  '/realtime': typeof homeRealtimeIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(home)': typeof homeRouteRouteWithChildren
   '/(home)/chat/': typeof homeChatIndexRoute
   '/(home)/diff/': typeof homeDiffIndexRoute
+  '/(home)/realtime/': typeof homeRealtimeIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/chat/' | '/diff/'
+  fullPaths: '/chat/' | '/diff/' | '/realtime/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/chat' | '/diff'
-  id: '__root__' | '/(home)' | '/(home)/chat/' | '/(home)/diff/'
+  to: '/chat' | '/diff' | '/realtime'
+  id:
+    | '__root__'
+    | '/(home)'
+    | '/(home)/chat/'
+    | '/(home)/diff/'
+    | '/(home)/realtime/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -62,6 +76,13 @@ declare module '@tanstack/react-router' {
       fullPath: ''
       preLoaderRoute: typeof homeRouteRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/(home)/realtime/': {
+      id: '/(home)/realtime/'
+      path: '/realtime'
+      fullPath: '/realtime/'
+      preLoaderRoute: typeof homeRealtimeIndexRouteImport
+      parentRoute: typeof homeRouteRoute
     }
     '/(home)/diff/': {
       id: '/(home)/diff/'
@@ -83,11 +104,13 @@ declare module '@tanstack/react-router' {
 interface homeRouteRouteChildren {
   homeChatIndexRoute: typeof homeChatIndexRoute
   homeDiffIndexRoute: typeof homeDiffIndexRoute
+  homeRealtimeIndexRoute: typeof homeRealtimeIndexRoute
 }
 
 const homeRouteRouteChildren: homeRouteRouteChildren = {
   homeChatIndexRoute: homeChatIndexRoute,
   homeDiffIndexRoute: homeDiffIndexRoute,
+  homeRealtimeIndexRoute: homeRealtimeIndexRoute,
 }
 
 const homeRouteRouteWithChildren = homeRouteRoute._addFileChildren(

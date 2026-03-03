@@ -1,6 +1,6 @@
 import {Function} from 'effect'
 
-import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
+import {createRootRoute, HeadContent, redirect, Scripts} from '@tanstack/react-router'
 
 import './styles.css'
 
@@ -15,5 +15,8 @@ export const Route = createRootRoute({
 
 			{props.children}
 		</div>
-	)
+	),
+	beforeLoad: ({location}) => {
+		if (location.pathname === '/') throw redirect({to: '/chat'})
+	}
 })

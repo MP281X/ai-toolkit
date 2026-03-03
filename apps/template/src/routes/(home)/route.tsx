@@ -1,4 +1,4 @@
-import {MessageSquare, Repeat} from '@ai-toolkit/components/icons'
+import {MessageSquare, Repeat, Zap} from '@ai-toolkit/components/icons'
 import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {createFileRoute, Outlet, useLocation, useNavigate} from '@tanstack/react-router'
@@ -33,6 +33,13 @@ function Layout() {
 							icon={<Repeat className="size-3.5" />}
 						>
 							Diff
+						</TreeExplorerItem>
+						<TreeExplorerItem
+							onClick={() => navigate({to: '/realtime'})}
+							selected={isCurrentPage('/realtime')}
+							icon={<Zap className="size-3.5" />}
+						>
+							Realtime
 						</TreeExplorerItem>
 					</TreeExplorerSection>
 				</TreeExplorer>
