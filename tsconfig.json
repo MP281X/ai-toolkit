@@ -4,13 +4,10 @@
 		"strict": true,
 		"noUnusedLocals": true,
 		"noErrorTruncation": true,
-		"noImplicitReturns": true,
 		"noUnusedParameters": true,
 		"noImplicitOverride": true,
-		"allowUnusedLabels": false,
 		"noUncheckedIndexedAccess": true,
 		"noFallthroughCasesInSwitch": true,
-		"exactOptionalPropertyTypes": false,
 		"noPropertyAccessFromIndexSignature": true,
 
 		// ts version and module resolution (use the lasted ts/js features and types)
@@ -32,11 +29,9 @@
 		"useDefineForClassFields": true,
 		"allowImportingTsExtensions": true,
 		"noUncheckedSideEffectImports": true,
-		"allowSyntheticDefaultImports": true,
 
 		// build config
 		"noEmit": true,
-		"sourceMap": true,
 		"incremental": true,
 		"tsBuildInfoFile": ".tsbuildinfo"
 	},

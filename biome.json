@@ -19,11 +19,16 @@
 				"useIterableCallbackReturn": "off"
 			},
 			"style": {
+				"noUselessElse": "error",
+				"noNestedTernary": "error",
+				"noInferrableTypes": "error",
 				"useNumberNamespace": "warn",
+				"noNonNullAssertion": "error",
+				"useCollapsedElseIf": "error",
 				"useAsConstAssertion": "warn",
 				"useEnumInitializers": "warn",
+				"noParameterProperties": "error",
 				"useDefaultParameterLast": "warn",
-				"noNonNullAssertion": "error",
 				"noUnusedTemplateLiteral": "warn",
 				"useConsistentTypeDefinitions": { "level": "error", "options": { "style": "type" } },
 				"useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },

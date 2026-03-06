@@ -93,48 +93,48 @@ function QuestionTool(props: {part: ToolCallPart; onResponse?: (response: ToolMe
 							{question.header ?? `Question ${index + 1}`}
 						</div>
 						{question.question && <div className="text-muted-foreground text-xs">{question.question}</div>}
-						{question.options && question.options.length > 0 ? (
-							question.multiple ? (
-								<div className="space-y-2">
-									{question.options.map(option => (
-										<div key={option.label} className="flex items-start gap-2 text-xs">
-											<Checkbox
-												checked={responses[index]?.includes(option.label) ?? false}
-												onCheckedChange={checked => setResponsesEntry(index, option.label, Boolean(checked))}
-												aria-label={option.label}
-											/>
-											<div className="space-y-0.5">
-												<div className="font-medium">{option.label}</div>
-												{option.description && (
-													<div className="text-[11px] text-muted-foreground">{option.description}</div>
-												)}
-											</div>
+						{question.options && Array.isArrayNonEmpty(question.options) && question.multiple && (
+							<div className="space-y-2">
+								{question.options.map(option => (
+									<div key={option.label} className="flex items-start gap-2 text-xs">
+										<Checkbox
+											checked={responses[index]?.includes(option.label) ?? false}
+											onCheckedChange={checked => setResponsesEntry(index, option.label, Boolean(checked))}
+											aria-label={option.label}
+										/>
+										<div className="space-y-0.5">
+											<div className="font-medium">{option.label}</div>
+											{option.description && (
+												<div className="text-[11px] text-muted-foreground">{option.description}</div>
+											)}
 										</div>
-									))}
-								</div>
-							) : (
-								<RadioGroup value={responses[index]?.[0]} onValueChange={value => setSingleResponse(index, value)}>
-									{question.options.map(option => (
-										<div key={option.label} className="flex items-start gap-2 text-xs">
-											<RadioGroupItem value={option.label} aria-label={option.label} />
-											<div className="space-y-0.5">
-												<div className="font-medium">{option.label}</div>
-												{option.description && (
-													<div className="text-[11px] text-muted-foreground">{option.description}</div>
-												)}
-											</div>
+									</div>
+								))}
+							</div>
+						)}
+						{question.options && Array.isArrayNonEmpty(question.options) && !question.multiple && (
+							<RadioGroup value={responses[index]?.[0]} onValueChange={value => setSingleResponse(index, value)}>
+								{question.options.map(option => (
+									<div key={option.label} className="flex items-start gap-2 text-xs">
+										<RadioGroupItem value={option.label} aria-label={option.label} />
+										<div className="space-y-0.5">
+											<div className="font-medium">{option.label}</div>
+											{option.description && (
+												<div className="text-[11px] text-muted-foreground">{option.description}</div>
+											)}
 										</div>
-									))}
-								</RadioGroup>
-							)
-						) : (
+									</div>
+								))}
+							</RadioGroup>
+						)}
+						{(Predicate.isNullish(question.options) || Array.isArrayEmpty(question.options)) && (
 							<Input
 								value={responses[index]?.[0] ?? ''}
 								onChange={event => setSingleResponse(index, event.currentTarget.value)}
 								placeholder="Type your answer"
 							/>
 						)}
-						{question.options && question.options.length > 0 && question.multiple && (
+						{question.options && Array.isArrayNonEmpty(question.options) && question.multiple && (
 							<Textarea
 								value={responses[index]?.join(', ') ?? ''}
 								onChange={event => setResponsesFromText(index, event.currentTarget.value)}

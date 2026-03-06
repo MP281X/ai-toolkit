@@ -1,0 +1,51 @@
+{
+	"$schema": "https://btca.dev/btca.schema.json",
+
+	"model": "gpt-5-mini",
+	"provider": "github-copilot",
+	"dataDirectory": ".opencode/btca",
+
+	"resources": [
+		{
+			"name": "effect",
+			"type": "git",
+			"branch": "main",
+			"url": "https://github.com/Effect-TS/effect-smol"
+		},
+		{
+			"name": "tanstack-router",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages/react-router/src",
+			"url": "https://github.com/TanStack/router"
+		},
+		{
+			"name": "ai",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages/ai/src",
+			"url": "https://github.com/vercel/ai"
+		},
+		{
+			"name": "@pierre/diffs",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages/diffs/src",
+			"url": "https://github.com/pierrecomputer/pierre"
+		},
+		{
+			"name": "@github/copilot-sdk",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "nodejs",
+			"url": "https://github.com/github/copilot-sdk"
+		},
+		{
+			"name": "@opencode-ai/sdk",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages/sdk/js/src/v2",
+			"url": "https://github.com/anomalyco/opencode"
+		}
+	]
+}
