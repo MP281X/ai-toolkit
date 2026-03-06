@@ -17,9 +17,7 @@
 	"dependencies": {
 		"ai": "latest",
 		"@opencode-ai/sdk": "latest",
-		"@openai/codex-sdk": "latest",
 		"@github/copilot-sdk": "latest",
-		"@anthropic-ai/claude-agent-sdk": "latest",
 
 		"exa-js": "latest",
 

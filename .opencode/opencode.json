@@ -3,6 +3,14 @@
 
 	"tools": { "question": true, "codesearch": false },
 
+	"mcp": {
+		"btca": {
+			"type": "local",
+			"timeout": 600000,
+			"command": ["bunx", "btca", "mcp"]
+		}
+	},
+
 	"permission": {
 		"bash": {
 			"*": "allow",
