@@ -1,6 +1,6 @@
 import {Array as EffectArray, Record as EffectRecord} from 'effect'
 
-import {type FilePart, makeFilePart} from '@ai-toolkit/ai/schema'
+import {type FilePart, FilePart as FilePartSchema} from '@ai-toolkit/ai/schema'
 import {ArrowUpIcon, Paperclip} from '@ai-toolkit/components/icons'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
@@ -336,7 +336,7 @@ export function ChatInput(props: ChatInputProps) {
 			files.map(async file => {
 				const name = file.name
 				const base64 = await readAsBase64(file)
-				const attachment = makeFilePart({
+				const attachment = FilePartSchema.makeUnsafe({
 					data: base64,
 					filename: name,
 					mediaType: file.type || 'application/octet-stream'

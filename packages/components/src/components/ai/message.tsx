@@ -2,7 +2,7 @@
 
 import {Array} from 'effect'
 
-import type {ConversationMessage, ToolMessagePart} from '@ai-toolkit/ai/schema'
+import type {ConversationMessage, ToolResponsePart} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, ClockIcon, HashIcon, InboxIcon, SparklesIcon, UserIcon} from 'lucide-react'
 
 import {Attachment} from '#components/ai/attachment.tsx'
@@ -27,7 +27,7 @@ function hasUsage(usage: ConversationMessage['usage']) {
 	return usage.input > 0 || usage.output > 0
 }
 
-export function Message(props: {message: ConversationMessage; onToolResponse?: (response: ToolMessagePart) => void}) {
+export function Message(props: {message: ConversationMessage; onToolResponse?: (response: ToolResponsePart) => void}) {
 	const m = props.message
 	const duration = m.role !== 'user' && m.finishedAt ? formatDuration(m.finishedAt - m.startedAt) : null
 	const theme = messageTheme(m)

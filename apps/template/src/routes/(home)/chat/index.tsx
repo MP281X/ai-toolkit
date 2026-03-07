@@ -2,7 +2,7 @@ import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {makeTextPart} from '@ai-toolkit/ai/schema'
+import {type ConversationPart, reconstructMessages, TextPart} from '@ai-toolkit/ai/schema'
 import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
@@ -22,7 +22,13 @@ const messagesAtom = Atom.keepAlive(
 	AtomRuntime.atom(
 		pipe(
 			RpcClient.asEffect(),
-			Effect.map(client => client('ai.listMessages', void 0)),
+			Effect.map(client =>
+				client('ai.events', void 0).pipe(
+					Stream.scan([] as readonly ConversationPart[], (parts, part) => [...parts, part]),
+					Stream.drop(1),
+					Stream.map(parts => reconstructMessages(parts))
+				)
+			),
 			Stream.unwrap
 		)
 	)
@@ -49,7 +55,9 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput onSubmit={data => sendMessage({payload: [makeTextPart({text: data.text}), ...data.attachments]})}>
+			<ChatInput
+				onSubmit={data => sendMessage({payload: [TextPart.makeUnsafe({text: data.text}), ...data.attachments]})}
+			>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>

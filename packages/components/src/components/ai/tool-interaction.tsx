@@ -2,19 +2,13 @@
 
 import {Array, Predicate} from 'effect'
 
-import {
-	makeToolApprovalResponsePart,
-	makeToolResultPart,
-	type ToolMessagePart,
-	type ToolPart
-} from '@ai-toolkit/ai/schema'
+import {ToolApprovalResponsePart, type ToolPart, type ToolResponsePart, ToolResultPart} from '@ai-toolkit/ai/schema'
 import {
 	CommandToolInput,
 	decodeToolValueOrUndefined,
-	makeQuestionToolAnswer,
-	makeQuestionToolOutput,
 	PathToolInput,
 	PatternToolInput,
+	QuestionToolAnswer,
 	QuestionToolInput,
 	QuestionToolOutput,
 	TextToolOutput,
@@ -57,32 +51,38 @@ const TOOL_ICONS: Record<string, typeof TerminalIcon> = {
 	write: PenLineIcon
 }
 
-/** Tools whose output is expandable when present. */
-const EXPANDABLE_KINDS = new Set(['bash', 'write', 'patch'])
+const EXPANDABLE_TOOL_NAMES = new Set(['bash', 'write', 'patch'])
 
-export function ToolInteraction(props: {part: ToolPart; onResponse?: (response: ToolMessagePart) => void}) {
-	if (isIntentTool(props.part.toolName)) return null
+function isQuestionTool(toolName: string) {
+	return toolName === 'question'
+}
 
+function isWebTool(toolName: string) {
+	return toolName === 'web'
+}
+
+export function ToolInteraction(props: {part: ToolPart; onResponse?: (response: ToolResponsePart) => void}) {
 	const isPendingQuestion =
-		props.part.toolKind === 'question' &&
+		isQuestionTool(props.part.toolName) &&
 		props.part.status !== 'error' &&
 		!decodeToolValueOrUndefined(QuestionToolOutput, props.part.output)
 
-	if (isPendingQuestion) return <PendingQuestion part={props.part} onResponse={props.onResponse} />
-
-	return <ToolRow part={props.part} onResponse={props.onResponse} />
+	return isPendingQuestion ? (
+		<PendingQuestion part={props.part} onResponse={props.onResponse} />
+	) : (
+		<ToolRow {...props} />
+	)
 }
 
-function ToolRow(props: {part: ToolPart; onResponse?: (response: ToolMessagePart) => void}) {
-	const Icon = TOOL_ICONS[props.part.toolKind] ?? WrenchIcon
+function ToolRow(props: {part: ToolPart; onResponse?: (response: ToolResponsePart) => void}) {
+	const Icon = TOOL_ICONS[props.part.toolName] ?? WrenchIcon
 	const summary = toolSummary(props.part)
 	const needsApproval = props.part.status === 'pending-approval'
-	const hasError = props.part.status === 'error'
 	const hasOutput = Predicate.isNotUndefined(props.part.output)
-	const expandable = hasError || (EXPANDABLE_KINDS.has(props.part.toolKind) && hasOutput)
-	const isQuestion = props.part.toolKind === 'question'
+	const expandable = props.part.status === 'error' || (EXPANDABLE_TOOL_NAMES.has(props.part.toolName) && hasOutput)
+	const isQuestion = isQuestionTool(props.part.toolName)
 
-	if (props.part.toolKind === 'web') {
+	if (isWebTool(props.part.toolName)) {
 		return <WebToolRow part={props.part} needsApproval={needsApproval} onResponse={props.onResponse} />
 	}
 
@@ -128,7 +128,11 @@ function ToolRow(props: {part: ToolPart; onResponse?: (response: ToolMessagePart
 	)
 }
 
-function WebToolRow(props: {part: ToolPart; needsApproval: boolean; onResponse?: (response: ToolMessagePart) => void}) {
+function WebToolRow(props: {
+	part: ToolPart
+	needsApproval: boolean
+	onResponse?: (response: ToolResponsePart) => void
+}) {
 	const input = decodeToolValueOrUndefined(WebToolInput, props.part.input)
 	const url = input?.url
 	const query = input?.query
@@ -189,12 +193,12 @@ function ToolOutput(props: {part: ToolPart}) {
 		)
 	}
 
-	if (props.part.toolKind === 'question') {
+	if (isQuestionTool(props.part.toolName)) {
 		const output = decodeToolValueOrUndefined(QuestionToolOutput, props.part.output)
 		if (output) {
 			return (
 				<div className="space-y-2 py-1 text-[11px]">
-					{output.answers.map((answer, index) => (
+					{output.answers.map((answer: {answer: string | readonly string[]; wasFreeform: boolean}, index: number) => (
 						<div key={index} className="space-y-0.5">
 							{output.answers.length > 1 && <div className="text-muted-foreground">Answer {index + 1}</div>}
 							<div className="text-foreground">{formatQuestionAnswer(answer.answer)}</div>
@@ -205,18 +209,19 @@ function ToolOutput(props: {part: ToolPart}) {
 		}
 	}
 
-	if (props.part.toolKind === 'patch') {
+	if (props.part.toolName === 'patch') {
 		return <PatchOutput part={props.part} />
 	}
 
-	const text = decodeTextOutput(props.part.output)
-	if (!text) return null
+	const text = decodeToolValueOrUndefined(TextToolOutput, props.part.output)?.text ?? ''
+	if (!text) {
+		return null
+	}
 
 	const lang =
-		props.part.toolKind === 'write'
+		props.part.toolName === 'write'
 			? extensionOf(decodeToolValueOrUndefined(PathToolInput, props.part.input)?.path)
 			: 'bash'
-
 	return (
 		<div className="max-h-60 overflow-auto">
 			<Code code={text} lang={lang} />
@@ -226,10 +231,11 @@ function ToolOutput(props: {part: ToolPart}) {
 
 function PatchOutput(props: {part: ToolPart}) {
 	const path = decodeToolValueOrUndefined(PathToolInput, props.part.input)?.path ?? 'file'
-	const text = decodeTextOutput(props.part.output)
-	if (!text) return null
+	const text = decodeToolValueOrUndefined(TextToolOutput, props.part.output)?.text ?? ''
+	if (!text) {
+		return null
+	}
 
-	// Try to split old/new from structured output, fall back to showing as diff code
 	const output = props.part.output as Record<string, unknown> | undefined
 	const oldContent = typeof output?.['old'] === 'string' ? output['old'] : undefined
 	const newContent = typeof output?.['new'] === 'string' ? output['new'] : undefined
@@ -249,13 +255,16 @@ function PatchOutput(props: {part: ToolPart}) {
 	)
 }
 
-function ApprovalActions(props: {part: ToolPart; onResponse?: (response: ToolMessagePart) => void}) {
+function ApprovalActions(props: {part: ToolPart; onResponse?: (response: ToolResponsePart) => void}) {
 	const [responded, setResponded] = useState<boolean>()
 
 	function respond(approved: boolean) {
 		setResponded(approved)
-		if (!props.part.approvalId) return
-		props.onResponse?.(makeToolApprovalResponsePart({approvalId: props.part.approvalId, approved}))
+		if (!props.part.approvalId) {
+			return
+		}
+
+		props.onResponse?.(ToolApprovalResponsePart.makeUnsafe({approvalId: props.part.approvalId, approved}))
 	}
 
 	if (Predicate.isBoolean(responded)) {
@@ -278,12 +287,14 @@ function ApprovalActions(props: {part: ToolPart; onResponse?: (response: ToolMes
 	)
 }
 
-function PendingQuestion(props: {part: ToolPart; onResponse?: (response: ToolMessagePart) => void}) {
+function PendingQuestion(props: {part: ToolPart; onResponse?: (response: ToolResponsePart) => void}) {
 	const input = decodeToolValueOrUndefined(QuestionToolInput, props.part.input)
 	const questions = input?.questions ?? []
 	const [responses, setResponsesEntry, setSingleResponse, setFreeformResponse] = useQuestionState(questions)
 
-	if (Array.isReadonlyArrayEmpty(questions)) return null
+	if (Array.isReadonlyArrayEmpty(questions)) {
+		return null
+	}
 
 	return (
 		<div className="border border-violet-500/30 bg-violet-500/5">
@@ -293,9 +304,8 @@ function PendingQuestion(props: {part: ToolPart; onResponse?: (response: ToolMes
 				<span className="min-w-0 truncate text-foreground">{questions[0]?.question}</span>
 			</div>
 			<div className="space-y-2 border-border/30 border-t px-2 py-1.5">
-				{questions.map((question, qi) => {
-					const hasOptions = question.options && question.options.length > 0
-
+				{questions.map((question: QuestionItem, qi: number) => {
+					const hasOptions = (question.options?.length ?? 0) > 0
 					return (
 						<div key={`q-${qi}`} className="space-y-1 border-border/30 border-b pb-1.5 last:border-b-0 last:pb-0">
 							{questions.length > 1 && (
@@ -305,7 +315,6 @@ function PendingQuestion(props: {part: ToolPart; onResponse?: (response: ToolMes
 								<div className="space-y-0.5">
 									{question.options?.map((option, optionIndex) => {
 										const optionId = `${props.part.toolCallId}-${qi}-${optionIndex}`
-
 										return (
 											<label
 												key={option.label}
@@ -329,7 +338,6 @@ function PendingQuestion(props: {part: ToolPart; onResponse?: (response: ToolMes
 								<RadioGroup value={responses[qi]?.selected[0]} onValueChange={value => setSingleResponse(qi, value)}>
 									{question.options?.map((option, optionIndex) => {
 										const optionId = `${props.part.toolCallId}-${qi}-${optionIndex}`
-
 										return (
 											<label
 												key={option.label}
@@ -379,10 +387,10 @@ function useQuestionState(questions: readonly {multiple?: boolean}[]) {
 		setResponses(current => {
 			const next = [...current]
 			const entry = next[index] ?? {selected: [], freeform: ''}
-			const currentValues = new Set(entry.selected)
-			if (checked) currentValues.add(label)
-			else currentValues.delete(label)
-			next[index] = {freeform: entry.freeform, selected: Array.fromIterable(currentValues)}
+			const selected = new Set(entry.selected)
+			if (checked) selected.add(label)
+			else selected.delete(label)
+			next[index] = {freeform: entry.freeform, selected: Array.fromIterable(selected)}
 			return next
 		})
 	}
@@ -412,59 +420,54 @@ function submitQuestion(
 	part: ToolPart,
 	questions: readonly QuestionItem[],
 	responses: readonly QuestionResponseState[],
-	onResponse?: (response: ToolMessagePart) => void
+	onResponse?: (response: ToolResponsePart) => void
 ) {
 	onResponse?.(
-		makeToolResultPart({
-			output: makeQuestionToolOutput({
+		ToolResultPart.makeUnsafe({
+			output: QuestionToolOutput.makeUnsafe({
 				answers: responses.map((response, index) => {
 					const question = questions[index]
-					const isMultiple = question?.multiple === true
 					const values = response.freeform ? [...response.selected, response.freeform] : response.selected
 					const answer =
-						isMultiple || (question?.allowFreeform !== false && values.length > 1) ? values : (values[0] ?? '')
+						question?.multiple === true || (question?.allowFreeform !== false && values.length > 1)
+							? values
+							: (values[0] ?? '')
 					const wasFreeform = question?.options
 						? values.some(value => !(question.options?.some(option => option.label === value) ?? false))
 						: response.freeform.length > 0 || values.length > 0
-					return makeQuestionToolAnswer({answer, wasFreeform})
+					return QuestionToolAnswer.makeUnsafe({answer, wasFreeform})
 				})
 			}),
 			toolCallId: part.toolCallId,
-			toolKind: part.toolKind,
 			toolName: part.toolName
 		})
 	)
 }
 
 function toolSummary(part: ToolPart) {
-	if (part.toolKind === 'bash')
+	if (part.toolName === 'bash')
 		return decodeToolValueOrUndefined(CommandToolInput, part.input)?.command ?? part.toolName
-	if (part.toolKind === 'read' || part.toolKind === 'write' || part.toolKind === 'patch') {
+	if (part.toolName === 'read' || part.toolName === 'write' || part.toolName === 'patch') {
 		const path = decodeToolValueOrUndefined(PathToolInput, part.input)?.path
 		return path ? toRelativePath(path) : part.toolName
 	}
-	if (part.toolKind === 'glob' || part.toolKind === 'grep')
+	if (part.toolName === 'glob' || part.toolName === 'grep') {
 		return decodeToolValueOrUndefined(PatternToolInput, part.input)?.pattern ?? part.toolName
-	if (part.toolKind === 'question') {
+	}
+	if (isQuestionTool(part.toolName)) {
 		const questions = decodeToolValueOrUndefined(QuestionToolInput, part.input)?.questions ?? []
 		const firstQuestion = questions[0]?.question
-		if (!firstQuestion) return part.toolName
+		if (!firstQuestion) {
+			return part.toolName
+		}
+
 		return questions.length > 1 ? `${firstQuestion} (+${questions.length - 1})` : firstQuestion
 	}
-	if (part.toolKind === 'web') {
+	if (isWebTool(part.toolName)) {
 		const input = decodeToolValueOrUndefined(WebToolInput, part.input)
 		return input?.url ? formatUrl(input.url) : (input?.query ?? part.toolName)
 	}
 	return part.toolName.replace(/[_-]/g, ' ')
-}
-
-function isIntentTool(name: string) {
-	const lower = name.toLowerCase()
-	return lower === 'intent' || lower === 'assistant.intent' || lower === 'report_intent'
-}
-
-function decodeTextOutput(output: unknown) {
-	return decodeToolValueOrUndefined(TextToolOutput, output)?.text ?? ''
 }
 
 function extensionOf(path: string | undefined) {
@@ -485,10 +488,7 @@ function formatUrl(value: string) {
 function getUrlDisplayParts(value: string) {
 	try {
 		const url = new URL(value)
-		return {
-			hostname: url.hostname,
-			suffix: `${url.pathname === '/' ? '' : url.pathname}${url.search}${url.hash}`
-		}
+		return {hostname: url.hostname, suffix: `${url.pathname === '/' ? '' : url.pathname}${url.search}${url.hash}`}
 	} catch {
 		return {hostname: value, suffix: ''}
 	}
@@ -501,7 +501,6 @@ function formatQuestionAnswer(answer: string | readonly string[]) {
 function Favicon(props: {url: string}) {
 	const hostname = getHostname(props.url)
 	const iconUrl = hostname ? `https://www.google.com/s2/favicons?domain=${hostname}&sz=32` : undefined
-
 	return iconUrl ? (
 		<img src={iconUrl} alt="" className="size-3 shrink-0" />
 	) : (
