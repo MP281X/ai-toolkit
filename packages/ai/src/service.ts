@@ -17,7 +17,7 @@ export class Agent extends ServiceMap.Service<
 		prompt: (parts: readonly UserMessagePart[]) => Effect.Effect<void, AiError>
 		respond: (part: ToolMessagePart) => Effect.Effect<void, AiError>
 		stream: Stream.Stream<MessageStreamPart>
-		history: Stream.Stream<ConversationMessage[]>
+		history: Stream.Stream<readonly ConversationMessage[]>
 	}
 >()('@ai-toolkit/ai/Agent') {
 	static layer(input: ModelSelection) {

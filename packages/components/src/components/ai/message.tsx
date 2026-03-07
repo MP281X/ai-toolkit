@@ -1,100 +1,116 @@
-/** biome-ignore-all lint/suspicious/noArrayIndexKey: llm tokens */
+/** biome-ignore-all lint/suspicious/noArrayIndexKey: reconstructed stream order */
 
 import {Array} from 'effect'
 
 import type {ConversationMessage, ToolMessagePart} from '@ai-toolkit/ai/schema'
-import {BookOpenTextIcon, BotIcon, HashIcon, InboxIcon, SparklesIcon, WrenchIcon} from 'lucide-react'
+import {BookOpenTextIcon, ClockIcon, HashIcon, InboxIcon, SparklesIcon, UserIcon} from 'lucide-react'
 
 import {Attachment} from '#components/ai/attachment.tsx'
 import {Error} from '#components/ai/error.tsx'
 import {ReasoningDelta} from '#components/ai/reasoning-delta.tsx'
-import {ToolApproval} from '#components/ai/tool-approval.tsx'
-import {ToolError} from '#components/ai/tool-error.tsx'
+import {TextDelta} from '#components/ai/text-delta.tsx'
 import {ToolInteraction} from '#components/ai/tool-interaction.tsx'
-import {ToolResult} from '#components/ai/tool-result.tsx'
-import {Markdown} from '#components/render/markdown.tsx'
-import {cn, formatRelativeTime, formatTokens} from '#lib/utils.ts'
+import {cn, formatDuration, formatRelativeTime, formatTokens} from '#lib/utils.ts'
 
-export function Message(props: ConversationMessage & {onToolResponse?: (response: ToolMessagePart) => void}) {
-	const hasApproval = props.parts.some(p => p._tag === 'tool-approval-request')
+type MessageTheme = {bar: string; border: string; bg: string}
+
+function messageTheme(message: ConversationMessage): MessageTheme {
+	if (message.parts.some(p => p._tag === 'tool' && p.status === 'pending-approval'))
+		return {bar: 'bg-violet-500/60', border: 'border-violet-500/30', bg: ''}
+	if (message.state === 'error') return {bar: 'bg-destructive/60', border: 'border-destructive/30', bg: ''}
+	if (message.role === 'user') return {bar: 'bg-primary', border: 'border-primary/20', bg: 'bg-primary/1'}
+	if (message.state === 'complete') return {bar: 'bg-blue-500/60', border: 'border-blue-500/30', bg: 'bg-blue-500/1'}
+	return {bar: 'bg-muted-foreground/40', border: 'border-border', bg: ''}
+}
+
+function hasUsage(usage: ConversationMessage['usage']) {
+	return usage.input > 0 || usage.output > 0
+}
+
+export function Message(props: {message: ConversationMessage; onToolResponse?: (response: ToolMessagePart) => void}) {
+	const m = props.message
+	const duration = m.role !== 'user' && m.finishedAt ? formatDuration(m.finishedAt - m.startedAt) : null
+	const theme = messageTheme(m)
+
 	return (
 		<article className="flex gap-2">
-			<div
-				className={cn(
-					'w-0.5 shrink-0',
-					props.state === 'stop' ? 'bg-blue-500/60' : 'bg-muted-foreground/40',
-					hasApproval && 'bg-violet-500/60',
-					props.role === 'user' && 'bg-primary'
-				)}
-			/>
+			<div className={cn('w-0.5 shrink-0', theme.bar)} />
 			<div className="min-w-0 flex-1">
-				<div
-					className={cn(
-						'w-full border-2 px-3',
-						props.state === 'stop' ? 'border-blue-500/30 bg-blue-500/1' : 'border-border',
-						hasApproval && 'border-violet-500/30',
-						props.role === 'user' && 'border-primary/20 bg-primary/1'
-					)}
-				>
+				<div className={cn('w-full border-2 px-3', theme.border, theme.bg)}>
 					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
-						{props.role === 'user' && <BotIcon className="size-3 text-primary" />}
-						{props.role === 'assistant' && <SparklesIcon className="size-3" />}
-						{props.role === 'tool' && <WrenchIcon className="size-3" />}
-						<span>
-							{props.model.provider}/{props.model.model}
+						{m.role === 'user' ? (
+							<UserIcon className="size-3 shrink-0 text-primary" />
+						) : (
+							<SparklesIcon className="size-3 shrink-0" />
+						)}
+						<span className="min-w-0 truncate">
+							<span className="text-muted-foreground/50">{m.model.provider}/</span>
+							<span>{m.model.model}</span>
 						</span>
-						<span className="ml-auto">{formatRelativeTime(props.startedAt)}</span>
+						<span className="ml-auto flex shrink-0 items-center gap-3">
+							{hasUsage(m.usage) && (
+								<>
+									<span className="flex items-center gap-1" title="Input tokens">
+										<InboxIcon className="size-3 shrink-0" />
+										{formatTokens(m.usage.input)}
+									</span>
+									<span className="flex items-center gap-1" title="Output tokens">
+										<BookOpenTextIcon className="size-3 shrink-0" />
+										{formatTokens(m.usage.output)}
+									</span>
+									{m.usage.reasoning > 0 && (
+										<span className="flex items-center gap-1" title="Reasoning tokens">
+											<HashIcon className="size-3 shrink-0" />
+											{formatTokens(m.usage.reasoning)}
+										</span>
+									)}
+								</>
+							)}
+							{duration && (
+								<span className="flex items-center gap-1 text-muted-foreground/40" title="Duration">
+									<ClockIcon className="size-3 shrink-0" />
+									{duration}
+								</span>
+							)}
+							<span className="text-muted-foreground/40">{formatRelativeTime(m.startedAt)}</span>
+						</span>
 					</div>
+
 					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-						{props.state === 'loading' && Array.isReadonlyArrayEmpty(props.parts) ? (
+						{m.state === 'streaming' && Array.isReadonlyArrayEmpty(m.parts) ? (
 							<div className="flex gap-1 py-0.5">
-								<div className="size-1.5 animate-pulse bg-muted-foreground/60" style={{animationDelay: '0ms'}} />
-								<div className="size-1.5 animate-pulse bg-muted-foreground/60" style={{animationDelay: '200ms'}} />
-								<div className="size-1.5 animate-pulse bg-muted-foreground/60" style={{animationDelay: '400ms'}} />
+								<span
+									className="inline-block size-1.5 animate-pulse bg-muted-foreground/60"
+									style={{animationDelay: '0ms'}}
+								/>
+								<span
+									className="inline-block size-1.5 animate-pulse bg-muted-foreground/60"
+									style={{animationDelay: '200ms'}}
+								/>
+								<span
+									className="inline-block size-1.5 animate-pulse bg-muted-foreground/60"
+									style={{animationDelay: '300ms'}}
+								/>
 							</div>
 						) : (
-							props.parts.map((part, index) => {
+							m.parts.map((part, index) => {
 								switch (part._tag) {
 									case 'text':
-										return <Markdown key={index}>{part.text}</Markdown>
+										return <TextDelta key={index} part={part} />
 									case 'reasoning':
-										return <ReasoningDelta key={index} {...part} />
+										return <ReasoningDelta key={index} part={part} />
 									case 'file':
-										return <Attachment key={index} {...part} />
-									case 'tool-approval-request':
-										return <ToolApproval key={index} part={part} onResponse={props.onToolResponse} />
-									case 'tool-call':
+										return <Attachment key={index} part={part} />
+									case 'tool':
 										return <ToolInteraction key={index} part={part} onResponse={props.onToolResponse} />
-									case 'tool-result':
-										return <ToolResult key={index} {...part} />
-									case 'tool-error':
-										return <ToolError key={index} {...part} />
 									case 'error':
-										return <Error key={index} {...part} />
+										return <Error key={index} part={part} />
 									default:
 										return null
 								}
 							})
 						)}
 					</div>
-					{(props.usage.input > 0 || props.usage.output > 0) && (
-						<div className="flex flex-wrap items-center gap-1.5 border-border/60 border-t py-2 font-mono text-[11px] text-muted-foreground leading-none">
-							<span className="flex items-center gap-1">
-								<InboxIcon className="size-3" />
-								{formatTokens(props.usage.input)}
-							</span>
-							<span className="flex items-center gap-1">
-								<BookOpenTextIcon className="size-3" />
-								{formatTokens(props.usage.output)}
-							</span>
-							{props.usage.reasoning > 0 && (
-								<span className="flex items-center gap-1">
-									<HashIcon className="size-3" />
-									{formatTokens(props.usage.reasoning)}
-								</span>
-							)}
-						</div>
-					)}
 				</div>
 			</div>
 		</article>

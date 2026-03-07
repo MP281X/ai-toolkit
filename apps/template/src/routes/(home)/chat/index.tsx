@@ -2,7 +2,7 @@ import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {TextPart} from '@ai-toolkit/ai/schema'
+import {makeTextPart} from '@ai-toolkit/ai/schema'
 import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
@@ -43,13 +43,13 @@ function RouteComponent() {
 				{messages.map(message => (
 					<Message
 						key={`${message.startedAt}-${message.role}`}
-						{...message}
+						message={message}
 						onToolResponse={response => toolInteraction({payload: response})}
 					/>
 				))}
 			</Conversation>
 
-			<ChatInput onSubmit={data => sendMessage({payload: [new TextPart({text: data.text}), ...data.attachments]})}>
+			<ChatInput onSubmit={data => sendMessage({payload: [makeTextPart({text: data.text}), ...data.attachments]})}>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />
 				</Toolbar>
