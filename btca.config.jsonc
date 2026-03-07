@@ -1,7 +1,7 @@
 {
 	"$schema": "https://btca.dev/btca.schema.json",
 
-	"model": "gpt-5-mini",
+	"model": "minimax-m2.5-free",
 	"provider": "github-copilot",
 	"dataDirectory": ".opencode/btca",
 

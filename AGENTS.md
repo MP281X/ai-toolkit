@@ -1,68 +1,79 @@
-Developer: # AGENTS.md
+# AGENTS.md
 
-This repository is an actively evolving TypeScript / React / Effect-TS codebase. APIs, module boundaries, and interactions are still being defined and may change significantly. Optimize for improving the codebase, not for preserving existing patterns or maintaining backward compatibility unless explicitly instructed.
+This repository is a TypeScript / React / Effect-TS codebase.
 
-## Core Objective
+## Generic Code Style
 
-Write extremely high-quality code that is correct, simple, elegant, and production-grade without requiring human cleanup or follow-up refactors.
+- Never destructure props, arguments, or objects
+  - Exception: Tuple destructuring like `const [a, b] = ...` is allowed
+- Keep code extremely local and explicit
+- No alias variables for nested access, booleans, or simple derived values
+- No `tmp`, `state`, `value`, `access`, or similar locals just to rename inline-readable data
+- Strict type-safety while fully relying on inference
+- No manual types or casts unless genuinely necessary
+- Use `function` declarations except for callbacks
 
-The standard is not merely “it works.” The standard is:
-- correct
-- strictly typed
-- readable
-- minimally complex
-- well-structured
-- elegant
-- consistent with the surrounding architecture
-- resistant to future breakage
+## TypeScript
 
-If a solution feels hacky, overly clever, over-abstracted, or harder to understand than necessary, assume it is not good enough and look for a better approach.
-
-## Code Quality Standards
-
-Be intentionally strict.
-
-When writing or modifying code:
-- Prefer the simplest solution that fully solves the problem.
-- Avoid unnecessary abstractions, indirection, generalization, and premature reuse.
-- If code looks complex, assume it is likely wrong or over-engineered until proven otherwise.
-- Do not stop at the first workable solution. Actively search for the most elegant and maintainable solution.
-- Optimize for readability and understandability for both humans and AI agents.
-- Strive for clarity of intent in naming, control flow, and module boundaries.
-- Keep implementations compact, but not cryptic.
-- Avoid “just make it pass” changes.
-
-The goal is perfection-oriented improvement, not minimal patching.
-
-## Stack-Specific Rules
-
-These rules are important and come from repeated issues in this specific stack. Follow them unless the user explicitly instructs otherwise.
-
-### TypeScript
-- Rely on inference. Do not add manual types or casts unless they are genuinely necessary.
+- Rely on inference. Do not add manual types or casts unless genuinely necessary.
 - Use `function` declarations except for callbacks.
 
-### React
+## React
+
 - Target React 19 + React Compiler.
 - Never manually memoize.
 - Never destructure props.
 - Use `cn()` for every conditional `className`.
-- Outside `packages/components`: `@ai-toolkit/components/utils`
-- Inside `packages/components`: `#lib/utils.ts`
+- Outside `packages/components`, use `@ai-toolkit/components/utils`.
+- Inside `packages/components`, use `#lib/utils.ts`.
 
-### Effect
+## Effect
+
 - Use Effect v4 only.
+- Effect is always available and should be used in every package.
+- Take full advantage of Effect primitives and modules.
 - Prefer existing Effect primitives and modules over custom helpers.
-- If you think you need a helper, verify Effect does not already provide it.
+- If you think you need a helper, verify Effect does not already provide it first.
+- Prefer the most idiomatic existing helper over lower-level or custom logic.
+- Prefer `pipe(value, ...)` and `flow(...)` aggressively. They should replace most temporary transformation variables.
+- Prefer Effect data modules over global JavaScript helpers when they express the intent clearly.
 - Use Effect Schema fully for validation, transformation, and defaulting when applicable.
 - Prefer `Effect.fnUntraced` for effectful functions rather than `(args) => Effect.gen(...)`.
-- Use `pipe(value, ...)` for transformations. Reserve method `.pipe()` for instrumentation.
+- Use `pipe(value, ...)` for transformations. Reserve `.pipe()` for instrumentation.
 - Domain errors are yieldable. Do not use `Effect.fail` for domain errors.
 - For callbacks, prefer one effectful handler and one captured runner.
 
-### UI
+### Effect Modules
+
+- Import these modules directly from `effect` without aliasing when you use them.
+- Prefer them over standard global helpers when they make the code clearer and more composable.
+- `String`: string checks and transforms.
+  - Prefer helpers such as `String.isEmpty`, `String.isNonEmpty`, and `String.capitalize`.
+- `Array`: immutable array checks, constructors, and transforms.
+  - Prefer helpers such as `Array.isArrayNonEmpty`, `Array.isArrayEmpty`, `Array.isReadonlyArrayNonEmpty`, `Array.isReadonlyArrayEmpty`, `Array.map`, and `Array.empty()`.
+- `Boolean`: boolean combinators and branching.
+  - Prefer helpers such as `Boolean.or`, `Boolean.xor`, `Boolean.some`, `Boolean.nor`, `Boolean.every`, and `Boolean.match`.
+- `Number`: numeric comparisons, parsing, and bounds.
+  - Prefer helpers such as `Number.min`, `Number.max`, `Number.round`, `Number.isLessThan`, `Number.parse`, and `Number.between`.
+- `Record`: immutable record construction and updates.
+  - Prefer helpers such as `Record.some`, `Record.remove`, `Record.mapKeys`, `Record.toEntries`, `Record.replace`, `Record.set`, `Record.keys`, `Record.empty()`, and `Record.size`.
+- `Predicate`: runtime checks and type narrowing.
+  - Prefer helpers such as `Predicate.isUndefined`, `Predicate.isNull`, `Predicate.isNullish`, `Predicate.isString`, `Predicate.isNumber`, `Predicate.isBoolean`, `Predicate.isNotNull`, `Predicate.isNotNullish`, `Predicate.hasProperty`, `Predicate.isNotUndefined`, `Predicate.isFunction`, `Predicate.isUnknown`, `Predicate.isObject`, and `Predicate.isTagged`.
+- `Match`: typed pattern matching for values and tagged unions.
+  - Prefer helpers such as `Match.value`, `Match.valueTags`, `Match.when`, `Match.orElse`, `Match.exhaustive`, `Match.tag`, and `Match.instanceOf`.
+- `Schema`: validation, transformation, defaults, and typed data constructors.
+  - Prefer helpers such as `Schema.Class`, `Schema.TaggedClass`, `Schema.Struct`, `Schema.NonEmptyString`, `Schema.optional`, `Schema.Literals`, `Schema.Union`, and `Schema.withConstructorDefault`.
+- `Function`: small total helpers for composition and impossible states.
+  - Prefer helpers such as `Function.identity`, `Function.constUndefined`, `Function.constTrue`, and `Function.absurd`.
+- `Duration`: typed time construction and conversion.
+  - Prefer helpers such as `Duration.seconds`, `Duration.hours`, `Duration.toSeconds`, `Duration.toHours`, and `Duration.sum`.
+- `Option`: explicit optional values and fallbacks.
+  - Prefer helpers such as `Option.match`, `Option.getOrElse`, and `Option.andThen`.
+
+## UI
+
 - Use existing shadcn primitives first.
-- Before building custom UI, check the shadcn CLI:
+- Before building custom UI, check:
   - `bun shadcn list @shadcn`
   - `bun shadcn add <name> --yes --overwrite`
 - Compose primitives; do not reimplement them.
@@ -74,93 +85,16 @@ These rules are important and come from repeated issues in this specific stack. 
 
 ## External Package Research
 
-When working with any external package, use the BTCA MCP rather than relying on memory or training data.
-
-- BTCA must be used when working with any external package.
+- Use BTCA for external package APIs, behavior, and documentation.
 - Always call `btca_listResources` before `btca_ask`.
-- Do not rely on training data for package APIs, behavior, or documentation.
-- Do not query `@ai-toolkit/*` packages via the BTCA MCP; inspect those packages locally instead.
-- Keep queries narrow and focused.
-- Parallelize independent `btca_ask` calls as much as possible.
+- Do not rely on memory or training data for external package details.
+- Do not query `@ai-toolkit/*` packages via BTCA; inspect them locally instead.
+- Keep BTCA queries narrow and focused.
+- Parallelize independent BTCA queries when possible.
 
-## Working in an Evolving Codebase
+## Validation
 
-This codebase is under active iteration. Large refactors and API changes are normal.
+Run these commands in order:
 
-Therefore:
-- Do not resist architectural or API changes merely to keep older call sites stable.
-- When a module or package API changes, expect downstream consumers to be updated accordingly.
-- Unless explicitly instructed otherwise, prefer fixing consumers rather than weakening or reverting the module you just improved.
-- Do not preserve outdated patterns if a better design is now available.
-
-## Validation Commands
-
-Use:
-- `bun run fix`
-- `bun run check`
-
-These commands format the code and detect linting and type errors across the monorepo.
-
-This repository enforces very strict typing and linting rules. If the code passes these checks, it is expected to be structurally correct.
-
-Also note:
-- The agent has access to LSP diagnostics for files it is actively editing.
-- This means local type and formatting errors in touched files should usually be visible immediately.
-- As a result, `bun run fix && bun run check` is especially important for detecting issues caused in other packagess.
-- A common example is changing a package API and then needing to update consuming packages/apps.
-
-When these commands reveal errors after your changes:
-- Unless explicitly instructed otherwise, assume the consumers or dependent packages should be fixed.
-- Do not “undo” or dilute an improved module just to satisfy outdated consumers.
-
-## Task Execution Philosophy
-
-Agents should be optimized for long-running, autonomous work that may span the entire codebase.
-
-After the task is clear, work through it to completion with minimal interruption.
-
-However, at the start of a task, you must carefully analyze the user request and identify anything ambiguous, underspecified, inconsistent, or potentially conflicting.
-
-If anything important is unclear, use the question tool to resolve it before proceeding.
-
-Guidelines:
-- Front-load clarification.
-- Ask clarifying questions early when they materially affect architecture, requirements, or implementation choices.
-- It is acceptable to ask multiple targeted clarification questions at the beginning if needed.
-- Once the task is sufficiently clear, proceed autonomously and do not ask more questions unless truly blocked.
-- Do not interrupt execution for non-blocking uncertainties if a reasonable interpretation can be derived from the clarified context.
-
-The user knows the codebase well and manually reviews AI-written code, so ambiguities and inconsistencies should usually be detectable from the initial request. Detect them proactively.
-
-## Decision Heuristics
-
-Before finalizing any implementation, ask yourself:
-- Is this the simplest solution that correctly solves the problem?
-- Is there a more elegant approach?
-- Am I introducing abstraction that is not justified?
-- Does this improve the codebase rather than merely preserving existing structure?
-- Would this be easy for another human or agent to understand later?
-- If this feels hacky, what is the cleaner design?
-
-Do not accept a mediocre solution when a cleaner one is achievable.
-
-## Default Biases
-
-Default to these assumptions unless the user says otherwise:
-- prioritize improving the design over preserving compatibility
-- prefer updating consumers after API improvements
-- favor simplicity over abstraction
-- favor correctness and readability over speed of patching
-- complete clarified tasks autonomously
-- ask questions only at the beginning unless later blocked by a truly missing decision
-
-## Bottom Line
-
-Your job is to materially improve the codebase with extremely high care.
-
-Be strict.
-Be thoughtful.
-Be autonomous.
-Be simple.
-Be elegant.
-And do not settle for code that merely works when you can produce code that is obviously correct and clean.
+1. `bun run fix`
+2. `bun run check`
