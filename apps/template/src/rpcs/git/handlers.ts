@@ -1,4 +1,4 @@
-import {Effect} from 'effect'
+import {Effect, SubscriptionRef} from 'effect'
 
 import {Git} from '@ai-toolkit/git/service'
 
@@ -9,8 +9,8 @@ export const GitLive = GitContracts.toLayer(
 		const git = yield* Git
 
 		return GitContracts.of({
-			'git.stagedDiffs': () => git.stagedDiffs,
-			'git.unstagedDiffs': () => git.unstagedDiffs,
+			'git.stagedDiffs': () => SubscriptionRef.changes(git.stagedDiffs),
+			'git.unstagedDiffs': () => SubscriptionRef.changes(git.unstagedDiffs),
 			'git.stageFile': payload => git.stageFile(payload.filePath),
 			'git.unstageFile': payload => git.unstageFile(payload.filePath),
 			'git.discardFile': payload => git.discardFile(payload.filePath),

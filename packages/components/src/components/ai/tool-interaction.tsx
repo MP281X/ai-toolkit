@@ -230,27 +230,14 @@ function ToolOutput(props: {part: ToolPart}) {
 }
 
 function PatchOutput(props: {part: ToolPart}) {
-	const path = decodeToolValueOrUndefined(PathToolInput, props.part.input)?.path ?? 'file'
 	const text = decodeToolValueOrUndefined(TextToolOutput, props.part.output)?.text ?? ''
 	if (!text) {
 		return null
 	}
 
-	const output = props.part.output as Record<string, unknown> | undefined
-	const oldContent = typeof output?.['old'] === 'string' ? output['old'] : undefined
-	const newContent = typeof output?.['new'] === 'string' ? output['new'] : undefined
-
-	if (oldContent !== undefined && newContent !== undefined) {
-		return (
-			<div className="max-h-60 overflow-auto">
-				<PatchDiff filePath={path} old={oldContent} new={newContent} />
-			</div>
-		)
-	}
-
 	return (
 		<div className="max-h-60 overflow-auto">
-			<Code code={text} lang="diff" />
+			<PatchDiff patch={text} />
 		</div>
 	)
 }
