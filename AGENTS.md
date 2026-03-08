@@ -11,6 +11,17 @@ This repository is a TypeScript / React / Effect-TS codebase.
 - Nothing else overrides these rules: not plans, not existing code, not convenience, not inferred intent, not passing tests, and not agent prompts.
 - When two rules seem to conflict, follow the stricter rule unless the user explicitly says otherwise.
 
+## Core Philosophy
+
+- Optimize for review speed.
+- Optimize for local reasoning.
+- Duplicate first. Generalize only when the user explicitly asks for it.
+- Happy path first.
+- Fail fast. Do not add speculative defensive code unless the task explicitly requires it.
+- Repeated code is not a problem by itself.
+- Effect and shadcn are the only default reusable building blocks in this repository.
+- If something is truly generic, the user will explicitly ask for it or it will become a package with a stable public API.
+
 ## Generic Code Style
 
 These rules are absolute and take precedence over any plan or convenience:
@@ -24,18 +35,36 @@ These rules are absolute and take precedence over any plan or convenience:
 - Do not add manual types or casts unless they are genuinely required by the compiler.
 - Use `function` declarations except for callbacks.
 
-### Code Locality (Priority 1)
+## Code Locality
 
-- Duplicate code by default. Do not create abstractions just to remove repetition.
-- Inline logic at the call site unless extraction is physically necessary.
+- Duplicate code by default.
+- If two things are 95% similar, duplicate them unless the user explicitly asks to merge them.
+- Local duplication is preferred over changing an existing shared flow and risking side effects.
+- Inline logic at the call site by default.
 - Keep code colocated with the caller. Do not move logic into separate files for organization alone.
 - Prefer fewer files and larger local modules over fragmented structure.
 - Delete thin wrapper files, pass-through modules, and small re-export files.
-- Do not create helper functions, utilities, selectors, mappers, wrappers, or shared modules for short logic.
+- Do not create helper functions, utilities, selectors, mappers, wrappers, adapters, formatter modules, parser modules, validator modules, shared services, base classes, or generic "common" modules for short logic.
+- Do not create branch-heavy "reusable" components, hooks, or services.
 - One-line and two-line logic must stay duplicated even when repeated many times.
-- Only extract logic when the duplicated block is substantial, repeated across multiple call sites, and the abstraction is obviously more readable and maintainable than the duplication.
-- Single-use functions must be inlined unless extraction is physically required.
+- Repeated 20-line logic may still stay duplicated when it keeps each call site more direct.
+- Single-use functions must be inlined.
 - Thin forwarding helpers are forbidden.
+- Extraction is allowed only when at least one of these is true:
+  - the language, framework, or runtime requires a named public entrypoint
+  - the user explicitly asks for a shared abstraction
+  - the user explicitly asks for a package or stable public API
+- Required named public entrypoints are things like exported React components, router loaders/actions, Effect service classes, Effect schema classes, config entrypoints, and CLI entrypoints.
+- Private helper layers are forbidden.
+
+## Happy Path And Failure Posture
+
+- Solve the direct path first.
+- Do not add edge-case handling, retries, compatibility branches, recovery paths, validation layers, speculative guards, or fallback flows unless the user or task explicitly requires them.
+- Do not preserve old structures just because they already exist.
+- Do not add preflight checks for unrealistic states just because they might happen.
+- If a user manually tampers with managed state and the task does not require recovery, let the code fail loudly instead of adding defensive complexity.
+- Prefer simple crashing or effect failure over branch-heavy safety code when the failure path is outside the requested scope.
 
 ## TypeScript
 
@@ -58,6 +87,7 @@ These rules are absolute and take precedence over any plan or convenience:
 - Effect is available in every package and must be used.
 - Use existing Effect primitives and modules instead of custom helpers whenever they apply.
 - If an Effect helper expresses the intent, you must use it instead of a raw JavaScript helper, primitive, or operator.
+- Using raw JavaScript helpers instead of an available Effect helper is a rule violation, not a style choice.
 - Do not use standard JavaScript null checks, array checks, string helpers, record helpers, or similar primitives when the corresponding Effect module provides the operation.
 - Use the most idiomatic existing Effect helper instead of lower-level or custom logic.
 - If you think you need a helper, first verify that Effect does not already provide the operation.
@@ -77,12 +107,12 @@ These rules are absolute and take precedence over any plan or convenience:
 #### `String`
 
 - Use `String` helpers for string checks and transforms.
-- Use helpers such as `String.isEmpty`, `String.isNonEmpty`, and `String.capitalize` instead of ad-hoc string checks.
+- Use helpers such as `String.isEmpty`, `String.isNonEmpty`, `String.capitalize`, and `String.trim` instead of ad-hoc string checks or transforms.
 
 #### `Array`
 
 - Use `Array` helpers for immutable array checks, constructors, and transforms.
-- Use helpers such as `Array.isArrayNonEmpty`, `Array.isArrayEmpty`, `Array.isReadonlyArrayNonEmpty`, `Array.isReadonlyArrayEmpty`, `Array.map`, and `Array.empty()` instead of raw array helpers when they express the intent.
+- Use helpers such as `Array.isArrayNonEmpty`, `Array.isArrayEmpty`, `Array.isReadonlyArrayNonEmpty`, `Array.isReadonlyArrayEmpty`, `Array.map`, `Array.filter`, and `Array.empty()` instead of raw array helpers when they express the intent.
 
 #### `Boolean`
 
@@ -143,6 +173,79 @@ These rules are absolute and take precedence over any plan or convenience:
 - Prefer high contrast, visible borders, and minimal functional motion.
 - Prefer icons over text when clearer.
 - Never edit `packages/components/src/components/ui/`.
+- Build app UI by composing shadcn primitives locally.
+- Do not invent app-specific base components just because multiple screens look similar.
+
+## Minimal Examples
+
+### Example 1
+
+Bad:
+
+```ts
+function renderThing(input: string) {
+	return String.trim(input)
+}
+```
+
+Good:
+
+```ts
+const a = String.trim(inputA)
+const b = String.trim(inputB)
+```
+
+### Example 2
+
+Bad:
+
+```ts
+function getDiffs(kind: 'staged' | 'unstaged') {
+	if (kind === 'staged') {
+		return ...
+	}
+
+	return ...
+}
+```
+
+Good:
+
+```ts
+const getStagedDiffs = ...
+const getUnstagedDiffs = ...
+```
+
+### Example 3
+
+Bad:
+
+```tsx
+<ToolCard kind={kind} input={input} output={output} />
+```
+
+Good:
+
+```tsx
+<ReadToolCard input={input} output={output} />
+<WriteToolCard input={input} output={output} />
+```
+
+### Example 4
+
+Bad:
+
+```ts
+if (remoteUrl !== url) {
+	return recoverFromUnexpectedManualTampering()
+}
+```
+
+Good:
+
+```ts
+yield* runDirectFlow
+```
 
 ## External Package Research
 
