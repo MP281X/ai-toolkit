@@ -1,7 +1,8 @@
 ---
+description: Commit staged changes, rebase, and push safely
 model: opencode/minimax-m2.5-free
 agent: general
-description: Commit staged changes, rebase, and push safely
+subtask: true
 ---
 
 ## Request

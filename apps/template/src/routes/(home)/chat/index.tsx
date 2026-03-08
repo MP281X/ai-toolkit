@@ -2,12 +2,13 @@ import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {type ConversationPart, reconstructMessages, TextPart} from '@ai-toolkit/ai/schema'
+import {type ConversationPart, FilePart, reconstructMessages, TextPart} from '@ai-toolkit/ai/schema'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
 import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/input'
+import {fileToBase64} from '@ai-toolkit/components/utils'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {useState} from 'react'
@@ -57,7 +58,20 @@ function RouteComponent() {
 			</Conversation>
 
 			<ChatInput
-				onSubmit={data => sendMessage({payload: [TextPart.makeUnsafe({text: data.text}), ...data.attachments]})}
+				onSubmit={async data => {
+					const fileParts: (typeof FilePart.Type)[] = []
+					for (const file of data.attachments) {
+						const result = await fileToBase64(file)
+						fileParts.push(
+							FilePart.makeUnsafe({
+								data: result.data,
+								filename: result.filename,
+								mediaType: result.mediaType
+							})
+						)
+					}
+					sendMessage({payload: [TextPart.makeUnsafe({text: data.text}), ...fileParts]})
+				}}
 			>
 				<Toolbar>
 					<ModelSelector model={model} onModelChange={setModel} />

@@ -1,4 +1,4 @@
-import {MessageSquare, Repeat, Zap} from '@ai-toolkit/components/icons'
+import {MessageSquare, Paperclip, Repeat, Zap} from '@ai-toolkit/components/icons'
 import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {createFileRoute, Outlet, useLocation, useNavigate} from '@tanstack/react-router'
@@ -11,7 +11,6 @@ export const Route = createFileRoute('/(home)')({
 
 function Layout() {
 	const navigate = useNavigate()
-
 	const location = useLocation()
 	const isCurrentPage = (path: FileRouteTypes['to']) => location.pathname.startsWith(path)
 
@@ -26,6 +25,13 @@ function Layout() {
 							icon={<MessageSquare className="size-3.5" />}
 						>
 							Chat
+						</TreeExplorerItem>
+						<TreeExplorerItem
+							onClick={() => navigate({to: '/input'})}
+							selected={isCurrentPage('/input')}
+							icon={<Paperclip className="size-3.5" />}
+						>
+							Input
 						</TreeExplorerItem>
 						<TreeExplorerItem
 							onClick={() => navigate({to: '/diff'})}

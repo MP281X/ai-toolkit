@@ -1,8 +1,7 @@
-import {Array as EffectArray, Record as EffectRecord} from 'effect'
+import {Array, Predicate, pipe, Record, String} from 'effect'
 
-import {type FilePart, FilePart as FilePartSchema} from '@ai-toolkit/ai/schema'
 import {ArrowUpIcon, Paperclip} from '@ai-toolkit/components/icons'
-import {Button} from '@ai-toolkit/components/ui/button'
+import {Button, buttonVariants} from '@ai-toolkit/components/ui/button'
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
 import {ContentEditable} from '@lexical/react/LexicalContentEditable'
@@ -12,12 +11,11 @@ import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin'
 import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {mergeRegister} from '@lexical/utils'
 import * as lexical from 'lexical'
+import type * as React from 'react'
 import type {ReactElement, ReactNode} from 'react'
-import {useLayoutEffect, useRef, useState} from 'react'
+import {Children, isValidElement, useId, useLayoutEffect, useRef, useState} from 'react'
 
 import {cn} from '#lib/utils.ts'
-
-// -- Lexical token node (atomic, non-splittable text) --
 
 class TokenNode extends lexical.TextNode {
 	static override getType() {
@@ -36,12 +34,6 @@ class TokenNode extends lexical.TextNode {
 		return true
 	}
 }
-
-function $createTokenNode(text: string, color: string) {
-	return new TokenNode(text).setStyle(`color: ${color}`)
-}
-
-// -- Types --
 
 export type AutocompleteEntry = {
 	kind: 'trigger' | 'snippet' | 'attachment'
@@ -70,114 +62,32 @@ type SnippetConfig = {
 type ChatInputProps = {
 	value?: string
 	onValueChange?: (value: string) => void
-	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: FilePart[]}) => void
+	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: globalThis.File[]}) => void
 	placeholder?: string
 	children?: ReactNode
 	disabled?: boolean
 	className?: string
 }
 
-type ActiveMenu = {kind: 'trigger'; char: string; query: string}
-
-type ResolvedOption = AutocompleteOptionConfig & {color: string}
-
-type CompletionState = AutocompleteEntry & {matchText: string}
-
-type AttachmentState = {attachment: FilePart; matchText: string}
-
-// -- Child parsing --
-
-function normalizeChildren(children: ReactNode): ReactElement[] {
-	const result: ReactElement[] = []
-	const stack: ReactNode[] = EffectArray.isArray(children) ? (children as ReactNode[]) : [children]
-	for (const child of stack) {
-		if (child === null || child === undefined || child === false) continue
-		if (EffectArray.isArray(child)) {
-			result.push(...normalizeChildren(child as ReactNode[]))
-			continue
-		}
-		if (typeof child === 'object' && 'type' in child) {
-			result.push(child as ReactElement)
-		}
-	}
-	return result
+type ActiveMenu = {
+	char: string
+	query: string
 }
 
-function parseChildren(children: ReactNode) {
-	const autocomplete: Record<string, ResolvedOption[]> = {}
-	const snippets: SnippetConfig[] = []
-	let toolbar: ReactNode = null
-	let actions: ReactNode = null
-
-	for (const child of normalizeChildren(children)) {
-		if (child.type === Autocomplete) {
-			const autoProps = child.props as AutocompleteConfig
-			const color = autoProps.color
-			const options: ResolvedOption[] = []
-			for (const entry of normalizeChildren(autoProps.children)) {
-				if (entry.type !== AutocompleteOption) continue
-				const optionProps = entry.props as AutocompleteOptionConfig
-				options.push({...optionProps, color})
-			}
-			autocomplete[autoProps.trigger] = options
-			continue
-		}
-		if (child.type === Snippets) {
-			const snippetsProps = child.props as {children: ReactNode}
-			for (const entry of normalizeChildren(snippetsProps.children)) {
-				if (entry.type !== Snippet) continue
-				const snippetProps = entry.props as SnippetConfig
-				snippets.push({insert: snippetProps.insert, children: snippetProps.children})
-			}
-			continue
-		}
-		if (child.type === Toolbar) {
-			toolbar = (child.props as {children: ReactNode}).children
-			continue
-		}
-		if (child.type === InputActions) {
-			actions = (child.props as {children?: ReactNode}).children ?? null
-		}
-	}
-
-	return {autocomplete, snippets, toolbar, actions}
+type ResolvedOption = AutocompleteOptionConfig & {
+	color: string
 }
 
-// -- Trigger detection --
-
-function detectTrigger(selection: ReturnType<typeof lexical.$getSelection>, triggerChars: string[]): ActiveMenu | null {
-	if (!lexical.$isRangeSelection(selection)) return null
-	const anchorNode = selection.anchor.getNode()
-	if (!lexical.$isTextNode(anchorNode)) return null
-
-	const leading = anchorNode.getTextContent().slice(0, selection.anchor.offset)
-	const escaped = triggerChars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')
-	if (!escaped) return null
-
-	const regex = new RegExp(`([${escaped}])([A-Za-z0-9_-]{0,32})$`)
-	const match = regex.exec(leading)
-	if (match === null) return null
-
-	const char = match[1]
-	const query = match[2]
-	if (char === undefined || query === undefined) return null
-	return {kind: 'trigger', char, query}
+type CompletionState = AutocompleteEntry & {
+	matchText: string
 }
 
-function matchOptions(autocomplete: Record<string, ResolvedOption[]>, active: ActiveMenu | null): ResolvedOption[] {
-	if (active === null) return []
-	const options = autocomplete[active.char]
-	if (!options) return []
-	const query = active.query.toLowerCase()
-	return options.filter(option => {
-		if (!query) return true
-		return option.value.toLowerCase().includes(query) || option.description?.toLowerCase().includes(query)
-	})
+type AttachmentState = {
+	file: globalThis.File
+	matchText: string
 }
 
-// -- Keyboard handler (Lexical plugin) --
-
-function EditorKeyboard(keyboardProps: {
+function EditorKeyboard(props: {
 	editorRef: React.RefObject<lexical.LexicalEditor | null>
 	onSubmit: () => void
 	onDismiss: () => void
@@ -189,13 +99,15 @@ function EditorKeyboard(keyboardProps: {
 	const [editor] = useLexicalComposerContext()
 
 	useLayoutEffect(() => {
-		keyboardProps.editorRef.current = editor
-		if (!keyboardProps.disabled) editor.focus()
-	}, [editor, keyboardProps.editorRef, keyboardProps.disabled])
+		props.editorRef.current = editor
+		if (!props.disabled) {
+			editor.focus()
+		}
+	}, [editor, props.disabled, props.editorRef])
 
 	useLayoutEffect(() => {
-		editor.setEditable(!keyboardProps.disabled)
-	}, [editor, keyboardProps.disabled])
+		editor.setEditable(!props.disabled)
+	}, [editor, props.disabled])
 
 	useLayoutEffect(
 		() =>
@@ -204,13 +116,15 @@ function EditorKeyboard(keyboardProps: {
 					lexical.KEY_ENTER_COMMAND,
 					event => {
 						if (event?.shiftKey) return false
-						if (keyboardProps.menuOpen) {
+
+						if (props.menuOpen) {
 							event?.preventDefault()
-							keyboardProps.onSelect()
+							props.onSelect()
 							return true
 						}
+
 						event?.preventDefault()
-						keyboardProps.onSubmit()
+						props.onSubmit()
 						return true
 					},
 					lexical.COMMAND_PRIORITY_LOW
@@ -218,259 +132,142 @@ function EditorKeyboard(keyboardProps: {
 				editor.registerCommand(
 					lexical.KEY_DOWN_COMMAND,
 					event => {
-						if (!event) return false
-						if (event.key === 'Escape' && keyboardProps.menuOpen) {
+						if (event?.key === 'Escape' && props.menuOpen) {
 							event.preventDefault()
-							keyboardProps.onDismiss()
+							props.onDismiss()
 							return true
 						}
-						if (keyboardProps.menuOpen && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+
+						if (props.menuOpen && (event?.key === 'ArrowUp' || event?.key === 'ArrowDown')) {
 							event.preventDefault()
-							keyboardProps.onNavigate(event.key === 'ArrowUp' ? 'up' : 'down')
+							props.onNavigate(event.key === 'ArrowUp' ? 'up' : 'down')
 							return true
 						}
+
 						return false
 					},
 					lexical.COMMAND_PRIORITY_LOW
 				)
 			),
-		[
-			editor,
-			keyboardProps.menuOpen,
-			keyboardProps.onSubmit,
-			keyboardProps.onDismiss,
-			keyboardProps.onNavigate,
-			keyboardProps.onSelect,
-			keyboardProps
-		]
+		[editor, props.menuOpen, props.onDismiss, props.onNavigate, props.onSelect, props.onSubmit]
 	)
 
 	return null
 }
 
-function scrollSelectedIntoView(node: HTMLButtonElement | null) {
-	node?.scrollIntoView({block: 'nearest'})
-}
-
-// -- Main component --
-
 export function ChatInput(props: ChatInputProps) {
-	const {autocomplete, snippets, toolbar, actions} = parseChildren(props.children)
-	const triggerChars = EffectRecord.keys(autocomplete)
-	const disabled = props.disabled ?? false
+	const autocomplete: {[key: string]: ResolvedOption[]} = {}
+	const snippets: SnippetConfig[] = []
+	let toolbar: ReactNode = null
+	let actions: ReactNode = null
 
-	const [internalPrompt, setInternalPrompt] = useState(props.value ?? '')
-	const prompt = props.value ?? internalPrompt
+	for (const child of Children.toArray(props.children)) {
+		if (!isValidElement(child)) continue
+
+		if (child.type === Autocomplete) {
+			const autocompleteChild = child as ReactElement<AutocompleteConfig>
+			const options: ResolvedOption[] = []
+
+			for (const optionChild of Children.toArray(autocompleteChild.props.children)) {
+				if (!isValidElement(optionChild)) continue
+
+				if (optionChild.type !== AutocompleteOption) continue
+
+				const autocompleteOptionChild = optionChild as ReactElement<AutocompleteOptionConfig>
+				options.push({
+					value: autocompleteOptionChild.props.value,
+					description: autocompleteOptionChild.props.description,
+					icon: autocompleteOptionChild.props.icon,
+					children: autocompleteOptionChild.props.children,
+					color: autocompleteChild.props.color
+				})
+			}
+
+			autocomplete[autocompleteChild.props.trigger] = options
+			continue
+		}
+
+		if (child.type === Snippets) {
+			const snippetsChild = child as ReactElement<{children: ReactNode}>
+
+			for (const snippetChild of Children.toArray(snippetsChild.props.children)) {
+				if (!isValidElement(snippetChild)) continue
+
+				if (snippetChild.type !== Snippet) continue
+
+				const snippetElement = snippetChild as ReactElement<SnippetConfig>
+				snippets.push({insert: snippetElement.props.insert, children: snippetElement.props.children})
+			}
+
+			continue
+		}
+
+		if (child.type === Toolbar) {
+			toolbar = (child as ReactElement<{children: ReactNode}>).props.children
+			continue
+		}
+
+		if (child.type === InputActions) actions = (child as ReactElement<{children?: ReactNode}>).props.children ?? null
+	}
+
+	const internalPromptRef = useRef(props.value ?? '')
 	const [active, setActive] = useState<ActiveMenu | null>(null)
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const completionsRef = useRef<CompletionState[]>([])
 	const attachmentsRef = useRef<AttachmentState[]>([])
-	const fileInputRef = useRef<HTMLInputElement | null>(null)
+	const fileInputId = useId()
 	const editorRef = useRef<lexical.LexicalEditor | null>(null)
 
-	const matched = matchOptions(autocomplete, active).slice(0, 10)
-	const menuOpen = matched.length > 0
-
-	function setPromptValue(nextValue: string) {
-		if (props.value === undefined) setInternalPrompt(nextValue)
-		props.onValueChange?.(nextValue)
-	}
-
-	function handleSubmit() {
-		const trimmed = prompt.trim()
-		if (!trimmed || disabled) return
-
-		const seen = new Set<string>()
-		const activeCompletions = completionsRef.current.filter(c => {
-			if (!trimmed.includes(c.matchText) || seen.has(c.matchText)) return false
-			seen.add(c.matchText)
-			return true
-		})
-		const activeAttachments = attachmentsRef.current.filter(a => trimmed.includes(a.matchText))
-		props.onSubmit({
-			text: trimmed,
-			completions: activeCompletions.map(({kind, name, char}) => ({kind, name, char})),
-			attachments: activeAttachments.map(a => a.attachment)
-		})
-
-		editorRef.current?.update(() => {
-			const root = lexical.$getRoot()
-			root.clear()
-			root.selectStart()
-		})
-
-		setPromptValue('')
-		setActive(null)
-		completionsRef.current = []
-		attachmentsRef.current = []
-	}
-
-	function handleDismiss() {
-		setActive(null)
-		setSelectedIndex(0)
-	}
-
-	function readAsBase64(file: globalThis.File) {
-		return new Promise<string>((resolve, reject) => {
-			const reader = new FileReader()
-			reader.onload = () => {
-				if (typeof reader.result !== 'string') {
-					reject(new Error('Attachment read failed'))
-					return
+	const matched: ResolvedOption[] = []
+	if (Predicate.isNotNull(active)) {
+		const options = autocomplete[active.char]
+		if (Predicate.isNotNullish(options)) {
+			for (const option of options) {
+				if (
+					String.isEmpty(active.query) ||
+					option.value.toLowerCase().includes(active.query.toLowerCase()) ||
+					(Predicate.isNotNullish(option.description) &&
+						option.description.toLowerCase().includes(active.query.toLowerCase()))
+				) {
+					matched.push(option)
 				}
-				const commaIndex = reader.result.indexOf(',')
-				const content = commaIndex === -1 ? reader.result : reader.result.slice(commaIndex + 1)
-				resolve(content)
+
+				if (matched.length >= 10) break
 			}
-			reader.onerror = () => reject(reader.error ?? new Error('Attachment read failed'))
-			reader.readAsDataURL(file)
-		})
-	}
-
-	async function handleAttachFiles(files: globalThis.File[]) {
-		if (files.length === 0) return
-		const editor = editorRef.current
-		if (!editor) return
-
-		const entries = await Promise.all(
-			files.map(async file => {
-				const name = file.name
-				const base64 = await readAsBase64(file)
-				const attachment = FilePartSchema.makeUnsafe({
-					data: base64,
-					filename: name,
-					mediaType: file.type || 'application/octet-stream'
-				})
-				return {attachment, matchText: name}
-			})
-		)
-		attachmentsRef.current = [...attachmentsRef.current, ...entries]
-
-		editor.update(() => {
-			const selection = lexical.$getSelection()
-			if (!lexical.$isRangeSelection(selection)) return
-			for (const entry of entries) {
-				const tokenNode = $createTokenNode(entry.matchText, '#f59e0b')
-				selection.insertNodes([tokenNode])
-				const cursorNode = lexical.$createTextNode(' ')
-				selection.insertNodes([cursorNode])
-				cursorNode.select()
-			}
-		})
-	}
-
-	function handleNavigate(direction: 'up' | 'down') {
-		if (matched.length === 0) return
-		setSelectedIndex(prev => {
-			if (direction === 'up') return prev <= 0 ? matched.length - 1 : prev - 1
-			return prev >= matched.length - 1 ? 0 : prev + 1
-		})
-	}
-
-	function handleSelect() {
-		const entry = matched[selectedIndex]
-		if (entry) handlePick(entry)
-	}
-
-	function handlePick(entry: ResolvedOption) {
-		const editor = editorRef.current
-		if (!editor || active?.kind !== 'trigger') return
-
-		const triggerChar = active.char
-		const tokenText = `${triggerChar}${entry.value}`
-
-		editor.update(() => {
-			const selection = lexical.$getSelection()
-			if (!lexical.$isRangeSelection(selection)) return
-
-			const anchorNode = selection.anchor.getNode()
-			const triggerLength = 1 + active.query.length
-			const startOffset = selection.anchor.offset - triggerLength
-
-			if (lexical.$isTextNode(anchorNode) && startOffset >= 0) {
-				selection.setTextNodeRange(anchorNode, startOffset, anchorNode, selection.anchor.offset)
-			}
-
-			const tokenNode = $createTokenNode(tokenText, entry.color)
-			selection.insertNodes([tokenNode])
-			const cursorNode = lexical.$createTextNode(' ')
-			selection.insertNodes([cursorNode])
-			cursorNode.select()
-		})
-
-		completionsRef.current = [
-			...completionsRef.current,
-			{kind: 'trigger', name: entry.value, char: triggerChar, matchText: tokenText}
-		]
-
-		setActive(null)
-		setSelectedIndex(0)
-	}
-
-	function handleSnippetInsert(entry: SnippetConfig) {
-		const editor = editorRef.current
-		if (!editor) return
-		editor.update(() => {
-			const selection = lexical.$getSelection()
-			if (!lexical.$isRangeSelection(selection)) return
-			const parts = entry.insert.split('\n')
-			for (let i = 0; i < parts.length; i++) {
-				const part = parts[i]
-				if (part !== undefined && part.length > 0) selection.insertText(part)
-				if (i < parts.length - 1 && !(i === parts.length - 2 && parts[parts.length - 1] === '')) {
-					selection.insertNodes([lexical.$createLineBreakNode()])
-				}
-			}
-		})
-		completionsRef.current = [...completionsRef.current, {kind: 'snippet', name: entry.insert, matchText: entry.insert}]
-	}
-
-	function handleEditorChange(editorState: lexical.EditorState) {
-		editorState.read(() => {
-			const nextPrompt = lexical.$getRoot().getTextContent()
-			if (nextPrompt !== prompt) setPromptValue(nextPrompt)
-
-			const detected = detectTrigger(lexical.$getSelection(), triggerChars)
-			if (detected === null) {
-				setActive(null)
-				return
-			}
-			const options = autocomplete[detected.char]
-			if (options && options.length > 0) {
-				setActive(detected)
-				setSelectedIndex(0)
-			} else {
-				setActive(null)
-			}
-		})
-	}
-
-	function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
-		const files = EffectArray.fromIterable(event.clipboardData.files)
-		if (files.length === 0) return
-		event.preventDefault()
-		void handleAttachFiles(files)
+		}
 	}
 
 	useLayoutEffect(() => {
-		if (props.value === undefined) return
-		const editor = editorRef.current
-		if (!editor) return
-		const currentValue = editor.getEditorState().read(() => lexical.$getRoot().getTextContent())
-		if (currentValue === props.value) return
-		editor.update(() => {
+		if (Predicate.isUndefined(props.value)) return
+
+		if (Predicate.isNullish(editorRef.current)) return
+
+		const nextValue = props.value
+
+		const currentValue = editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
+		if (currentValue === nextValue) return
+
+		editorRef.current.update(() => {
 			const root = lexical.$getRoot()
 			root.clear()
-			if (props.value) root.append(lexical.$createTextNode(props.value))
+			const paragraph = lexical.$createParagraphNode()
+			root.append(paragraph)
+			if (String.isNonEmpty(nextValue)) paragraph.append(lexical.$createTextNode(nextValue))
 			root.selectEnd()
 		})
+
+		internalPromptRef.current = nextValue
+		completionsRef.current = []
+		attachmentsRef.current = []
+		setActive(null)
+		setSelectedIndex(0)
 	}, [props.value])
 
 	return (
 		<div className={cn('border-border/60 border-t bg-background', props.className)}>
 			<div className="px-3 py-3">
 				<div className="relative flex w-full flex-col border border-input dark:bg-input/30">
-					{menuOpen && (
+					{Predicate.isNotNull(active) && Array.isReadonlyArrayNonEmpty(matched) && (
 						<div className="absolute right-0 bottom-full left-0 z-10 mb-2">
 							<div
 								role="listbox"
@@ -479,27 +276,60 @@ export function ChatInput(props: ChatInputProps) {
 							>
 								{matched.map((entry, index) => (
 									<button
-										// biome-ignore lint/suspicious/noArrayIndexKey: _
+										// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated menu options are acceptable here
 										key={`${entry.value}-${index}`}
 										type="button"
 										role="option"
 										aria-selected={index === selectedIndex}
-										ref={index === selectedIndex ? scrollSelectedIntoView : undefined}
+										ref={index === selectedIndex ? node => void node?.scrollIntoView({block: 'nearest'}) : undefined}
 										className={cn(
 											'flex w-full items-start gap-3 px-3 py-2 text-left text-xs',
 											index === selectedIndex ? 'bg-muted' : ''
 										)}
+										onMouseDown={event => event.preventDefault()}
 										onMouseEnter={() => setSelectedIndex(index)}
-										onClick={() => handlePick(entry)}
+										onClick={() => {
+											if (Predicate.isNullish(editorRef.current)) return
+
+											const tokenText = `${active.char}${entry.value}`
+
+											editorRef.current.update(() => {
+												const selection = lexical.$getSelection()
+												if (!lexical.$isRangeSelection(selection)) return
+
+												const anchorNode = selection.anchor.getNode()
+												const triggerLength = 1 + active.query.length
+												const startOffset = selection.anchor.offset - triggerLength
+
+												if (lexical.$isTextNode(anchorNode) && startOffset >= 0) {
+													selection.setTextNodeRange(anchorNode, startOffset, anchorNode, selection.anchor.offset)
+												}
+
+												const tokenNode = new TokenNode(tokenText).setStyle(`color: ${entry.color}`)
+												selection.insertNodes([tokenNode])
+												const cursorNode = lexical.$createTextNode(' ')
+												selection.insertNodes([cursorNode])
+												cursorNode.select()
+											})
+
+											completionsRef.current = [
+												...completionsRef.current,
+												{kind: 'trigger', name: entry.value, char: active.char, matchText: tokenText}
+											]
+											setActive(null)
+											setSelectedIndex(0)
+										}}
 									>
 										{entry.children ?? (
 											<div className="flex items-center gap-2">
-												{entry.icon ? <span>{entry.icon}</span> : null}
+												{Predicate.isNotNullish(entry.icon) && <span>{entry.icon}</span>}
 												<span className="font-medium" style={{color: entry.color}}>
-													{active?.kind === 'trigger' ? active.char : ''}
+													{active.char}
 													{entry.value}
 												</span>
-												{entry.description ? <span className="text-muted-foreground">{entry.description}</span> : null}
+												{Predicate.isNotNullish(entry.description) && (
+													<span className="text-muted-foreground">{entry.description}</span>
+												)}
 											</div>
 										)}
 									</button>
@@ -521,7 +351,33 @@ export function ChatInput(props: ChatInputProps) {
 						<div
 							className="relative overflow-y-auto"
 							style={{maxHeight: '22.5rem', minHeight: '6rem'}}
-							onPaste={handlePaste}
+							onPaste={event => {
+								const files = Array.fromIterable(event.clipboardData.files)
+								if (Array.isReadonlyArrayEmpty(files)) return
+
+								event.preventDefault()
+								if (Predicate.isNullish(editorRef.current)) return
+
+								const entries = Array.map(files, file => ({file, matchText: file.name}))
+								attachmentsRef.current = [...attachmentsRef.current, ...entries]
+								editorRef.current.focus()
+								editorRef.current.update(() => {
+									let selection = lexical.$getSelection()
+									if (!lexical.$isRangeSelection(selection)) {
+										lexical.$getRoot().selectEnd()
+										selection = lexical.$getSelection()
+										if (!lexical.$isRangeSelection(selection)) return
+									}
+
+									for (const entry of entries) {
+										const tokenNode = new TokenNode(entry.matchText).setStyle('color: #f59e0b')
+										selection.insertNodes([tokenNode])
+										const cursorNode = lexical.$createTextNode(' ')
+										selection.insertNodes([cursorNode])
+										cursorNode.select()
+									}
+								})
+							}}
 						>
 							<PlainTextPlugin
 								contentEditable={
@@ -538,16 +394,157 @@ export function ChatInput(props: ChatInputProps) {
 								ErrorBoundary={LexicalErrorBoundary}
 							/>
 						</div>
-						<OnChangePlugin onChange={handleEditorChange} />
+						<OnChangePlugin
+							onChange={editorState => {
+								editorState.read(() => {
+									const nextPrompt = lexical.$getRoot().getTextContent()
+									if (nextPrompt !== (Predicate.isUndefined(props.value) ? internalPromptRef.current : props.value)) {
+										if (Predicate.isUndefined(props.value)) internalPromptRef.current = nextPrompt
+
+										if (Predicate.isFunction(props.onValueChange)) props.onValueChange(nextPrompt)
+									}
+
+									const selection = lexical.$getSelection()
+									if (!lexical.$isRangeSelection(selection)) {
+										setActive(null)
+										return
+									}
+
+									const anchorNode = selection.anchor.getNode()
+									if (!lexical.$isTextNode(anchorNode)) {
+										setActive(null)
+										return
+									}
+
+									const escaped = pipe(
+										Record.keys(autocomplete),
+										Array.map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+										Array.join('')
+									)
+
+									if (String.isEmpty(escaped)) {
+										setActive(null)
+										return
+									}
+
+									const match = new RegExp(`([${escaped}])([A-Za-z0-9_-]{0,32})$`).exec(
+										anchorNode.getTextContent().slice(0, selection.anchor.offset)
+									)
+									if (Predicate.isNullish(match)) {
+										setActive(null)
+										return
+									}
+
+									if (Predicate.isUndefined(match[1]) || Predicate.isUndefined(match[2])) {
+										setActive(null)
+										return
+									}
+
+									const nextOptions = autocomplete[match[1]]
+									if (Predicate.isNullish(nextOptions) || Array.isReadonlyArrayEmpty(nextOptions)) {
+										setActive(null)
+										return
+									}
+
+									setActive({char: match[1], query: match[2]})
+									setSelectedIndex(0)
+								})
+							}}
+						/>
 						<HistoryPlugin />
 						<EditorKeyboard
 							editorRef={editorRef}
-							onSubmit={handleSubmit}
-							onDismiss={handleDismiss}
-							onNavigate={handleNavigate}
-							onSelect={handleSelect}
-							menuOpen={menuOpen}
-							disabled={disabled}
+							onSubmit={() => {
+								if (Predicate.isNullish(editorRef.current) || (props.disabled ?? false)) return
+
+								const text = String.trim(
+									editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
+								)
+								if (String.isEmpty(text)) return
+
+								props.onSubmit({
+									text,
+									completions: pipe(
+										completionsRef.current,
+										Array.filter(completion => text.includes(completion.matchText)),
+										Array.map(completion => ({kind: completion.kind, name: completion.name, char: completion.char}))
+									),
+									attachments: pipe(
+										attachmentsRef.current,
+										Array.filter(attachment => text.includes(attachment.matchText)),
+										Array.map(attachment => attachment.file)
+									)
+								})
+
+								editorRef.current.update(() => {
+									const root = lexical.$getRoot()
+									root.clear()
+									root.append(lexical.$createParagraphNode())
+									root.selectStart()
+								})
+
+								if (Predicate.isUndefined(props.value)) internalPromptRef.current = ''
+
+								if (Predicate.isFunction(props.onValueChange)) props.onValueChange('')
+
+								setActive(null)
+								setSelectedIndex(0)
+								completionsRef.current = []
+								attachmentsRef.current = []
+							}}
+							onDismiss={() => {
+								setActive(null)
+								setSelectedIndex(0)
+							}}
+							onNavigate={direction => {
+								if (Array.isReadonlyArrayEmpty(matched)) return
+
+								setSelectedIndex(previous => {
+									if (direction === 'up') return previous <= 0 ? matched.length - 1 : previous - 1
+
+									return previous >= matched.length - 1 ? 0 : previous + 1
+								})
+							}}
+							onSelect={() => {
+								const entry = matched[selectedIndex]
+								if (
+									Predicate.isNullish(entry) ||
+									Predicate.isNullish(editorRef.current) ||
+									Predicate.isNullish(active)
+								) {
+									return
+								}
+
+								const tokenText = `${active.char}${entry.value}`
+
+								editorRef.current.update(() => {
+									const selection = lexical.$getSelection()
+									if (!lexical.$isRangeSelection(selection)) return
+
+									const anchorNode = selection.anchor.getNode()
+									const triggerLength = 1 + active.query.length
+									const startOffset = selection.anchor.offset - triggerLength
+
+									if (lexical.$isTextNode(anchorNode) && startOffset >= 0) {
+										selection.setTextNodeRange(anchorNode, startOffset, anchorNode, selection.anchor.offset)
+									}
+
+									const tokenNode = new TokenNode(tokenText).setStyle(`color: ${entry.color}`)
+									selection.insertNodes([tokenNode])
+									const cursorNode = lexical.$createTextNode(' ')
+									selection.insertNodes([cursorNode])
+									cursorNode.select()
+								})
+
+								completionsRef.current = [
+									...completionsRef.current,
+									{kind: 'trigger', name: entry.value, char: active.char, matchText: tokenText}
+								]
+								setActive(null)
+								setSelectedIndex(0)
+							}}
+							menuOpen={Array.isReadonlyArrayNonEmpty(matched)}
+							disabled={props.disabled ?? false}
 						/>
 					</LexicalComposer>
 
@@ -556,41 +553,138 @@ export function ChatInput(props: ChatInputProps) {
 						<div className="flex items-center gap-2">
 							{snippets.map((entry, index) => (
 								<Button
-									// biome-ignore lint/suspicious/noArrayIndexKey: _
+									// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated snippet entries are acceptable here
 									key={`snippet-${entry.insert}-${index}`}
 									type="button"
 									variant="outline"
 									size="icon-xs"
-									onClick={() => handleSnippetInsert(entry)}
-									disabled={disabled}
+									onMouseDown={event => event.preventDefault()}
+									onClick={() => {
+										if (Predicate.isNullish(editorRef.current)) return
+
+										editorRef.current.update(() => {
+											const selection = lexical.$getSelection()
+											if (!lexical.$isRangeSelection(selection)) return
+
+											const parts = entry.insert.split('\n')
+											for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+												const part = parts[partIndex]
+												if (Predicate.isUndefined(part)) continue
+												if (String.isNonEmpty(part)) selection.insertText(part)
+
+												if (
+													partIndex < parts.length - 1 &&
+													!(partIndex === parts.length - 2 && parts[parts.length - 1] === '')
+												) {
+													selection.insertNodes([lexical.$createLineBreakNode()])
+												}
+											}
+										})
+
+										completionsRef.current = [
+											...completionsRef.current,
+											{kind: 'snippet', name: entry.insert, matchText: entry.insert}
+										]
+									}}
+									disabled={props.disabled ?? false}
 								>
 									{entry.children}
 								</Button>
 							))}
-							<Button
-								type="button"
-								variant="outline"
-								size="icon-xs"
-								onClick={() => fileInputRef.current?.click()}
-								disabled={disabled}
+							<label
+								htmlFor={fileInputId}
+								className={cn(
+									buttonVariants({variant: 'outline', size: 'icon-xs'}),
+									(props.disabled ?? false) ? 'pointer-events-none' : 'cursor-pointer'
+								)}
 								aria-label="Attach file"
 							>
 								<Paperclip className="size-3.5" />
-							</Button>
+							</label>
 							<input
-								ref={fileInputRef}
+								id={fileInputId}
 								type="file"
 								className="sr-only"
 								multiple
+								disabled={props.disabled ?? false}
 								onChange={event => {
 									const files = event.currentTarget.files
-									if (!files) return
-									void handleAttachFiles([...files])
+									if (Predicate.isNullish(files) || Predicate.isNullish(editorRef.current)) {
+										return
+									}
+
+									const entries = Array.map(Array.fromIterable(files), file => ({file, matchText: file.name}))
 									event.currentTarget.value = ''
+									attachmentsRef.current = [...attachmentsRef.current, ...entries]
+									editorRef.current.focus()
+									editorRef.current.update(() => {
+										let selection = lexical.$getSelection()
+										if (!lexical.$isRangeSelection(selection)) {
+											lexical.$getRoot().selectEnd()
+											selection = lexical.$getSelection()
+											if (!lexical.$isRangeSelection(selection)) {
+												return
+											}
+										}
+
+										for (const entry of entries) {
+											const tokenNode = new TokenNode(entry.matchText).setStyle('color: #f59e0b')
+											selection.insertNodes([tokenNode])
+											const cursorNode = lexical.$createTextNode(' ')
+											selection.insertNodes([cursorNode])
+											cursorNode.select()
+										}
+									})
 								}}
 							/>
 							{actions}
-							<Button onClick={handleSubmit} variant="default" size="icon-xs" disabled={disabled}>
+							<Button
+								onClick={() => {
+									if (Predicate.isNullish(editorRef.current)) {
+										return
+									}
+
+									const text = String.trim(
+										editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
+									)
+									if (String.isEmpty(text)) {
+										return
+									}
+
+									props.onSubmit({
+										text,
+										completions: pipe(
+											completionsRef.current,
+											Array.filter(completion => text.includes(completion.matchText)),
+											Array.map(completion => ({kind: completion.kind, name: completion.name, char: completion.char}))
+										),
+										attachments: pipe(
+											attachmentsRef.current,
+											Array.filter(attachment => text.includes(attachment.matchText)),
+											Array.map(attachment => attachment.file)
+										)
+									})
+
+									editorRef.current.update(() => {
+										const root = lexical.$getRoot()
+										root.clear()
+										root.append(lexical.$createParagraphNode())
+										root.selectStart()
+									})
+
+									if (Predicate.isUndefined(props.value)) internalPromptRef.current = ''
+
+									if (Predicate.isFunction(props.onValueChange)) props.onValueChange('')
+
+									setActive(null)
+									setSelectedIndex(0)
+									completionsRef.current = []
+									attachmentsRef.current = []
+								}}
+								variant="default"
+								size="icon-xs"
+								disabled={props.disabled ?? false}
+							>
 								<ArrowUpIcon className="size-3.5" />
 							</Button>
 						</div>
@@ -600,8 +694,6 @@ export function ChatInput(props: ChatInputProps) {
 		</div>
 	)
 }
-
-// -- Declarative config components (render nothing, read by parseChildren) --
 
 function Autocomplete(_: AutocompleteConfig) {
 	return null
@@ -627,4 +719,4 @@ function InputActions(_: {children?: ReactNode}) {
 	return null
 }
 
-export {Autocomplete, AutocompleteOption, Snippet, Snippets, Toolbar, InputActions}
+export {Autocomplete, AutocompleteOption, InputActions, Snippet, Snippets, Toolbar}

@@ -1,6 +1,7 @@
 ---
 description: Aggressive simplification that removes defensive code and uses Effect idioms
 agent: build
+subtask: true
 ---
 
 Run an aggressive simplification pass on the current implementation.
