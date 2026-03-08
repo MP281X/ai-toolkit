@@ -34,6 +34,13 @@
 			"url": "https://github.com/pierrecomputer/pierre"
 		},
 		{
+			"name": "lexical",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages",
+			"url": "https://github.com/facebook/lexical"
+		},
+		{
 			"name": "@github/copilot-sdk",
 			"type": "git",
 			"branch": "main",

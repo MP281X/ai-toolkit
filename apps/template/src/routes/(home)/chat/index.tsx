@@ -3,11 +3,11 @@ import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {type ConversationPart, reconstructMessages, TextPart} from '@ai-toolkit/ai/schema'
-import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/ai/input'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
+import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/input'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {useState} from 'react'
@@ -30,7 +30,8 @@ const messagesAtom = Atom.keepAlive(
 				)
 			),
 			Stream.unwrap
-		)
+		),
+		{initialValue: reconstructMessages([])}
 	)
 )
 

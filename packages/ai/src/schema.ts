@@ -12,7 +12,7 @@ export const ToolName = Schema.Union([
 	Schema.Literal('patch'),
 	Schema.Literal('glob'),
 	Schema.Literal('grep'),
-	Schema.String as Schema.Schema<string & {}>
+	Schema.String // TODO: see why this doesn't work:  as Schema.Schema<string & {}>
 ])
 
 export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
