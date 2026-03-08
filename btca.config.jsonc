@@ -3,7 +3,7 @@
 
 	"model": "grok-code-fast-1",
 	"provider": "github-copilot",
-	"dataDirectory": ".opencode/btca",
+	"dataDirectory": "/tmp/btca",
 
 	"resources": [
 		{

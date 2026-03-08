@@ -1,40 +1,21 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {Effect, pipe, Stream} from 'effect'
 
-import {
-	ChevronRight,
-	File,
-	SiGnubash,
-	SiMarkdown,
-	SiReact,
-	SiTypescript,
-	SquareMinus,
-	SquarePlus,
-	Trash2
-} from '@ai-toolkit/components/icons'
+import {ChevronRight, FileIcon, SquareMinus, SquarePlus, Trash2} from '@ai-toolkit/components/icons'
 import {FullFile, PatchDiff} from '@ai-toolkit/components/render/diff'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {cn} from '@ai-toolkit/components/utils'
 import {createFileRoute} from '@tanstack/react-router'
+import {Atom} from 'effect/unstable/reactivity'
 import {useState} from 'react'
 
-import {RpcClient} from '#lib/atomRuntime.ts'
+import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 
 export const Route = createFileRoute('/(home)/diff/')({
 	component: RouteComponent
 })
-
-function FileIcon(props: {filePath: string; className?: string}) {
-	const ext = props.filePath.split('.').pop()?.toLowerCase()
-	const cls = cn('size-3.5 shrink-0', props.className)
-
-	if (ext === 'md' || ext === 'markdown') return <SiMarkdown className={cls} />
-	if (ext === 'sh' || ext === 'bash' || ext === 'zsh') return <SiGnubash className={cls} />
-	if (ext === 'tsx' || ext === 'jsx') return <SiReact className={cn(cls, 'text-sky-400')} />
-	if (ext === 'ts' || ext === 'js') return <SiTypescript className={cn(cls, 'text-blue-500')} />
-	return <File className={cls} />
-}
 
 function FileEntry(props: {
 	filePath: string
@@ -59,7 +40,7 @@ function FileEntry(props: {
 							isOpen ? 'rotate-90' : 'rotate-0'
 						)}
 					/>
-					<FileIcon filePath={props.filePath} className="text-muted-foreground" />
+					<FileIcon filePath={props.filePath} />
 					<span className="min-w-0 truncate font-mono text-xs">
 						{dir && <span className="text-muted-foreground">{dir}</span>}
 						<span className="font-semibold text-foreground">{name}</span>
@@ -185,43 +166,51 @@ function GitSection(props: {
 	)
 }
 
+const stagedDiffsAtom = Atom.keepAlive(
+	AtomRuntime.atom(
+		pipe(
+			RpcClient.asEffect(),
+			Effect.map(client => client('git.stagedDiffs', void 0)),
+			Stream.unwrap
+		)
+	)
+)
+
+const unstagedDiffsAtom = Atom.keepAlive(
+	AtomRuntime.atom(
+		pipe(
+			RpcClient.asEffect(),
+			Effect.map(client => client('git.unstagedDiffs', void 0)),
+			Stream.unwrap
+		)
+	)
+)
+
 function RouteComponent() {
-	const {value: stagedDiffs} = useAtomSuspense(RpcClient.query('git.stagedDiffs', void 0))
-	const {value: unstagedDiffs} = useAtomSuspense(RpcClient.query('git.unstagedDiffs', void 0))
+	const {value: stagedDiffs} = useAtomSuspense(stagedDiffsAtom)
+	const {value: unstagedDiffs} = useAtomSuspense(unstagedDiffsAtom)
 	const stageFile = useAtomSet(RpcClient.mutation('git.stageFile'))
 	const unstageFile = useAtomSet(RpcClient.mutation('git.unstageFile'))
 	const discardFile = useAtomSet(RpcClient.mutation('git.discardFile'))
 
-	const [removedFromStaged, setRemovedFromStaged] = useState<Set<string>>(new Set())
-	const [removedFromUnstaged, setRemovedFromUnstaged] = useState<Set<string>>(new Set())
-
-	const displayedStaged = stagedDiffs.filter(d => !removedFromStaged.has(d.filePath))
-	const displayedUnstaged = unstagedDiffs.filter(d => !removedFromUnstaged.has(d.filePath))
-
-	function handleUnstage(filePath: string) {
-		unstageFile({payload: {filePath}})
-		setRemovedFromStaged(prev => new Set([...prev, filePath]))
-	}
-
-	function handleStage(filePath: string) {
-		stageFile({payload: {filePath}})
-		setRemovedFromUnstaged(prev => new Set([...prev, filePath]))
-	}
-
-	function handleDiscardFile(filePath: string) {
-		discardFile({payload: {filePath}})
-		setRemovedFromStaged(prev => new Set([...prev, filePath]))
-		setRemovedFromUnstaged(prev => new Set([...prev, filePath]))
-	}
-
 	return (
 		<ResizablePanelGroup orientation="horizontal" className="h-dvh min-h-0 w-full bg-background">
 			<ResizablePanel minSize="20%" defaultSize="50%" className="flex min-h-0">
-				<GitSection label="Staged" diffs={displayedStaged} onUnstage={handleUnstage} onDiscard={handleDiscardFile} />
+				<GitSection
+					label="Staged"
+					diffs={stagedDiffs}
+					onUnstage={filePath => unstageFile({payload: {filePath}})}
+					onDiscard={filePath => discardFile({payload: {filePath}})}
+				/>
 			</ResizablePanel>
 			<ResizableHandle />
 			<ResizablePanel minSize="20%" defaultSize="50%" className="flex min-h-0 min-w-0">
-				<GitSection label="Unstaged" diffs={displayedUnstaged} onStage={handleStage} onDiscard={handleDiscardFile} />
+				<GitSection
+					label="Unstaged"
+					diffs={unstagedDiffs}
+					onStage={filePath => stageFile({payload: {filePath}})}
+					onDiscard={filePath => discardFile({payload: {filePath}})}
+				/>
 			</ResizablePanel>
 		</ResizablePanelGroup>
 	)

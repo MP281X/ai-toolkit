@@ -17,7 +17,7 @@ export function Markdown(props: {children: string; className?: string}) {
 	const tokens = marked.lexer(props.children)
 
 	return (
-		<div className={cn('markdown wrap-break-word select-text text-wrap text-[12px] leading-relaxed', props.className)}>
+		<div className={cn('markdown wrap-break-word select-text text-wrap text-[14px] leading-relaxed', props.className)}>
 			{tokens.map((token, index) => {
 				// skip raw HTML block tokens
 				if (token.type === 'html') return null

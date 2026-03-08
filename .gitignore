@@ -12,9 +12,6 @@
 # packages
 **/node_modules
 
-# opencode
-.opencode/btca
-
 # nix
 result
 flake.lock

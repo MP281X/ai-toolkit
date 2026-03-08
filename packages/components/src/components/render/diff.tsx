@@ -7,7 +7,7 @@ const DIFF_CSS = `
 	:host {
 		--diffs-font-family: "JetBrains Mono Variable", monospace;
 		--diffs-header-font-family: "JetBrains Mono Variable", monospace;
-		--diffs-font-size: 11px;
+		--diffs-font-size: 14px;
 		--diffs-line-height: 1.5;
 		--gutter: light-dark(oklch(0.967 0.001 286.375), oklch(0.22 0.007 285.885));
 		--muted: light-dark(oklch(0.967 0.001 286.375), oklch(0.25 0.006 286.033));

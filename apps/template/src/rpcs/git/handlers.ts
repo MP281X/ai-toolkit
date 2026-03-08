@@ -13,7 +13,8 @@ export const GitLive = GitContracts.toLayer(
 			'git.unstagedDiffs': () => git.unstagedDiffs,
 			'git.stageFile': payload => git.stageFile(payload.filePath),
 			'git.unstageFile': payload => git.unstageFile(payload.filePath),
-			'git.discardFile': payload => git.discardFile(payload.filePath)
+			'git.discardFile': payload => git.discardFile(payload.filePath),
+			'git.clone': payload => git.clone(payload.url, payload.directory)
 		})
 	})
 )
