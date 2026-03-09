@@ -5,14 +5,6 @@
 	"tools": { "question": false, "codesearch": false },
 	"agent": { "general": { "mode": "primary", "model": "opencode-go/kimi-k2.5", "tools": { "question": true } } },
 
-	"mcp": {
-		"btca": {
-			"type": "local",
-			"timeout": 600000,
-			"command": ["bunx", "btca", "mcp"]
-		}
-	},
-
 	"permission": {
 		"bash": {
 			"*": "allow",

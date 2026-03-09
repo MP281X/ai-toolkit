@@ -1,304 +1,311 @@
 import type {Scope} from 'effect'
-import {Array, Deferred, Effect, flow, Layer, PubSub, Queue, Ref, Stream} from 'effect'
+import {Deferred, Effect, flow, Layer, PubSub, Queue, Ref, Stream} from 'effect'
 
 import {CopilotClient, type PermissionRequestResult, type SessionEvent} from '@github/copilot-sdk'
 
-import type {ModelId, ModelSelection} from '../catalog.ts'
+import type {ModelSelection} from '../catalog.ts'
 import {
 	AiError,
+	type ConversationEvent,
 	type ConversationMessage,
-	type ConversationPart,
-	createUserTurnParts,
-	ErrorPart,
-	FinishPart,
-	publishConversationPartStream,
-	ReasoningDeltaPart,
-	StartPart,
-	TextDeltaPart,
-	ToolApprovalRequestPart,
-	ToolCallPart,
-	ToolErrorPart,
-	type ToolResponsePart,
-	ToolResultPart,
-	type UserMessagePart
+	createPromptEvents,
+	MessageErrorEvent,
+	MessageFinishEvent,
+	MessageStartEvent,
+	type PromptPart,
+	publishConversationEventStream,
+	ReasoningDeltaEvent,
+	TextDeltaEvent,
+	ToolApprovalRequestEvent,
+	ToolCallEvent,
+	ToolErrorEvent,
+	type ToolResponse,
+	ToolResultEvent,
+	Usage
 } from '../schema.ts'
 import {Agent} from '../service.ts'
 import {
 	decodeToolValueOrUndefined,
 	normalizeToolInput,
+	normalizeToolKind,
 	normalizeToolOutput,
+	QuestionItem,
 	QuestionToolInput,
 	QuestionToolOutput,
+	ReportIntentToolInput,
 	stringifyToolValue
 } from '../tools.ts'
 
-type QuestionAnswer = {answer: string; wasFreeform: boolean}
-
-function makeUserInputQuestionToolInput(input: {
-	allowFreeform?: boolean
-	choices?: readonly string[]
-	question: string
-}) {
+function makeQuestionInput(request: {question: string; choices?: readonly string[]; allowFreeform?: boolean}) {
 	return QuestionToolInput.makeUnsafe({
 		questions: [
-			{
-				allowFreeform: input.allowFreeform,
+			QuestionItem.makeUnsafe({
+				custom: request.allowFreeform,
 				header: 'Question',
-				options: (input.choices ?? []).map(choice => ({label: choice})),
-				question: input.question
-			}
+				options: (request.choices ?? []).map(choice => ({label: choice})),
+				question: request.question
+			})
 		]
 	})
 }
 
-function getQuestionToolSignature(input: unknown) {
-	const questionInput = decodeToolValueOrUndefined(QuestionToolInput, input)
-	const question = questionInput?.questions[0]
-	if (!question) {
-		return undefined
-	}
-
-	return JSON.stringify({
-		allowFreeform: question.allowFreeform,
-		header: question.header,
-		multiple: question.multiple,
-		options: (question.options ?? []).map((option: {label: string; description?: string}) => [
-			option.label,
-			option.description
-		]),
-		question: question.question
-	})
-}
-
-function enqueueQuestionToolCallId(questionToolCallIds: Map<string, string[]>, input: unknown, toolCallId: string) {
-	const signature = getQuestionToolSignature(input)
-	if (!signature) {
-		return
-	}
-
-	questionToolCallIds.set(signature, [...(questionToolCallIds.get(signature) ?? []), toolCallId])
-}
-
-function takeQuestionToolCallId(questionToolCallIds: Map<string, string[]>, input: unknown) {
-	const signature = getQuestionToolSignature(input)
-	if (!signature) {
-		return undefined
-	}
-
-	const [toolCallId, ...rest] = questionToolCallIds.get(signature) ?? []
-	if (!toolCallId) {
-		return undefined
-	}
-
-	if (rest.length === 0) {
-		questionToolCallIds.delete(signature)
-	} else {
-		questionToolCallIds.set(signature, rest)
-	}
-
-	return toolCallId
-}
-
-function deleteQuestionToolCallId(questionToolCallIds: Map<string, string[]>, toolCallId: string) {
-	for (const [signature, toolCallIds] of questionToolCallIds) {
-		const nextToolCallIds = toolCallIds.filter(candidate => candidate !== toolCallId)
-		if (nextToolCallIds.length === toolCallIds.length) {
-			continue
+function extractQuestionResponse(output: unknown) {
+	const decoded = decodeToolValueOrUndefined(QuestionToolOutput, output)
+	if (decoded?._tag === 'question') {
+		const answer = decoded.answers[0]
+		return {
+			answer: answer ? answer.answers.join('\n') : '',
+			wasFreeform: true
 		}
+	}
 
-		if (nextToolCallIds.length === 0) {
-			questionToolCallIds.delete(signature)
-		} else {
-			questionToolCallIds.set(signature, nextToolCallIds)
-		}
-		return
+	return {
+		answer: stringifyToolValue(output),
+		wasFreeform: true
 	}
 }
 
-function isCopilotIntentTool(toolName: string | undefined) {
-	const normalized = toolName?.toLowerCase()
-	return normalized === 'report_intent' || normalized === 'assistant.intent' || normalized === 'intent'
-}
-
-function extractCopilotIntent(input: unknown) {
-	if (typeof input !== 'object' || input === null) {
-		return undefined
-	}
-
-	const record = input as Record<string, unknown>
-	const intent = record['intent']
-	const text = record['text']
-	if (typeof intent === 'string' && intent.trim().length > 0) {
-		return intent.trim()
-	}
-	if (typeof text === 'string' && text.trim().length > 0) {
-		return text.trim()
-	}
-	return undefined
-}
-
-function assistantStream(
-	session: Awaited<ReturnType<CopilotClient['createSession']>>,
-	selection: ModelSelection,
-	prompt: string,
-	questionToolCallIds: Map<string, string[]>,
-	toolNames: Map<string, string>,
+function assistantEventStream(input: {
+	session: Awaited<ReturnType<CopilotClient['createSession']>>
+	selection: ModelSelection
+	prompt: string
 	toolInputs: Map<string, unknown>
-) {
-	return Stream.callback<ConversationPart, AiError>(
+	toolNames: Map<string, string>
+	lastIntentRef: Ref.Ref<string | undefined>
+	questionToolCallIdRef: Ref.Ref<string | undefined>
+	messageIdRef: Ref.Ref<string | undefined>
+}) {
+	return Stream.callback<ConversationEvent, AiError>(
 		Effect.fnUntraced(function* (queue) {
-			const turnHasToolCalls = yield* Ref.make(false)
-			const usage = yield* Ref.make({input: 0, output: 0, reasoning: 0})
+			const usage = yield* Ref.make(Usage.makeUnsafe({}))
+			const hasToolCalls = yield* Ref.make(false)
 			const runFork = Effect.runForkWith(yield* Effect.services<Scope.Scope>())
 
 			const onEvent = Effect.fnUntraced(function* (event: SessionEvent) {
-				switch (event.type) {
-					case 'assistant.turn_start':
-						yield* Ref.set(turnHasToolCalls, false)
-						yield* Ref.set(usage, {input: 0, output: 0, reasoning: 0})
-						return yield* Queue.offer(queue, StartPart.makeUnsafe({model: selection, role: 'assistant'}))
-					case 'assistant.message_delta':
-						return yield* Queue.offer(
-							queue,
-							TextDeltaPart.makeUnsafe({id: event.data.messageId, text: event.data.deltaContent})
-						)
-					case 'assistant.reasoning_delta':
-						return yield* Queue.offer(
-							queue,
-							ReasoningDeltaPart.makeUnsafe({id: event.data.reasoningId, text: event.data.deltaContent})
-						)
-					case 'tool.execution_start': {
-						if (isCopilotIntentTool(event.data.toolName)) {
-							toolNames.set(event.data.toolCallId, event.data.toolName)
-							const intent = extractCopilotIntent(event.data.arguments)
-							if (!intent) {
-								return
-							}
+				if (event.type === 'assistant.turn_start') {
+					const messageId = crypto.randomUUID()
+					yield* Ref.set(input.messageIdRef, messageId)
+					yield* Ref.set(usage, Usage.makeUnsafe({}))
+					yield* Ref.set(hasToolCalls, false)
+					yield* Ref.set(input.lastIntentRef, undefined)
+					yield* Ref.set(input.questionToolCallIdRef, undefined)
+					input.toolInputs.clear()
+					input.toolNames.clear()
+					return yield* Queue.offer(
+						queue,
+						MessageStartEvent.makeUnsafe({messageId, model: input.selection, role: 'assistant'})
+					)
+				}
 
-							return yield* Queue.offer(queue, ReasoningDeltaPart.makeUnsafe({id: event.data.toolCallId, text: intent}))
+				if (event.type === 'assistant.message_delta') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
+						return
+					}
+					return yield* Queue.offer(
+						queue,
+						TextDeltaEvent.makeUnsafe({messageId, partId: event.data.messageId, text: event.data.deltaContent})
+					)
+				}
+
+				if (event.type === 'assistant.reasoning_delta') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
+						return
+					}
+					return yield* Queue.offer(
+						queue,
+						ReasoningDeltaEvent.makeUnsafe({
+							kind: 'reasoning',
+							messageId,
+							partId: event.data.reasoningId,
+							text: event.data.deltaContent
+						})
+					)
+				}
+
+				if (event.type === 'assistant.intent') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
+						return
+					}
+					const shouldEmit = yield* Ref.modify(input.lastIntentRef, prev => {
+						if (prev === event.data.intent) return [false, prev] as const
+						return [true, event.data.intent] as const
+					})
+					if (!shouldEmit) {
+						return
+					}
+					const toolCallId = crypto.randomUUID()
+					const toolInput = ReportIntentToolInput.makeUnsafe({intent: event.data.intent})
+					input.toolInputs.set(toolCallId, toolInput)
+					input.toolNames.set(toolCallId, 'report_intent')
+					yield* Queue.offer(
+						queue,
+						ToolCallEvent.makeUnsafe({
+							input: toolInput,
+							messageId,
+							partId: toolCallId,
+							state: 'running',
+							toolCallId,
+							toolKind: 'report_intent',
+							toolName: 'report_intent'
+						})
+					)
+					return yield* Queue.offer(
+						queue,
+						ToolResultEvent.makeUnsafe({
+							messageId,
+							partId: toolCallId,
+							toolCallId,
+							toolKind: 'report_intent',
+							toolName: 'report_intent'
+						})
+					)
+				}
+
+				if (event.type === 'tool.execution_start') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
+						return
+					}
+					if (normalizeToolKind(event.data.toolName) === 'question') {
+						yield* Ref.set(input.questionToolCallIdRef, event.data.toolCallId)
+						input.toolInputs.set(event.data.toolCallId, normalizeToolInput(event.data.toolName, event.data.arguments))
+						input.toolNames.set(event.data.toolCallId, event.data.toolName)
+						return
+					}
+					yield* Ref.set(hasToolCalls, true)
+					const normalizedInput = normalizeToolInput(event.data.toolName, event.data.arguments)
+					input.toolInputs.set(event.data.toolCallId, normalizedInput)
+					input.toolNames.set(event.data.toolCallId, event.data.toolName)
+					return yield* Queue.offer(
+						queue,
+						ToolCallEvent.makeUnsafe({
+							input: normalizedInput,
+							messageId,
+							partId: event.data.toolCallId,
+							state: normalizeToolKind(event.data.toolName) === 'question' ? 'pending-user-input' : 'running',
+							toolCallId: event.data.toolCallId,
+							toolKind: normalizeToolKind(event.data.toolName),
+							toolName: event.data.toolName
+						})
+					)
+				}
+
+				if (event.type === 'tool.execution_complete') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
+						return
+					}
+					const toolName = input.toolNames.get(event.data.toolCallId) ?? event.data.toolCallId
+					if (normalizeToolKind(toolName) === 'question') {
+						if ((yield* Ref.get(input.questionToolCallIdRef)) === event.data.toolCallId) {
+							yield* Ref.set(input.questionToolCallIdRef, undefined)
 						}
+						input.toolNames.delete(event.data.toolCallId)
+						input.toolInputs.delete(event.data.toolCallId)
+						return
+					}
+					const toolInput = input.toolInputs.get(event.data.toolCallId)
+					input.toolNames.delete(event.data.toolCallId)
+					input.toolInputs.delete(event.data.toolCallId)
 
-						yield* Ref.set(turnHasToolCalls, true)
-						const input = normalizeToolInput(event.data.toolName, event.data.arguments)
-						toolNames.set(event.data.toolCallId, event.data.toolName)
-						toolInputs.set(event.data.toolCallId, input)
-						if (event.data.toolName.toLowerCase() === 'question' || event.data.toolName.toLowerCase() === 'ask_user') {
-							enqueueQuestionToolCallId(questionToolCallIds, input, event.data.toolCallId)
-						}
-
+					if (event.data.success) {
 						return yield* Queue.offer(
 							queue,
-							ToolCallPart.makeUnsafe({
-								input,
+							ToolResultEvent.makeUnsafe({
+								messageId,
+								output: normalizeToolOutput(
+									toolName,
+									event.data.result?.detailedContent ?? event.data.result?.content ?? '',
+									toolInput
+								),
+								partId: event.data.toolCallId,
 								toolCallId: event.data.toolCallId,
-								toolName: event.data.toolName
+								toolKind: normalizeToolKind(toolName),
+								toolName
 							})
 						)
 					}
-					case 'tool.execution_complete': {
-						const toolName = toolNames.get(event.data.toolCallId)
-						if (isCopilotIntentTool(toolName)) {
-							toolNames.delete(event.data.toolCallId)
-							toolInputs.delete(event.data.toolCallId)
-							return
-						}
 
-						const resolvedToolName = toolName ?? 'tool'
-						const toolInput = toolInputs.get(event.data.toolCallId)
-						if (resolvedToolName.toLowerCase() === 'question' || resolvedToolName.toLowerCase() === 'ask_user') {
-							deleteQuestionToolCallId(questionToolCallIds, event.data.toolCallId)
-						}
-						toolNames.delete(event.data.toolCallId)
-						toolInputs.delete(event.data.toolCallId)
+					return yield* Queue.offer(
+						queue,
+						ToolErrorEvent.makeUnsafe({
+							error: event.data.error?.message ?? 'Tool failed',
+							messageId,
+							partId: event.data.toolCallId,
+							toolCallId: event.data.toolCallId,
+							toolKind: normalizeToolKind(toolName),
+							toolName
+						})
+					)
+				}
 
-						if (event.data.success) {
-							return yield* Queue.offer(
-								queue,
-								ToolResultPart.makeUnsafe({
-									output: normalizeToolOutput(resolvedToolName, event.data.result ?? null, toolInput),
-									toolCallId: event.data.toolCallId,
-									toolName: resolvedToolName
-								})
-							)
-						}
-
-						return yield* Queue.offer(
-							queue,
-							ToolErrorPart.makeUnsafe({
-								error: event.data.error ?? toolInput,
-								toolCallId: event.data.toolCallId,
-								toolName: resolvedToolName
-							})
-						)
-					}
-					case 'assistant.usage':
-						return yield* Ref.update(usage, current => ({
+				if (event.type === 'assistant.usage') {
+					return yield* Ref.update(usage, current =>
+						Usage.makeUnsafe({
 							input: current.input + (event.data.inputTokens ?? 0),
 							output: current.output + (event.data.outputTokens ?? 0),
 							reasoning: current.reasoning
-						}))
-					case 'assistant.turn_end':
-						return yield* Queue.offer(
-							queue,
-							FinishPart.makeUnsafe({
-								finishReason: (yield* Ref.get(turnHasToolCalls)) ? 'tool-calls' : 'stop',
-								usage: yield* Ref.get(usage)
-							})
-						)
-					case 'session.error':
-						yield* Queue.offer(queue, ErrorPart.makeUnsafe({error: new Error(event.data.message)}))
-						yield* Queue.offer(queue, FinishPart.makeUnsafe({finishReason: 'error', usage: yield* Ref.get(usage)}))
-						return yield* Queue.end(queue)
-					case 'session.idle':
-						return yield* Queue.end(queue)
-					default:
+						})
+					)
+				}
+
+				if (event.type === 'assistant.turn_end') {
+					const messageId = yield* Ref.get(input.messageIdRef)
+					if (messageId === undefined) {
 						return
+					}
+					return yield* Queue.offer(
+						queue,
+						MessageFinishEvent.makeUnsafe({
+							finishReason: (yield* Ref.get(hasToolCalls)) ? 'tool-calls' : 'stop',
+							messageId,
+							usage: yield* Ref.get(usage)
+						})
+					)
+				}
+
+				if (event.type === 'session.error') {
+					const messageId = (yield* Ref.get(input.messageIdRef)) ?? crypto.randomUUID()
+					yield* Queue.offer(
+						queue,
+						MessageErrorEvent.makeUnsafe({error: new Error(event.data.message), messageId, partId: crypto.randomUUID()})
+					)
+					yield* Queue.offer(
+						queue,
+						MessageFinishEvent.makeUnsafe({finishReason: 'error', messageId, usage: yield* Ref.get(usage)})
+					)
+					return yield* Queue.end(queue)
+				}
+
+				if (event.type === 'session.idle') {
+					return yield* Queue.end(queue)
 				}
 			})
 
 			yield* Effect.acquireRelease(
-				Effect.sync(() => session.on(event => void runFork(onEvent(event)))),
+				Effect.sync(() => input.session.on(event => void runFork(Effect.ignore(onEvent(event))))),
 				unsubscribe => Effect.sync(unsubscribe)
 			)
 
-			yield* Effect.tryPromise({try: () => session.send({prompt}), catch: cause => new AiError({cause})})
+			if (input.prompt.length === 0) {
+				return
+			}
+
+			yield* Effect.tryPromise({
+				try: () => input.session.send({prompt: input.prompt}),
+				catch: cause => new AiError({cause})
+			})
 		})
 	)
 }
 
-function extractQuestionAnswer(output: unknown): QuestionAnswer {
-	const decoded = decodeToolValueOrUndefined(QuestionToolOutput, output)
-	const firstAnswer = decoded?.answers[0]
-	if (firstAnswer) {
-		return {
-			answer: stringifyToolValue(firstAnswer.answer),
-			wasFreeform: firstAnswer.wasFreeform
-		}
-	}
-
-	if (typeof output === 'object' && output !== null) {
-		const record = output as Record<string, unknown>
-		const answers = record['answers']
-		if (Array.isArray(answers)) {
-			const answer = answers[0]
-			if (typeof answer === 'object' && answer !== null) {
-				const answerRecord = answer as Record<string, unknown>
-				return {
-					answer: stringifyToolValue(answerRecord['answer']),
-					wasFreeform: answerRecord['wasFreeform'] === true
-				}
-			}
-		}
-	}
-
-	return {answer: stringifyToolValue(output), wasFreeform: true}
-}
-
-export function CopilotSdkAgentLayer(input: {model: ModelId}) {
+export function CopilotSdkAgentLayer(selection: ModelSelection) {
 	return Layer.effect(
 		Agent,
 		Effect.fnUntraced(function* () {
-			const selection: ModelSelection = {agent: 'copilot', model: input.model, provider: 'copilot'}
 			const client = yield* Effect.acquireRelease(
 				Effect.tryPromise({
 					try: async () => {
@@ -314,14 +321,16 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 				)
 			)
 
-			const events = yield* PubSub.unbounded<ConversationPart>({replay: 100_000})
+			const events = yield* PubSub.unbounded<ConversationEvent>({replay: 100_000})
 			const history = yield* Ref.make<readonly ConversationMessage[]>([])
+			const messageIdRef = yield* Ref.make<string | undefined>(undefined)
+			const lastIntentRef = yield* Ref.make<string | undefined>(undefined)
+			const questionToolCallIdRef = yield* Ref.make<string | undefined>(undefined)
 			const pendingApprovals = new Map<string, Deferred.Deferred<PermissionRequestResult>>()
-			const pendingQuestions = new Map<string, Deferred.Deferred<QuestionAnswer>>()
-			const questionToolCallIds = new Map<string, string[]>()
-			const toolNames = new Map<string, string>()
+			const pendingQuestions = new Map<string, Deferred.Deferred<{answer: string; wasFreeform: boolean}>>()
+			const approvalLookup = new Map<string, {messageId: string; toolCallId: string; toolName: string}>()
 			const toolInputs = new Map<string, unknown>()
-
+			const toolNames = new Map<string, string>()
 			const runPromise = Effect.runPromiseWith(yield* Effect.services<Scope.Scope>())
 
 			const session = yield* Effect.tryPromise({
@@ -332,44 +341,59 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 						onPermissionRequest: request =>
 							runPromise(
 								Effect.gen(function* () {
+									const messageId = (yield* Ref.get(messageIdRef)) ?? crypto.randomUUID()
 									const toolCallId = request.toolCallId ?? crypto.randomUUID()
 									const toolName = toolNames.get(toolCallId) ?? request.kind
-									const input = toolInputs.get(toolCallId) ?? request
-									const part = ToolApprovalRequestPart.makeUnsafe({
-										input,
-										toolCallId,
-										toolName
-									})
+									const input = normalizeToolInput(toolName, toolInputs.get(toolCallId))
+									const approvalId = crypto.randomUUID()
+									approvalLookup.set(approvalId, {messageId, toolCallId, toolName})
 									const deferred = yield* Deferred.make<PermissionRequestResult>()
-									pendingApprovals.set(part.approvalId, deferred)
-									yield* publishConversationPartStream(history, events, Stream.fromIterable([part]))
+									pendingApprovals.set(approvalId, deferred)
+									yield* publishConversationEventStream(
+										history,
+										events,
+										Stream.fromIterable([
+											ToolApprovalRequestEvent.makeUnsafe({
+												approvalId,
+												input,
+												messageId,
+												partId: approvalId,
+												toolCallId,
+												toolKind: normalizeToolKind(toolName),
+												toolName
+											})
+										])
+									)
 									return yield* Deferred.await(deferred)
 								})
 							),
 						onUserInputRequest: request =>
 							runPromise(
 								Effect.gen(function* () {
-									const questionInput = makeUserInputQuestionToolInput(request)
-									const toolCallId = takeQuestionToolCallId(questionToolCallIds, questionInput) ?? crypto.randomUUID()
-									toolInputs.set(toolCallId, questionInput)
-									const deferred = yield* Deferred.make<QuestionAnswer>()
+									const messageId = (yield* Ref.get(messageIdRef)) ?? crypto.randomUUID()
+									const toolCallId = (yield* Ref.get(questionToolCallIdRef)) ?? crypto.randomUUID()
+									const toolInput = makeQuestionInput(request)
+									const deferred = yield* Deferred.make<{answer: string; wasFreeform: boolean}>()
 									pendingQuestions.set(toolCallId, deferred)
-
-									if (!toolNames.has(toolCallId)) {
-										toolNames.set(toolCallId, 'question')
-										yield* publishConversationPartStream(
-											history,
-											events,
-											Stream.fromIterable([
-												ToolCallPart.makeUnsafe({
-													input: questionInput,
-													toolCallId,
-													toolName: 'question'
-												})
-											])
-										)
-									}
-
+									yield* Ref.set(questionToolCallIdRef, toolCallId)
+									toolInputs.set(toolCallId, toolInput)
+									toolNames.set(toolCallId, 'question')
+									yield* publishConversationEventStream(
+										history,
+										events,
+										Stream.fromIterable([
+											ToolCallEvent.makeUnsafe({
+												input: toolInput,
+												messageId,
+												partId: toolCallId,
+												requestId: toolCallId,
+												state: 'pending-user-input',
+												toolCallId,
+												toolKind: 'question',
+												toolName: 'question'
+											})
+										])
+									)
 									return yield* Deferred.await(deferred)
 								})
 							)
@@ -378,44 +402,66 @@ export function CopilotSdkAgentLayer(input: {model: ModelId}) {
 			})
 
 			return Agent.of({
-				prompt: Effect.fnUntraced(function* (parts: readonly UserMessagePart[]) {
-					yield* publishConversationPartStream(
+				prompt: Effect.fnUntraced(function* (parts: readonly PromptPart[]) {
+					yield* publishConversationEventStream(
 						history,
 						events,
-						Stream.fromIterable(createUserTurnParts({model: selection, parts}))
+						Stream.fromIterable(createPromptEvents({model: selection, parts}))
 					)
-					yield* publishConversationPartStream(
+					yield* publishConversationEventStream(
 						history,
 						events,
-						assistantStream(
-							session,
+						assistantEventStream({
+							lastIntentRef,
+							messageIdRef,
+							prompt: parts.flatMap(part => (part._tag === 'text' ? [part.text] : [])).join('\n'),
+							questionToolCallIdRef,
 							selection,
-							parts.flatMap(part => (part._tag === 'text' ? [part.text] : [])).join('\n'),
-							questionToolCallIds,
-							toolNames,
-							toolInputs
-						)
+							session,
+							toolInputs,
+							toolNames
+						})
 					)
 				}),
-				respond: Effect.fnUntraced(function* (part: ToolResponsePart) {
-					yield* publishConversationPartStream(history, events, Stream.fromIterable([part]))
-
-					if (part._tag === 'tool-approval-response') {
-						const deferred = pendingApprovals.get(part.approvalId)
-						pendingApprovals.delete(part.approvalId)
+				respond: Effect.fnUntraced(function* (response: ToolResponse) {
+					if (response._tag === 'tool-approval-response') {
+						yield* publishConversationEventStream(history, events, Stream.fromIterable([response]))
+						const deferred = pendingApprovals.get(response.approvalId)
+						pendingApprovals.delete(response.approvalId)
+						approvalLookup.delete(response.approvalId)
 						if (deferred) {
 							yield* Deferred.succeed(
 								deferred,
-								part.approved ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'}
+								response.decision === 'approve' ? {kind: 'approved'} : {kind: 'denied-interactively-by-user'}
 							)
 						}
 						return
 					}
 
-					const deferred = pendingQuestions.get(part.toolCallId)
-					pendingQuestions.delete(part.toolCallId)
+					if (response.toolKind !== 'question') {
+						return
+					}
+
+					yield* publishConversationEventStream(
+						history,
+						events,
+						Stream.fromIterable([
+							ToolResultEvent.makeUnsafe({
+								messageId: response.messageId,
+								output: response.output,
+								partId: response.partId,
+								requestId: response.requestId,
+								toolCallId: response.toolCallId,
+								toolKind: response.toolKind,
+								toolName: response.toolName
+							})
+						])
+					)
+
+					const deferred = pendingQuestions.get(response.toolCallId)
+					pendingQuestions.delete(response.toolCallId)
 					if (deferred) {
-						yield* Deferred.succeed(deferred, extractQuestionAnswer(part.output))
+						yield* Deferred.succeed(deferred, extractQuestionResponse(response.output))
 					}
 				}),
 				stream: Stream.fromPubSub(events)

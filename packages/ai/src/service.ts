@@ -3,24 +3,24 @@ import {type Effect, ServiceMap, type Stream} from 'effect'
 import {AiSdkAgentLayer} from './agents/ai-sdk.ts'
 import {CopilotSdkAgentLayer} from './agents/copilot-sdk.ts'
 import type {ModelSelection} from './catalog.ts'
-import {AiError, type ConversationPart, type ToolResponsePart, type UserMessagePart} from './schema.ts'
+import {AiError, type ConversationEvent, type PromptPart, type ToolResponse} from './schema.ts'
 
 export class Agent extends ServiceMap.Service<
 	Agent,
 	{
-		prompt: (parts: readonly UserMessagePart[]) => Effect.Effect<void, AiError>
-		respond: (part: ToolResponsePart) => Effect.Effect<void, AiError>
-		stream: Stream.Stream<ConversationPart>
+		prompt: (parts: readonly PromptPart[]) => Effect.Effect<void, AiError>
+		respond: (response: ToolResponse) => Effect.Effect<void, AiError>
+		stream: Stream.Stream<ConversationEvent>
 	}
 >()('@ai-toolkit/ai/Agent') {
-	static layer(input: ModelSelection) {
-		switch (input.agent) {
-			case 'copilot':
-				return CopilotSdkAgentLayer({model: input.model})
+	static layer(selection: ModelSelection) {
+		switch (selection.agent) {
 			case 'ai':
-				return AiSdkAgentLayer({provider: input.provider, model: input.model})
+				return AiSdkAgentLayer(selection)
+			case 'copilot':
+				return CopilotSdkAgentLayer(selection)
 			default:
-				throw new AiError({message: 'Not implemented'})
+				throw new AiError({message: 'Unsupported agent selection'})
 		}
 	}
 }

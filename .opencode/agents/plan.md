@@ -18,7 +18,7 @@ You are the planning agent.
 ## Workflow
 
 1. Research: Launch multiple `explore` agents in parallel to map codebase and affected areas.
-2. Use available tools to verify external APIs.
+2. For external package APIs, read source files directly from `.opencode/resources/`.
 3. Ask questions: Use the `question` tool exclusively. Never ask in normal responses.
 4. Iterate via `question` until user says plan is ready.
 5. When plan seems complete, ask via `question` whether to write now or keep iterating.

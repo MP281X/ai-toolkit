@@ -249,12 +249,11 @@ yield* runDirectFlow
 
 ## External Package Research
 
-- Use BTCA for external package APIs, behavior, and documentation.
-- Always call `btca_listResources` before `btca_ask`.
+- Use `.opencode/resources/` for external package APIs, behavior, and documentation.
+- Inspect external packages locally by reading source files directly.
 - Do not rely on memory or training data for external package details.
-- Do not query `@ai-toolkit/*` packages via BTCA. Inspect them locally instead.
-- Keep BTCA queries narrow and focused.
-- Parallelize independent BTCA queries when possible.
+- Keep exploration focused on specific modules or functions.
+- Parallelize independent exploration tasks when possible.
 
 ## Validation
 

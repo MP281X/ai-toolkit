@@ -31,16 +31,16 @@ Run an aggressive simplification pass on the current implementation.
 - When an operation might fail harmlessly, attempt the operation and catch/ignore the specific error instead of checking first.
 - Use the most idiomatic Effect pattern available.
 
-## BTCA Usage (Mandatory)
+## External Package Research (Mandatory)
 
-You MUST use BTCA aggressively to find Effect helpers before refactoring.
+You MUST explore `.opencode/resources/` aggressively to find Effect helpers before refactoring.
 
-- Always call `btca_listResources` first.
-- Query BTCA for every Effect pattern you encounter: error handling, streaming, state management, scheduling, caching, etc.
+- Read source files directly from `.opencode/resources/effect/` for Effect patterns.
+- For other packages, explore their source in `.opencode/resources/{package-name}/`.
 - Look for helpers in modules like: Effect, Stream, SubscriptionRef, Schedule, Fiber, Deferred, Ref, etc.
-- Parallelize independent BTCA queries when possible.
-- If you think "there should be a helper for this", query BTCA to find it.
-- Common patterns to query for:
+- Parallelize independent exploration tasks when possible.
+- If you think "there should be a helper for this", search the Effect source to find it.
+- Common patterns to explore:
   - Error catching and ignoring (Effect.catchAll, Effect.catchTag, Effect.ignore)
   - Stream operators (debounce, throttle, sample)
   - State management (SubscriptionRef patterns, Ref patterns)
@@ -114,16 +114,16 @@ const result = yield* pipe(
 
 ## Process
 
-1. Call `btca_listResources` to see available resources.
+1. List available resources in `.opencode/resources/`.
 2. Inspect the current code to identify:
    - Defensive checks (existence checks before operations)
    - Validation branches for user-controlled state
    - Deep nesting that can be flattened
    - Unused branches or dead code
-3. Query BTCA for Effect helpers that can simplify each pattern you find.
+3. Explore `.opencode/resources/effect/` for Effect helpers that can simplify each pattern you find.
 4. Remove defensive preflight checks and convert to "try and catch" patterns.
 5. Delete validation branches for unrealistic failure scenarios.
-6. Simplify nested code using Effect helpers found via BTCA.
+6. Simplify nested code using Effect helpers found in the resources.
 7. Delete dead code, unused branches, compatibility code, and legacy leftovers.
 8. Inline tiny helpers and delete pass-through layers.
 9. Run the validation commands from `AGENTS.md` in order.

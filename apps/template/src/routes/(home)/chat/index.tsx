@@ -2,7 +2,13 @@ import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Effect, pipe, Stream} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {type ConversationPart, FilePart, reconstructMessages, TextPart} from '@ai-toolkit/ai/schema'
+import {
+	type ConversationEvent,
+	PromptFilePart,
+	type PromptPart,
+	PromptTextPart,
+	reconstructMessages
+} from '@ai-toolkit/ai/schema'
 import {Message} from '@ai-toolkit/components/ai/message'
 import {ModelSelector} from '@ai-toolkit/components/ai/model-selector'
 import {Conversation} from '@ai-toolkit/components/conversation'
@@ -25,14 +31,14 @@ const messagesAtom = Atom.keepAlive(
 			RpcClient.asEffect(),
 			Effect.map(client =>
 				client('ai.events', void 0).pipe(
-					Stream.scan([] as readonly ConversationPart[], (parts, part) => [...parts, part]),
+					Stream.scan([] as readonly ConversationEvent[], (events, event) => [...events, event]),
 					Stream.drop(1),
-					Stream.map(parts => reconstructMessages(parts))
+					Stream.map(events => reconstructMessages(events))
 				)
 			),
 			Stream.unwrap
 		),
-		{initialValue: reconstructMessages([])}
+		{initialValue: []}
 	)
 )
 
@@ -41,8 +47,8 @@ function RouteComponent() {
 	const sendMessage = useAtomSet(RpcClient.mutation('ai.sendMessage'))
 	const toolInteraction = useAtomSet(RpcClient.mutation('ai.tool'))
 	const [model, setModel] = useState<{model: ModelId; provider: ProviderId}>({
-		provider: 'openrouter',
-		model: 'openai/gpt-oss-20b:free'
+		model: 'opencode-go/kimi-k2.5',
+		provider: 'opencode'
 	})
 
 	return (
@@ -50,7 +56,7 @@ function RouteComponent() {
 			<Conversation className="min-h-0 flex-1">
 				{messages.map(message => (
 					<Message
-						key={`${message.startedAt}-${message.role}`}
+						key={message.id}
 						message={message}
 						onToolResponse={response => toolInteraction({payload: response})}
 					/>
@@ -59,18 +65,22 @@ function RouteComponent() {
 
 			<ChatInput
 				onSubmit={async data => {
-					const fileParts: (typeof FilePart.Type)[] = []
+					const parts: PromptPart[] = [PromptTextPart.makeUnsafe({text: data.text})]
 					for (const file of data.attachments) {
-						const result = await fileToBase64(file)
-						fileParts.push(
-							FilePart.makeUnsafe({
-								data: result.data,
-								filename: result.filename,
-								mediaType: result.mediaType
+						const encoded = await fileToBase64(file)
+						parts.push(
+							PromptFilePart.makeUnsafe({
+								data: encoded.data,
+								filename: encoded.filename,
+								mediaType: encoded.mediaType
 							})
 						)
 					}
-					sendMessage({payload: [TextPart.makeUnsafe({text: data.text}), ...fileParts]})
+					const firstPart = parts[0]
+					if (!firstPart) {
+						return
+					}
+					sendMessage({payload: [firstPart, ...parts.slice(1)]})
 				}}
 			>
 				<Toolbar>

@@ -1,57 +1,42 @@
-import {Array, Match, Option, Predicate, pipe, Schema, SchemaGetter} from 'effect'
+import {Array, Match, Option, Predicate, Schema} from 'effect'
 
-// ──────────────────────────── Canonical Tool Names ────────────────────────────
+export const CanonicalToolKind = Schema.Literals(['question', 'web', 'bash', 'read', 'write', 'patch', 'glob', 'grep'])
+export type CanonicalToolKind = typeof CanonicalToolKind.Type
 
-export function normalizeToolName(toolName?: string) {
-	const normalized = toolName?.toLowerCase()
-	return pipe(
-		Match.value(normalized),
-		Match.when(Match.is('question', 'ask_user'), () => 'question' as const),
-		Match.when(Match.is('web_search', 'web_fetch', 'webfetch', 'search', 'fetch', 'url'), () => 'web' as const),
-		Match.when(Match.is('bash', 'shell'), () => 'bash' as const),
-		Match.when(Match.is('read', 'view'), () => 'read' as const),
-		Match.when(Match.is('write', 'create_file', 'edit'), () => 'write' as const),
-		Match.when(Match.is('patch', 'str_replace_editor'), () => 'patch' as const),
-		Match.when(Match.is('glob'), () => 'glob' as const),
-		Match.when(Match.is('grep'), () => 'grep' as const),
-		Match.orElse(() => (toolName ?? '') as string & {})
-	)
-}
+export const ToolKind = Schema.String
+export type ToolKind = typeof ToolKind.Type
 
-// ──────────────────────────── Canonical Schemas ────────────────────────────
-
-export const ToolOption = Schema.Struct({
+export const QuestionOption = Schema.Struct({
 	label: Schema.NonEmptyString,
 	description: Schema.optional(Schema.NonEmptyString)
 })
-export type ToolOption = typeof ToolOption.Type
+export type QuestionOption = typeof QuestionOption.Type
 
-export const ToolQuestion = Schema.Struct({
-	header: Schema.optional(Schema.NonEmptyString),
+export const QuestionItem = Schema.Struct({
 	question: Schema.NonEmptyString,
-	allowFreeform: Schema.optional(Schema.Boolean),
-	options: Schema.optional(Schema.Array(ToolOption)),
-	multiple: Schema.optional(Schema.Boolean)
+	header: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+	options: Schema.Array(QuestionOption).pipe(Schema.withConstructorDefault(() => Option.some([] as const))),
+	multiple: Schema.optional(Schema.NullOr(Schema.Boolean)),
+	custom: Schema.optional(Schema.NullOr(Schema.Boolean))
 })
-export type ToolQuestion = typeof ToolQuestion.Type
+export type QuestionItem = typeof QuestionItem.Type
 
-export const QuestionToolInput = Schema.Struct({
-	questions: Schema.Array(ToolQuestion).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
+export const QuestionAnswer = Schema.Struct({
+	answers: Schema.Array(Schema.String).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
+})
+export type QuestionAnswer = typeof QuestionAnswer.Type
+
+export const QuestionToolInput = Schema.TaggedStruct('question', {
+	questions: Schema.Array(QuestionItem).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
 })
 export type QuestionToolInput = typeof QuestionToolInput.Type
 
-export const QuestionToolAnswer = Schema.Struct({
-	answer: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
-	wasFreeform: Schema.Boolean
-})
-export type QuestionToolAnswer = typeof QuestionToolAnswer.Type
-
-export const QuestionToolOutput = Schema.Struct({
-	answers: Schema.Array(QuestionToolAnswer).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
+export const QuestionToolOutput = Schema.TaggedStruct('question', {
+	answers: Schema.Array(QuestionAnswer).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
 })
 export type QuestionToolOutput = typeof QuestionToolOutput.Type
 
-export const WebToolInput = Schema.Struct({
+export const WebToolInput = Schema.TaggedStruct('web', {
 	query: Schema.optional(Schema.NonEmptyString),
 	url: Schema.optional(Schema.NonEmptyString)
 })
@@ -65,7 +50,7 @@ export const WebToolSource = Schema.Struct({
 })
 export type WebToolSource = typeof WebToolSource.Type
 
-export const WebToolOutput = Schema.Struct({
+export const WebToolOutput = Schema.TaggedStruct('web', {
 	provider: Schema.optional(Schema.NonEmptyString),
 	query: Schema.optional(Schema.NonEmptyString),
 	url: Schema.optional(Schema.NonEmptyString),
@@ -74,461 +59,571 @@ export const WebToolOutput = Schema.Struct({
 })
 export type WebToolOutput = typeof WebToolOutput.Type
 
-export const CommandToolInput = Schema.Struct({
+export const BashToolInput = Schema.TaggedStruct('bash', {
 	command: Schema.NonEmptyString
 })
-export type CommandToolInput = typeof CommandToolInput.Type
+export type BashToolInput = typeof BashToolInput.Type
 
-export const PathToolInput = Schema.Struct({
+export const ReadToolInput = Schema.TaggedStruct('read', {
 	path: Schema.NonEmptyString
 })
-export type PathToolInput = typeof PathToolInput.Type
+export type ReadToolInput = typeof ReadToolInput.Type
 
-export const PatternToolInput = Schema.Struct({
+export const WriteToolInput = Schema.TaggedStruct('write', {
+	path: Schema.NonEmptyString
+})
+export type WriteToolInput = typeof WriteToolInput.Type
+
+export const PatchToolInput = Schema.TaggedStruct('patch', {
+	path: Schema.optional(Schema.NonEmptyString),
+	patch: Schema.optional(Schema.String)
+})
+export type PatchToolInput = typeof PatchToolInput.Type
+
+export const GlobToolInput = Schema.TaggedStruct('glob', {
 	pattern: Schema.NonEmptyString
 })
-export type PatternToolInput = typeof PatternToolInput.Type
+export type GlobToolInput = typeof GlobToolInput.Type
 
-export const TextToolOutput = Schema.Struct({
+export const GrepToolInput = Schema.TaggedStruct('grep', {
+	pattern: Schema.NonEmptyString
+})
+export type GrepToolInput = typeof GrepToolInput.Type
+
+export const ReportIntentToolInput = Schema.TaggedStruct('report_intent', {
+	intent: Schema.NonEmptyString
+})
+export type ReportIntentToolInput = typeof ReportIntentToolInput.Type
+
+export const TextToolOutput = Schema.TaggedStruct('text', {
 	text: Schema.String
 })
 export type TextToolOutput = typeof TextToolOutput.Type
 
-// ──────────────────────────── Unified Tool Data ────────────────────────────
-
-export const QuestionToolData = Schema.TaggedStruct('question', {
-	input: QuestionToolInput,
-	output: Schema.optional(QuestionToolOutput)
+export const PatchToolOutput = Schema.TaggedStruct('patch', {
+	path: Schema.optional(Schema.NonEmptyString),
+	patch: Schema.String
 })
-export type QuestionToolData = typeof QuestionToolData.Type
+export type PatchToolOutput = typeof PatchToolOutput.Type
 
-export const WebToolData = Schema.TaggedStruct('web', {
-	input: WebToolInput,
-	output: Schema.optional(WebToolOutput)
-})
-export type WebToolData = typeof WebToolData.Type
-
-export const BashToolData = Schema.TaggedStruct('bash', {
-	input: CommandToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type BashToolData = typeof BashToolData.Type
-
-export const ReadToolData = Schema.TaggedStruct('read', {
-	input: PathToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type ReadToolData = typeof ReadToolData.Type
-
-export const WriteToolData = Schema.TaggedStruct('write', {
-	input: PathToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type WriteToolData = typeof WriteToolData.Type
-
-export const PatchToolData = Schema.TaggedStruct('patch', {
-	input: PathToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type PatchToolData = typeof PatchToolData.Type
-
-export const GlobToolData = Schema.TaggedStruct('glob', {
-	input: PatternToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type GlobToolData = typeof GlobToolData.Type
-
-export const GrepToolData = Schema.TaggedStruct('grep', {
-	input: PatternToolInput,
-	output: Schema.optional(TextToolOutput)
-})
-export type GrepToolData = typeof GrepToolData.Type
-
-export const ToolData = Schema.Union([
-	QuestionToolData,
-	WebToolData,
-	BashToolData,
-	ReadToolData,
-	WriteToolData,
-	PatchToolData,
-	GlobToolData,
-	GrepToolData
+export const NormalizedToolInput = Schema.Union([
+	QuestionToolInput,
+	WebToolInput,
+	BashToolInput,
+	ReadToolInput,
+	WriteToolInput,
+	PatchToolInput,
+	GlobToolInput,
+	GrepToolInput,
+	ReportIntentToolInput
 ])
-export type ToolData = typeof ToolData.Type
+export type NormalizedToolInput = typeof NormalizedToolInput.Type
 
-// ──────────────────────────── Wire → Canonical Transforms ────────────────────────────
+export const NormalizedToolOutput = Schema.Union([QuestionToolOutput, WebToolOutput, TextToolOutput, PatchToolOutput])
+export type NormalizedToolOutput = typeof NormalizedToolOutput.Type
 
-const QuestionToolInvocationBoolean = Schema.Union([Schema.Boolean, Schema.String])
+export function normalizeToolKind(toolName: string) {
+	if (toolName.toLowerCase() === 'report_intent') {
+		return 'report_intent' as const
+	}
 
-const QuestionToolInvocationOption = Schema.Struct({
-	label: Schema.NonEmptyString,
-	description: Schema.optional(Schema.String)
-})
-
-const QuestionToolInvocationQuestion = Schema.Struct({
-	allowFreeform: Schema.optional(QuestionToolInvocationBoolean),
-	choices: Schema.optional(Schema.Array(Schema.Union([Schema.NonEmptyString, QuestionToolInvocationOption]))),
-	header: Schema.optional(Schema.String),
-	multiple: Schema.optional(QuestionToolInvocationBoolean),
-	options: Schema.optional(Schema.Array(QuestionToolInvocationOption)),
-	question: Schema.optional(Schema.String)
-})
-
-const QuestionToolInvocationWire = Schema.Struct({
-	allowFreeform: Schema.optional(QuestionToolInvocationBoolean),
-	choices: Schema.optional(Schema.Array(Schema.Union([Schema.NonEmptyString, QuestionToolInvocationOption]))),
-	header: Schema.optional(Schema.String),
-	multiple: Schema.optional(QuestionToolInvocationBoolean),
-	options: Schema.optional(Schema.Array(QuestionToolInvocationOption)),
-	question: Schema.optional(Schema.String),
-	questions: Schema.optional(
-		Schema.Union([Schema.Array(Schema.Union([Schema.String, QuestionToolInvocationQuestion])), Schema.String])
+	return Match.value(toolName.toLowerCase()).pipe(
+		Match.when('question', () => 'question' as const),
+		Match.when('ask_user', () => 'question' as const),
+		Match.when('web_search', () => 'web' as const),
+		Match.when('web_fetch', () => 'web' as const),
+		Match.when('webfetch', () => 'web' as const),
+		Match.when('search', () => 'web' as const),
+		Match.when('fetch', () => 'web' as const),
+		Match.when('url', () => 'web' as const),
+		Match.when('bash', () => 'bash' as const),
+		Match.when('shell', () => 'bash' as const),
+		Match.when('read', () => 'read' as const),
+		Match.when('view', () => 'read' as const),
+		Match.when('write', () => 'write' as const),
+		Match.when('create_file', () => 'write' as const),
+		Match.when('edit', () => 'write' as const),
+		Match.when('patch', () => 'patch' as const),
+		Match.when('str_replace_editor', () => 'patch' as const),
+		Match.when('glob', () => 'glob' as const),
+		Match.when('grep', () => 'grep' as const),
+		Match.orElse(() => toolName)
 	)
-})
-
-const QuestionToolInvocationInput = QuestionToolInvocationWire.pipe(
-	Schema.decodeTo(QuestionToolInput, {
-		decode: SchemaGetter.transform(normalizeQuestionInvocationInput),
-		encode: SchemaGetter.transform(value => value)
-	})
-)
-
-const WebToolInvocationWire = Schema.Struct({
-	query: Schema.optional(Schema.String),
-	url: Schema.optional(Schema.String),
-	searchTerm: Schema.optional(Schema.String),
-	uri: Schema.optional(Schema.String)
-})
-
-const WebToolInvocationInput = WebToolInvocationWire.pipe(
-	Schema.decodeTo(WebToolInput, {
-		decode: SchemaGetter.transform(wire =>
-			WebToolInput.makeUnsafe({
-				query: normalizeNonEmptyString(wire.query) ?? normalizeNonEmptyString(wire.searchTerm),
-				url: normalizeNonEmptyString(wire.url) ?? normalizeNonEmptyString(wire.uri)
-			})
-		),
-		encode: SchemaGetter.transform(value => value)
-	})
-)
-
-const CommandToolInvocationWire = Schema.Struct({
-	command: Schema.optional(Schema.String),
-	fullCommandText: Schema.optional(Schema.String),
-	bashCommand: Schema.optional(Schema.String)
-})
-
-const CommandToolInvocationInput = CommandToolInvocationWire.pipe(
-	Schema.decodeTo(CommandToolInput, {
-		decode: SchemaGetter.transform(wire => {
-			const command =
-				normalizeNonEmptyString(wire.command) ??
-				normalizeNonEmptyString(wire.fullCommandText) ??
-				normalizeNonEmptyString(wire.bashCommand)
-			return CommandToolInput.makeUnsafe({command: command ?? ''})
-		}),
-		encode: SchemaGetter.transform(value => value)
-	})
-)
-
-const PathToolInvocationWire = Schema.Struct({
-	path: Schema.optional(Schema.String),
-	filePath: Schema.optional(Schema.String)
-})
-
-const PathToolInvocationInput = PathToolInvocationWire.pipe(
-	Schema.decodeTo(PathToolInput, {
-		decode: SchemaGetter.transform(wire => {
-			const path = normalizeNonEmptyString(wire.path) ?? normalizeNonEmptyString(wire.filePath)
-			return PathToolInput.makeUnsafe({path: path ?? ''})
-		}),
-		encode: SchemaGetter.transform(value => value)
-	})
-)
-
-const PatternToolInvocationWire = Schema.Struct({
-	pattern: Schema.optional(Schema.String),
-	query: Schema.optional(Schema.String)
-})
-
-const PatternToolInvocationInput = PatternToolInvocationWire.pipe(
-	Schema.decodeTo(PatternToolInput, {
-		decode: SchemaGetter.transform(wire => {
-			const pattern = normalizeNonEmptyString(wire.pattern) ?? normalizeNonEmptyString(wire.query)
-			return PatternToolInput.makeUnsafe({pattern: pattern ?? ''})
-		}),
-		encode: SchemaGetter.transform(value => value)
-	})
-)
-
-// ──────────────────────────── Public Utilities ────────────────────────────
+}
 
 export function decodeToolValueOrUndefined<A>(schema: Schema.Schema<A>, value: unknown) {
-	const decoded = Schema.decodeUnknownOption(schema as never)(value)
-	return Option.getOrUndefined(decoded) as A | undefined
+	return Option.getOrUndefined(Schema.decodeUnknownOption(schema as never)(value)) as A | undefined
 }
 
 export function stringifyToolValue(value: unknown): string {
-	if (typeof value === 'string') {
+	if (Predicate.isString(value)) {
 		return value
 	}
 
-	if (typeof value === 'number' || typeof value === 'boolean') {
-		return `${value}`
+	if (Predicate.isNumber(value) || Predicate.isBoolean(value)) {
+		return globalThis.String(value)
 	}
 
 	if (Array.isArray(value)) {
-		return value.map(item => stringifyToolValue(item)).join('\n')
+		return value.map(entry => stringifyToolValue(entry)).join('\n')
 	}
 
-	if (value == null) {
+	if (Predicate.isNullish(value)) {
 		return ''
 	}
 
-	try {
-		return JSON.stringify(value, null, 2)
-	} catch {
-		return `${value}`
+	if (Predicate.isObject(value)) {
+		try {
+			return JSON.stringify(value, null, 2)
+		} catch {
+			return '[object Object]'
+		}
 	}
-}
 
-// ──────────────────────────── Normalization ────────────────────────────
+	return globalThis.String(value)
+}
 
 export function normalizeToolInput(toolName: string, input: unknown) {
-	const canonical = normalizeToolName(toolName)
-	return pipe(
-		Match.value(canonical),
-		Match.when('question', () => decodeToolValueOrUndefined(QuestionToolInvocationInput, input) ?? input),
-		Match.when('web', () => decodeToolValueOrUndefined(WebToolInvocationInput, input) ?? input),
-		Match.when('bash', () => decodeToolValueOrUndefined(CommandToolInvocationInput, input) ?? input),
-		Match.when('read', () => decodeToolValueOrUndefined(PathToolInvocationInput, input) ?? input),
-		Match.when('write', () => decodeToolValueOrUndefined(PathToolInvocationInput, input) ?? input),
-		Match.when('patch', () => decodeToolValueOrUndefined(PathToolInvocationInput, input) ?? input),
-		Match.when('glob', () => decodeToolValueOrUndefined(PatternToolInvocationInput, input) ?? input),
-		Match.when('grep', () => decodeToolValueOrUndefined(PatternToolInvocationInput, input) ?? input),
-		Match.orElse(() => input)
-	)
-}
+	if (normalizeToolKind(toolName) === 'question') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			if (Array.isArray(record['questions'])) {
+				return QuestionToolInput.makeUnsafe({
+					questions: record['questions'].flatMap(entry => {
+						if (Predicate.isString(entry)) {
+							const trimmed = entry.trim()
+							return trimmed.length > 0 ? [QuestionItem.makeUnsafe({question: trimmed})] : []
+						}
 
-export function normalizeToolOutput(toolName: string, output: unknown, input?: unknown) {
-	const canonical = normalizeToolName(toolName)
-	return pipe(
-		Match.value(canonical),
-		Match.when('question', () => normalizeQuestionOutput(output)),
-		Match.when('web', () => normalizeWebOutput(output, input)),
-		Match.when('bash', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.when('read', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.when('write', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.when('patch', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.when('glob', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.when('grep', () => TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})),
-		Match.orElse(() => output)
-	)
-}
+						if (Predicate.isObject(entry) && !Predicate.isNull(entry)) {
+							const entryRecord = entry as Record<string, unknown>
+							const question = Predicate.isString(entryRecord['question']) ? entryRecord['question'].trim() : ''
+							return question.length === 0
+								? []
+								: [
+										QuestionItem.makeUnsafe({
+											custom: Predicate.isBoolean(entryRecord['custom']) ? entryRecord['custom'] : undefined,
+											header:
+												Predicate.isString(entryRecord['header']) && entryRecord['header'].trim().length > 0
+													? entryRecord['header'].trim()
+													: undefined,
+											multiple: Predicate.isBoolean(entryRecord['multiple']) ? entryRecord['multiple'] : undefined,
+											options: Array.isArray(entryRecord['options'])
+												? entryRecord['options'].flatMap(option => {
+														if (Predicate.isString(option)) {
+															const trimmedOption = option.trim()
+															return trimmedOption.length > 0 ? [QuestionOption.makeUnsafe({label: trimmedOption})] : []
+														}
 
-// ──────────────────────────── Internal Helpers ────────────────────────────
+														if (Predicate.isObject(option) && !Predicate.isNull(option)) {
+															const optionRecord = option as Record<string, unknown>
+															const label = Predicate.isString(optionRecord['label'])
+																? optionRecord['label'].trim()
+																: ''
+															return label.length === 0
+																? []
+																: [
+																		QuestionOption.makeUnsafe({
+																			description:
+																				Predicate.isString(optionRecord['description']) &&
+																				optionRecord['description'].trim().length > 0
+																					? optionRecord['description'].trim()
+																					: undefined,
+																			label
+																		})
+																	]
+														}
 
-function normalizeQuestionOutput(output: unknown) {
-	const decoded = decodeToolValueOrUndefined(QuestionToolOutput, output)
-	if (decoded) {
-		return decoded
-	}
+														return []
+													})
+												: [],
+											question
+										})
+									]
+						}
 
-	const text = decodeToolValueOrUndefined(TextToolOutput, output)?.text
-	if (text && text.length > 0) {
-		return QuestionToolOutput.makeUnsafe({
-			answers: [QuestionToolAnswer.makeUnsafe({answer: text, wasFreeform: true})]
-		})
-	}
-
-	if (typeof output === 'string' && output.length > 0) {
-		return QuestionToolOutput.makeUnsafe({
-			answers: [QuestionToolAnswer.makeUnsafe({answer: output, wasFreeform: true})]
-		})
-	}
-
-	return output
-}
-
-function normalizeWebOutput(output: unknown, input?: unknown) {
-	const decoded = decodeToolValueOrUndefined(WebToolOutput, output)
-	if (decoded) {
-		return decoded
-	}
-
-	if (typeof output !== 'object' || output === null) {
-		return output
-	}
-
-	const record = output as Record<string, unknown>
-	const defaults = decodeToolValueOrUndefined(WebToolInvocationInput, input)
-	const query = normalizeNonEmptyString(record['query']) ?? defaults?.query
-	const url = normalizeNonEmptyString(record['url']) ?? defaults?.url
-	const text = typeof record['text'] === 'string' ? record['text'] : undefined
-	const sources = Array.isArray(record['sources']) ? record['sources'].flatMap(normalizeWebToolSource) : []
-
-	if (!(query || url || text || sources.length > 0)) {
-		return output
-	}
-
-	return WebToolOutput.makeUnsafe({
-		provider: normalizeNonEmptyString(record['provider']),
-		query,
-		url,
-		text,
-		sources
-	})
-}
-
-function normalizeQuestionInvocationInput(input: typeof QuestionToolInvocationWire.Type): QuestionToolInput {
-	const questionsSource =
-		typeof input.questions === 'string' ? parseQuestionWireQuestions(input.questions) : (input.questions ?? [])
-	const questions = questionsSource.flatMap(entry => normalizeQuestionEntry(entry, input))
-	if (questions.length > 0) {
-		return QuestionToolInput.makeUnsafe({questions})
-	}
-
-	const question = normalizeNonEmptyString(input.question)
-	if (!question) {
-		return QuestionToolInput.makeUnsafe({})
-	}
-
-	return QuestionToolInput.makeUnsafe({
-		questions: [
-			ToolQuestion.makeUnsafe({
-				allowFreeform: normalizeQuestionBoolean(input.allowFreeform),
-				header: normalizeNonEmptyString(input.header),
-				multiple: normalizeQuestionBoolean(input.multiple),
-				options: normalizeQuestionOptions(input.options ?? input.choices),
-				question
-			})
-		]
-	})
-}
-
-function normalizeQuestionEntry(
-	entry: unknown,
-	defaults: typeof QuestionToolInvocationWire.Type
-): readonly ToolQuestion[] {
-	if (typeof entry === 'string') {
-		const question = normalizeNonEmptyString(entry)
-		return question
-			? [
-					ToolQuestion.makeUnsafe({
-						allowFreeform: normalizeQuestionBoolean(defaults.allowFreeform),
-						header: normalizeNonEmptyString(defaults.header),
-						multiple: normalizeQuestionBoolean(defaults.multiple),
-						options: normalizeQuestionOptions(defaults.options ?? defaults.choices),
-						question
+						return []
 					})
-				]
-			: []
-	}
+				})
+			}
 
-	const question = normalizeNonEmptyString((entry as {question?: unknown}).question)
-	if (!question) {
-		return []
-	}
+			if (Predicate.isString(record['question']) && record['question'].trim().length > 0) {
+				return QuestionToolInput.makeUnsafe({
+					questions: [
+						QuestionItem.makeUnsafe({
+							custom: Predicate.isBoolean(record['custom']) ? record['custom'] : undefined,
+							header:
+								Predicate.isString(record['header']) && record['header'].trim().length > 0
+									? record['header'].trim()
+									: undefined,
+							multiple: Predicate.isBoolean(record['multiple']) ? record['multiple'] : undefined,
+							options: Array.isArray(record['options'])
+								? record['options'].flatMap(option => {
+										if (Predicate.isString(option)) {
+											const trimmedOption = option.trim()
+											return trimmedOption.length > 0 ? [QuestionOption.makeUnsafe({label: trimmedOption})] : []
+										}
 
-	const record = entry as typeof QuestionToolInvocationQuestion.Type
-	return [
-		ToolQuestion.makeUnsafe({
-			allowFreeform: normalizeQuestionBoolean(record.allowFreeform) ?? normalizeQuestionBoolean(defaults.allowFreeform),
-			header: normalizeNonEmptyString(record.header) ?? normalizeNonEmptyString(defaults.header),
-			multiple: normalizeQuestionBoolean(record.multiple) ?? normalizeQuestionBoolean(defaults.multiple),
-			options:
-				normalizeQuestionOptions(record.options ?? record.choices) ??
-				normalizeQuestionOptions(defaults.options ?? defaults.choices),
-			question
-		})
-	]
-}
+										if (Predicate.isObject(option) && !Predicate.isNull(option)) {
+											const optionRecord = option as Record<string, unknown>
+											const label = Predicate.isString(optionRecord['label']) ? optionRecord['label'].trim() : ''
+											return label.length === 0
+												? []
+												: [
+														QuestionOption.makeUnsafe({
+															description:
+																Predicate.isString(optionRecord['description']) &&
+																optionRecord['description'].trim().length > 0
+																	? optionRecord['description'].trim()
+																	: undefined,
+															label
+														})
+													]
+										}
 
-function normalizeQuestionBoolean(value: unknown) {
-	if (typeof value === 'boolean') {
-		return value
-	}
+										return []
+									})
+								: [],
+							question: record['question'].trim()
+						})
+					]
+				})
+			}
+		}
 
-	if (typeof value !== 'string') {
 		return undefined
 	}
 
-	const normalized = value.trim().toLowerCase()
-	if (normalized === 'true') {
-		return true
+	if (normalizeToolKind(toolName) === 'web') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const query =
+				Predicate.isString(record['query']) && record['query'].trim().length > 0 ? record['query'].trim() : undefined
+			const url =
+				Predicate.isString(record['url']) && record['url'].trim().length > 0 ? record['url'].trim() : undefined
+			const searchTerm =
+				Predicate.isString(record['searchTerm']) && record['searchTerm'].trim().length > 0
+					? record['searchTerm'].trim()
+					: undefined
+			const uri =
+				Predicate.isString(record['uri']) && record['uri'].trim().length > 0 ? record['uri'].trim() : undefined
+			return WebToolInput.makeUnsafe({query: query ?? searchTerm, url: url ?? uri})
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return WebToolInput.makeUnsafe({query: input.trim()})
+		}
+
+		return undefined
 	}
 
-	if (normalized === 'false') {
-		return false
+	if (normalizeToolKind(toolName) === 'bash') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const command =
+				Predicate.isString(record['command']) && record['command'].trim().length > 0
+					? record['command'].trim()
+					: undefined
+			const fullCommandText =
+				Predicate.isString(record['fullCommandText']) && record['fullCommandText'].trim().length > 0
+					? record['fullCommandText'].trim()
+					: undefined
+			const bashCommand =
+				Predicate.isString(record['bashCommand']) && record['bashCommand'].trim().length > 0
+					? record['bashCommand'].trim()
+					: undefined
+			return (command ?? fullCommandText ?? bashCommand)
+				? BashToolInput.makeUnsafe({command: command ?? fullCommandText ?? bashCommand ?? ''})
+				: undefined
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return BashToolInput.makeUnsafe({command: input.trim()})
+		}
+
+		return undefined
+	}
+
+	if (normalizeToolKind(toolName) === 'read') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const path =
+				Predicate.isString(record['path']) && record['path'].trim().length > 0 ? record['path'].trim() : undefined
+			const filePath =
+				Predicate.isString(record['filePath']) && record['filePath'].trim().length > 0
+					? record['filePath'].trim()
+					: undefined
+			return (path ?? filePath) ? ReadToolInput.makeUnsafe({path: path ?? filePath ?? ''}) : undefined
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return ReadToolInput.makeUnsafe({path: input.trim()})
+		}
+
+		return undefined
+	}
+
+	if (normalizeToolKind(toolName) === 'write') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const path =
+				Predicate.isString(record['path']) && record['path'].trim().length > 0 ? record['path'].trim() : undefined
+			const filePath =
+				Predicate.isString(record['filePath']) && record['filePath'].trim().length > 0
+					? record['filePath'].trim()
+					: undefined
+			return (path ?? filePath) ? WriteToolInput.makeUnsafe({path: path ?? filePath ?? ''}) : undefined
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return WriteToolInput.makeUnsafe({path: input.trim()})
+		}
+
+		return undefined
+	}
+
+	if (normalizeToolKind(toolName) === 'patch') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			return PatchToolInput.makeUnsafe({
+				path:
+					Predicate.isString(record['path']) && record['path'].trim().length > 0 ? record['path'].trim() : undefined,
+				patch: Predicate.isString(record['patch']) ? record['patch'] : undefined
+			})
+		}
+
+		if (Predicate.isString(input)) {
+			return PatchToolInput.makeUnsafe({patch: input})
+		}
+
+		return undefined
+	}
+
+	if (normalizeToolKind(toolName) === 'glob') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const pattern =
+				Predicate.isString(record['pattern']) && record['pattern'].trim().length > 0
+					? record['pattern'].trim()
+					: undefined
+			return pattern ? GlobToolInput.makeUnsafe({pattern}) : undefined
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return GlobToolInput.makeUnsafe({pattern: input.trim()})
+		}
+
+		return undefined
+	}
+
+	if (normalizeToolKind(toolName) === 'grep') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			const pattern =
+				Predicate.isString(record['pattern']) && record['pattern'].trim().length > 0
+					? record['pattern'].trim()
+					: undefined
+			const query =
+				Predicate.isString(record['query']) && record['query'].trim().length > 0 ? record['query'].trim() : undefined
+			return (pattern ?? query) ? GrepToolInput.makeUnsafe({pattern: pattern ?? query ?? ''}) : undefined
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return GrepToolInput.makeUnsafe({pattern: input.trim()})
+		}
+
+		return undefined
+	}
+
+	if (toolName.toLowerCase() === 'report_intent') {
+		if (Predicate.isObject(input) && !Predicate.isNull(input)) {
+			const record = input as Record<string, unknown>
+			if (Predicate.isString(record['intent']) && record['intent'].trim().length > 0) {
+				return ReportIntentToolInput.makeUnsafe({intent: record['intent'].trim()})
+			}
+		}
+
+		if (Predicate.isString(input) && input.trim().length > 0) {
+			return ReportIntentToolInput.makeUnsafe({intent: input.trim()})
+		}
+
+		return undefined
 	}
 
 	return undefined
 }
 
-function normalizeQuestionOptions(value: unknown) {
-	if (!Array.isArray(value)) {
-		return undefined
-	}
+export function normalizeToolOutput(toolName: string, output: unknown, input?: unknown) {
+	if (normalizeToolKind(toolName) === 'question') {
+		if (Predicate.isObject(output) && !Predicate.isNull(output)) {
+			const record = output as Record<string, unknown>
+			if (Array.isArray(record['answers'])) {
+				return QuestionToolOutput.makeUnsafe({
+					answers: record['answers'].flatMap(answer => {
+						if (Predicate.isString(answer)) {
+							return [QuestionAnswer.makeUnsafe({answers: [answer]})]
+						}
 
-	const options = value.flatMap(entry => {
-		if (typeof entry === 'string') {
-			const label = normalizeNonEmptyString(entry)
-			return label ? [ToolOption.makeUnsafe({label})] : []
-		}
+						if (Array.isArray(answer)) {
+							return [
+								QuestionAnswer.makeUnsafe({
+									answers: answer.flatMap(entry => (Predicate.isString(entry) ? [entry] : []))
+								})
+							]
+						}
 
-		if (typeof entry !== 'object' || entry === null) {
-			return []
-		}
+						if (Predicate.isObject(answer) && !Predicate.isNull(answer)) {
+							const answerRecord = answer as Record<string, unknown>
+							if (Array.isArray(answerRecord['answers'])) {
+								return [
+									QuestionAnswer.makeUnsafe({
+										answers: answerRecord['answers'].flatMap(entry => (Predicate.isString(entry) ? [entry] : []))
+									})
+								]
+							}
 
-		const record = entry as Record<string, unknown>
-		const label = normalizeNonEmptyString(record['label'])
-		return label ? [ToolOption.makeUnsafe({description: normalizeNonEmptyString(record['description']), label})] : []
-	})
+							if (Predicate.isString(answerRecord['answer'])) {
+								return [QuestionAnswer.makeUnsafe({answers: [answerRecord['answer']]})]
+							}
 
-	return options.length > 0 ? options : undefined
-}
+							if (Array.isArray(answerRecord['answer'])) {
+								return [
+									QuestionAnswer.makeUnsafe({
+										answers: answerRecord['answer'].flatMap(entry => (Predicate.isString(entry) ? [entry] : []))
+									})
+								]
+							}
+						}
 
-function parseQuestionWireQuestions(value: string): readonly unknown[] {
-	const parsed = parseJsonOrUndefined(value) ?? parseJsonOrUndefined(value.replaceAll('/', ''))
-	if (Array.isArray(parsed)) {
-		return parsed
-	}
-
-	return Predicate.isNotUndefined(parsed) ? [parsed] : [value]
-}
-
-function normalizeWebToolSource(source: unknown): readonly WebToolSource[] {
-	if (typeof source !== 'object' || source === null) {
-		return []
-	}
-
-	const record = source as Record<string, unknown>
-	const url = normalizeNonEmptyString(record['url'])
-	return url
-		? [
-				WebToolSource.makeUnsafe({
-					publishedDate: normalizeNonEmptyString(record['publishedDate']),
-					text: typeof record['text'] === 'string' ? record['text'] : undefined,
-					title: normalizeNonEmptyString(record['title']),
-					url
+						return []
+					})
 				})
-			]
-		: []
-}
+			}
+		}
 
-function normalizeNonEmptyString(value: unknown) {
-	if (typeof value !== 'string') {
+		if (Predicate.isString(output)) {
+			return QuestionToolOutput.makeUnsafe({answers: [QuestionAnswer.makeUnsafe({answers: [output]})]})
+		}
+
+		if (Array.isArray(output)) {
+			return QuestionToolOutput.makeUnsafe({
+				answers: output.map(answer =>
+					QuestionAnswer.makeUnsafe({
+						answers: Array.isArray(answer) ? answer.flatMap(entry => (Predicate.isString(entry) ? [entry] : [])) : []
+					})
+				)
+			})
+		}
+
 		return undefined
 	}
 
-	const normalized = value.trim()
-	return normalized.length > 0 ? normalized : undefined
-}
+	if (normalizeToolKind(toolName) === 'web') {
+		if (Predicate.isObject(output) && !Predicate.isNull(output)) {
+			const record = output as Record<string, unknown>
+			const normalizedInput = normalizeToolInput(toolName, input)
+			const fallbackQuery = normalizedInput?._tag === 'web' ? normalizedInput.query : undefined
+			const fallbackUrl = normalizedInput?._tag === 'web' ? normalizedInput.url : undefined
+			const query =
+				Predicate.isString(record['query']) && record['query'].trim().length > 0 ? record['query'].trim() : undefined
+			const url =
+				Predicate.isString(record['url']) && record['url'].trim().length > 0 ? record['url'].trim() : undefined
+			return WebToolOutput.makeUnsafe({
+				provider:
+					Predicate.isString(record['provider']) && record['provider'].trim().length > 0
+						? record['provider'].trim()
+						: undefined,
+				query: query ?? fallbackQuery,
+				url: url ?? fallbackUrl,
+				text: Predicate.isString(record['text']) ? record['text'] : undefined,
+				sources: Array.isArray(record['sources'])
+					? record['sources'].flatMap(source => {
+							if (Predicate.isObject(source) && !Predicate.isNull(source)) {
+								const sourceRecord = source as Record<string, unknown>
+								const url = Predicate.isString(sourceRecord['url']) ? sourceRecord['url'].trim() : ''
+								return url.length === 0
+									? []
+									: [
+											WebToolSource.makeUnsafe({
+												publishedDate:
+													Predicate.isString(sourceRecord['publishedDate']) &&
+													sourceRecord['publishedDate'].trim().length > 0
+														? sourceRecord['publishedDate'].trim()
+														: undefined,
+												text: Predicate.isString(sourceRecord['text']) ? sourceRecord['text'] : undefined,
+												title:
+													Predicate.isString(sourceRecord['title']) && sourceRecord['title'].trim().length > 0
+														? sourceRecord['title'].trim()
+														: undefined,
+												url
+											})
+										]
+							}
 
-function parseJsonOrUndefined(value: string) {
-	try {
-		return JSON.parse(value) as unknown
-	} catch {
+							return []
+						})
+					: []
+			})
+		}
+
+		if (Predicate.isString(output)) {
+			const normalizedInput = normalizeToolInput(toolName, input)
+			return WebToolOutput.makeUnsafe({
+				query: normalizedInput?._tag === 'web' ? normalizedInput.query : undefined,
+				text: output,
+				url: normalizedInput?._tag === 'web' ? normalizedInput.url : undefined
+			})
+		}
+
 		return undefined
 	}
+
+	if (normalizeToolKind(toolName) === 'patch') {
+		const normalizedInput = normalizeToolInput(toolName, input)
+		const fallbackPath = normalizedInput?._tag === 'patch' ? normalizedInput.path : undefined
+		if (Predicate.isString(output)) {
+			return PatchToolOutput.makeUnsafe({
+				path: fallbackPath,
+				patch: output
+			})
+		}
+
+		if (Predicate.isObject(output) && !Predicate.isNull(output)) {
+			const record = output as Record<string, unknown>
+			const patch = Predicate.isString(record['patch']) ? record['patch'] : stringifyToolValue(output)
+			const path =
+				Predicate.isString(record['path']) && record['path'].trim().length > 0 ? record['path'].trim() : undefined
+			return PatchToolOutput.makeUnsafe({
+				path: path ?? fallbackPath,
+				patch
+			})
+		}
+
+		return PatchToolOutput.makeUnsafe({
+			path: fallbackPath,
+			patch: stringifyToolValue(output)
+		})
+	}
+
+	if (normalizeToolKind(toolName) === 'bash') {
+		return TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})
+	}
+
+	if (normalizeToolKind(toolName) === 'read') {
+		return TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})
+	}
+
+	if (normalizeToolKind(toolName) === 'write') {
+		return TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})
+	}
+
+	if (normalizeToolKind(toolName) === 'glob') {
+		return TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})
+	}
+
+	if (normalizeToolKind(toolName) === 'grep') {
+		return TextToolOutput.makeUnsafe({text: stringifyToolValue(output)})
+	}
+
+	return undefined
 }

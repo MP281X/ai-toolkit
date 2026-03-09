@@ -12,6 +12,8 @@
 # packages
 **/node_modules
 
+.opencode/resources
+
 # nix
 result
 flake.lock
