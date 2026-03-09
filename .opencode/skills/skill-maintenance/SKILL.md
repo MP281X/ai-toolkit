@@ -1,6 +1,6 @@
 ---
 name: skill-maintenance
-description: Update skill files when recurring patterns emerge. Add generic intentions, architectural patterns, or repeated corrections that should apply across the project.
+description: Load when adding project-wide patterns or architectural decisions to skills
 ---
 
 ## Source files
@@ -10,23 +10,16 @@ description: Update skill files when recurring patterns emerge. Add generic inte
 ```
 
 
-## Overview
-
-This skill updates skill files when the user indicates patterns that should apply across the entire project. It captures generic intentions, architectural decisions, and recurring patterns - NOT one-off fixes.
-
-
 ## When to use this skill
 
-### DO use when the user indicates:
-
+Use when the user indicates:
 - "This pattern should be used everywhere"
 - "Add this to the skills" 
 - "This is how we should do X across the project"
 - Repeatedly correcting the same pattern in multiple files
 - Architectural decisions that affect coding style broadly
 
-### DON'T use for:
-
+Don't use for:
 - One-off mistakes or bugs
 - Specific implementation details unique to one feature
 - Minor code style preferences
@@ -35,67 +28,52 @@ This skill updates skill files when the user indicates patterns that should appl
 
 ## Examples of appropriate skill updates
 
-### Generic pattern that should be project-wide
+Generic pattern that should be project-wide:
+User says: "Always use Effect.fnUntraced instead of returning Effect.gen from arrow functions."
+→ Add to effect-core skill with inline Bad/Good examples.
 
-User says: "Always use Effect.fnUntraced instead of returning Effect.gen from arrow functions. This should be the standard everywhere."
+Architectural decision:
+User says: "We don't use classes for services, always use the ServiceMap.Service factory pattern."
+→ Add to effect-core skill.
 
-This should be added to effect-core skill.
-
-
-### Architectural decision
-
-User says: "We don't use classes for services, always use the ServiceMap.Service factory pattern. Add this to the skills."
-
-This should be added to effect-core skill.
-
-
-### Repeated correction becomes a pattern
-
-Agent notices user corrects the same mistake 3+ times (e.g., "Don't use native array methods outside JSX"). User confirms: "Yes, always use effect/Array instead."
-
-This should be added to effect-primitives skill.
+Repeated correction becomes a pattern:
+User corrects the same mistake 3+ times. User confirms: "Yes, always use effect/Array instead."
+→ Add to effect-primitives skill.
 
 
 ## Process
 
 1. Identify which skill file needs updating based on the pattern domain
-2. Read the current skill file to understand existing structure
+2. Read the current skill file from `.opencode/skills/` to understand existing structure
 3. Research in `.opencode/resources/` if the pattern involves external APIs
-4. Add a new section with clear DO/DON'T examples
-5. Keep explanations brief but specific
+4. Add a new section with inline Bad/Good examples (same code block)
+5. Keep explanations brief - code examples are most important
+6. After updating the skill, immediately refactor the code that prompted the skill change
 7. Report what was added
 
 
 ## Format for new sections
 
-```
-## Brief descriptive title
+New sections must follow this exact structure — one sentence rule, then a single code block with Bad and Good separated by a blank line:
 
-One sentence explaining the rule or pattern.
+    ## Brief descriptive title
 
+    One sentence explaining the rule.
 
-### DO: Positive example
+    ```typescript
+    // Bad - explanation of what's wrong
+    const incorrect = ...
 
-```typescript
-// Good code example showing the correct pattern
-const correct = ...
-```
+    // Good - explanation of correct approach
+    const correct = ...
+    ```
 
-
-### DON'T: Negative example
-
-```typescript
-// Bad code example showing what to avoid
-const incorrect = ...
-
-// Good - corrected version
-const correct = ...
-```
 
 ## Rules
 
 - Only add patterns the user explicitly says should be used everywhere
 - Don't add one-off fixes
-- Always include both DO and DON'T examples
+- Always include inline Bad/Good examples in same code block
 - Keep explanations minimal - code examples are most important
-- Update only ONE skill file per session unless patterns span multiple domains
+- Skill files are always under `.opencode/skills/`
+- After editing a skill, update the in-progress code to satisfy the new skill requirements in the same session

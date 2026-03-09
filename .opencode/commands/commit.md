@@ -1,5 +1,6 @@
 ---
 description: Generate commit message from staged changes and plans. Commit, rebase, push.
+model: opencode/minimax-m2.5-free
 agent: general
 ---
 
@@ -67,10 +68,11 @@ Body: Optional bullet list for extra detail.
 ## Safety Constraints
 
 - In-progress rebase/merge/cherry-pick → STOP and report
-- Empty staged_diff → STOP, ask user to stage changes
 - No upstream tracking → STOP, ask which remote/branch to push
 - Never force-push
 - Irreversible/ambiguous commands → STOP and confirm
+
+Unstaged changes are normal - the user may commit only part of their changes. Never treat this as an error.
 
 
 ## Process
@@ -90,7 +92,5 @@ Body: Optional bullet list for extra detail.
 
 ## Output
 
-- Checklist of steps taken
 - Commit message used
-- Commands with one-line results
 - Final status: success or STOP reason
