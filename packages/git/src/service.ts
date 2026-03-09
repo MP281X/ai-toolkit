@@ -107,11 +107,11 @@ export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
 				yield* pipe(fs.makeDirectory(dirname(directory), {recursive: true}), Effect.ignore)
 
 				yield* pipe(
-					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', url, directory])),
+					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', url, directory], {cwd})),
 					Effect.asVoid,
 					Effect.catch(() =>
 						pipe(
-							execString(ChildProcess.make('git', ['pull', '--ff-only'], {cwd: directory})),
+							execString(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only'])),
 							Effect.asVoid,
 							Effect.mapError(cause => new GitError({message: `failed to update ${directory} from ${url}`, cause}))
 						)

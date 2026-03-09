@@ -1,14 +1,15 @@
 ---
-description: Commit staged changes, rebase, and push safely
-model: opencode/minimax-m2.5-free
+description: Generate commit message from staged changes and plans. Commit, rebase, push.
 agent: general
-subtask: true
 ---
 
 ## Request
+
 commit and push
 
+
 ## Inputs
+
 <request>
 $ARGUMENTS
 </request>
@@ -25,46 +26,71 @@ $ARGUMENTS
 !`git diff --staged`
 </staged_diff>
 
+<recent_plans>
+!`ls -t .opencode/plans/*.md 2>/dev/null | head -5 | xargs -I {} sh -c 'echo "--- {} ---" && head -20 {}'`
+</recent_plans>
+
+
+## Understanding the Task
+
+Read staged_diff and recent_plans to understand what was accomplished:
+- Main task/objective (from plan files if present)
+- Key changes in the diff
+- New features, refactors, fixes
+
+
 ## Commit Prefixes
-- `feat:` new feature
-- `fix:` bug fix
-- `refactor:` restructuring
-- `perf:` performance
-- `chore:` maintenance (deps/config)
-- `docs:` documentation
-- `test:` tests
-- `ci:` CI/CD
-- `style:` formatting only
+
+```
+feat:     New features
+fix:      Bug fixes
+refactor: Code restructuring without behavior change
+perf:     Performance improvements
+chore:    Maintenance (deps, config, tooling) - use in body only
+docs:     Documentation
+test:     Tests
+ci:       CI/CD changes
+style:    Formatting only
+```
+
 
 ## Commit Message Rules
-- Subject: `<prefix>: <what was accomplished>` — imperative, concise, <= 72 chars
-- Body: optional — bullet list with extra detail only when needed
-- Use `<request>` only if it's consistent with `<staged_diff>`
+
+Subject: `<prefix>: <what was accomplished>` — imperative, concise, <= 72 chars
+- Focus on main task. Omit minor changes (deps, formatting) from subject.
+- Minor changes go in body if needed.
+- Reference plan files if they clarify the objective.
+
+Body: Optional bullet list for extra detail.
+
 
 ## Safety Constraints
-- In-progress rebase, merge, or cherry-pick → STOP and report
-- Empty `<staged_diff>` → STOP and ask user to stage changes
-- No upstream tracking branch → STOP and ask which remote/branch to push to
-- Never force-push or use destructive flags
-- If any command would be irreversible, ambiguous, or changes remote target unexpectedly → STOP and ask for confirmation
+
+- In-progress rebase/merge/cherry-pick → STOP and report
+- Empty staged_diff → STOP, ask user to stage changes
+- No upstream tracking → STOP, ask which remote/branch to push
+- Never force-push
+- Irreversible/ambiguous commands → STOP and confirm
+
 
 ## Process
-Begin with concise checklist (3-7 bullets, conceptual not implementation):
-1. Draft commit message from `<staged_diff>`
-2. Run `git commit`
-3. Run `git pull --rebase`
-   - If conflicts → STOP, tell user to resolve manually
-4. Run `git push`
 
-## Execution Rules
+1. Draft commit message from diff + plans
+2. `git commit -m "subject" [-m "body"]`
+3. `git pull --rebase` (conflicts → STOP, tell user to resolve)
+4. `git push`
+
+
+## Execution
+
 - Each step as separate command
-- Before each command: one brief line with purpose and minimal context
-- After each command: validate in 1-2 lines, continue or STOP on failure
-- Think step-by-step internally, don't reveal reasoning unless asked
-- Conservative first pass; ask only if safety constraint triggered or info missing
+- Before each: one brief line with purpose
+- After each: validate in 1-2 lines, continue or STOP on failure
 
-## Output Format
-- Checklist: 3-7 bullets
+
+## Output
+
+- Checklist of steps taken
 - Commit message used
-- Commands run with one-line result each
+- Commands with one-line results
 - Final status: success or STOP reason

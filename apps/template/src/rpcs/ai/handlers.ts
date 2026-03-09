@@ -16,7 +16,7 @@ export const AiLive = pipe(
 			})
 		})
 	),
-	Layer.provide(Agent.layer({agent: 'opencode', model: 'gpt-5-mini', provider: 'copilot'}))
+	// Layer.provide(Agent.layer({agent: 'opencode', model: 'gpt-5-mini', provider: 'copilot'}))
 	// Layer.provide(Agent.layer({agent: 'ai', model: 'openai/gpt-oss-20b:free', provider: 'openrouter'}))
-	// Layer.provide(Agent.layer({agent: 'copilot', model: 'gpt-5-mini', provider: 'copilot'}))
+	Layer.provide(Agent.layer({agent: 'copilot', model: 'gpt-5-mini', provider: 'copilot'}))
 )
