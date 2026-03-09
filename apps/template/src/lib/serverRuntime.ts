@@ -1,4 +1,3 @@
-import {BunServices} from '@effect/platform-bun'
 import {Layer, pipe} from 'effect'
 
 import {Git} from '@ai-toolkit/git/service'
@@ -19,6 +18,5 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(Git.layer),
 	// base layers
 	Layer.provideMerge(OtelLayer('backend')),
-	Layer.provideMerge(BunServices.layer),
 	Layer.provideMerge(RpcSerialization.layerNdjson)
 )

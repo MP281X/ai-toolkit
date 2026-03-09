@@ -1,4 +1,6 @@
-import {type ModelId, offerings, type ProviderId, providers} from '@ai-toolkit/ai/catalog'
+import {Array} from 'effect'
+
+import {type ModelId, models, type ProviderId, providers} from '@ai-toolkit/ai/catalog'
 import {CheckIcon, ChevronsUpDownIcon} from '@ai-toolkit/components/icons'
 import {
 	Command,
@@ -11,18 +13,7 @@ import {
 import {Popover, PopoverContent, PopoverTrigger} from '@ai-toolkit/components/ui/popover'
 import {useState} from 'react'
 
-import {formatPrice} from '#lib/utils.ts'
-
-function formatModelName(modelId: ModelId) {
-	const hasOrg = modelId.includes('/')
-	const rest = hasOrg ? modelId.slice(modelId.indexOf('/') + 1) : modelId
-	return rest.replace(/:free$/, '').replace(/-free$/, '')
-}
-
-function formatPricing(pricing: {input: number; output: number}) {
-	if (pricing.input === 0 && pricing.output === 0) return 'free'
-	return `${formatPrice(pricing.input)} in · ${formatPrice(pricing.output)} out`
-}
+import {cn, formatPrice} from '#lib/utils.ts'
 
 export namespace ModelSelector {
 	export type Props = {
@@ -33,10 +24,6 @@ export namespace ModelSelector {
 
 export function ModelSelector(props: ModelSelector.Props) {
 	const [open, setOpen] = useState(false)
-	const groups = providers.map(provider => ({
-		provider: provider.id,
-		models: offerings.filter(o => o.provider === provider.id)
-	}))
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -44,36 +31,58 @@ export function ModelSelector(props: ModelSelector.Props) {
 				<span className="flex min-w-0 items-center gap-1.5">
 					<span className="shrink-0 text-muted-foreground/60">{props.model.provider}</span>
 					<span className="shrink-0 text-muted-foreground/30">/</span>
-					<span className="truncate text-foreground">{formatModelName(props.model.model)}</span>
+					<span className="truncate text-foreground">
+						{(props.model.model.includes('/')
+							? props.model.model.slice(props.model.model.indexOf('/') + 1)
+							: props.model.model
+						)
+							.replace(/:free$/, '')
+							.replace(/-free$/, '')}
+					</span>
 				</span>
 				<ChevronsUpDownIcon className="size-3 shrink-0 opacity-50" />
 			</PopoverTrigger>
-			<PopoverContent className="w-72 gap-0 p-0" side="top" align="start">
+			<PopoverContent className="w-80 gap-0 p-0" side="top" align="start">
 				<Command>
 					<CommandInput placeholder="Search models..." />
 					<CommandList>
-						{groups.map(group => (
-							<CommandGroup key={group.provider} heading={group.provider}>
-								{group.models.map(pm => {
-									const key = `${group.provider}:${pm.model}`
-									const isSelected = props.model.provider === group.provider && props.model.model === pm.model
-									const name = formatModelName(pm.model)
+						{providers.map(provider => (
+							<CommandGroup key={provider.id} heading={provider.id}>
+								{Array.filter(models, model => model.provider === provider.id).map(model => {
+									const key = `${provider.id}:${model.model}`
+									const isSelected = props.model.provider === provider.id && props.model.model === model.model
+									const name = (
+										model.model.includes('/') ? model.model.slice(model.model.indexOf('/') + 1) : model.model
+									)
+										.replace(/:free$/, '')
+										.replace(/-free$/, '')
+
 									return (
 										<CommandItem
 											key={key}
 											value={key}
-											keywords={[pm.model, group.provider, name]}
+											keywords={[model.model, model.agent, provider.id, name]}
 											onSelect={() => {
-												props.onModelChange({provider: group.provider, model: pm.model})
+												props.onModelChange({model: model.model, provider: provider.id})
 												setOpen(false)
 											}}
 										>
 											<CheckIcon
-												className={`size-2.5 shrink-0 text-muted-foreground/50 ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+												className={cn(
+													'size-2.5 shrink-0 text-muted-foreground/50',
+													isSelected ? 'opacity-100' : 'opacity-0'
+												)}
 											/>
-											<span className="min-w-0 flex-1 truncate">{name}</span>
+											<div className="min-w-0 flex-1">
+												<div className="truncate text-[12px] text-foreground">{name}</div>
+												<div className="truncate font-mono text-[9px] text-muted-foreground/60">
+													{model.agent} · {model.contextWindow.toLocaleString()} ctx
+												</div>
+											</div>
 											<CommandShortcut className="text-[9px] text-muted-foreground/40 tracking-normal">
-												{formatPricing(pm.pricing)}
+												{model.pricing.input === 0 && model.pricing.output === 0
+													? 'free'
+													: `${formatPrice(model.pricing.input)} in · ${formatPrice(model.pricing.output)} out`}
 											</CommandShortcut>
 										</CommandItem>
 									)

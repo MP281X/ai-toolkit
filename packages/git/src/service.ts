@@ -1,92 +1,123 @@
-import {join} from 'node:path'
+import {dirname} from 'node:path'
 
-import {Array, Effect, FileSystem, Layer, pipe, ServiceMap, String} from 'effect'
+import {Duration, Effect, FileSystem, Layer, pipe, ServiceMap, Stream, String, SubscriptionRef} from 'effect'
 
-import * as Command from 'effect/unstable/process/ChildProcess'
-import {ChildProcessSpawner} from 'effect/unstable/process/ChildProcessSpawner'
+import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 import {GitDiff, GitError} from './schema.ts'
 
 export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
 	make: Effect.gen(function* () {
-		function use(...args: readonly string[]) {
-			return Effect.gen(function* () {
-				const childProcess = yield* ChildProcessSpawner
-				const output = yield* pipe(
-					childProcess.string(Command.make('git', args)),
-					Effect.mapError(cause => new GitError({cause}))
-				)
-
-				return pipe(output, String.split('\n'), Array.filter(String.isNonEmpty))
-			})
-		}
-
+		const execLines = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.lines)
+		const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 		const fs = yield* FileSystem.FileSystem
 
-		const repoRoot = pipe(
-			use('rev-parse', '--show-toplevel'),
-			Effect.map(lines => lines[0] ?? process.cwd())
+		const cwd = yield* pipe(
+			execString(ChildProcess.make('git', ['rev-parse', '--show-toplevel'])),
+			Effect.map(String.trim),
+			Effect.mapError(cause => new GitError({message: 'app must start inside a git repo', cause}))
+		)
+
+		const getStagedDiffs = pipe(
+			execLines(ChildProcess.make('git', ['diff', '--cached', '--name-only'], {cwd})),
+			Effect.flatMap(
+				Effect.forEach(
+					filePath =>
+						Effect.map(
+							execString(
+								ChildProcess.make(
+									'git',
+									['diff', '--cached', '--patch', '--find-renames', '-U999999', '--no-ext-diff', '--', filePath],
+									{cwd}
+								)
+							),
+							patch => new GitDiff({filePath, patch})
+						),
+					{concurrency: 'unbounded'}
+				)
+			),
+			Effect.mapError(cause => new GitError({cause}))
+		)
+		const stagedDiffsRef = yield* Effect.andThen(getStagedDiffs, SubscriptionRef.make)
+
+		const getUnstagedDiffs = pipe(
+			execLines(ChildProcess.make('git', ['diff', '--name-only'], {cwd})),
+			Effect.flatMap(
+				Effect.forEach(
+					filePath =>
+						Effect.map(
+							execString(
+								ChildProcess.make(
+									'git',
+									['diff', '--patch', '--find-renames', '-U999999', '--no-ext-diff', '--', filePath],
+									{cwd}
+								)
+							),
+							patch => new GitDiff({filePath, patch})
+						),
+					{concurrency: 'unbounded'}
+				)
+			),
+			Effect.mapError(cause => new GitError({cause}))
+		)
+		const unstagedDiffsRef = yield* Effect.andThen(getUnstagedDiffs, SubscriptionRef.make)
+
+		yield* Effect.forkScoped(
+			pipe(
+				fs.watch(cwd),
+				Stream.debounce(Duration.millis(50)),
+				Stream.tap(() =>
+					Effect.all(
+						[
+							Effect.flatMap(getStagedDiffs, diffs => SubscriptionRef.set(stagedDiffsRef, diffs)),
+							Effect.flatMap(getUnstagedDiffs, diffs => SubscriptionRef.set(unstagedDiffsRef, diffs))
+						],
+						{concurrency: 'unbounded'}
+					)
+				),
+				Stream.runDrain
+			)
 		)
 
 		return {
-			stagedDiffs: pipe(
-				use('diff', '--cached', '--name-only'),
-				Effect.flatMap(
-					Effect.forEach(filePath =>
+			stagedDiffs: stagedDiffsRef,
+			unstagedDiffs: unstagedDiffsRef,
+			stageFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(
+					execString(ChildProcess.make('git', ['add', '--', filePath], {cwd})),
+					Effect.mapError(cause => new GitError({cause})),
+					Effect.asVoid
+				)
+			}),
+			unstageFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(
+					execString(ChildProcess.make('git', ['reset', 'HEAD', '--', filePath], {cwd})),
+					Effect.mapError(cause => new GitError({cause})),
+					Effect.asVoid
+				)
+			}),
+			discardFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(
+					execString(ChildProcess.make('git', ['restore', '--worktree', '--source=HEAD', '--', filePath], {cwd})),
+					Effect.mapError(cause => new GitError({cause})),
+					Effect.asVoid
+				)
+			}),
+			clone: Effect.fnUntraced(function* (url: string, directory: string) {
+				yield* pipe(fs.makeDirectory(dirname(directory), {recursive: true}), Effect.ignore)
+
+				yield* pipe(
+					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', url, directory])),
+					Effect.asVoid,
+					Effect.catch(() =>
 						pipe(
-							use('diff', '--cached', '--', `:/${filePath}`),
-							Effect.map(lines => lines.join('\n')),
-							Effect.filterOrFail(String.isNonEmpty, () => new GitError({message: `empty diff for ${filePath}`})),
-							Effect.flatMap(patch =>
-								pipe(
-									use('show', `HEAD:${filePath}`),
-									Effect.map(lines => lines.join('\n')),
-									Effect.flatMap(old =>
-										pipe(
-											use('show', `:${filePath}`),
-											Effect.map(lines => lines.join('\n')),
-											Effect.map(next => new GitDiff({filePath, patch, old, new: next}))
-										)
-									)
-								)
-							)
+							execString(ChildProcess.make('git', ['pull', '--ff-only'], {cwd: directory})),
+							Effect.asVoid,
+							Effect.mapError(cause => new GitError({message: `failed to update ${directory} from ${url}`, cause}))
 						)
 					)
 				)
-			),
-			unstagedDiffs: pipe(
-				repoRoot,
-				Effect.flatMap(root =>
-					pipe(
-						use('diff', '--name-only'),
-						Effect.flatMap(
-							Effect.forEach(filePath =>
-								pipe(
-									use('diff', '--', `:/${filePath}`),
-									Effect.map(lines => lines.join('\n')),
-									Effect.filterOrFail(String.isNonEmpty, () => new GitError({message: `empty diff for ${filePath}`})),
-									Effect.flatMap(patch =>
-										pipe(
-											use('show', `HEAD:${filePath}`),
-											Effect.map(lines => lines.join('\n')),
-											Effect.flatMap(old =>
-												pipe(
-													fs.readFileString(join(root, filePath)),
-													Effect.mapError(cause => new GitError({cause})),
-													Effect.map(next => new GitDiff({filePath, patch, old, new: next}))
-												)
-											)
-										)
-									)
-								)
-							)
-						)
-					)
-				)
-			),
-			stageFile: (filePath: string) => use('add', '--', filePath).pipe(Effect.asVoid),
-			unstageFile: (filePath: string) => use('reset', 'HEAD', '--', filePath).pipe(Effect.asVoid),
-			discardFile: (filePath: string) => use('checkout', '--', filePath).pipe(Effect.asVoid)
+			})
 		}
 	})
 }) {

@@ -70,3 +70,19 @@ export function formatPrice(value: number) {
 	if (value === 0) return 'free'
 	return `$${value % 1 === 0 ? value.toString() : value.toFixed(2).replace(/\.00$/, '')}`
 }
+
+export function fileToBase64(file: globalThis.File) {
+	return new Promise<{data: string; filename: string; mediaType: string}>(resolve => {
+		const reader = new FileReader()
+		reader.onload = () => {
+			const content = Predicate.isString(reader.result) ? reader.result : ''
+			const commaIndex = content.indexOf(',')
+			void resolve({
+				data: commaIndex === -1 ? content : content.slice(commaIndex + 1),
+				filename: file.name,
+				mediaType: String.isNonEmpty(file.type) ? file.type : 'application/octet-stream'
+			})
+		}
+		reader.readAsDataURL(file)
+	})
+}

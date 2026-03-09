@@ -12,8 +12,7 @@
 # packages
 **/node_modules
 
-# opencode
-.opencode/btca
+.opencode/resources
 
 # nix
 result

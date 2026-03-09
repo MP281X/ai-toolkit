@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as homeRouteRouteImport } from './routes/(home)/route'
 import { Route as homeRealtimeIndexRouteImport } from './routes/(home)/realtime/index'
+import { Route as homeInputIndexRouteImport } from './routes/(home)/input/index'
 import { Route as homeDiffIndexRouteImport } from './routes/(home)/diff/index'
 import { Route as homeChatIndexRouteImport } from './routes/(home)/chat/index'
 
@@ -21,6 +22,11 @@ const homeRouteRoute = homeRouteRouteImport.update({
 const homeRealtimeIndexRoute = homeRealtimeIndexRouteImport.update({
   id: '/realtime/',
   path: '/realtime/',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeInputIndexRoute = homeInputIndexRouteImport.update({
+  id: '/input/',
+  path: '/input/',
   getParentRoute: () => homeRouteRoute,
 } as any)
 const homeDiffIndexRoute = homeDiffIndexRouteImport.update({
@@ -37,11 +43,13 @@ const homeChatIndexRoute = homeChatIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/chat/': typeof homeChatIndexRoute
   '/diff/': typeof homeDiffIndexRoute
+  '/input/': typeof homeInputIndexRoute
   '/realtime/': typeof homeRealtimeIndexRoute
 }
 export interface FileRoutesByTo {
   '/chat': typeof homeChatIndexRoute
   '/diff': typeof homeDiffIndexRoute
+  '/input': typeof homeInputIndexRoute
   '/realtime': typeof homeRealtimeIndexRoute
 }
 export interface FileRoutesById {
@@ -49,18 +57,20 @@ export interface FileRoutesById {
   '/(home)': typeof homeRouteRouteWithChildren
   '/(home)/chat/': typeof homeChatIndexRoute
   '/(home)/diff/': typeof homeDiffIndexRoute
+  '/(home)/input/': typeof homeInputIndexRoute
   '/(home)/realtime/': typeof homeRealtimeIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/chat/' | '/diff/' | '/realtime/'
+  fullPaths: '/chat/' | '/diff/' | '/input/' | '/realtime/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/chat' | '/diff' | '/realtime'
+  to: '/chat' | '/diff' | '/input' | '/realtime'
   id:
     | '__root__'
     | '/(home)'
     | '/(home)/chat/'
     | '/(home)/diff/'
+    | '/(home)/input/'
     | '/(home)/realtime/'
   fileRoutesById: FileRoutesById
 }
@@ -84,6 +94,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeRealtimeIndexRouteImport
       parentRoute: typeof homeRouteRoute
     }
+    '/(home)/input/': {
+      id: '/(home)/input/'
+      path: '/input'
+      fullPath: '/input/'
+      preLoaderRoute: typeof homeInputIndexRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
     '/(home)/diff/': {
       id: '/(home)/diff/'
       path: '/diff'
@@ -104,12 +121,14 @@ declare module '@tanstack/react-router' {
 interface homeRouteRouteChildren {
   homeChatIndexRoute: typeof homeChatIndexRoute
   homeDiffIndexRoute: typeof homeDiffIndexRoute
+  homeInputIndexRoute: typeof homeInputIndexRoute
   homeRealtimeIndexRoute: typeof homeRealtimeIndexRoute
 }
 
 const homeRouteRouteChildren: homeRouteRouteChildren = {
   homeChatIndexRoute: homeChatIndexRoute,
   homeDiffIndexRoute: homeDiffIndexRoute,
+  homeInputIndexRoute: homeInputIndexRoute,
   homeRealtimeIndexRoute: homeRealtimeIndexRoute,
 }
 

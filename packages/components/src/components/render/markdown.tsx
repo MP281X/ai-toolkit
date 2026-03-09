@@ -17,16 +17,23 @@ export function Markdown(props: {children: string; className?: string}) {
 	const tokens = marked.lexer(props.children)
 
 	return (
-		<div className={cn('markdown wrap-break-word select-text text-wrap text-[13px] leading-relaxed', props.className)}>
+		<div className={cn('markdown wrap-break-word select-text text-wrap text-[14px] leading-relaxed', props.className)}>
 			{tokens.map((token, index) => {
-				// biome-ignore lint/suspicious/noArrayIndexKey: markdown
-				if (token.type === 'code') return <Code key={index} code={token.text} lang={resolveLanguage(token.lang)} />
-
 				// skip raw HTML block tokens
 				if (token.type === 'html') return null
 
 				// biome-ignore lint/suspicious/noArrayIndexKey: markdown
-				return <Inline key={index} content={token.raw} />
+				if (token.type !== 'code') return <Inline key={index} content={token.raw} />
+
+				return (
+					<Code
+						// biome-ignore lint/suspicious/noArrayIndexKey: markdown
+						key={index}
+						code={token.text}
+						className="border border-border"
+						lang={resolveLanguage(token.lang)}
+					/>
+				)
 			})}
 		</div>
 	)

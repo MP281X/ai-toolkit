@@ -1,35 +1,52 @@
 import type {FilePart} from '@ai-toolkit/ai/schema'
+import {PaperclipIcon} from 'lucide-react'
 
-function openAttachment(attachment: FilePart) {
-	const binary = atob(attachment.data)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-	const blob = new Blob([bytes], {type: attachment.mediaType})
-	const url = URL.createObjectURL(blob)
-	const opened = window.open(url, '_blank')
-	if (!opened) window.location.href = url
-	else setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
+export function Attachment(props: {part: FilePart}) {
+	if (props.part.mediaType.startsWith('image/')) {
+		return (
+			<div className="border-border/40 border-y py-2">
+				<button
+					type="button"
+					onClick={() => {
+						const binary = atob(props.part.data)
+						const bytes = new Uint8Array(binary.length)
+						for (let index = 0; index < binary.length; index++) {
+							bytes[index] = binary.charCodeAt(index)
+						}
+						const url = URL.createObjectURL(new Blob([bytes], {type: props.part.mediaType}))
+						window.open(url, '_blank')
+						setTimeout(() => URL.revokeObjectURL(url), 1000)
+					}}
+					className="block max-w-sm cursor-pointer hover:opacity-90"
+					title={props.part.filename}
+				>
+					<img
+						src={`data:${props.part.mediaType};base64,${props.part.data}`}
+						alt={props.part.filename}
+						className="max-h-64 w-full border border-border object-contain"
+					/>
+				</button>
+			</div>
+		)
+	}
 
-export function Attachment(props: FilePart) {
 	return (
 		<button
 			type="button"
-			onClick={() => openAttachment(props)}
-			className="flex items-center gap-2 border border-border px-2 py-1.5 text-left text-[11px]"
+			onClick={() => {
+				const binary = atob(props.part.data)
+				const bytes = new Uint8Array(binary.length)
+				for (let index = 0; index < binary.length; index++) {
+					bytes[index] = binary.charCodeAt(index)
+				}
+				const url = URL.createObjectURL(new Blob([bytes], {type: props.part.mediaType}))
+				window.open(url, '_blank')
+				setTimeout(() => URL.revokeObjectURL(url), 1000)
+			}}
+			className="inline-flex items-center gap-1.5 border border-border px-2 py-0.5 text-[12px] hover:bg-muted/50"
 		>
-			{props.mediaType.startsWith('image/') ? (
-				<img
-					src={`data:${props.mediaType};base64,${props.data}`}
-					alt={props.filename}
-					className="h-10 w-16 shrink-0 border border-border object-cover"
-				/>
-			) : (
-				<div className="flex h-10 w-16 shrink-0 items-center justify-center border border-border bg-muted font-mono text-[10px] text-muted-foreground">
-					FILE
-				</div>
-			)}
-			<span className="truncate text-foreground">{props.filename}</span>
+			<PaperclipIcon className="size-3 text-muted-foreground" />
+			<span className="max-w-48 truncate">{props.part.filename}</span>
 		</button>
 	)
 }
