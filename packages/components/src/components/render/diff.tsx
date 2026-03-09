@@ -1,4 +1,6 @@
-import {parseDiffFromFile} from '@pierre/diffs'
+import {Array, pipe, String} from 'effect'
+
+import {getSingularPatch} from '@pierre/diffs'
 import * as Pierre from '@pierre/diffs/react'
 
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
@@ -7,7 +9,7 @@ const DIFF_CSS = `
 	:host {
 		--diffs-font-family: "JetBrains Mono Variable", monospace;
 		--diffs-header-font-family: "JetBrains Mono Variable", monospace;
-		--diffs-font-size: 11px;
+		--diffs-font-size: 14px;
 		--diffs-line-height: 1.5;
 		--gutter: light-dark(oklch(0.967 0.001 286.375), oklch(0.22 0.007 285.885));
 		--muted: light-dark(oklch(0.967 0.001 286.375), oklch(0.25 0.006 286.033));
@@ -90,21 +92,10 @@ const DIFF_CSS = `
 	}
 `
 
-export function PatchDiff(props: {
-	filePath: string
-	old: string
-	new: string
-	onStage?: () => void
-	onUnstage?: () => void
-	onDiscard?: () => void
-}) {
-	const fileDiff = parseDiffFromFile(
-		{name: props.filePath, contents: props.old},
-		{name: props.filePath, contents: props.new}
-	)
+export function PatchDiff(props: {patch: string}) {
 	return (
-		<Pierre.FileDiff
-			fileDiff={fileDiff}
+		<Pierre.PatchDiff
+			patch={props.patch}
 			options={{
 				overflow: 'scroll',
 				themeType: 'system',
@@ -120,10 +111,24 @@ export function PatchDiff(props: {
 	)
 }
 
-export function FullFile(props: {filePath: string; content: string}) {
+export function PatchResult(props: {filePath: string; patch: string}) {
+	const fileDiff = getSingularPatch(props.patch)
+
+	const content = pipe(
+		fileDiff.hunks,
+		Array.flatMap(hunk => hunk.hunkContent),
+		Array.flatMap(part => (part.type === 'context' ? part.lines : part.additions)),
+		Array.join(''),
+		String.trim
+	)
+
 	return (
 		<Pierre.File
-			file={{name: props.filePath, contents: props.content, lang: resolveLanguage(props.filePath)}}
+			file={{
+				name: props.filePath,
+				contents: fileDiff.type === 'deleted' || String.isEmpty(content) ? '' : content,
+				lang: resolveLanguage(props.filePath)
+			}}
 			options={{
 				overflow: 'scroll',
 				themeType: 'system',

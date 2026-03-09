@@ -1,9 +1,9 @@
 {
 	"$schema": "https://btca.dev/btca.schema.json",
 
-	"model": "gpt-5-mini",
+	"model": "claude-haiku-4.5",
 	"provider": "github-copilot",
-	"dataDirectory": ".opencode/btca",
+	"dataDirectory": "/tmp/btca",
 
 	"resources": [
 		{
@@ -32,6 +32,13 @@
 			"branch": "main",
 			"searchPath": "packages/diffs/src",
 			"url": "https://github.com/pierrecomputer/pierre"
+		},
+		{
+			"name": "lexical",
+			"type": "git",
+			"branch": "main",
+			"searchPath": "packages",
+			"url": "https://github.com/facebook/lexical"
 		},
 		{
 			"name": "@github/copilot-sdk",

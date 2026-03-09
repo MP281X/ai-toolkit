@@ -1,5 +1,7 @@
 import type {TextPart} from '@ai-toolkit/ai/schema'
 
-export function TextDelta(props: TextPart) {
-	return <span className="whitespace-pre-wrap">{props.text}</span>
+import {Markdown} from '#components/render/markdown.tsx'
+
+export function TextDelta(props: {part: TextPart}) {
+	return <Markdown>{props.part.text}</Markdown>
 }

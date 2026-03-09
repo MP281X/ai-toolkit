@@ -1,166 +1,263 @@
-Developer: # AGENTS.md
+# AGENTS.md
 
-This repository is an actively evolving TypeScript / React / Effect-TS codebase. APIs, module boundaries, and interactions are still being defined and may change significantly. Optimize for improving the codebase, not for preserving existing patterns or maintaining backward compatibility unless explicitly instructed.
+This repository is a TypeScript / React / Effect-TS codebase.
 
-## Core Objective
+## Rule Priority
 
-Write extremely high-quality code that is correct, simple, elegant, and production-grade without requiring human cleanup or follow-up refactors.
+- Every rule in this file is mandatory.
+- These rules are not suggestions, preferences, or guidelines.
+- A rule may be overridden only by an explicit user instruction.
+- Explicit means the user directly says to break a specific rule or class of rules.
+- Nothing else overrides these rules: not plans, not existing code, not convenience, not inferred intent, not passing tests, and not agent prompts.
+- When two rules seem to conflict, follow the stricter rule unless the user explicitly says otherwise.
 
-The standard is not merely “it works.” The standard is:
-- correct
-- strictly typed
-- readable
-- minimally complex
-- well-structured
-- elegant
-- consistent with the surrounding architecture
-- resistant to future breakage
+## Core Philosophy
 
-If a solution feels hacky, overly clever, over-abstracted, or harder to understand than necessary, assume it is not good enough and look for a better approach.
+- Optimize for review speed.
+- Optimize for local reasoning.
+- Duplicate first. Generalize only when the user explicitly asks for it.
+- Happy path first.
+- Fail fast. Do not add speculative defensive code unless the task explicitly requires it.
+- Repeated code is not a problem by itself.
+- Effect and shadcn are the only default reusable building blocks in this repository.
+- If something is truly generic, the user will explicitly ask for it or it will become a package with a stable public API.
 
-## Code Quality Standards
+## Generic Code Style
 
-Be intentionally strict.
+These rules are absolute and take precedence over any plan or convenience:
 
-When writing or modifying code:
-- Prefer the simplest solution that fully solves the problem.
-- Avoid unnecessary abstractions, indirection, generalization, and premature reuse.
-- If code looks complex, assume it is likely wrong or over-engineered until proven otherwise.
-- Do not stop at the first workable solution. Actively search for the most elegant and maintainable solution.
-- Optimize for readability and understandability for both humans and AI agents.
-- Strive for clarity of intent in naming, control flow, and module boundaries.
-- Keep implementations compact, but not cryptic.
-- Avoid “just make it pass” changes.
-
-The goal is perfection-oriented improvement, not minimal patching.
-
-## Stack-Specific Rules
-
-These rules are important and come from repeated issues in this specific stack. Follow them unless the user explicitly instructs otherwise.
-
-### TypeScript
-- Rely on inference. Do not add manual types or casts unless they are genuinely necessary.
+- Never destructure props, arguments, or objects.
+  - Exception: tuple destructuring like `const [a, b] = ...` is allowed.
+- Keep code extremely local and explicit.
+- Do not introduce alias variables for nested access, booleans, or simple derived values.
+- Do not create `tmp`, `state`, `value`, `access`, or similar locals just to rename inline-readable data.
+- Maintain strict type-safety while relying on inference as much as possible.
+- Do not add manual types or casts unless they are genuinely required by the compiler.
 - Use `function` declarations except for callbacks.
 
-### React
+## Code Locality
+
+- Duplicate code by default.
+- If two things are 95% similar, duplicate them unless the user explicitly asks to merge them.
+- Local duplication is preferred over changing an existing shared flow and risking side effects.
+- Inline logic at the call site by default.
+- Keep code colocated with the caller. Do not move logic into separate files for organization alone.
+- Prefer fewer files and larger local modules over fragmented structure.
+- Delete thin wrapper files, pass-through modules, and small re-export files.
+- Do not create helper functions, utilities, selectors, mappers, wrappers, adapters, formatter modules, parser modules, validator modules, shared services, base classes, or generic "common" modules for short logic.
+- Do not create branch-heavy "reusable" components, hooks, or services.
+- One-line and two-line logic must stay duplicated even when repeated many times.
+- Repeated 20-line logic may still stay duplicated when it keeps each call site more direct.
+- Single-use functions must be inlined.
+- Thin forwarding helpers are forbidden.
+- Extraction is allowed only when at least one of these is true:
+  - the language, framework, or runtime requires a named public entrypoint
+  - the user explicitly asks for a shared abstraction
+  - the user explicitly asks for a package or stable public API
+- Required named public entrypoints are things like exported React components, router loaders/actions, Effect service classes, Effect schema classes, config entrypoints, and CLI entrypoints.
+- Private helper layers are forbidden.
+
+## Happy Path And Failure Posture
+
+- Solve the direct path first.
+- Do not add edge-case handling, retries, compatibility branches, recovery paths, validation layers, speculative guards, or fallback flows unless the user or task explicitly requires them.
+- Do not preserve old structures just because they already exist.
+- Do not add preflight checks for unrealistic states just because they might happen.
+- If a user manually tampers with managed state and the task does not require recovery, let the code fail loudly instead of adding defensive complexity.
+- Prefer simple crashing or effect failure over branch-heavy safety code when the failure path is outside the requested scope.
+
+## TypeScript
+
+- Rely on inference. Do not add manual types or casts unless genuinely necessary.
+- Use `function` declarations except for callbacks.
+- Do not introduce type boilerplate that exists only to mirror runtime values.
+
+## React
+
 - Target React 19 + React Compiler.
 - Never manually memoize.
 - Never destructure props.
 - Use `cn()` for every conditional `className`.
-- Outside `packages/components`: `@ai-toolkit/components/utils`
-- Inside `packages/components`: `#lib/utils.ts`
+- Outside `packages/components`, import `cn()` from `@ai-toolkit/components/utils`.
+- Inside `packages/components`, import `cn()` from `#lib/utils.ts`.
 
-### Effect
+## Effect
+
 - Use Effect v4 only.
-- Prefer existing Effect primitives and modules over custom helpers.
-- If you think you need a helper, verify Effect does not already provide it.
-- Use Effect Schema fully for validation, transformation, and defaulting when applicable.
-- Prefer `Effect.fnUntraced` for effectful functions rather than `(args) => Effect.gen(...)`.
-- Use `pipe(value, ...)` for transformations. Reserve method `.pipe()` for instrumentation.
+- Effect is available in every package and must be used.
+- Use existing Effect primitives and modules instead of custom helpers whenever they apply.
+- If an Effect helper expresses the intent, you must use it instead of a raw JavaScript helper, primitive, or operator.
+- Using raw JavaScript helpers instead of an available Effect helper is a rule violation, not a style choice.
+- Do not use standard JavaScript null checks, array checks, string helpers, record helpers, or similar primitives when the corresponding Effect module provides the operation.
+- Use the most idiomatic existing Effect helper instead of lower-level or custom logic.
+- If you think you need a helper, first verify that Effect does not already provide the operation.
+- Use `pipe(value, ...)` and `flow(...)` aggressively. They should replace most temporary transformation variables.
+- Use `pipe(value, ...)` for transformations. Reserve `.pipe()` for instrumentation.
+- Use Effect Schema for validation, transformation, and defaults whenever it is applicable.
+- Prefer `Effect.fnUntraced` for effectful functions instead of `(args) => Effect.gen(...)`.
 - Domain errors are yieldable. Do not use `Effect.fail` for domain errors.
 - For callbacks, prefer one effectful handler and one captured runner.
 
-### UI
+### Effect Modules
+
+- Import Effect modules directly from `effect` without aliasing.
+- These module choices are mandatory when an equivalent helper exists.
+- Do not fall back to standard JavaScript helpers when an Effect helper fits the operation.
+
+#### `String`
+
+- Use `String` helpers for string checks and transforms.
+- Use helpers such as `String.isEmpty`, `String.isNonEmpty`, `String.capitalize`, and `String.trim` instead of ad-hoc string checks or transforms.
+
+#### `Array`
+
+- Use `Array` helpers for immutable array checks, constructors, and transforms.
+- Use helpers such as `Array.isArrayNonEmpty`, `Array.isArrayEmpty`, `Array.isReadonlyArrayNonEmpty`, `Array.isReadonlyArrayEmpty`, `Array.map`, `Array.filter`, and `Array.empty()` instead of raw array helpers when they express the intent.
+
+#### `Boolean`
+
+- Use `Boolean` helpers for boolean combinators and expression-style branching when they fit the operation.
+- Use helpers such as `Boolean.or`, `Boolean.xor`, `Boolean.some`, `Boolean.nor`, `Boolean.every`, and `Boolean.match` instead of ad-hoc boolean combination code when they express the intent.
+
+#### `Number`
+
+- Use `Number` helpers for parsing, comparisons, bounds, and rounding.
+- Use helpers such as `Number.min`, `Number.max`, `Number.round`, `Number.isLessThan`, `Number.parse`, and `Number.between` instead of ad-hoc numeric helpers when they fit.
+
+#### `Record`
+
+- Use `Record` helpers for immutable record construction and updates.
+- Use helpers such as `Record.some`, `Record.remove`, `Record.mapKeys`, `Record.toEntries`, `Record.replace`, `Record.set`, `Record.keys`, `Record.empty()`, and `Record.size` instead of raw object helpers when they fit.
+
+#### `Predicate`
+
+- Use `Predicate` helpers for runtime checks and narrowing.
+- Null, undefined, nullish, type, and tagged checks must use `Predicate` helpers when applicable.
+- Example: use `Predicate.isNullish(x)`, not `x == null`.
+- Use helpers such as `Predicate.isUndefined`, `Predicate.isNull`, `Predicate.isNullish`, `Predicate.isString`, `Predicate.isNumber`, `Predicate.isBoolean`, `Predicate.isNotNull`, `Predicate.isNotNullish`, `Predicate.hasProperty`, `Predicate.isNotUndefined`, `Predicate.isFunction`, `Predicate.isUnknown`, `Predicate.isObject`, and `Predicate.isTagged`.
+
+#### `Match`
+
+- Use `Match` for typed branching over values and tagged unions when it makes the code more direct.
+- Use helpers such as `Match.value`, `Match.valueTags`, `Match.when`, `Match.orElse`, `Match.exhaustive`, `Match.tag`, and `Match.instanceOf`.
+
+#### `Schema`
+
+- Use `Schema` for validation, transformation, defaults, and typed constructors when applicable.
+- Use helpers such as `Schema.Class`, `Schema.TaggedClass`, `Schema.Struct`, `Schema.NonEmptyString`, `Schema.optional`, `Schema.Literals`, `Schema.Union`, and `Schema.withConstructorDefault`.
+
+#### `Function`
+
+- Use `Function` helpers for small total helpers and impossible states when they fit exactly.
+- Use helpers such as `Function.identity`, `Function.constUndefined`, `Function.constTrue`, and `Function.absurd`.
+
+#### `Duration`
+
+- Use `Duration` helpers for typed time construction and conversion.
+- Use helpers such as `Duration.seconds`, `Duration.hours`, `Duration.toSeconds`, `Duration.toHours`, and `Duration.sum`.
+
+#### `Option`
+
+- Use `Option` for explicit optional values and fallbacks when the operation is optional by nature.
+- Use helpers such as `Option.match`, `Option.getOrElse`, and `Option.andThen`.
+
+## UI
+
 - Use existing shadcn primitives first.
-- Before building custom UI, check the shadcn CLI:
+- Before building custom UI, run:
   - `bun shadcn list @shadcn`
   - `bun shadcn add <name> --yes --overwrite`
-- Compose primitives; do not reimplement them.
+- Compose primitives. Do not reimplement them.
 - Keep the visual language in `packages/components/src/theme.css`.
 - Use existing design tokens only.
 - Prefer high contrast, visible borders, and minimal functional motion.
 - Prefer icons over text when clearer.
 - Never edit `packages/components/src/components/ui/`.
+- Build app UI by composing shadcn primitives locally.
+- Do not invent app-specific base components just because multiple screens look similar.
+
+## Minimal Examples
+
+### Example 1
+
+Bad:
+
+```ts
+function renderThing(input: string) {
+	return String.trim(input)
+}
+```
+
+Good:
+
+```ts
+const a = String.trim(inputA)
+const b = String.trim(inputB)
+```
+
+### Example 2
+
+Bad:
+
+```ts
+function getDiffs(kind: 'staged' | 'unstaged') {
+	if (kind === 'staged') {
+		return ...
+	}
+
+	return ...
+}
+```
+
+Good:
+
+```ts
+const getStagedDiffs = ...
+const getUnstagedDiffs = ...
+```
+
+### Example 3
+
+Bad:
+
+```tsx
+<ToolCard kind={kind} input={input} output={output} />
+```
+
+Good:
+
+```tsx
+<ReadToolCard input={input} output={output} />
+<WriteToolCard input={input} output={output} />
+```
+
+### Example 4
+
+Bad:
+
+```ts
+if (remoteUrl !== url) {
+	return recoverFromUnexpectedManualTampering()
+}
+```
+
+Good:
+
+```ts
+yield* runDirectFlow
+```
 
 ## External Package Research
 
-When working with any external package, use the BTCA MCP rather than relying on memory or training data.
+- Use `.opencode/resources/` for external package APIs, behavior, and documentation.
+- Inspect external packages locally by reading source files directly.
+- Do not rely on memory or training data for external package details.
+- Keep exploration focused on specific modules or functions.
+- Parallelize independent exploration tasks when possible.
 
-- BTCA must be used when working with any external package.
-- Always call `btca_listResources` before `btca_ask`.
-- Do not rely on training data for package APIs, behavior, or documentation.
-- Do not query `@ai-toolkit/*` packages via the BTCA MCP; inspect those packages locally instead.
-- Keep queries narrow and focused.
-- Parallelize independent `btca_ask` calls as much as possible.
+## Validation
 
-## Working in an Evolving Codebase
+Run these commands in order:
 
-This codebase is under active iteration. Large refactors and API changes are normal.
-
-Therefore:
-- Do not resist architectural or API changes merely to keep older call sites stable.
-- When a module or package API changes, expect downstream consumers to be updated accordingly.
-- Unless explicitly instructed otherwise, prefer fixing consumers rather than weakening or reverting the module you just improved.
-- Do not preserve outdated patterns if a better design is now available.
-
-## Validation Commands
-
-Use:
-- `bun run fix`
-- `bun run check`
-
-These commands format the code and detect linting and type errors across the monorepo.
-
-This repository enforces very strict typing and linting rules. If the code passes these checks, it is expected to be structurally correct.
-
-Also note:
-- The agent has access to LSP diagnostics for files it is actively editing.
-- This means local type and formatting errors in touched files should usually be visible immediately.
-- As a result, `bun run fix && bun run check` is especially important for detecting issues caused in other packagess.
-- A common example is changing a package API and then needing to update consuming packages/apps.
-
-When these commands reveal errors after your changes:
-- Unless explicitly instructed otherwise, assume the consumers or dependent packages should be fixed.
-- Do not “undo” or dilute an improved module just to satisfy outdated consumers.
-
-## Task Execution Philosophy
-
-Agents should be optimized for long-running, autonomous work that may span the entire codebase.
-
-After the task is clear, work through it to completion with minimal interruption.
-
-However, at the start of a task, you must carefully analyze the user request and identify anything ambiguous, underspecified, inconsistent, or potentially conflicting.
-
-If anything important is unclear, use the question tool to resolve it before proceeding.
-
-Guidelines:
-- Front-load clarification.
-- Ask clarifying questions early when they materially affect architecture, requirements, or implementation choices.
-- It is acceptable to ask multiple targeted clarification questions at the beginning if needed.
-- Once the task is sufficiently clear, proceed autonomously and do not ask more questions unless truly blocked.
-- Do not interrupt execution for non-blocking uncertainties if a reasonable interpretation can be derived from the clarified context.
-
-The user knows the codebase well and manually reviews AI-written code, so ambiguities and inconsistencies should usually be detectable from the initial request. Detect them proactively.
-
-## Decision Heuristics
-
-Before finalizing any implementation, ask yourself:
-- Is this the simplest solution that correctly solves the problem?
-- Is there a more elegant approach?
-- Am I introducing abstraction that is not justified?
-- Does this improve the codebase rather than merely preserving existing structure?
-- Would this be easy for another human or agent to understand later?
-- If this feels hacky, what is the cleaner design?
-
-Do not accept a mediocre solution when a cleaner one is achievable.
-
-## Default Biases
-
-Default to these assumptions unless the user says otherwise:
-- prioritize improving the design over preserving compatibility
-- prefer updating consumers after API improvements
-- favor simplicity over abstraction
-- favor correctness and readability over speed of patching
-- complete clarified tasks autonomously
-- ask questions only at the beginning unless later blocked by a truly missing decision
-
-## Bottom Line
-
-Your job is to materially improve the codebase with extremely high care.
-
-Be strict.
-Be thoughtful.
-Be autonomous.
-Be simple.
-Be elegant.
-And do not settle for code that merely works when you can produce code that is obviously correct and clean.
+1. `bun run fix`
+2. `bun run check`

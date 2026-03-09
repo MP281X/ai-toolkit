@@ -2,7 +2,7 @@ import * as WebSdk from '@effect/opentelemetry/WebSdk'
 import {Config, Effect, Layer, Option} from 'effect'
 
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'
-import {BatchSpanProcessor} from '@opentelemetry/sdk-trace-web'
+import {SimpleSpanProcessor} from '@opentelemetry/sdk-trace-web'
 
 export const OtelLayer = (serviceName: string) =>
 	Layer.unwrap(
@@ -13,7 +13,7 @@ export const OtelLayer = (serviceName: string) =>
 				onSome: url =>
 					WebSdk.layer(() => ({
 						resource: {serviceName},
-						spanProcessor: new BatchSpanProcessor(new OTLPTraceExporter({url}))
+						spanProcessor: new SimpleSpanProcessor(new OTLPTraceExporter({url}))
 					}))
 			})
 		)
