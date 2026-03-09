@@ -1,6 +1,6 @@
 ---
 name: effect-schema
-description: Effect Schema v4 patterns - Classes, TaggedClass, literals, unions, constructor defaults, error classes
+description: Load when defining schemas - Classes, TaggedClass, literals, unions, defaults, errors
 ---
 
 ## Source files
@@ -11,61 +11,64 @@ description: Effect Schema v4 patterns - Classes, TaggedClass, literals, unions,
 ```
 
 
-## Overview
-
-Prefer Schema.Class and Schema.TaggedClass for application data. These provide constructors, type inference, and runtime validation in one definition.
-
-Use Schema.Struct only when a plain schema value is better for transforms or low-level composition.
-
-
 ## Classes
 
-Define data models using Schema.Class. This creates both a schema and a constructor.
-
-
-### DO: Define simple classes
-
 ```typescript
+// Bad - plain interface with no schema
+interface Usage {
+  input: number
+  output: number
+}
+
+// Good - Schema.Class creates both schema and constructor
 export class Usage extends Schema.Class<Usage>('Usage')({
   input: Schema.Number,
   output: Schema.Number
 }) {}
 ```
 
-Optional fields can be undefined or absent. Use Schema.optional for fields that can be undefined. Use Schema.optionalKey for fields that can be absent.
-
-
-### DO: Define classes with optional fields
-
 ```typescript
+// Bad - required field where undefined should be valid
 export class Event extends Schema.Class<Event>('Event')({
   id: Schema.NonEmptyString,
-  kind: Schema.optional(Schema.String),
-  data: Schema.optionalKey(Schema.String)
+  kind: Schema.String,     // required, can't be undefined
+  data: Schema.String      // required, can't be missing
+}) {}
+
+// Good - optional and optionalKey for nullable/absent fields
+export class Event extends Schema.Class<Event>('Event')({
+  id: Schema.NonEmptyString,
+  kind: Schema.optional(Schema.String),    // can be undefined
+  data: Schema.optionalKey(Schema.String)  // can be absent
 }) {}
 ```
 
 
 ## Tagged classes
 
-Use Schema.TaggedClass for discriminated data with a _tag field. This is the standard way to define ADTs in Effect.
-
-
-### DO: Define tagged classes
-
 ```typescript
+// Bad - Schema.Class with a manual _tag field
+export class TextDelta extends Schema.Class<TextDelta>('TextDelta')({
+  _tag: Schema.Literal('text-delta'),
+  messageId: Schema.NonEmptyString,
+  text: Schema.String
+}) {}
+
+// Good - Schema.TaggedClass adds _tag automatically
 export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
   messageId: Schema.NonEmptyString,
   text: Schema.String
 }) {}
 ```
 
-If the discriminant field is not _tag, use Schema.tag explicitly.
-
-
-### DO: Use custom discriminant fields
-
 ```typescript
+// Bad - string literal for a non-_tag discriminant
+export class ClickEvent extends Schema.Class<ClickEvent>('ClickEvent')({
+  type: Schema.Literal('click'),
+  x: Schema.Number
+}) {}
+
+// Good - Schema.tag for non-_tag discriminant fields
 export class ClickEvent extends Schema.Class<ClickEvent>('ClickEvent')({
   type: Schema.tag('click'),
   x: Schema.Number
@@ -75,42 +78,28 @@ export class ClickEvent extends Schema.Class<ClickEvent>('ClickEvent')({
 
 ## Literals
 
-Use Schema.Literals for fixed-value unions like enums or status values.
-
-Always infer the type from the schema. Do not define the type manually alongside the schema.
-
-
-### DO: Define literal unions with inferred types
+Use Schema.Literals for fixed-value unions. Always infer the type from the schema — never define the type manually alongside it. Put the type declaration before the schema value.
 
 ```typescript
-type Role = typeof Role.Type
-const Role = Schema.Literals(['user', 'assistant'])
-```
-
-
-### DON'T: Define types manually
-
-```typescript
-// Bad
+// Bad - manual type defined separately from schema
 type Role = 'user' | 'assistant'
 const Role = Schema.Literals(['user', 'assistant'])
 
-// Good
+// Good - infer type from schema, type declaration comes first
 type Role = typeof Role.Type
 const Role = Schema.Literals(['user', 'assistant'])
 ```
-
-Put the type declaration before the schema value.
 
 
 ## Unions
 
-Use Schema.Union for discriminated unions. Combine tagged classes, regular classes, or literals.
-
-
-### DO: Define unions
+Use Schema.Union for discriminated unions combining tagged classes, regular classes, or literals.
 
 ```typescript
+// Bad - plain TypeScript union with no schema
+type Part = TextPart | FilePart | ToolPart | ErrorPart
+
+// Good - Schema.Union for a validated schema union
 type Part = typeof Part.Type
 const Part = Schema.Union([TextPart, FilePart, ToolPart, ErrorPart])
 ```
@@ -118,12 +107,18 @@ const Part = Schema.Union([TextPart, FilePart, ToolPart, ErrorPart])
 
 ## Constructor defaults
 
-Use Schema.withConstructorDefault to provide default values for constructors. The callback must return Option.some(value).
-
-
-### DO: Provide constructor defaults
+Use Schema.withConstructorDefault to provide default values in constructors. The callback must return Option.some(value).
 
 ```typescript
+// Bad - required fields that callers must always provide
+export class Message extends Schema.Class<Message>('Message')({
+  id: Schema.NonEmptyString,
+  createdAt: Schema.Number,
+  role: Role,
+  parts: Schema.Array(Part)
+}) {}
+
+// Good - Schema.withConstructorDefault for fields with sensible defaults
 export class Message extends Schema.Class<Message>('Message')({
   id: Schema.NonEmptyString.pipe(
     Schema.withConstructorDefault(() => Option.some(crypto.randomUUID()))
@@ -138,49 +133,31 @@ export class Message extends Schema.Class<Message>('Message')({
 }) {}
 ```
 
-Option.some(...) is required by the Schema API here. This is the only place where creating Option values is expected.
-
-
 ## Internal construction
 
-For Schema.Class and Schema.TaggedClass, prefer using new for trusted internal construction. This bypasses validation for known-good data.
-
-
-### DO: Use new for internal construction
+For Schema.Class and Schema.TaggedClass, use `new` for trusted internal construction. This bypasses validation for known-good data.
 
 ```typescript
+// Bad - Schema.decode for internally constructed data
+const event = yield* Schema.decodeUnknown(TextDelta)({
+  messageId: '123',
+  text: 'hello'
+})
+
+// Good - new for internal construction of known-good data
 const event = new TextDelta({
   messageId: '123',
   text: 'hello'
 })
 ```
 
-Keep decode and encode functions for external boundaries and real transformations where validation matters.
-
-Use makeUnsafe only for non-class schemas that intentionally stay as schema values.
-
-
-## Domain errors
-
-Use Schema.TaggedErrorClass for service-level errors. Define one error type per service.
-
-
-### DO: Define error classes
-
 ```typescript
-export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
-  cause: Schema.optional(Schema.Unknown),
-  message: Schema.optional(Schema.NonEmptyString)
-}) {}
-```
+// Bad - Option wrapper when a direct API exists
+const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(MySchema)(value))
 
-Errors are yieldable. Use them directly in effects.
-
-
-### DO: Yield error classes
-
-```typescript
-yield* new GitError({message: 'failed'})
+// Good - direct Exit API
+const exit = Schema.decodeUnknownExit(MySchema)(value)
+const decoded = Exit.isSuccess(exit) ? exit.value : undefined
 ```
 
 
@@ -188,10 +165,15 @@ yield* new GitError({message: 'failed'})
 
 Spread .fields to compose schemas. Do not introduce wrappers or inheritance helpers just to reuse a few fields.
 
-
-### DO: Spread fields for composition
-
 ```typescript
+// Bad - inheritance helper just to share fields
+class BaseEntity extends Schema.Class<BaseEntity>('BaseEntity')({
+  createdAt: Schema.Number,
+  updatedAt: Schema.Number
+}) {}
+class User extends BaseEntity { ... } // Wrong pattern
+
+// Good - spread .fields for composition
 export class Timestamped extends Schema.Class<Timestamped>('Timestamped')({
   createdAt: Schema.Number,
   updatedAt: Schema.Number
@@ -208,22 +190,33 @@ export class User extends Schema.Class<User>('User')({
 
 Always infer types from schemas. Never define types manually alongside schemas.
 
+For `Schema.Class` and `Schema.TaggedClass`, use the class itself as the type — no separate type alias needed.
 
-### DON'T: Define types manually
+For every non-class schema value, always export the inferred type with the same name, declared before the schema value.
 
 ```typescript
-// Bad
-type Usage = { input: number; output: number }
-const Usage = Schema.Class<Usage>('Usage')({
-  input: Schema.Number,
-  output: Schema.Number
+// Bad - manual type defined alongside a Class
+type Usage = {input: number; output: number}
+class Usage extends Schema.Class<Usage>('Usage')({...}) {}
+
+// Bad - missing type export for a non-class schema
+export const ModelSelection = Schema.Struct({
+  agent: AgentId,
+  provider: ProviderId,
+  model: ModelId
 })
 
-// Good
+// Good - Class provides its own type automatically
 export class Usage extends Schema.Class<Usage>('Usage')({
   input: Schema.Number,
   output: Schema.Number
 }) {}
 
-// Type is automatically available as Usage.Type
+// Good - export matching type for non-class schemas, type first
+export type ModelSelection = typeof ModelSelection.Type
+export const ModelSelection = Schema.Struct({
+  agent: AgentId,
+  provider: ProviderId,
+  model: ModelId
+})
 ```

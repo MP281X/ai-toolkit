@@ -1,6 +1,6 @@
 ---
 name: refactor
-description: Aggressive simplification pass - remove dead code, defensive checks, thin wrappers
+description: Load for post-implementation cleanup - remove dead code, defensive checks, thin wrappers
 ---
 
 ## Source files
@@ -10,15 +10,7 @@ description: Aggressive simplification pass - remove dead code, defensive checks
 .opencode/resources/effect/packages/effect/src/Function.ts
 .opencode/resources/effect/packages/effect/src/Match.ts
 .opencode/resources/effect/packages/effect/src/String.ts
-All skill files for patterns to apply
 ```
-
-
-## Overview
-
-Delete more than you add. Remove dead code, unused branches, legacy leftovers. Inline small helpers. Delete pass-through layers and thin wrappers.
-
-This is a mandatory cleanup pass after implementation completes.
 
 
 ## Required skills
@@ -29,18 +21,15 @@ If a cleaner result exists by applying another skill, take it. This is mandatory
 
 ## Remove defensive checks
 
-Prefer try and catch over check then do. Attempt the operation and handle failure rather than checking preconditions.
-
-
-### DON'T: Check before acting
+Attempt the operation and handle failure. Do not check preconditions before acting.
 
 ```typescript
-// Bad
+// Bad - check then act
 if (!(yield* fs.exists(path))) {
   yield* fs.makeDirectory(path, {recursive: true})
 }
 
-// Good
+// Good - attempt and catch
 yield* pipe(
   fs.makeDirectory(path, {recursive: true}),
   Effect.catchAll(() => Effect.void)
@@ -48,22 +37,18 @@ yield* pipe(
 ```
 
 
-## Remove validation branches
+## Remove redundant validation
 
-Do not validate states that should not occur. Real errors surface naturally through the effect system.
-
-
-### DON'T: Validate expected states
+Do not add validation checks for states that the Effect type system or the upstream operation already guarantees cannot occur. Real errors surface naturally through the effect error channel.
 
 ```typescript
-// Bad
-const value = yield* getSomeValue()
+// Bad - manually checking a return value that the type already constrains
+const value = yield* getSomeValue() // already typed as the expected shape
 if (value !== expected) {
-  yield* new AppError({message: 'mismatch'})
+  yield* new AppError({message: 'mismatch'}) // unreachable in practice
 }
 
-// Good
-// Remove validation. Let the effect fail if the state is wrong.
+// Good - trust the Effect chain; the error is handled upstream
 const value = yield* getSomeValue()
 // Continue with value
 ```
@@ -73,11 +58,8 @@ const value = yield* getSomeValue()
 
 Avoid deeply nested pipe calls. Flatten into a single pipe chain.
 
-
-### DON'T: Nest pipe calls
-
 ```typescript
-// Bad
+// Bad - nested pipes
 const result = yield* pipe(
   pipe(
     pipe(operation, Effect.map(...)),
@@ -86,7 +68,7 @@ const result = yield* pipe(
   Effect.map(...)
 )
 
-// Good
+// Good - flat pipe chain
 const result = yield* pipe(
   operation,
   Effect.map(...),
@@ -98,42 +80,31 @@ const result = yield* pipe(
 
 ## Inline single-use functions
 
-If a function is called once and is short, inline it at the call site.
-
-
-### DON'T: Create single-use functions
+Never extract a function that is called exactly once and fits on one line. Inline it at the call site.
 
 ```typescript
-// Bad
+// Bad - single-use, single-line helper that adds no clarity
 function formatName(name: string) {
   return String.trim(name)
 }
 const clean = formatName(input)
 
-// Good
+// Good - inline at the call site
 const clean = String.trim(input)
 ```
 
+## Delete routing functions
 
-## Delete branch-heavy generics
-
-Prefer duplicated specialized code over branch-heavy reusable components.
-
-
-### DON'T: Create branch-heavy functions
+Do not create a function that only branches on a parameter to call one of several other functions. Call the specialized function directly at the call site.
 
 ```typescript
-// Bad
+// Bad - routing function that adds no logic
 function getItems(kind: 'active' | 'archived') {
   if (kind === 'active') return getActiveItems()
   return getArchivedItems()
 }
 
-// Good
-const getActiveItems = ...
-const getArchivedItems = ...
-
-// Use directly at call sites
+// Good - call the specialized function directly
 getActiveItems()
 getArchivedItems()
 ```
@@ -141,19 +112,15 @@ getArchivedItems()
 
 ## Remove dead code
 
-Delete unused imports, variables, functions, and types. Remove commented-out code. Delete console.log statements used for debugging.
-
-
-### DON'T: Leave unused code
+Delete unused imports, variables, functions, and types. Remove commented-out code. Delete debug console.log statements.
 
 ```typescript
-// Bad
-import { unused } from './module'
+// Bad - unused imports, commented-out debug code
+import {unused} from './module'
 const debugValue = 'temporary'
 // console.log('debug:', debugValue)
 
-// Good
-// Only keep what is actually used
+// Good - only what is used remains, no commented-out code
 ```
 
 

@@ -23,13 +23,13 @@ Agents MUST load relevant skills before work.
 Load with: "Load skill: {name}"
 
 Available skills:
-- effect-core - Effect runtime, services, layers, errors, streams
-- effect-primitives - Predicate, Match, Array, Record, String, Number, Boolean, Option
-- effect-schema - Schema.Class, TaggedClass, literals, unions, defaults
-- effect-atom - Atom and RPC patterns for React
-- ui-shadcn - shadcn UI primitives and composition
-- refactor - Post-implementation cleanup
-- skill-maintenance - Update skills when recurring patterns emerge
+- **effect-primitives** - Load for ALL TypeScript code - standard library modules (pipe, flow, Match, Array, etc.) work everywhere
+- effect-core - Load when using Effect runtime - services, layers, errors, Effect.gen, fnUntraced, streams
+- effect-schema - Load when defining schemas - Classes, TaggedClass, literals, unions, defaults, errors
+- effect-atom - Load for React components using Effect Atom - atoms, subscriptions, mutations, hooks
+- ui-shadcn - Load when building UI - shadcn primitives, theme tokens, visual language
+- refactor - Load for post-implementation cleanup - remove dead code, defensive checks, thin wrappers
+- skill-maintenance - Load when adding project-wide patterns or architectural decisions to skills
 
 
 ## Skill Maintenance
