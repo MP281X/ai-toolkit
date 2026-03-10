@@ -3,7 +3,6 @@ import {Schema} from 'effect'
 export const providers = [
 	{id: 'opencode_zen', baseUrl: 'https://opencode.ai/zen/v1', apiKeyEnv: 'AI_OPENCODE_ZEN'},
 	{id: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKeyEnv: 'AI_OPENROUTER'},
-	{id: 'opencode', baseUrl: 'http://127.0.0.1:4096', apiKeyEnv: undefined},
 	{id: 'copilot', baseUrl: 'https://api.githubcopilot.com', apiKeyEnv: undefined}
 ] as const
 
@@ -54,14 +53,6 @@ export const models = [
 		model: 'gpt-5-mini',
 		adapter: 'openai',
 		contextWindow: 192_000,
-		pricing: {input: 0, output: 0}
-	},
-	{
-		agent: 'opencode',
-		provider: 'opencode',
-		model: 'opencode-go/kimi-k2.5',
-		adapter: 'opencode',
-		contextWindow: 256_000,
 		pricing: {input: 0, output: 0}
 	}
 ] as const satisfies readonly {

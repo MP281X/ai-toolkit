@@ -12,33 +12,18 @@ const resources = [
 	{
 		name: 'tanstack-router',
 		url: 'https://github.com/TanStack/router'
-		// searchPath: 'packages/react-router/src'
-	},
-	{
-		name: 'ai',
-		url: 'https://github.com/vercel/ai'
-		// searchPath: 'packages/ai/src'
 	},
 	{
 		name: 'pierre-diffs',
 		url: 'https://github.com/pierrecomputer/pierre'
-		// searchPath: 'packages/diffs/src'
 	},
 	{
 		name: 'lexical',
 		url: 'https://github.com/facebook/lexical'
-		// searchPath: 'packages'
 	},
 	{
-		branch: 'main',
-		name: 'copilot-sdk',
-		url: 'https://github.com/github/copilot-sdk'
-		// searchPath: 'nodejs'
-	},
-	{
-		name: 'opencode-sdk',
+		name: 'opencode',
 		url: 'https://github.com/anomalyco/opencode'
-		// searchPath: 'packages/sdk/js/src/v2'
 	}
 ]
 
