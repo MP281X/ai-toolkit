@@ -10,7 +10,7 @@ export class AiContracts extends RpcGroup.make(
 		success: ConversationEvent
 	}),
 	Rpc.make('ai.sendMessage', {
-		payload: {model: ModelSelection, parts: Schema.NonEmptyArray(PromptPart)},
+		payload: Schema.Struct({model: ModelSelection, parts: Schema.NonEmptyArray(PromptPart)}),
 		error: AiError
 	}),
 	Rpc.make('ai.tool', {

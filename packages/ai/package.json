@@ -6,6 +6,7 @@
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./catalog": "./src/catalog.ts",
+		"./tool": "./src/tool.ts",
 		"./service": "./src/service.ts"
 	},
 

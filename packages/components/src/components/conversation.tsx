@@ -34,7 +34,11 @@ export function Conversation(props: {children?: React.ReactElement[]; className?
 
 	return (
 		<div className={cn('relative flex h-full flex-col', props.className)}>
-			<div ref={scrollRef} className="flex flex-1 flex-col gap-2 overflow-y-auto px-3 py-3" onScroll={handleScroll}>
+			<div
+				ref={scrollRef}
+				className="flex flex-1 flex-col divide-y divide-border overflow-y-auto px-3 py-1"
+				onScroll={handleScroll}
+			>
 				{props.children}
 			</div>
 
