@@ -7,7 +7,7 @@
 		"./schema": "./src/schema.ts",
 		"./catalog": "./src/catalog.ts",
 		"./service": "./src/service.ts",
-		"./tools": "./src/tools.ts"
+		"./tool": "./src/tool.ts"
 	},
 
 	"scripts": {
@@ -17,9 +17,6 @@
 
 	"dependencies": {
 		"ai": "latest",
-		"@opencode-ai/sdk": "latest",
-		"@github/copilot-sdk": "latest",
-
 		"exa-js": "latest",
 
 		"@ai-sdk/xai": "latest",

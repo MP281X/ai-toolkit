@@ -1,6 +1,7 @@
 import {Schema} from 'effect'
 
-import {AiError, ConversationEvent, PromptPart, ToolResponse} from '@ai-toolkit/ai/schema'
+import {ModelSelection} from '@ai-toolkit/ai/catalog'
+import {AgentResponse, AiError, ConversationEvent, PromptPart} from '@ai-toolkit/ai/schema'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export class AiContracts extends RpcGroup.make(
@@ -9,11 +10,11 @@ export class AiContracts extends RpcGroup.make(
 		success: ConversationEvent
 	}),
 	Rpc.make('ai.sendMessage', {
-		payload: Schema.NonEmptyArray(PromptPart),
+		payload: {model: ModelSelection, parts: Schema.NonEmptyArray(PromptPart)},
 		error: AiError
 	}),
 	Rpc.make('ai.tool', {
-		payload: ToolResponse,
+		payload: AgentResponse,
 		error: AiError
 	})
 ) {}

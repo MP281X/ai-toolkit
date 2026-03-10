@@ -2,29 +2,18 @@ import type {FilePart} from '@ai-toolkit/ai/schema'
 import {PaperclipIcon} from 'lucide-react'
 
 export function Attachment(props: {part: FilePart}) {
-	if (props.part.mediaType.startsWith('image/')) {
+	const url = URL.createObjectURL(props.part.file)
+
+	if (props.part.file.type.startsWith('image/') && url) {
 		return (
 			<div className="border-border/40 border-y py-2">
 				<button
 					type="button"
-					onClick={() => {
-						const binary = atob(props.part.data)
-						const bytes = new Uint8Array(binary.length)
-						for (let index = 0; index < binary.length; index++) {
-							bytes[index] = binary.charCodeAt(index)
-						}
-						const url = URL.createObjectURL(new Blob([bytes], {type: props.part.mediaType}))
-						window.open(url, '_blank')
-						setTimeout(() => URL.revokeObjectURL(url), 1000)
-					}}
+					onClick={() => window.open(url, '_blank')}
 					className="block max-w-sm cursor-pointer hover:opacity-90"
-					title={props.part.filename}
+					title={props.part.file.name}
 				>
-					<img
-						src={`data:${props.part.mediaType};base64,${props.part.data}`}
-						alt={props.part.filename}
-						className="max-h-64 w-full border border-border object-contain"
-					/>
+					<img src={url} alt={props.part.file.name} className="max-h-64 w-full border border-border object-contain" />
 				</button>
 			</div>
 		)
@@ -33,20 +22,11 @@ export function Attachment(props: {part: FilePart}) {
 	return (
 		<button
 			type="button"
-			onClick={() => {
-				const binary = atob(props.part.data)
-				const bytes = new Uint8Array(binary.length)
-				for (let index = 0; index < binary.length; index++) {
-					bytes[index] = binary.charCodeAt(index)
-				}
-				const url = URL.createObjectURL(new Blob([bytes], {type: props.part.mediaType}))
-				window.open(url, '_blank')
-				setTimeout(() => URL.revokeObjectURL(url), 1000)
-			}}
+			onClick={() => url && window.open(url, '_blank')}
 			className="inline-flex items-center gap-1.5 border border-border px-2 py-0.5 text-[12px] hover:bg-muted/50"
 		>
 			<PaperclipIcon className="size-3 text-muted-foreground" />
-			<span className="max-w-48 truncate">{props.part.filename}</span>
+			<span className="max-w-48 truncate">{props.part.file.name}</span>
 		</button>
 	)
 }

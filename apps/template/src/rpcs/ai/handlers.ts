@@ -11,12 +11,10 @@ export const AiLive = pipe(
 
 			return AiContracts.of({
 				'ai.events': () => agent.stream,
-				'ai.sendMessage': input => agent.prompt(input),
+				'ai.sendMessage': input => agent.prompt(input.model, input.parts),
 				'ai.tool': response => agent.respond(response)
 			})
 		})
 	),
-	// Layer.provide(Agent.layer({agent: 'opencode', model: 'gpt-5-mini', provider: 'copilot'}))
-	// Layer.provide(Agent.layer({agent: 'ai', model: 'openai/gpt-oss-20b:free', provider: 'openrouter'}))
-	Layer.provide(Agent.layer({agent: 'copilot', model: 'gpt-5-mini', provider: 'copilot'}))
+	Layer.provide(Agent.layer)
 )

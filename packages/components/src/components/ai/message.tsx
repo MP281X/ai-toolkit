@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: stream-derived UI */
 
-import {Array, Predicate} from 'effect'
+import {Array, Match, Predicate, pipe} from 'effect'
 
-import type {ConversationMessage, ToolResponse} from '@ai-toolkit/ai/schema'
+import type {AgentResponse, ConversationMessage} from '@ai-toolkit/ai/schema'
 import {BookOpenTextIcon, ClockIcon, HashIcon, InboxIcon, SparklesIcon, UserIcon} from 'lucide-react'
 
 import {Attachment} from '#components/ai/attachment.tsx'
@@ -12,7 +12,7 @@ import {TextDelta} from '#components/ai/text-delta.tsx'
 import {ToolInteraction} from '#components/ai/tool-interaction.tsx'
 import {cn, formatDuration, formatRelativeTime, formatTokens} from '#lib/utils.ts'
 
-export function Message(props: {message: ConversationMessage; onToolResponse?: (response: ToolResponse) => void}) {
+export function Message(props: {message: ConversationMessage; onRespond?: (response: AgentResponse) => void}) {
 	let theme = {bar: 'bg-muted-foreground/40', border: 'border-border', bg: ''}
 	if (props.message.state === 'complete') {
 		theme = {bar: 'bg-blue-500/60', border: 'border-blue-500/30', bg: 'bg-blue-500/1'}
@@ -23,7 +23,11 @@ export function Message(props: {message: ConversationMessage; onToolResponse?: (
 	if (props.message.state === 'error') {
 		theme = {bar: 'bg-destructive/60', border: 'border-destructive/30', bg: ''}
 	}
-	if (props.message.parts.some(part => part._tag === 'tool' && part.state === 'pending-approval')) {
+	if (
+		props.message.parts.some(
+			part => part._tag === 'tool' && (part.state === 'pending-approval' || part.state === 'pending-input')
+		)
+	) {
 		theme = {bar: 'bg-violet-500/60', border: 'border-violet-500/30', bg: ''}
 	}
 	const duration = props.message.finishedAt ? formatDuration(props.message.finishedAt - props.message.startedAt) : null
@@ -89,19 +93,15 @@ export function Message(props: {message: ConversationMessage; onToolResponse?: (
 							</div>
 						) : (
 							props.message.parts.map((part, index) => {
-								if (part._tag === 'text') {
-									return <TextDelta key={index} part={part} />
-								}
-								if (part._tag === 'reasoning') {
-									return <ReasoningDelta key={index} part={part} />
-								}
-								if (part._tag === 'file') {
-									return <Attachment key={index} part={part} />
-								}
-								if (part._tag === 'tool') {
-									return <ToolInteraction key={index} part={part} onResponse={props.onToolResponse} />
-								}
-								return <Error key={index} part={part} />
+								return pipe(
+									Match.value(part),
+									Match.tag('text', part => <TextDelta key={index} part={part} />),
+									Match.tag('reasoning', part => <ReasoningDelta key={index} part={part} />),
+									Match.tag('file', part => <Attachment key={index} part={part} />),
+									Match.tag('tool', part => <ToolInteraction key={index} part={part} onResponse={props.onRespond} />),
+									Match.tag('error', part => <Error key={index} part={part} />),
+									Match.exhaustive
+								)
 							})
 						)}
 					</div>
