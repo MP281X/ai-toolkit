@@ -1,39 +1,39 @@
 ---
 name: ui-shadcn
-description: Load when building UI - shadcn primitives, theme tokens, visual language
+description: UI components and styling
+metadata:
+  patterns: shadcn primitives, theme tokens, cn(), layout, brutalist, density
 ---
 
 ## Source files
 
 ```
-src/**/theme.css     (design tokens — read before styling anything)
-src/components/ui/   (local shadcn components — check before building new ones)
+**/src/**/theme.css
+**/src/components/ui/
 ```
 
 
-### Check available primitives
+## Check primitives
+
+Always check available primitives before building custom.
 
 ```bash
 bun shadcn list @shadcn
-```
-
-
-### Add missing primitives
-
-```bash
 bun shadcn add <name> --yes --overwrite
 ```
 
 
-### Don't create custom components without checking primitives
+## Use primitives
+
+Never create custom components without checking first.
 
 ```typescript
-// Bad - custom card component
+// Bad - custom card
 export function MyCard({ children }) {
   return <div className="border rounded p-4">{children}</div>
 }
 
-// Good - use shadcn Card primitive
+// Good - use shadcn Card
 import { Card, CardContent } from '@components/ui/card'
 
 <Card>
@@ -42,99 +42,213 @@ import { Card, CardContent } from '@components/ui/card'
 ```
 
 
-### Compose primitives
+## Compose primitives
+
+Use Dialog instead of custom modals.
 
 ```tsx
-// Bad - custom modal with manual backdrop/positioning
+// Bad - custom modal
 function UserModal({open}) {
-  if (!open) return null
+  if (!open) return
   return (
     <div className="fixed inset-0 bg-black/50">
-      <div className="bg-white p-4 rounded">...</div>
+      <div className="bg-white p-4">...</div>
     </div>
   )
 }
 
-// Good - Dialog primitive handles accessibility, positioning, and backdrop
+// Good - Dialog primitive
 <Dialog>
   <DialogTrigger>Open</DialogTrigger>
   <DialogContent>
     <DialogHeader>
       <DialogTitle>Title</DialogTitle>
     </DialogHeader>
-    <div>Content</div>
   </DialogContent>
 </Dialog>
 ```
 
 
-### Don't fork shadcn components
+## Don't fork components
+
+Wrap at screen level. Never edit shadcn source.
 
 ```typescript
-// Bad - editing src/components/ui/card.tsx to tweak a detail for one screen
+// Bad - editing src/components/ui/card.tsx
 
-// Good - wrap at screen level, leave the primitive untouched
+// Good - wrap at screen level
 function UserScreen() {
   return (
     <Card className="custom-layout">
-      <CardContent>Screen-specific content</CardContent>
+      <CardContent>Content</CardContent>
     </Card>
   )
 }
 ```
 
 
-### Don't hardcode arbitrary values
+## Theme tokens
+
+Always use theme tokens. Never hardcode.
 
 ```typescript
-// Bad - arbitrary color or spacing not from the theme
+// Bad
 <div style={{ backgroundColor: '#3b82f6' }}>
 <div className="p-[13px]">
 
-// Good - use theme tokens from theme.css
+// Good
 <div className="bg-primary">
-<div className="bg-primary text-primary-foreground">
+<div className="p-2">
 ```
 
+Use Tailwind classes only. No inline `style` unless required by platform.
 
-## Layout and interaction
+```typescript
+// Bad
+<div style={{ color: 'red' }}>
 
-- Prefer existing layout primitives before creating custom wrappers
-- Use meaningful motion only when the surrounding product already uses animation
-- Keep mobile and desktop layouts equally intentional
-- Reach for custom components only after checking the shadcn registry and existing local patterns
+// Good
+<div className="text-destructive">
+```
+
+Prefer existing tokens before arbitrary values.
+
+```typescript
+// Bad - arbitrary when token fits
+<span className="text-[#f97316]">Warning</span>
+
+// Good - theme token
+<span className="text-destructive">Error</span>
+
+// Acceptable - truly one-off
+<span className="text-[#4ade80]">Passing</span>
+```
+
 
 ## Icons
 
-Use the icon set already present in the repository. Add a new icon package only when the repo already depends on it or the task explicitly requires it.
+Prefer icons over text labels.
 
 ```typescript
-// Bad - importing from an icon library not used in this repo
+// Bad - text buttons
+<Button>Delete</Button>
+<Button>Settings</Button>
+
+// Good - icon-only
+<Button size="icon" title="Delete"><Trash2 className="size-4" /></Button>
+<Button size="icon" title="Settings"><Settings className="size-4" /></Button>
+```
+
+Use the icon library in repo dependencies.
+
+```typescript
+// Bad
 import {SomeIcon} from 'new-icon-library'
 
-// Good - use the icon library already in the repo's dependencies
-import {SomeIcon} from 'existing-icon-library-in-package-json'
+// Good
+import {SomeIcon} from 'existing-library'
 ```
 
 
-## Visual design rules
+## Styling
 
-### Theme
+Use `cn()` for ALL conditional className.
 
-- High contrast, visible borders
-- NO gradients, glass, decorative blur, or marketing cards
-- Existing design tokens ONLY
-- NEVER invent colors, tokens, or animations
+```typescript
+// Bad
+<div className={`button ${isActive ? 'active' : ''}`}>
 
-### Styling
+// Good
+<div className={cn('button', isActive && 'active')}>
+```
 
-- Use `cn()` for ALL conditional `className` values
-- Icons over text where possible
-- Use the most recognizable icon from the existing icon library
-- NEVER edit the shadcn component source files
 
-### Components
+## Layout density
 
-- Compose shadcn primitives, NEVER reimplement them
+Build compact, information-dense layouts.
+
+```typescript
+// Bad - generous padding
+<div className="p-8 space-y-6">
+  <div className="mb-6">...</div>
+</div>
+
+// Good - tight spacing
+<div className="p-2 space-y-1">
+  <div>...</div>
+</div>
+```
+
+For dense data, minimal padding and borders for separation:
+
+```typescript
+// Bad
+<div className="py-4 px-3 border-b">...</div>
+
+// Good
+<div className="py-1 px-2 border-b">...</div>
+```
+
+
+## Remove redundancy
+
+Every element must serve a distinct purpose.
+
+```typescript
+// Bad - header only labels content
+<div>
+  <h3>Users</h3>
+  <p className="text-muted-foreground">Manage your users here.</p>
+  <UserList />
+</div>
+
+// Good
+<UserList />
+```
+
+One trigger per action.
+
+```typescript
+// Bad - delete in row and detail panel
+<TableRow>
+  <TableCell>{user.name}</TableCell>
+  <TableCell><Button size="icon"><Trash2 /></Button></TableCell>
+</TableRow>
+// ...and in detail panel
+<Button variant="destructive">Delete user</Button>
+
+// Good
+<TableRow>
+  <TableCell>{user.name}</TableCell>
+  <TableCell><Button size="icon"><Trash2 /></Button></TableCell>
+</TableRow>
+```
+
+
+## Component-scoped constants
+
+Keep constants inside components.
+
+```typescript
+// Bad - module-level constant
+const filtered = Array.filter(items, item => item.active)
+
+export function ItemList(props) {
+  // uses filtered
+}
+
+// Good
+export function ItemList(props) {
+  const filtered = Array.filter(items, item => item.active)
+}
+```
+
+
+## Visual design
+
+- Squared, hard edges — `--radius: 0`. Never `rounded-full` or `rounded-[*]`
+- High contrast, visible borders on all containers
+- NO gradients, glass effects, blur, or shadows
 - Minimal, functional motion only
-- Follow existing patterns in the codebase
+- Monospace font throughout
+- Dense first: optimize for information density

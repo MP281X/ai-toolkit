@@ -1,6 +1,8 @@
 ---
 name: refactor
-description: Load for post-implementation cleanup - remove dead code, defensive checks, thin wrappers
+description: Post-implementation cleanup ONLY
+metadata:
+  patterns: dead code removal, defensive checks, thin wrappers, simplification
 ---
 
 ## Source files
@@ -15,13 +17,23 @@ description: Load for post-implementation cleanup - remove dead code, defensive 
 
 ## Required skills
 
-The refactor pass must load and apply every relevant skill.
-If a cleaner result exists by applying another skill, take it. This is mandatory.
+This skill MUST load and apply ALL relevant skills. The refactor pass is the final enforcement of every guideline.
+
+```typescript
+// Process:
+// 1. Inspect code
+// 2. Load all relevant skills
+// 3. Research .opencode/resources/
+// 4. Apply EVERY skill rule strictly
+// 5. Simplify even if code is duplicated
+// 6. Run `bun run fix && bun run check`
+// 7. Report simplifications and skill violations fixed
+```
 
 
 ## Remove defensive checks
 
-Attempt the operation and handle failure. Do not check preconditions before acting.
+Attempt and handle failure.
 
 ```typescript
 // Bad - check then act
@@ -39,27 +51,26 @@ yield* pipe(
 
 ## Remove redundant validation
 
-Do not add validation checks for states that the Effect type system or the upstream operation already guarantees cannot occur. Real errors surface naturally through the effect error channel.
+Trust the Effect chain.
 
 ```typescript
-// Bad - manually checking a return value that the type already constrains
-const value = yield* getSomeValue() // already typed as the expected shape
+// Bad - checking what types guarantee
+const value = yield* getValue()
 if (value !== expected) {
-  yield* new AppError({message: 'mismatch'}) // unreachable in practice
+  yield* new AppError({message: 'mismatch'})
 }
 
-// Good - trust the Effect chain; the error is handled upstream
-const value = yield* getSomeValue()
-// Continue with value
+// Good
+const value = yield* getValue()
 ```
 
 
 ## Flatten nesting
 
-Avoid deeply nested pipe calls. Flatten into a single pipe chain.
+Avoid deeply nested pipes.
 
 ```typescript
-// Bad - nested pipes
+// Bad - nested
 const result = yield* pipe(
   pipe(
     pipe(operation, Effect.map(...)),
@@ -68,7 +79,7 @@ const result = yield* pipe(
   Effect.map(...)
 )
 
-// Good - flat pipe chain
+// Good - flat
 const result = yield* pipe(
   operation,
   Effect.map(...),
@@ -80,55 +91,86 @@ const result = yield* pipe(
 
 ## Inline single-use functions
 
-Never extract a function that is called exactly once and fits on one line. Inline it at the call site.
+Never extract single-use, single-line functions.
 
 ```typescript
-// Bad - single-use, single-line helper that adds no clarity
-function formatName(name: string) {
+// Bad
+function format(name: string) {
   return String.trim(name)
 }
-const clean = formatName(input)
+const clean = format(input)
 
-// Good - inline at the call site
+// Good
 const clean = String.trim(input)
 ```
 
-## Delete routing functions
 
-Do not create a function that only branches on a parameter to call one of several other functions. Call the specialized function directly at the call site.
+## Inline single-use constants
+
+Never extract single-use constants.
 
 ```typescript
-// Bad - routing function that adds no logic
+// Bad
+const emptyParts: readonly Part[] = []
+const schema = Schema.withConstructorDefault(() => Option.some(emptyParts))
+
+// Good
+const schema = Schema.withConstructorDefault(() => Option.some([]))
+```
+
+
+## Delete routing functions
+
+Don't create functions that only branch to other functions.
+
+```typescript
+// Bad
 function getItems(kind: 'active' | 'archived') {
-  if (kind === 'active') return getActiveItems()
-  return getArchivedItems()
+  if (kind === 'active') return getActive()
+  return getArchived()
 }
 
-// Good - call the specialized function directly
-getActiveItems()
-getArchivedItems()
+// Good
+getActive()
+getArchived()
+```
+
+
+## Remove decorative comments
+
+Remove section banners and obvious comments.
+
+```typescript
+// Bad - section banners
+// ── Provider Resolution ──
+function resolve(config: Config) { ... }
+
+// ── Data Transformation ──
+const transformers = { ... }
+
+// Good
+function resolve(config: Config) { ... }
+const transformers = { ... }
+
+// Bad - obvious comment
+// Convert file to base64
+async function fileToBase64(file: File) { ... }
+
+// Good
+async function fileToBase64(file: File) { ... }
 ```
 
 
 ## Remove dead code
 
-Delete unused imports, variables, functions, and types. Remove commented-out code. Delete debug console.log statements.
+Delete unused imports, variables, functions, types. Remove commented-out code.
 
 ```typescript
-// Bad - unused imports, commented-out debug code
+// Bad - unused imports, commented code
 import {unused} from './module'
-const debugValue = 'temporary'
-// console.log('debug:', debugValue)
+const debug = 'temporary'
+// console.log('debug:', debug)
 
-// Good - only what is used remains, no commented-out code
+// Good
+import {used} from './module'
 ```
-
-
-## Process
-
-1. Inspect code for dead code, defensive checks, validation branches, deep nesting, thin wrappers, single-use functions, and custom UI that should use shadcn primitives
-2. Load every relevant skill for the touched code before changing it
-3. Research .opencode/resources/ to find simpler v4-native patterns
-4. Apply simplification even if it means duplicating code or deleting an abstraction
-5. Run `bun run fix && bun run check`
-6. Report what was simplified and which skills materially changed the result
