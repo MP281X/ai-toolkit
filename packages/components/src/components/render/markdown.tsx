@@ -1,3 +1,5 @@
+import {Array} from 'effect'
+
 import {Marked} from 'marked'
 
 import {resolveLanguage} from '#lib/shiki.ts'
@@ -18,9 +20,9 @@ export function Markdown(props: {children: string; className?: string}) {
 
 	return (
 		<div className={cn('markdown wrap-break-word select-text text-wrap text-[14px] leading-relaxed', props.className)}>
-			{tokens.map((token, index) => {
+			{Array.map(tokens, (token, index) => {
 				// skip raw HTML block tokens
-				if (token.type === 'html') return null
+				if (token.type === 'html') return
 
 				// biome-ignore lint/suspicious/noArrayIndexKey: markdown
 				if (token.type !== 'code') return <Inline key={index} content={token.raw} />

@@ -39,12 +39,6 @@ const load = Effect.gen(function* () {
 Use for functions with arguments.
 
 ```typescript
-// Bad
-const save = (name: string) => Effect.gen(function* () {
-  const id = yield* db.insert('users', {name})
-  yield* log(`created ${id}`)
-})
-
 // Good
 const save = Effect.fnUntraced(function* (name: string) {
   const id = yield* db.insert('users', {name})

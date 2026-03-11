@@ -53,7 +53,7 @@ export function formatDuration(ms: number) {
 	const sec = ms / 1000
 	if (sec < 60) return `${sec.toFixed(1)}s`
 
-	const parts: string[] = []
+	const parts = Array.empty<string>()
 	const d = Math.floor(sec / 86400)
 	const h = Math.floor(sec / 3600) % 24
 	const m = Math.floor(sec / 60) % 60

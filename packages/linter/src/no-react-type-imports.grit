@@ -1,0 +1,11 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`import type { $_ } from 'react'`,
+	`import type { $_ } from "react"`,
+	`import type * as $_ from 'react'`,
+	`import type * as $_ from "react"`
+} as $match where {
+	register_diagnostic(span=$match, message="React types are globally available; use React.ReactNode, React.FC etc. instead of importing from 'react'")
+}

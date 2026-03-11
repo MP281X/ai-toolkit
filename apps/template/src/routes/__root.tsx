@@ -16,7 +16,7 @@ export const Route = createRootRoute({
 			{props.children}
 		</div>
 	),
-	beforeLoad: ({location}) => {
-		if (location.pathname === '/') throw redirect({to: '/chat'})
+	beforeLoad: args => {
+		if (args.location.pathname === '/') throw redirect({to: '/chat'})
 	}
 })

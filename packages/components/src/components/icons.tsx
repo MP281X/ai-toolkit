@@ -1,4 +1,4 @@
-import {Match} from 'effect'
+import {Match, pipe} from 'effect'
 
 import {SiGnubash, SiMarkdown, SiReact} from '@icons-pack/react-simple-icons'
 import {Braces, File} from 'lucide-react'
@@ -10,7 +10,8 @@ export * from '@icons-pack/react-simple-icons'
 export * from 'lucide-react'
 
 export function FileIcon(props: {filePath: string; className?: string}) {
-	return Match.value(resolveLanguage(props.filePath)).pipe(
+	return pipe(
+		Match.value(resolveLanguage(props.filePath)),
 		Match.when('shell', () => <SiGnubash className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.when('markdown', () => <SiMarkdown className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.when('tsx', () => <SiReact className={cn('size-3.5 shrink-0 text-sky-400', props.className)} />),

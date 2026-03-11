@@ -163,14 +163,4 @@ async function fileToBase64(file: File) { ... }
 
 ## Remove dead code
 
-Delete unused imports, variables, functions, types. Remove commented-out code.
-
-```typescript
-// Bad - unused imports, commented code
-import {unused} from './module'
-const debug = 'temporary'
-// console.log('debug:', debug)
-
-// Good
-import {used} from './module'
-```
+Remove commented-out code. TypeScript (`noUnusedLocals`, `noUnusedParameters`) enforces removal of unused imports, variables, and parameters.

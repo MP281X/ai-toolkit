@@ -101,16 +101,6 @@ Always use theme tokens. Never hardcode.
 <div className="p-2">
 ```
 
-Use Tailwind classes only. No inline `style` unless required by platform.
-
-```typescript
-// Bad
-<div style={{ color: 'red' }}>
-
-// Good
-<div className="text-destructive">
-```
-
 Prefer existing tokens before arbitrary values.
 
 ```typescript

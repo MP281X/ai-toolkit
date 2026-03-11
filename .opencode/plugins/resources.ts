@@ -27,9 +27,9 @@ const resources = [
 	}
 ]
 
-export const plugin: Plugin = async ({client}) => {
+export const plugin = (async context => {
 	function toast(message: unknown) {
-		return Effect.sync(() => client.tui.showToast({body: {message: JSON.stringify(message), variant: 'info'}}))
+		return Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'info'}}))
 	}
 
 	void Effect.runPromise(
@@ -50,4 +50,4 @@ export const plugin: Plugin = async ({client}) => {
 	)
 
 	return {}
-}
+}) satisfies Plugin

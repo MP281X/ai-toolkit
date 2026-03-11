@@ -1,4 +1,4 @@
-import {Config, Record, Schema} from 'effect'
+import {Array, Config, Record, Schema} from 'effect'
 
 export const providers = {
 	opencode_zen: {apiUrl: Config.succeed('https://opencode.ai/zen/v1'), apiKey: Config.redacted('AI_OPENCODE_ZEN')},
@@ -53,7 +53,7 @@ export type ProviderId = typeof ProviderId.Type
 export const ProviderId = Schema.Literals(Record.keys(providers))
 
 export type ModelId = typeof ModelId.Type
-export const ModelId = Schema.Literals(models.map(model => model.model))
+export const ModelId = Schema.Literals(Array.map(models, model => model.model))
 
 export type AdapterId = typeof AdapterId.Type
-export const AdapterId = Schema.Literals(models.map(model => model.adapter))
+export const AdapterId = Schema.Literals(Array.map(models, model => model.adapter))

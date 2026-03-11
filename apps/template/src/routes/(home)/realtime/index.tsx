@@ -74,7 +74,7 @@ function RouteComponent() {
 		color: identity.color
 	}
 
-	const pixelMap = new Map(session.pixels.map(pixel => [`${pixel.x}:${pixel.y}`, pixel.color]))
+	const pixelMap = new Map(Array.map(session.pixels, pixel => [`${pixel.x}:${pixel.y}`, pixel.color]))
 
 	for (const key in optimisticPixelsRef.current) {
 		const optimisticColor = optimisticPixelsRef.current[key]
@@ -82,7 +82,7 @@ function RouteComponent() {
 		if (pixelMap.get(key) === optimisticColor) delete optimisticPixelsRef.current[key]
 	}
 
-	const remoteCursors = session.cursors.filter(cursor => cursor.id !== identity.id)
+	const remoteCursors = Array.filter(session.cursors, cursor => cursor.id !== identity.id)
 
 	function getBoardPoint(event: React.PointerEvent<HTMLDivElement>) {
 		const rect = event.currentTarget.getBoundingClientRect()
@@ -190,6 +190,7 @@ function RouteComponent() {
 							>
 								<div
 									className="grid aspect-14/10 w-full"
+									// biome-ignore lint: packages/linter/src/no-inline-style.grit
 									style={{gridTemplateColumns: `repeat(${session.width}, minmax(0, 1fr))`}}
 								>
 									{Array.makeBy(session.width * session.height, index => {
@@ -201,6 +202,7 @@ function RouteComponent() {
 											<div
 												key={key}
 												className="border-foreground/10 border-r border-b"
+												// biome-ignore lint: packages/linter/src/no-inline-style.grit
 												style={{
 													backgroundColor: optimisticPixelsRef.current[key] ?? pixelMap.get(key) ?? 'var(--color-card)'
 												}}
@@ -209,16 +211,18 @@ function RouteComponent() {
 									})}
 								</div>
 
-								{remoteCursors.map(cursor => (
+								{Array.map(remoteCursors, cursor => (
 									<div
 										key={cursor.id}
 										className="pointer-events-none absolute z-10 transition-[left,top] duration-75 ease-linear"
+										// biome-ignore lint: packages/linter/src/no-inline-style.grit
 										style={{
 											left: `${(cursor.x / session.width) * 100}%`,
 											top: `${(cursor.y / session.height) * 100}%`
 										}}
 									>
 										<div className="flex items-center gap-1">
+											{/* biome-ignore lint: packages/linter/src/no-inline-style.grit */}
 											<MousePointer2 className="size-4" style={{color: cursor.color}} />
 											<span className="border bg-background px-1 py-0.5 font-mono text-[10px]">{cursor.name}</span>
 										</div>
@@ -237,7 +241,7 @@ function RouteComponent() {
 								</CardTitle>
 							</CardHeader>
 							<CardContent className="grid grid-cols-4 gap-2 pt-0">
-								{palette.map(color => (
+								{Array.map(palette, color => (
 									<Button
 										key={color}
 										type="button"
@@ -246,6 +250,7 @@ function RouteComponent() {
 										className={cn('w-full', paintColor === color ? 'ring-2 ring-foreground' : '')}
 										onClick={() => setPaintColor(color)}
 									>
+										{/* biome-ignore lint: packages/linter/src/no-inline-style.grit */}
 										<span className="h-4 w-4 border" style={{backgroundColor: color}} />
 									</Button>
 								))}
@@ -260,14 +265,15 @@ function RouteComponent() {
 								</CardTitle>
 							</CardHeader>
 							<CardContent className="space-y-2 pt-0">
-								{session.cursors.length === 0 ? (
+								{Array.isReadonlyArrayEmpty(session.cursors) ? (
 									<div className="border p-2 font-mono text-muted-foreground text-xs">
 										Connected players appear here.
 									</div>
 								) : (
-									session.cursors.map(cursor => (
+									Array.map(session.cursors, cursor => (
 										<div key={cursor.id} className="flex items-center justify-between border p-2 font-mono text-xs">
 											<div className="flex items-center gap-2">
+												{/* biome-ignore lint: packages/linter/src/no-inline-style.grit */}
 												<span className="size-2 border" style={{backgroundColor: cursor.color}} />
 												<span>{cursor.name}</span>
 											</div>

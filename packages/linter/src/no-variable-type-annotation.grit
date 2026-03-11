@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`const $name: $type = $expr`,
+	`let $name: $type = $expr`
+} as $match where {
+	not $filename <: r".*/components/ui/.*",
+	register_diagnostic(span=$match, message="Rely on type inference; remove explicit type annotations on variables. Use typed factories (Array.empty<T>(), Record.empty<K,V>()) for empty containers")
+}

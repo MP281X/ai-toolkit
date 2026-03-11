@@ -1,5 +1,5 @@
 import {useAtomSuspense} from '@effect/atom-react'
-import {Effect} from 'effect'
+import {Array, Effect} from 'effect'
 
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {Code, CodeXml} from '@ai-toolkit/components/icons'
@@ -21,7 +21,7 @@ function RouteComponent() {
 	return (
 		<div className="flex h-full w-full flex-col">
 			<Conversation className="min-h-0 flex-1">
-				{messages.map(message => (
+				{Array.map(messages, message => (
 					<>{JSON.stringify(message)}</>
 				))}
 			</Conversation>

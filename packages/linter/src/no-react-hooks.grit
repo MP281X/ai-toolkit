@@ -1,0 +1,19 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$fn($...)` as $match where {
+	$fn <: or {
+		`useCallback` where {
+			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useCallback as it interferes with the compiler")
+		},
+		`useMemo` where {
+			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useMemo as it interferes with the compiler")
+		},
+		`useImperativeHandle` where {
+			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useImperativeHandle as it interferes with the compiler")
+		},
+		`useEffect` where {
+			register_diagnostic(span=$fn, message="Don't use useEffect; prefer Atom-based reactive patterns or Effect instead")
+		}
+	}
+}

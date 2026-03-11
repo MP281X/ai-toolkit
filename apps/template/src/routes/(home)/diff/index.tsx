@@ -55,7 +55,7 @@ function RouteComponent() {
 						</span>
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto">
-						{stagedDiffs.map(diff => (
+						{Array.map(stagedDiffs, diff => (
 							<Collapsible key={diff.filePath} className="group border-b">
 								<div className="flex items-center gap-2 bg-muted/40 px-3">
 									<CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 py-2.5 text-left">
@@ -173,7 +173,7 @@ function RouteComponent() {
 						{Array.isReadonlyArrayEmpty(unstagedDiffs) ? (
 							<div className="px-3 py-6 text-center text-muted-foreground text-xs">No changes</div>
 						) : (
-							unstagedDiffs.map(diff => (
+							Array.map(unstagedDiffs, diff => (
 								<Collapsible key={diff.filePath} className="group border-b">
 									<div className="flex items-center gap-2 bg-muted/40 px-3">
 										<CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 py-2.5 text-left">

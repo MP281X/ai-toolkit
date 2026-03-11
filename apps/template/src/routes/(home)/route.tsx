@@ -12,7 +12,10 @@ export const Route = createFileRoute('/(home)')({
 function Layout() {
 	const navigate = useNavigate()
 	const location = useLocation()
-	const isCurrentPage = (path: FileRouteTypes['to']) => location.pathname.startsWith(path)
+
+	function isCurrentPage(path: FileRouteTypes['to']) {
+		return location.pathname.startsWith(path)
+	}
 
 	return (
 		<ResizablePanelGroup orientation="horizontal" className="h-full w-full">

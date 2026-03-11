@@ -1,10 +1,8 @@
-import type {ReactNode} from 'react'
-
 import {cn} from '#lib/utils.ts'
 
 type TreeExplorerProps = {
 	className?: string
-	children: ReactNode
+	children: React.ReactNode
 }
 
 export function TreeExplorer(props: TreeExplorerProps) {
@@ -14,7 +12,7 @@ export function TreeExplorer(props: TreeExplorerProps) {
 type TreeExplorerSectionProps = {
 	label: string
 	className?: string
-	children: ReactNode
+	children: React.ReactNode
 }
 
 export function TreeExplorerSection(props: TreeExplorerSectionProps) {
@@ -29,8 +27,8 @@ export function TreeExplorerSection(props: TreeExplorerSectionProps) {
 type TreeExplorerItemProps = {
 	selected?: boolean
 	onClick?: () => void
-	icon?: ReactNode
-	children: ReactNode
+	icon?: React.ReactNode
+	children: React.ReactNode
 }
 
 export function TreeExplorerItem(props: TreeExplorerItemProps) {

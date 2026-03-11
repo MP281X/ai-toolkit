@@ -11,8 +11,6 @@ import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin'
 import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {mergeRegister} from '@lexical/utils'
 import * as lexical from 'lexical'
-import type * as React from 'react'
-import type {ReactElement, ReactNode} from 'react'
 import {Children, isValidElement, useId, useLayoutEffect, useRef, useState} from 'react'
 
 import {cn} from '#lib/utils.ts'
@@ -44,19 +42,19 @@ export type AutocompleteEntry = {
 type AutocompleteOptionConfig = {
 	value: string
 	description?: string
-	icon?: ReactNode
-	children?: ReactNode
+	icon?: React.ReactNode
+	children?: React.ReactNode
 }
 
 type AutocompleteConfig = {
 	trigger: string
 	color: string
-	children: ReactNode
+	children: React.ReactNode
 }
 
 type SnippetConfig = {
 	insert: string
-	children: ReactNode
+	children: React.ReactNode
 }
 
 type ChatInputProps = {
@@ -64,7 +62,7 @@ type ChatInputProps = {
 	onValueChange?: (value: string) => void
 	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: globalThis.File[]}) => void
 	placeholder?: string
-	children?: ReactNode
+	children?: React.ReactNode
 	disabled?: boolean
 	className?: string
 }
@@ -153,28 +151,31 @@ function EditorKeyboard(props: {
 		[editor, props.menuOpen, props.onDismiss, props.onNavigate, props.onSelect, props.onSubmit]
 	)
 
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
 export function ChatInput(props: ChatInputProps) {
-	const autocomplete: {[key: string]: ResolvedOption[]} = {}
-	const snippets: SnippetConfig[] = []
-	let toolbar: ReactNode = null
-	let actions: ReactNode = null
+	const autocomplete = Record.empty<string, ResolvedOption[]>()
+	const snippets = Array.empty<SnippetConfig>()
+	let toolbar: React.ReactNode = null
+	let actions: React.ReactNode = null
 
 	for (const child of Children.toArray(props.children)) {
 		if (!isValidElement(child)) continue
 
 		if (child.type === Autocomplete) {
-			const autocompleteChild = child as ReactElement<AutocompleteConfig>
-			const options: ResolvedOption[] = []
+			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			const autocompleteChild = child as React.ReactElement<AutocompleteConfig>
+			const options = Array.empty<ResolvedOption>()
 
 			for (const optionChild of Children.toArray(autocompleteChild.props.children)) {
 				if (!isValidElement(optionChild)) continue
 
 				if (optionChild.type !== AutocompleteOption) continue
 
-				const autocompleteOptionChild = optionChild as ReactElement<AutocompleteOptionConfig>
+				// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+				const autocompleteOptionChild = optionChild as React.ReactElement<AutocompleteOptionConfig>
 				options.push({
 					value: autocompleteOptionChild.props.value,
 					description: autocompleteOptionChild.props.description,
@@ -189,14 +190,16 @@ export function ChatInput(props: ChatInputProps) {
 		}
 
 		if (child.type === Snippets) {
-			const snippetsChild = child as ReactElement<{children: ReactNode}>
+			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			const snippetsChild = child as React.ReactElement<{children: React.ReactNode}>
 
 			for (const snippetChild of Children.toArray(snippetsChild.props.children)) {
 				if (!isValidElement(snippetChild)) continue
 
 				if (snippetChild.type !== Snippet) continue
 
-				const snippetElement = snippetChild as ReactElement<SnippetConfig>
+				// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+				const snippetElement = snippetChild as React.ReactElement<SnippetConfig>
 				snippets.push({insert: snippetElement.props.insert, children: snippetElement.props.children})
 			}
 
@@ -204,11 +207,15 @@ export function ChatInput(props: ChatInputProps) {
 		}
 
 		if (child.type === Toolbar) {
-			toolbar = (child as ReactElement<{children: ReactNode}>).props.children
+			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			toolbar = (child as React.ReactElement<{children: React.ReactNode}>).props.children
 			continue
 		}
 
-		if (child.type === InputActions) actions = (child as ReactElement<{children?: ReactNode}>).props.children ?? null
+		if (child.type === InputActions) {
+			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			actions = (child as React.ReactElement<{children?: React.ReactNode}>).props.children ?? null
+		}
 	}
 
 	const internalPromptRef = useRef(props.value ?? '')
@@ -219,16 +226,16 @@ export function ChatInput(props: ChatInputProps) {
 	const fileInputId = useId()
 	const editorRef = useRef<lexical.LexicalEditor | null>(null)
 
-	const matched: ResolvedOption[] = []
+	const matched = Array.empty<ResolvedOption>()
 	if (Predicate.isNotNull(active)) {
 		const options = autocomplete[active.char]
 		if (Predicate.isNotNullish(options)) {
 			for (const option of options) {
 				if (
 					String.isEmpty(active.query) ||
-					option.value.toLowerCase().includes(active.query.toLowerCase()) ||
+					String.toLowerCase(option.value).includes(String.toLowerCase(active.query)) ||
 					(Predicate.isNotNullish(option.description) &&
-						option.description.toLowerCase().includes(active.query.toLowerCase()))
+						String.toLowerCase(option.description).includes(String.toLowerCase(active.query)))
 				) {
 					matched.push(option)
 				}
@@ -243,6 +250,7 @@ export function ChatInput(props: ChatInputProps) {
 
 		if (Predicate.isNullish(editorRef.current)) return
 
+		// biome-ignore lint: packages/linter/src/no-access-variables.grit
 		const nextValue = props.value
 
 		const currentValue = editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
@@ -275,7 +283,7 @@ export function ChatInput(props: ChatInputProps) {
 								aria-label="Autocomplete suggestions"
 								className="max-h-48 overflow-y-auto border border-input bg-background"
 							>
-								{matched.map((entry, index) => (
+								{Array.map(matched, (entry, index) => (
 									<button
 										// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated menu options are acceptable here
 										key={`${entry.value}-${index}`}
@@ -324,6 +332,7 @@ export function ChatInput(props: ChatInputProps) {
 										{entry.children ?? (
 											<div className="flex items-center gap-2">
 												{Predicate.isNotNullish(entry.icon) && <span>{entry.icon}</span>}
+												{/* biome-ignore lint: dynamic token colors come from user-provided autocomplete config */}
 												<span className="font-medium" style={{color: entry.color}}>
 													{active.char}
 													{entry.value}
@@ -350,8 +359,7 @@ export function ChatInput(props: ChatInputProps) {
 						}}
 					>
 						<div
-							className="relative overflow-y-auto"
-							style={{maxHeight: '22.5rem', minHeight: '6rem'}}
+							className="relative max-h-90 min-h-24 overflow-y-auto"
 							onPaste={event => {
 								const files = Array.fromIterable(event.clipboardData.files)
 								if (Array.isReadonlyArrayEmpty(files)) return
@@ -382,10 +390,7 @@ export function ChatInput(props: ChatInputProps) {
 						>
 							<PlainTextPlugin
 								contentEditable={
-									<ContentEditable
-										className="wrap-break-word block w-full resize-none whitespace-pre-wrap px-3 py-2 text-[13px] leading-relaxed outline-none"
-										style={{minHeight: '6rem'}}
-									/>
+									<ContentEditable className="wrap-break-word block min-h-24 w-full resize-none whitespace-pre-wrap px-3 py-2 text-[13px] leading-relaxed outline-none" />
 								}
 								placeholder={
 									<div className="pointer-events-none absolute inset-x-3 top-2 select-none text-[13px] text-muted-foreground">
@@ -552,7 +557,7 @@ export function ChatInput(props: ChatInputProps) {
 					<div className="flex items-center justify-between border-border/40 border-t px-2.5 py-2">
 						<div className="flex min-w-0 flex-1 items-center gap-2">{toolbar}</div>
 						<div className="flex items-center gap-2">
-							{snippets.map((entry, index) => (
+							{Array.map(snippets, (entry, index) => (
 								<Button
 									// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated snippet entries are acceptable here
 									key={`snippet-${entry.insert}-${index}`}
@@ -609,6 +614,7 @@ export function ChatInput(props: ChatInputProps) {
 								multiple
 								disabled={props.disabled ?? false}
 								onChange={event => {
+									// biome-ignore lint: packages/linter/src/no-access-variables.grit
 									const files = event.currentTarget.files
 									if (Predicate.isNullish(files) || Predicate.isNullish(editorRef.current)) {
 										return
@@ -697,26 +703,32 @@ export function ChatInput(props: ChatInputProps) {
 }
 
 function Autocomplete(_: AutocompleteConfig) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
 function AutocompleteOption(_: AutocompleteOptionConfig) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
-function Snippets(_: {children: ReactNode}) {
+function Snippets(_: {children: React.ReactNode}) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
 function Snippet(_: SnippetConfig) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
-function Toolbar(_: {children: ReactNode}) {
+function Toolbar(_: {children: React.ReactNode}) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 
-function InputActions(_: {children?: ReactNode}) {
+function InputActions(_: {children?: React.ReactNode}) {
+	// biome-ignore lint: necessary to make so this is considered a component
 	return null
 }
 

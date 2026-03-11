@@ -35,32 +35,7 @@ function process(items: string[]) { return items.length }
 ```
 
 
-## Type casting
-
-Never use `as`. Fix the actual problem.
-
-```typescript
-// Bad
-const user = fetchUser() as User
-const items = JSON.parse(data) as string[]
-
-// Good
-const user: User = fetchUser()
-const items = JSON.parse(data)
-```
-
-
 ## Imports
-
-Never rename imports.
-
-```typescript
-// Bad
-import {Schema as S} from 'effect'
-
-// Good
-import {Schema} from 'effect'
-```
 
 Same-package imports use relative paths with `.ts` extension.
 
@@ -171,16 +146,6 @@ if (Predicate.isUndefined(record)) { return }
 if (Predicate.isUndefined(record)) return
 ```
 
-Prefer bare `return` instead of `return undefined` or `return null`.
-
-```typescript
-// Bad
-if (Predicate.isNullish(value)) return undefined
-
-// Good
-if (Predicate.isNullish(value)) return
-```
-
 
 ## Simple literals
 
@@ -265,18 +230,6 @@ if (Predicate.isNotNullish(value)) doSomething(value)
 
 ## Arrays
 
-Use effect/Array. Native methods only allowed in JSX render lists.
-
-```typescript
-// Bad
-const names = items.map(item => item.name)
-const valid = items.filter(item => item.active)
-
-// Good
-const names = Array.map(items, item => item.name)
-const valid = Array.filter(items, item => item.active)
-```
-
 Use Array.isReadonlyArrayNonEmpty for type narrowing:
 
 ```typescript
@@ -300,21 +253,6 @@ const {removed, ...rest} = record
 // Good
 const updated = Record.set(record, 'key', newValue)
 const rest = Record.remove(record, 'removed')
-```
-
-
-## Strings
-
-Use String module functions.
-
-```typescript
-// Bad
-const trimmed = value.trim()
-if (value.length === 0) return
-
-// Good
-const trimmed = String.trim(value)
-if (String.isEmpty(value)) return
 ```
 
 
@@ -382,32 +320,4 @@ consume(label)
 
 // Good
 consume(Option.match(opt, {onSome: m => m.name, onNone: () => fallback}))
-```
-
-
-## Simple checks
-
-Inline trivial single-use checks.
-
-```typescript
-// Bad
-const isUser = message.role === 'user'
-render(isUser)
-
-// Good
-render(message.role === 'user')
-```
-
-
-## Access-only variables
-
-Do not extract access-only variables.
-
-```typescript
-// Bad
-const file = props.part.file
-consume(file.name)
-
-// Good
-consume(props.part.file.name)
 ```

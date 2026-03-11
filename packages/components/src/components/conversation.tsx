@@ -11,20 +11,24 @@ export function Conversation(props: {children?: React.ReactElement[]; className?
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on item count change
 	useLayoutEffect(() => {
+		// biome-ignore lint: packages/linter/src/no-access-variables.grit
 		const element = scrollRef.current
 		if (!(element && stickRef.current)) return
 		element.scrollTop = element.scrollHeight
 	}, [props.children?.length])
 
 	function handleScroll() {
+		// biome-ignore lint: packages/linter/src/no-access-variables.grit
 		const element = scrollRef.current
 		if (!element) return
+		// biome-ignore lint: packages/linter/src/no-simple-check-variables.grit
 		const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 100
 		stickRef.current = atBottom
 		setShowScroll(!atBottom)
 	}
 
 	function scrollBottom() {
+		// biome-ignore lint: packages/linter/src/no-access-variables.grit
 		const element = scrollRef.current
 		if (!element) return
 		element.scrollTop = element.scrollHeight
