@@ -99,6 +99,7 @@ function EditorKeyboard(props: {
 	const [editor] = useLexicalComposerContext()
 
 	useLayoutEffect(() => {
+		// biome-ignore lint/style/noParameterAssign: setting forwarded ref
 		props.editorRef.current = editor
 		if (!props.disabled) {
 			editor.focus()

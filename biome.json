@@ -7,8 +7,9 @@
 			"complexity": {
 				"useLiteralKeys": "off",
 				"useArrowFunction": "off",
-				"noUselessStringConcat": "warn",
-				"useSimplifiedLogicExpression": "warn"
+				"noUselessUndefined": "error",
+				"noUselessStringConcat": "error",
+				"useSimplifiedLogicExpression": "error"
 			},
 			"suspicious": {
 				"noConsole": "error",
@@ -19,6 +20,7 @@
 				"useIterableCallbackReturn": "off"
 			},
 			"style": {
+				"useExportType": "error",
 				"noUselessElse": "error",
 				"noNestedTernary": "error",
 				"noInferrableTypes": "error",
@@ -29,9 +31,11 @@
 				"useEnumInitializers": "warn",
 				"noParameterProperties": "error",
 				"useDefaultParameterLast": "warn",
-				"noUnusedTemplateLiteral": "warn",
 				"useConsistentTypeDefinitions": { "level": "error", "options": { "style": "type" } },
+				"noUnusedTemplateLiteral": "error",
+				"useImportType": { "level": "error", "options": { "style": "separatedType" } },
 				"useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
+				"noParameterAssign": { "level": "error", "options": { "propertyAssignment": "deny" } },
 				"noRestrictedImports": {
 					"level": "error",
 					"options": {
@@ -52,7 +56,8 @@
 							"Array": "Import Array from 'effect' instead",
 							"Number": "Import Number from 'effect' instead",
 							"String": "Import String from 'effect' instead",
-							"Object": "Import Record from 'effect' instead"
+							"Object": "Import Record from 'effect' instead",
+							"Boolean": "Import Boolean from 'effect' instead"
 						}
 					}
 				}
@@ -68,7 +73,7 @@
 				"noUnusedFunctionParameters": "off"
 			},
 			"nursery": {
-				"noFloatingPromises": "warn",
+				"noFloatingPromises": "error",
 				"useSortedClasses": { "level": "error", "fix": "safe" }
 			}
 		}
@@ -112,10 +117,10 @@
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "single",
+			"bracketSpacing": false,
 			"semicolons": "asNeeded",
 			"trailingCommas": "none",
-			"arrowParentheses": "asNeeded",
-			"bracketSpacing": false
+			"arrowParentheses": "asNeeded"
 		}
 	},
 
@@ -146,7 +151,10 @@
 						"noNonNullAssertion": "off",
 						"noRestrictedImports": "off",
 						"noRestrictedGlobals": "off",
-						"useConsistentTypeDefinitions": "off"
+						"useConsistentTypeDefinitions": "off",
+						"useImportType": "off",
+						"useExportType": "off",
+						"noParameterAssign": "off"
 					},
 					"suspicious": {
 						"noExplicitAny": "off",

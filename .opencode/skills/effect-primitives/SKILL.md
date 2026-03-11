@@ -182,28 +182,6 @@ if (Predicate.isNullish(value)) return
 ```
 
 
-## Nested ternaries
-
-Replace with Match.when.
-
-```typescript
-// Bad
-const pattern = Predicate.isString(input.pattern)
-  ? String.trim(input.pattern)
-  : Predicate.isString(input.query)
-    ? String.trim(input.query)
-    : undefined
-
-// Good
-pipe(
-  Match.value(input),
-  Match.when({pattern: Predicate.isString}, v => String.trim(v.pattern)),
-  Match.when({query: Predicate.isString}, v => String.trim(v.query)),
-  Match.orElse(() => undefined)
-)
-```
-
-
 ## Simple literals
 
 Use switch for simple literal matching.
