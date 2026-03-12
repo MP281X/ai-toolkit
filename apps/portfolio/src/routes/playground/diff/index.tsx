@@ -1,18 +1,17 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Option, pipe, Record, Stream, String} from 'effect'
+import {Array, Effect, pipe, Stream, String} from 'effect'
 
 import {ChevronRight, FileIcon, SquareMinus, SquarePlus, Trash2} from '@ai-toolkit/components/icons'
-import {PatchDiff, PatchResult} from '@ai-toolkit/components/render/diff'
+import {PatchDiff} from '@ai-toolkit/components/render/diff'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 
-export const Route = createFileRoute('/(home)/diff/')({
+export const Route = createFileRoute('/playground/diff/')({
 	component: RouteComponent
 })
 
@@ -42,8 +41,6 @@ function RouteComponent() {
 	const stageFile = useAtomSet(RpcClient.mutation('git.stageFile'))
 	const unstageFile = useAtomSet(RpcClient.mutation('git.unstageFile'))
 	const discardFile = useAtomSet(RpcClient.mutation('git.discardFile'))
-	const [rawViews, setRawViews] = useState(() => Record.empty<string, boolean>())
-
 	return (
 		<ResizablePanelGroup orientation="horizontal" className="h-dvh min-h-0 w-full bg-background">
 			<ResizablePanel minSize="20%" defaultSize="50%" className="flex min-h-0">
@@ -102,57 +99,11 @@ function RouteComponent() {
 												<Trash2 className="size-3.5" />
 											</Button>
 										</div>
-										<div className="flex shrink-0 items-center border bg-background p-0.5">
-											<Button
-												type="button"
-												size="sm"
-												variant={
-													pipe(
-														rawViews,
-														Record.get(`staged:${diff.filePath}`),
-														Option.getOrElse(() => false)
-													)
-														? 'ghost'
-														: 'secondary'
-												}
-												className="h-5 px-2 font-mono text-[10px]"
-												onClick={() => setRawViews(current => Record.set(current, `staged:${diff.filePath}`, false))}
-											>
-												diff
-											</Button>
-											<Button
-												type="button"
-												size="sm"
-												variant={
-													pipe(
-														rawViews,
-														Record.get(`staged:${diff.filePath}`),
-														Option.getOrElse(() => false)
-													)
-														? 'secondary'
-														: 'ghost'
-												}
-												className="h-5 px-2 font-mono text-[10px]"
-												onClick={() => setRawViews(current => Record.set(current, `staged:${diff.filePath}`, true))}
-												aria-label="Raw file"
-												title="Raw"
-											>
-												raw
-											</Button>
-										</div>
 									</div>
 								</div>
 								<CollapsibleContent>
 									<div className="border-t bg-background">
-										{pipe(
-											rawViews,
-											Record.get(`staged:${diff.filePath}`),
-											Option.getOrElse(() => false)
-										) ? (
-											<PatchResult filePath={diff.filePath} patch={diff.patch} />
-										) : (
-											<PatchDiff patch={diff.patch} />
-										)}
+										<PatchDiff patch={diff.patch} />
 									</div>
 								</CollapsibleContent>
 							</Collapsible>
@@ -187,9 +138,7 @@ function RouteComponent() {
 														onEmpty: () => <span className="font-semibold text-foreground">{diff.filePath}</span>,
 														onNonEmpty: (init, last) => (
 															<>
-																{Array.isReadonlyArrayNonEmpty(init) ? (
-																	<span className="text-muted-foreground">{pipe(init, Array.join('/'))}/</span>
-																) : null}
+																<span className="text-muted-foreground">{pipe(init, Array.join('/'))}/</span>
 																<span className="font-semibold text-foreground">{last}</span>
 															</>
 														)
@@ -197,84 +146,34 @@ function RouteComponent() {
 												)}
 											</span>
 										</CollapsibleTrigger>
-										<div className="flex shrink-0 items-center gap-2">
-											<div className="flex shrink-0 items-center gap-1">
-												<Button
-													type="button"
-													size="sm"
-													variant="ghost"
-													className="h-5 w-5 p-0"
-													onClick={() => stageFile({payload: {filePath: diff.filePath}})}
-													aria-label="Stage file"
-													title="Stage"
-												>
-													<SquarePlus className="size-3.5" />
-												</Button>
-												<Button
-													type="button"
-													size="sm"
-													variant="ghost"
-													className="h-5 w-5 p-0 text-destructive hover:text-destructive"
-													onClick={() => discardFile({payload: {filePath: diff.filePath}})}
-													aria-label="Discard file"
-													title="Discard"
-												>
-													<Trash2 className="size-3.5" />
-												</Button>
-											</div>
-											<div className="flex shrink-0 items-center border bg-background p-0.5">
-												<Button
-													type="button"
-													size="sm"
-													variant={
-														pipe(
-															rawViews,
-															Record.get(`unstaged:${diff.filePath}`),
-															Option.getOrElse(() => false)
-														)
-															? 'ghost'
-															: 'secondary'
-													}
-													className="h-5 px-2 font-mono text-[10px]"
-													onClick={() =>
-														setRawViews(current => Record.set(current, `unstaged:${diff.filePath}`, false))
-													}
-												>
-													diff
-												</Button>
-												<Button
-													type="button"
-													size="sm"
-													variant={
-														pipe(
-															rawViews,
-															Record.get(`unstaged:${diff.filePath}`),
-															Option.getOrElse(() => false)
-														)
-															? 'secondary'
-															: 'ghost'
-													}
-													className="h-5 px-2 font-mono text-[10px]"
-													onClick={() => setRawViews(current => Record.set(current, `unstaged:${diff.filePath}`, true))}
-													aria-label="Raw file"
-													title="Raw"
-												>
-													raw
-												</Button>
-											</div>
+										<div className="flex shrink-0 items-center gap-1">
+											<Button
+												type="button"
+												size="sm"
+												variant="ghost"
+												className="h-5 w-5 p-0"
+												onClick={() => stageFile({payload: {filePath: diff.filePath}})}
+												aria-label="Stage file"
+												title="Stage"
+											>
+												<SquarePlus className="size-3.5" />
+											</Button>
+											<Button
+												type="button"
+												size="sm"
+												variant="ghost"
+												className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+												onClick={() => discardFile({payload: {filePath: diff.filePath}})}
+												aria-label="Discard file"
+												title="Discard"
+											>
+												<Trash2 className="size-3.5" />
+											</Button>
 										</div>
 									</div>
 									<CollapsibleContent>
 										<div className="border-t bg-background">
-											{pipe(
-												rawViews,
-												Record.get(`unstaged:${diff.filePath}`),
-												Option.getOrElse(() => false)
-											) ? (
-												<PatchResult filePath={diff.filePath} patch={diff.patch} />
-											) : (
-												<PatchDiff patch={diff.patch} />
-											)}
+											<PatchDiff patch={diff.patch} />
 										</div>
 									</CollapsibleContent>
 								</Collapsible>

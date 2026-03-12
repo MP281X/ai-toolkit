@@ -6,17 +6,17 @@ import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {AiLive} from '#rpcs/ai/handlers.ts'
 import {GitLive} from '#rpcs/git/handlers.ts'
-import {RealtimeLive} from '#rpcs/realtime/handlers.ts'
+import {PortfolioLive} from '#rpcs/portfolio/handlers.ts'
 
 export const LiveLayers = pipe(
 	Layer.empty,
 	// rpc handlers
 	Layer.provideMerge(AiLive),
 	Layer.provideMerge(GitLive),
-	Layer.provideMerge(RealtimeLive),
+	Layer.provideMerge(PortfolioLive),
 	// application layers
 	Layer.provideMerge(Git.layer),
 	// base layers
-	Layer.provideMerge(OtelLayer('backend')),
+	Layer.provideMerge(OtelLayer('server')),
 	Layer.provideMerge(RpcSerialization.layerNdjson)
 )

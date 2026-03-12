@@ -1,13 +1,13 @@
 import {BunHttpServer, BunRuntime} from '@effect/platform-bun'
 import {Layer, pipe} from 'effect'
 
-import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
+import {HttpMiddleware, HttpRouter, HttpStaticServer} from 'effect/unstable/http'
 import {RpcGroup, RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {AiContracts} from '#rpcs/ai/contracts.ts'
 import {GitContracts} from '#rpcs/git/contracts.ts'
-import {RealtimeContracts} from '#rpcs/realtime/contracts.ts'
+import {PortfolioContracts} from '#rpcs/portfolio/contracts.ts'
 
 BunRuntime.runMain(
 	pipe(
@@ -16,7 +16,12 @@ BunRuntime.runMain(
 				RpcServer.layerHttp({
 					path: '/api/rpc',
 					protocol: 'websocket',
-					group: RpcGroup.make().merge(AiContracts, GitContracts, RealtimeContracts)
+					group: RpcGroup.make().merge(AiContracts, GitContracts, PortfolioContracts)
+				}),
+				HttpStaticServer.layer({
+					spa: true,
+					root: './dist/client',
+					index: 'index.html'
 				}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)

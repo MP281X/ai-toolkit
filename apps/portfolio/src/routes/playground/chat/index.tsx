@@ -9,7 +9,7 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {AtomRuntime} from '#lib/atomRuntime.ts'
 
-export const Route = createFileRoute('/(home)/chat/')({
+export const Route = createFileRoute('/playground/chat/')({
 	component: RouteComponent
 })
 
@@ -28,7 +28,7 @@ function RouteComponent() {
 
 			<ChatInput
 				onSubmit={data => {
-					// biome-ignore lint/suspicious/noConsole: _
+					// biome-ignore lint/suspicious/noConsole: demo route
 					console.log(data)
 				}}
 			>

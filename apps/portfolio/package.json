@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/template",
+	"name": "@ai-toolkit/portfolio",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -14,7 +14,7 @@
 		"dev:server": "bun --watch --port 3001 ./src/main.server.tsx",
 
 		"build:client": "vite build",
-		"build:server": "bun build ./src/main.server.tsx --compile --outfile ./dist/backend",
+		"build:server": "bun build ./src/main.server.tsx --compile --outfile ./dist/server",
 
 		"fix": "biome check --write --unsafe",
 		"check": "tsgo --noEmit && biome check"
