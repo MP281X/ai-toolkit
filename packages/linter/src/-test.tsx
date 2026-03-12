@@ -104,3 +104,29 @@ const bad_arrow_return = (x: number): string => String(x)
 // no-return-type-annotation - callback arrow function
 // biome-ignore lint: packages/linter/src/no-return-type-annotation.grit
 const arr = [1, 2, 3].map((x): string => String(x))
+
+// no-typeof-window-undefined
+function test_typeof_window() {
+	// biome-ignore lint: packages/linter/src/no-typeof-window-undefined.grit
+	if (typeof window === 'undefined') return null
+}
+
+// no-tailwind-class-variables
+// biome-ignore lint: packages/linter/src/no-tailwind-class-variables.grit
+const PANEL_CLASS = 'border border-border/70 bg-background/92'
+
+// no-simple-function-variables (arrow)
+// biome-ignore lint: packages/linter/src/no-simple-function-variables.grit
+const clampUnit = (value: number) => Math.max(0, Math.min(0.999999, value))
+
+// no-simple-function-variables (function expression)
+// biome-ignore lint: packages/linter/src/no-simple-function-variables.grit
+const clampUnit2 = function (value: number) {
+	return Math.max(0, Math.min(0.999999, value))
+}
+
+// no-native-methods (split)
+function test_split(str: string) {
+	// biome-ignore lint: packages/linter/src/no-native-methods.grit
+	return str.split(':')
+}

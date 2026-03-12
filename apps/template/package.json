@@ -26,6 +26,8 @@
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 
+		"@tanstack/react-hotkeys": "latest",
+
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/git": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
@@ -33,9 +35,10 @@
 	},
 
 	"devDependencies": {
-		"vite": "^8.0.0-beta",
-		"babel-plugin-react-compiler": "latest",
+		"vite": "latest",
 		"@vitejs/plugin-react": "latest",
+		"@rolldown/plugin-babel": "latest",
+		"babel-plugin-react-compiler": "latest",
 
 		"tailwindcss": "latest",
 		"@tailwindcss/vite": "latest"

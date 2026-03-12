@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`typeof window === 'undefined'` as $match where {
+	register_diagnostic(span=$match, message="Don't use typeof window checks; client and server code are already separated")
+}

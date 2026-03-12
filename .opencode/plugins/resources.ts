@@ -14,6 +14,10 @@ const resources = [
 		url: 'https://github.com/TanStack/router'
 	},
 	{
+		name: 'tanstack-hotkey',
+		url: 'https://github.com/TanStack/hotkeys'
+	},
+	{
 		name: 'pierre-diffs',
 		url: 'https://github.com/pierrecomputer/pierre'
 	},

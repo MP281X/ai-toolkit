@@ -60,7 +60,7 @@ type SnippetConfig = {
 type ChatInputProps = {
 	value?: string
 	onValueChange?: (value: string) => void
-	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: globalThis.File[]}) => void
+	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: File[]}) => void
 	placeholder?: string
 	children?: React.ReactNode
 	disabled?: boolean
@@ -81,7 +81,7 @@ type CompletionState = AutocompleteEntry & {
 }
 
 type AttachmentState = {
-	file: globalThis.File
+	file: File
 	matchText: string
 }
 
@@ -228,14 +228,15 @@ export function ChatInput(props: ChatInputProps) {
 
 	const matched = Array.empty<ResolvedOption>()
 	if (Predicate.isNotNull(active)) {
+		const lowerQuery = String.toLowerCase(active.query)
 		const options = autocomplete[active.char]
 		if (Predicate.isNotNullish(options)) {
 			for (const option of options) {
 				if (
 					String.isEmpty(active.query) ||
-					String.toLowerCase(option.value).includes(String.toLowerCase(active.query)) ||
+					pipe(String.toLowerCase(option.value), String.includes(lowerQuery)) ||
 					(Predicate.isNotNullish(option.description) &&
-						String.toLowerCase(option.description).includes(String.toLowerCase(active.query)))
+						pipe(String.toLowerCase(option.description), String.includes(lowerQuery)))
 				) {
 					matched.push(option)
 				}
@@ -285,7 +286,6 @@ export function ChatInput(props: ChatInputProps) {
 							>
 								{Array.map(matched, (entry, index) => (
 									<button
-										// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated menu options are acceptable here
 										key={`${entry.value}-${index}`}
 										type="button"
 										role="option"
@@ -424,7 +424,7 @@ export function ChatInput(props: ChatInputProps) {
 
 									const escaped = pipe(
 										Record.keys(autocomplete),
-										Array.map(char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+										Array.map(char => pipe(char, String.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))),
 										Array.join('')
 									)
 
@@ -434,7 +434,7 @@ export function ChatInput(props: ChatInputProps) {
 									}
 
 									const match = new RegExp(`([${escaped}])([A-Za-z0-9_-]{0,32})$`).exec(
-										anchorNode.getTextContent().slice(0, selection.anchor.offset)
+										pipe(anchorNode.getTextContent(), String.slice(0, selection.anchor.offset))
 									)
 									if (Predicate.isNullish(match)) {
 										setActive(null)
@@ -472,12 +472,12 @@ export function ChatInput(props: ChatInputProps) {
 									text,
 									completions: pipe(
 										completionsRef.current,
-										Array.filter(completion => text.includes(completion.matchText)),
+										Array.filter(completion => pipe(text, String.includes(completion.matchText))),
 										Array.map(completion => ({kind: completion.kind, name: completion.name, char: completion.char}))
 									),
 									attachments: pipe(
 										attachmentsRef.current,
-										Array.filter(attachment => text.includes(attachment.matchText)),
+										Array.filter(attachment => pipe(text, String.includes(attachment.matchText))),
 										Array.map(attachment => attachment.file)
 									)
 								})
@@ -559,7 +559,6 @@ export function ChatInput(props: ChatInputProps) {
 						<div className="flex items-center gap-2">
 							{Array.map(snippets, (entry, index) => (
 								<Button
-									// biome-ignore lint/suspicious/noArrayIndexKey: local duplicated snippet entries are acceptable here
 									key={`snippet-${entry.insert}-${index}`}
 									type="button"
 									variant="outline"
@@ -572,7 +571,7 @@ export function ChatInput(props: ChatInputProps) {
 											const selection = lexical.$getSelection()
 											if (!lexical.$isRangeSelection(selection)) return
 
-											const parts = entry.insert.split('\n')
+											const parts = pipe(entry.insert, String.split('\n'))
 											for (let partIndex = 0; partIndex < parts.length; partIndex++) {
 												const part = parts[partIndex]
 												if (Predicate.isUndefined(part)) continue
@@ -662,12 +661,12 @@ export function ChatInput(props: ChatInputProps) {
 										text,
 										completions: pipe(
 											completionsRef.current,
-											Array.filter(completion => text.includes(completion.matchText)),
+											Array.filter(completion => pipe(text, String.includes(completion.matchText))),
 											Array.map(completion => ({kind: completion.kind, name: completion.name, char: completion.char}))
 										),
 										attachments: pipe(
 											attachmentsRef.current,
-											Array.filter(attachment => text.includes(attachment.matchText)),
+											Array.filter(attachment => pipe(text, String.includes(attachment.matchText))),
 											Array.map(attachment => attachment.file)
 										)
 									})

@@ -17,7 +17,10 @@
 		"./packages/linter/src/no-arrow-for-named.grit",
 		"./packages/linter/src/no-ternary-in-jsx.grit",
 		"./packages/linter/src/no-variable-type-annotation.grit",
-		"./packages/linter/src/no-return-type-annotation.grit"
+		"./packages/linter/src/no-return-type-annotation.grit",
+		"./packages/linter/src/no-typeof-window-undefined.grit",
+		"./packages/linter/src/no-tailwind-class-variables.grit",
+		"./packages/linter/src/no-simple-function-variables.grit"
 	],
 
 	"linter": {
@@ -33,6 +36,7 @@
 			"suspicious": {
 				"noConsole": "error",
 				"noExplicitAny": "error",
+				"noArrayIndexKey": "off",
 				"noConfusingVoidType": "off",
 				"noAssignInExpressions": "off",
 				"noShadowRestrictedNames": "off",
@@ -42,7 +46,6 @@
 				"useExportType": "error",
 				"noUselessElse": "error",
 				"noNestedTernary": "error",
-				"noInferrableTypes": "error",
 				"useNumberNamespace": "warn",
 				"noNonNullAssertion": "error",
 				"useCollapsedElseIf": "error",
@@ -59,7 +62,8 @@
 					"level": "error",
 					"options": {
 						"deniedGlobals": {
-							"global": "use globalThis",
+							"global": "",
+							"globalThis": "",
 							"location": "Use Tanstack router",
 							"Array": "Import Array from 'effect' instead",
 							"Number": "Import Number from 'effect' instead",

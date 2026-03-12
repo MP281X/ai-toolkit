@@ -1,0 +1,7 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`const $name = $value` as $match where {
+	$value <: r"['\"].*?(?:border-|bg-|text-|p-|m-).*['\"]",
+	register_diagnostic(span=$match, message="Don't store Tailwind classes in variables; inline them at the point of use")
+}

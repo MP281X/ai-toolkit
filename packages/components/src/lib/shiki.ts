@@ -1,4 +1,4 @@
-import {flow, Match} from 'effect'
+import {Array, flow, Match, Option, pipe, String} from 'effect'
 
 import {getSharedHighlighter} from '@pierre/diffs'
 
@@ -11,7 +11,15 @@ const highlighter = await getSharedHighlighter({
 })
 
 export const resolveLanguage = flow(
-	(lang?: string) => Match.value(lang?.toLowerCase().split('.').pop()),
+	(lang: string = '') =>
+		Match.value(
+			pipe(
+				String.toLowerCase(lang),
+				String.split('.'),
+				Array.last,
+				Option.getOrElse(() => '')
+			)
+		),
 	Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx' as const),
 	Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell' as const),
 	Match.when(Match.is('md', 'markdown'), () => 'markdown' as const),

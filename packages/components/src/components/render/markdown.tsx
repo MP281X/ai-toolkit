@@ -24,17 +24,10 @@ export function Markdown(props: {children: string; className?: string}) {
 				// skip raw HTML block tokens
 				if (token.type === 'html') return
 
-				// biome-ignore lint/suspicious/noArrayIndexKey: markdown
 				if (token.type !== 'code') return <Inline key={index} content={token.raw} />
 
 				return (
-					<Code
-						// biome-ignore lint/suspicious/noArrayIndexKey: markdown
-						key={index}
-						code={token.text}
-						className="border border-border"
-						lang={resolveLanguage(token.lang)}
-					/>
+					<Code key={index} code={token.text} className="border border-border" lang={resolveLanguage(token.lang)} />
 				)
 			})}
 		</div>

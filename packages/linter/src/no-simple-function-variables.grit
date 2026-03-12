@@ -1,0 +1,15 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`const $name = function ($params) { return $expr; }` as $match where {
+		register_diagnostic(span=$match, message="Don't extract simple functions; inline the expression at the point of use")
+	},
+	`const $name = function $fnName($params) { return $expr; }` as $match where {
+		register_diagnostic(span=$match, message="Don't extract simple functions; inline the expression at the point of use")
+	},
+	`const $name = ($params) => $expr` as $match where {
+		not $expr <: contains `{$_}`,
+		register_diagnostic(span=$match, message="Don't extract simple functions; inline the expression at the point of use")
+	}
+}
