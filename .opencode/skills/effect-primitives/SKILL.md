@@ -291,23 +291,27 @@ const label = Boolean.match(isActive, {
 
 ## Option
 
-Only consume Option from Effect APIs. Never create Option for local control flow.
+Never wrap values into Option for local control flow. Do use Option methods when consuming values from Effect APIs.
 
 ```typescript
-// Bad
+// Bad - creating Option for local control flow
 const maybe = value !== null ? Option.some(value) : Option.none()
 
-// Good
+// Good - use Predicate for local control flow
 if (Predicate.isNotNullish(value)) handleValue(value)
 ```
 
-Use Option API for consuming:
+When consuming Options from Effect APIs, use Option methods:
 
 ```typescript
 // Bad
 const label = option._tag === 'Some' ? option.value : 'default'
 
-// Good
+// Good - use Option.isSome/isNone for checks
+if (Option.isSome(option)) return option.value.name
+if (Option.isNone(option)) return 'Unknown'
+
+// Good - use Option.getOrElse for defaults
 const label = Option.getOrElse(option, () => 'default')
 ```
 

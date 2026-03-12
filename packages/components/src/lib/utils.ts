@@ -23,7 +23,7 @@ export function formatError(error: unknown) {
 				Array.join('\n')
 			)
 		),
-		Match.when(Predicate.hasProperty('message'), error => globalThis.String(error.message)),
+		Match.when(Predicate.hasProperty('message'), error => String.String(error.message)),
 		Match.when(Predicate.isString, string => string),
 		Match.when(Predicate.isNullish, () => 'Error'),
 		Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, null, 2)),
@@ -34,7 +34,7 @@ export function formatError(error: unknown) {
 export function formatTokens(n: number) {
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
 	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-	return globalThis.String(n)
+	return String.String(n)
 }
 
 export function formatRelativeTime(timestamp: number) {
@@ -69,17 +69,17 @@ export function formatDuration(ms: number) {
 
 export function formatPrice(value: number) {
 	if (value === 0) return 'free'
-	return `$${value % 1 === 0 ? value.toString() : value.toFixed(2).replace(/\.00$/, '')}`
+	return `$${value % 1 === 0 ? String.String(value) : pipe(value.toFixed(2), String.replace(/\.00$/, ''))}`
 }
 
-export function fileToBase64(file: globalThis.File) {
+export function fileToBase64(file: File) {
 	return new Promise<{data: string; filename: string; mediaType: string}>(resolve => {
 		const reader = new FileReader()
 		reader.onload = () => {
 			const content = Predicate.isString(reader.result) ? reader.result : ''
-			const commaIndex = content.indexOf(',')
+			const match = /^[^,]*,(.*)$/s.exec(content)
 			void resolve({
-				data: commaIndex === -1 ? content : content.slice(commaIndex + 1),
+				data: match?.[1] ?? content,
 				filename: file.name,
 				mediaType: String.isNonEmpty(file.type) ? file.type : 'application/octet-stream'
 			})
