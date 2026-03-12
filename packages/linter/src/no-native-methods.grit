@@ -1,0 +1,44 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$obj.$method($...)` as $match where {
+	$method <: or {
+		`map`,
+		`filter`,
+		`reduce`,
+		`reduceRight`,
+		`find`,
+		`findIndex`,
+		`findLast`,
+		`findLastIndex`,
+		`some`,
+		`every`,
+		`forEach`,
+		`flatMap`,
+		`flat`,
+		`trim`,
+		`trimStart`,
+		`trimEnd`,
+		`toUpperCase`,
+		`toLowerCase`
+	},
+	not $obj <: or {
+		`Effect`,
+		`Stream`,
+		`Layer`,
+		`Record`,
+		`Option`,
+		`Either`,
+		`Exit`,
+		`Fiber`,
+		`Chunk`,
+		`Schedule`,
+		`Duration`,
+		`Cause`,
+		`Match`,
+		`Schema`,
+		`Array`,
+		`String`
+	},
+	register_diagnostic(span=$match, message="Use Array or String module from 'effect' instead of native prototype methods")
+}

@@ -1,0 +1,15 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$cond ? $a : $b` as $match where {
+	$b <: or {
+		`null`,
+		`undefined`
+	},
+	$a <: contains or {
+		`<$_>$_</$_>`,
+		`<$_ />`,
+		`<>$_</>`
+	},
+	register_diagnostic(span=$match, message="Prefer '$cond && ...' over ternary with null/undefined; logical AND is cleaner for conditional rendering")
+}

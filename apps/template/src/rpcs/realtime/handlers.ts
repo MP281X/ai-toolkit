@@ -1,4 +1,4 @@
-import {Effect, pipe, Stream, SubscriptionRef} from 'effect'
+import {Array, Effect, pipe, Stream, SubscriptionRef} from 'effect'
 
 import {RealtimeContracts, RealtimeCursor, RealtimePixel, RealtimeSession} from '#rpcs/realtime/contracts.ts'
 
@@ -12,17 +12,18 @@ export const RealtimeLive = RealtimeContracts.toLayer(
 					Stream.fromEffect(
 						SubscriptionRef.update(state, session => {
 							const now = Date.now()
-							const cursors = session.cursors.filter(item => item.id !== payload.id)
-
-							cursors.push(
-								new RealtimeCursor({
-									id: payload.id,
-									name: payload.name,
-									color: payload.color,
-									x: session.width / 2,
-									y: session.height / 2,
-									at: now
-								})
+							const cursors = pipe(
+								Array.filter(session.cursors, item => item.id !== payload.id),
+								Array.append(
+									new RealtimeCursor({
+										id: payload.id,
+										name: payload.name,
+										color: payload.color,
+										x: session.width / 2,
+										y: session.height / 2,
+										at: now
+									})
+								)
 							)
 
 							return new RealtimeSession({
@@ -35,7 +36,7 @@ export const RealtimeLive = RealtimeContracts.toLayer(
 					Stream.flatMap(() => SubscriptionRef.changes(state)),
 					Stream.ensuring(
 						SubscriptionRef.update(state, session => {
-							const nextCursors = session.cursors.filter(item => item.id !== payload.id)
+							const nextCursors = Array.filter(session.cursors, item => item.id !== payload.id)
 
 							if (nextCursors.length === session.cursors.length) {
 								return session
@@ -54,17 +55,18 @@ export const RealtimeLive = RealtimeContracts.toLayer(
 					const now = Date.now()
 					const x = Math.max(0, Math.min(session.width - 0.001, payload.x))
 					const y = Math.max(0, Math.min(session.height - 0.001, payload.y))
-					const cursors = session.cursors.filter(item => item.id !== payload.id)
-
-					cursors.push(
-						new RealtimeCursor({
-							id: payload.id,
-							name: payload.name,
-							color: payload.color,
-							x,
-							y,
-							at: now
-						})
+					const cursors = pipe(
+						Array.filter(session.cursors, item => item.id !== payload.id),
+						Array.append(
+							new RealtimeCursor({
+								id: payload.id,
+								name: payload.name,
+								color: payload.color,
+								x,
+								y,
+								at: now
+							})
+						)
 					)
 
 					return new RealtimeSession({
@@ -87,22 +89,23 @@ export const RealtimeLive = RealtimeContracts.toLayer(
 						by: payload.id,
 						at: now
 					})
-					const cursors = session.cursors.filter(item => item.id !== payload.id)
-
-					cursors.push(
-						new RealtimeCursor({
-							id: payload.id,
-							name: payload.name,
-							color: payload.color,
-							x: cursorX,
-							y: cursorY,
-							at: now
-						})
+					const cursors = pipe(
+						Array.filter(session.cursors, item => item.id !== payload.id),
+						Array.append(
+							new RealtimeCursor({
+								id: payload.id,
+								name: payload.name,
+								color: payload.color,
+								x: cursorX,
+								y: cursorY,
+								at: now
+							})
+						)
 					)
 
-					const hasPixel = session.pixels.some(item => item.x === x && item.y === y)
+					const hasPixel = Array.some(session.pixels, item => item.x === x && item.y === y)
 					const pixels = hasPixel
-						? session.pixels.map(item => (item.x === x && item.y === y ? pixel : item))
+						? Array.map(session.pixels, item => (item.x === x && item.y === y ? pixel : item))
 						: [...session.pixels, pixel]
 
 					return new RealtimeSession({
@@ -115,18 +118,19 @@ export const RealtimeLive = RealtimeContracts.toLayer(
 			'realtime.clearCanvas': payload =>
 				SubscriptionRef.update(state, session => {
 					const now = Date.now()
-					const existing = session.cursors.find(item => item.id === payload.id)
-					const cursors = session.cursors.filter(item => item.id !== payload.id)
-
-					cursors.push(
-						new RealtimeCursor({
-							id: payload.id,
-							name: payload.name,
-							color: payload.color,
-							x: existing?.x ?? session.width / 2,
-							y: existing?.y ?? session.height / 2,
-							at: now
-						})
+					const existing = Array.findFirst(session.cursors, item => item.id === payload.id)
+					const cursors = pipe(
+						Array.filter(session.cursors, item => item.id !== payload.id),
+						Array.append(
+							new RealtimeCursor({
+								id: payload.id,
+								name: payload.name,
+								color: payload.color,
+								x: existing._tag === 'Some' ? existing.value.x : session.width / 2,
+								y: existing._tag === 'Some' ? existing.value.y : session.height / 2,
+								at: now
+							})
+						)
 					)
 
 					return new RealtimeSession({

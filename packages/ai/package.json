@@ -4,10 +4,9 @@
 	"name": "@ai-toolkit/ai",
 
 	"exports": {
-		"./schema": "./src/schema.ts",
-		"./catalog": "./src/catalog.ts",
 		"./service": "./src/service.ts",
-		"./tools": "./src/tools.ts"
+		"./tool": "./src/tool.ts",
+		"./catalog": "./src/catalog.ts"
 	},
 
 	"scripts": {
@@ -16,17 +15,9 @@
 	},
 
 	"dependencies": {
-		"ai": "latest",
-		"@opencode-ai/sdk": "latest",
-		"@github/copilot-sdk": "latest",
-
-		"exa-js": "latest",
-
-		"@ai-sdk/xai": "latest",
-		"@ai-sdk/openai": "latest",
-		"@ai-sdk/google": "latest",
-		"@ai-sdk/anthropic": "latest",
-		"@ai-sdk/openai-compatible": "latest",
-		"@openrouter/ai-sdk-provider": "latest"
+		"@effect/ai-openai": "^4.0.0-beta",
+		"@effect/ai-anthropic": "^4.0.0-beta",
+		"@effect/ai-openrouter": "^4.0.0-beta",
+		"@effect/ai-openai-compat": "^4.0.0-beta"
 	}
 }

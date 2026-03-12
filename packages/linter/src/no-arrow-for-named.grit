@@ -1,0 +1,9 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`const $name = ($args) => $body`,
+	`export const $name = ($args) => $body`
+} as $match where {
+	register_diagnostic(span=$match, message="Use function declaration instead of arrow function for named functions")
+}

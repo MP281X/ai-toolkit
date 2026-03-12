@@ -1,0 +1,21 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`const $name = $obj.$prop` as $match where {
+		not $obj <: contains `$_($...)`,
+		register_diagnostic(span=$match, message="Don't extract access-only variables; inline property access at the point of use")
+	},
+	`const $name = $var` as $match where {
+		$var <: r"[a-zA-Z_$][a-zA-Z0-9_$]*",
+		not $var <: or {
+			`$_.$_`,
+			`$_($...)`,
+			`true`,
+			`false`,
+			`null`,
+			`undefined`
+		},
+		register_diagnostic(span=$match, message="Don't extract access-only variables; inline property access at the point of use")
+	}
+}
