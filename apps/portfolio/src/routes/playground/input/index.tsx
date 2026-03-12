@@ -14,7 +14,7 @@ import {Button} from '@ai-toolkit/components/ui/button'
 import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react'
 
-export const Route = createFileRoute('/(home)/input/')({
+export const Route = createFileRoute('/playground/input/')({
 	component: RouteComponent
 })
 

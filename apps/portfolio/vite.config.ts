@@ -22,6 +22,7 @@ export default defineConfig({
 		}
 	},
 	build: {
+		outDir: 'dist/client',
 		chunkSizeWarningLimit: 2000,
 		modulePreload: {polyfill: false},
 		rolldownOptions: {experimental: {lazyBarrel: true}}
