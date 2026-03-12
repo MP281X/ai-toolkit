@@ -1,29 +1,30 @@
 ---
 name: effect-atom
-description: Load for React components using Effect Atom - atoms, subscriptions, mutations, hooks
+description: React state management with Effect Atom
+metadata:
+  patterns: Atom, useAtomValue, useAtomSuspense, mutations, subscriptions
 ---
 
 ## Source files
 
 ```
 .opencode/resources/effect/packages/effect/src/unstable/reactivity/Atom.ts
-.opencode/resources/effect/packages/effect/src/unstable/reactivity/AtomRpc.ts
 .opencode/resources/effect/packages/atom/react/src/Hooks.ts
 ```
 
 
-## Stream atoms
+## Atom definition
 
-Define atoms at module scope using Atom.keepAlive with AtomRuntime.atom. Never define atoms inside components.
+Define atoms at module scope.
 
 ```typescript
-// Bad - atom defined inside a component, recreated on every render
+// Bad - atom inside component
 function RouteComponent() {
-  const itemsAtom = Atom.keepAlive(...) // Never do this
+  const itemsAtom = Atom.keepAlive(...)
   const items = useAtomValue(itemsAtom)
 }
 
-// Good - atom at module scope with full definition
+// Good - atom at module scope
 const itemsAtom = Atom.keepAlive(
   AtomRuntime.atom(
     pipe(
@@ -33,25 +34,26 @@ const itemsAtom = Atom.keepAlive(
     )
   )
 )
+
 function RouteComponent() {
-  const items = useAtomValue(itemsAtom)
+  const {value: items} = useAtomSuspense(itemsAtom)
 }
 ```
 
 
-## Derived stream atoms
+## Stream shaping
 
-Keep stream shaping logic inside the atom definition. Never transform atom data inside components.
+Keep stream logic inside the atom.
 
 ```typescript
-// Bad - data transformation inside the component
+// Bad - transform in component
 const itemsAtom = Atom.keepAlive(...)
 function RouteComponent() {
   const {value: items} = useAtomSuspense(itemsAtom)
-  const visible = items.filter(item => item.visible) // transform in component
+  const visible = Array.filter(items, item => item.visible)
 }
 
-// Good - shape the stream inside the atom definition
+// Good - shape in atom definition
 const visibleItemsAtom = Atom.keepAlive(
   AtomRuntime.atom(
     pipe(
@@ -65,21 +67,20 @@ const visibleItemsAtom = Atom.keepAlive(
     )
   )
 )
-function RouteComponent() {
-  const {value: visible} = useAtomSuspense(visibleItemsAtom)
-}
 ```
 
 
 ## Reading atoms
 
+Use useAtomSuspense for async, useAtomValue for sync.
+
 ```typescript
-// Bad - useAtomValue on an async atom (exposes raw AsyncResult, not the value)
+// Bad - useAtomValue on async atom
 function RouteComponent() {
-  const items = useAtomValue(itemsAtom) // async atom needs useAtomSuspense
+  const items = useAtomValue(itemsAtom)
 }
 
-// Good - useAtomSuspense for async, useAtomValue for synchronous
+// Good
 function RouteComponent() {
   const {value: items} = useAtomSuspense(itemsAtom)
   const count = useAtomValue(countAtom)
@@ -89,54 +90,52 @@ function RouteComponent() {
 
 ## Mutations
 
-Use useAtomSet with RpcClient.mutation for write operations. Never use useState plus fetch for data that comes from RPC.
+Use useAtomSet with RpcClient.mutation.
 
 ```typescript
-// Bad - useState + manual fetch for mutations
+// Bad - useState + manual fetch
 function RouteComponent() {
   const [isLoading, setIsLoading] = useState(false)
-  const createItem = async (name: string) => {
+  const create = async (name: string) => {
     setIsLoading(true)
     await api.post('/items', {name})
     setIsLoading(false)
   }
 }
 
-// Good - useAtomSet with RpcClient.mutation
+// Good - useAtomSet
 function RouteComponent() {
   const createItem = useAtomSet(RpcClient.mutation('items.create'))
-  const archiveItem = useAtomSet(RpcClient.mutation('items.archive'))
-
   createItem({payload: {name: 'Draft'}})
-  archiveItem({payload: {id: item.id}})
 }
 ```
 
 
-## Additional hooks
+## Hooks
+
+Use dedicated atom hooks.
 
 ```typescript
-// Bad - manual re-fetch pattern or no refresh mechanism
+// Bad - manual re-fetch pattern
 function RouteComponent() {
   const [_, setTick] = useState(0)
-  const refresh = () => setTick(t => t + 1) // manual refresh hack
+  const refresh = () => setTick(t => t + 1)
 }
 
-// Good - use the dedicated atom hooks
+// Good
 function RouteComponent() {
   const refresh = useAtomRefresh(itemsAtom)
-  useAtomSubscribe(itemsAtom, items => console.log('Items updated:', items))
-
-  return <button onClick={() => refresh()}>Refresh</button>
+  useAtomSubscribe(itemsAtom, items => console.log(items))
 }
 ```
+
 
 ## Route wiring
 
-Keep atom definitions at module scope and route logic inside the route component. Use TanStack Router patterns.
+Atoms at module scope, route logic in component.
 
 ```typescript
-// Bad - atoms defined inline, data fetched with useEffect
+// Bad - atoms inline, useEffect for data
 export const Route = createFileRoute('/items/')({
   component: () => {
     const [data, setData] = useState(null)
@@ -145,7 +144,7 @@ export const Route = createFileRoute('/items/')({
   }
 })
 
-// Good - atoms at module scope, route component uses atom hooks
+// Good
 export const Route = createFileRoute('/items/')({
   component: RouteComponent
 })

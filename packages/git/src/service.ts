@@ -1,5 +1,3 @@
-import {dirname} from 'node:path'
-
 import {Duration, Effect, FileSystem, Layer, pipe, ServiceMap, Stream, String, SubscriptionRef} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
@@ -104,7 +102,7 @@ export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
 				)
 			}),
 			clone: Effect.fnUntraced(function* (url: string, directory: string) {
-				yield* pipe(fs.makeDirectory(dirname(directory), {recursive: true}), Effect.ignore)
+				yield* pipe(fs.makeDirectory(directory, {recursive: true}), Effect.ignore)
 
 				yield* pipe(
 					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', url, directory], {cwd})),

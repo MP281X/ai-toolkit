@@ -1,14 +1,34 @@
 {
 	"$schema": "node_modules/@biomejs/biome/configuration_schema.json",
 
+	"plugins": [
+		"./packages/linter/src/no-type-assertion.grit",
+		"./packages/linter/src/no-renamed-imports.grit",
+		"./packages/linter/src/no-return-undefined-null.grit",
+		"./packages/linter/src/no-native-methods.grit",
+		"./packages/linter/src/no-effect-gen-with-args.grit",
+		"./packages/linter/src/no-arg-destructuring.grit",
+		"./packages/linter/src/no-access-variables.grit",
+		"./packages/linter/src/no-simple-check-variables.grit",
+		"./packages/linter/src/no-react-type-imports.grit",
+		"./packages/linter/src/no-react-hooks.grit",
+		"./packages/linter/src/no-inline-style.grit",
+		"./packages/linter/src/cn-classname.grit",
+		"./packages/linter/src/no-arrow-for-named.grit",
+		"./packages/linter/src/no-ternary-in-jsx.grit",
+		"./packages/linter/src/no-variable-type-annotation.grit",
+		"./packages/linter/src/no-return-type-annotation.grit"
+	],
+
 	"linter": {
 		"domains": { "react": "recommended" },
 		"rules": {
 			"complexity": {
 				"useLiteralKeys": "off",
 				"useArrowFunction": "off",
-				"noUselessStringConcat": "warn",
-				"useSimplifiedLogicExpression": "warn"
+				"noUselessUndefined": "error",
+				"noUselessStringConcat": "error",
+				"useSimplifiedLogicExpression": "error"
 			},
 			"suspicious": {
 				"noConsole": "error",
@@ -19,6 +39,7 @@
 				"useIterableCallbackReturn": "off"
 			},
 			"style": {
+				"useExportType": "error",
 				"noUselessElse": "error",
 				"noNestedTernary": "error",
 				"noInferrableTypes": "error",
@@ -29,20 +50,11 @@
 				"useEnumInitializers": "warn",
 				"noParameterProperties": "error",
 				"useDefaultParameterLast": "warn",
-				"noUnusedTemplateLiteral": "warn",
 				"useConsistentTypeDefinitions": { "level": "error", "options": { "style": "type" } },
+				"noUnusedTemplateLiteral": "error",
+				"useImportType": { "level": "error", "options": { "style": "separatedType" } },
 				"useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
-				"noRestrictedImports": {
-					"level": "error",
-					"options": {
-						"paths": {
-							"react": {
-								"importNames": ["useCallback", "useEffect", "useMemo"],
-								"message": "Do not use useCallback/useEffect/useMemo; prefer alternative patterns."
-							}
-						}
-					}
-				},
+				"noParameterAssign": { "level": "error", "options": { "propertyAssignment": "deny" } },
 				"noRestrictedGlobals": {
 					"level": "error",
 					"options": {
@@ -52,7 +64,8 @@
 							"Array": "Import Array from 'effect' instead",
 							"Number": "Import Number from 'effect' instead",
 							"String": "Import String from 'effect' instead",
-							"Object": "Import Record from 'effect' instead"
+							"Object": "Import Record from 'effect' instead",
+							"Boolean": "Import Boolean from 'effect' instead"
 						}
 					}
 				}
@@ -68,7 +81,7 @@
 				"noUnusedFunctionParameters": "off"
 			},
 			"nursery": {
-				"noFloatingPromises": "warn",
+				"noFloatingPromises": "error",
 				"useSortedClasses": { "level": "error", "fix": "safe" }
 			}
 		}
@@ -112,10 +125,10 @@
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "single",
+			"bracketSpacing": false,
 			"semicolons": "asNeeded",
 			"trailingCommas": "none",
-			"arrowParentheses": "asNeeded",
-			"bracketSpacing": false
+			"arrowParentheses": "asNeeded"
 		}
 	},
 
@@ -126,6 +139,7 @@
 			"**/*.tsx",
 			"**/*.css",
 			"**/*.html",
+			"**/*.grit",
 			"**/*.json",
 			"**/*.jsonc",
 			"!**/*.gen.ts",
@@ -139,36 +153,8 @@
 			"json": { "formatter": { "expand": "auto" } }
 		},
 		{
-			"includes": ["**/components/ui/*.tsx"],
-			"linter": {
-				"rules": {
-					"style": {
-						"noNonNullAssertion": "off",
-						"noRestrictedImports": "off",
-						"noRestrictedGlobals": "off",
-						"useConsistentTypeDefinitions": "off"
-					},
-					"suspicious": {
-						"noExplicitAny": "off",
-						"noDoubleEquals": "off",
-						"noArrayIndexKey": "off"
-					},
-					"security": {
-						"noDangerouslySetInnerHtml": "off"
-					},
-					"a11y": {
-						"useValidAriaRole": "off",
-						"useSemanticElements": "off",
-						"noLabelWithoutControl": "off",
-						"useKeyWithClickEvents": "off"
-					},
-					"correctness": {
-						"noUnusedImports": "off",
-						"noUnusedVariables": "off",
-						"noUnusedFunctionParameters": "off"
-					}
-				}
-			}
+			"includes": ["**/components/ui/**"],
+			"linter": { "enabled": false }
 		}
 	]
 }

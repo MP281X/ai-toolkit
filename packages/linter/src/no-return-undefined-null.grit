@@ -1,0 +1,9 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`return undefined`,
+	`return null`
+} as $match where {
+	register_diagnostic(span=$match, message="Use bare `return` instead of `return undefined` or `return null`")
+}

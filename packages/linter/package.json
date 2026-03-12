@@ -1,0 +1,10 @@
+{
+	"name": "@ai-toolkit/linter",
+	"private": true,
+	"type": "module",
+
+	"scripts": {
+		"fix": "biome check --write --unsafe",
+		"check": "biome check"
+	}
+}

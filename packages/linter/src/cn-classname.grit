@@ -1,0 +1,7 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`className={$expr}` as $match where {
+	$expr <: `$cond ? $a : $b`,
+	register_diagnostic(span=$match, message="Use cn() for conditional classNames instead of ternary expressions")
+}

@@ -1,0 +1,15 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`const $name = $expr` as $match where {
+	$expr <: or {
+		`$_ === $_`,
+		`$_ !== $_`,
+		`$_ > $_`,
+		`$_ < $_`,
+		`$_ >= $_`,
+		`$_ <= $_`,
+		`!$_`
+	},
+	register_diagnostic(span=$match, message="Don't extract simple check variables; inline the expression at the point of use")
+}

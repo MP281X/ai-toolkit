@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`($args) => Effect.gen($body)` as $match where {
+	register_diagnostic(span=$match, message="Use Effect.fnUntraced instead of wrapping Effect.gen in an arrow function")
+}

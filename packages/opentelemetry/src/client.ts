@@ -4,8 +4,8 @@ import {Config, Effect, Layer, Option} from 'effect'
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'
 import {SimpleSpanProcessor} from '@opentelemetry/sdk-trace-web'
 
-export const OtelLayer = (serviceName: string) =>
-	Layer.unwrap(
+export function OtelLayer(serviceName: string) {
+	return Layer.unwrap(
 		Effect.map(
 			Config.option(Config.string('VITE_OTEL_URL')).asEffect(),
 			Option.match({
@@ -18,3 +18,4 @@ export const OtelLayer = (serviceName: string) =>
 			})
 		)
 	)
+}

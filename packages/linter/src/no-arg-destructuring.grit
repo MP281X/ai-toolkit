@@ -1,0 +1,15 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`function $name($params) { $_ }`,
+	`function $name($params): $_ { $_ }`,
+	`async function $name($params) { $_ }`,
+	`async function $name($params): $_ { $_ }`,
+	`($params) => $_`,
+	`($params): $_ => $_`
+} where {
+	$params <: contains `{ $_ }` as $destructured where {
+		register_diagnostic(span=$destructured, message="Don't destructure function parameters; access properties directly within the function body")
+	}
+}

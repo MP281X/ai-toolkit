@@ -1,0 +1,8 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$expr as $type` as $match where {
+	not $match <: `$_ as const`,
+	not $filename <: r".*/components/ui/.*",
+	register_diagnostic(span=$match, message="Avoid `as` type assertions; use type annotations or fix the actual type problem")
+}
