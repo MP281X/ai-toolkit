@@ -11,8 +11,8 @@ import type {MutableRefObject, ReactNode} from 'react'
 import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
-import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/portfolio/contracts.ts'
-import {PortfolioState} from '#rpcs/portfolio/contracts.ts'
+import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
+import {PortfolioState} from '#rpcs/contracts.ts'
 
 const cursorPalette = [
 	'oklch(0.74 0.19 118)',
@@ -396,7 +396,7 @@ function Panel(input: {readonly className?: string; readonly children: ReactNode
 	)
 }
 
-export const Route = createFileRoute('/(portfolio)/')({
+export const Route = createFileRoute('/(home)/')({
 	component: PortfolioRoute
 })
 

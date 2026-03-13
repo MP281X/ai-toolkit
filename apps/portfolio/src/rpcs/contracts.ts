@@ -48,7 +48,7 @@ export const PortfolioEvent = Schema.Union([
 
 export type PortfolioEvent = typeof PortfolioEvent.Type
 
-export class PortfolioContracts extends RpcGroup.make(
+export class RpcContracts extends RpcGroup.make(
 	Rpc.make('portfolio.join', {
 		payload: Schema.Struct({
 			id: Schema.NonEmptyString,
