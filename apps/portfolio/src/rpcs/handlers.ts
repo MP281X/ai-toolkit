@@ -1,15 +1,15 @@
 import {Array, Duration, Effect, Option, PubSub, pipe, Schedule, Stream, SubscriptionRef} from 'effect'
 
 import {
-	PortfolioContracts,
 	PortfolioSnapshot,
 	PortfolioState,
 	PortfolioTrail,
 	PortfolioTrailAdded,
 	PortfolioVisitor,
 	PortfolioVisitorRemoved,
-	PortfolioVisitorUpserted
-} from '#rpcs/portfolio/contracts.ts'
+	PortfolioVisitorUpserted,
+	RpcContracts
+} from '#rpcs/contracts.ts'
 
 const botPalette = [
 	'oklch(0.74 0.19 118)',
@@ -145,7 +145,7 @@ function emitVisitorRemoved(
 	return PubSub.publish(events, new PortfolioVisitorRemoved({id}))
 }
 
-export const PortfolioLive = PortfolioContracts.toLayer(
+export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
 		const state = yield* SubscriptionRef.make(new PortfolioState({}))
 		const events = yield* PubSub.unbounded<
@@ -176,7 +176,7 @@ export const PortfolioLive = PortfolioContracts.toLayer(
 			)
 		}
 
-		return PortfolioContracts.of({
+		return RpcContracts.of({
 			'portfolio.join': payload =>
 				Stream.unwrap(
 					Effect.gen(function* () {

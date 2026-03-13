@@ -10,6 +10,6 @@ export const LiveLayers = pipe(
 	// rpc handlers
 	Layer.provideMerge(RpcHandlers),
 	// base layers
-	Layer.provideMerge(OtelLayer('portfolio-server')),
+	Layer.provideMerge(OtelLayer('agent-server')),
 	Layer.provideMerge(RpcSerialization.layerMsgPack)
 )

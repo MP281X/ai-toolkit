@@ -9,7 +9,7 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {AtomRuntime} from '#lib/atomRuntime.ts'
 
-export const Route = createFileRoute('/playground/chat/')({
+export const Route = createFileRoute('/(home)/')({
 	component: RouteComponent
 })
 

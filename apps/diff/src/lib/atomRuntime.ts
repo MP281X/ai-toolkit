@@ -11,7 +11,7 @@ import {RpcContracts} from '#rpcs/contracts.ts'
 export const LiveLayers = pipe(
 	Layer.empty,
 	// base layers
-	Layer.provideMerge(OtelLayer('portfolio-client')),
+	Layer.provideMerge(OtelLayer('diff-client')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
 	// envs
