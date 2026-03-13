@@ -15,7 +15,7 @@ export const LiveLayers = pipe(
 	// base layers
 	Layer.provideMerge(OtelLayer('client')),
 	Layer.provideMerge(FetchHttpClient.layer),
-	Layer.provideMerge(Rpc.RpcSerialization.layerNdjson),
+	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
 	// envs
 	Layer.provideMerge(
 		ConfigProvider.layer(
