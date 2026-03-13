@@ -7,7 +7,7 @@ export function Code(props: {code: string; lang: string; className?: string}) {
 	return (
 		<div
 			data-code-block
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: shiki output
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: shiki html
 			dangerouslySetInnerHTML={{__html: html}}
 			className={cn('select-text overflow-hidden bg-muted/30 text-sm leading-relaxed', props.className)}
 		/>

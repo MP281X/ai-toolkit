@@ -13,7 +13,14 @@ export const Route = createFileRoute('/playground/chat/')({
 	component: RouteComponent
 })
 
-const messagesAtom = Atom.keepAlive(AtomRuntime.atom(Effect.succeed([]), {initialValue: []}))
+const messagesAtom = Atom.keepAlive(
+	AtomRuntime.atom(
+		Effect.gen(function* () {
+			return []
+		}),
+		{initialValue: []}
+	)
+)
 
 function RouteComponent() {
 	const {value: messages} = useAtomSuspense(messagesAtom)
@@ -27,10 +34,8 @@ function RouteComponent() {
 			</Conversation>
 
 			<ChatInput
-				onSubmit={data => {
-					// biome-ignore lint/suspicious/noConsole: demo route
-					console.log(data)
-				}}
+				// biome-ignore lint/suspicious/noConsole: debug
+				onSubmit={data => console.log(data)}
 			>
 				<Toolbar>model selector</Toolbar>
 

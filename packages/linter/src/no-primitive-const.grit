@@ -1,0 +1,18 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`const $name = $value` as $match where {
+	$value <: or {
+		string(),
+		number(),
+		`true`,
+		`false`,
+		`$n as const` where $n <: or {
+			string(),
+			number(),
+			`true`,
+			`false`
+		}
+	},
+	register_diagnostic(span=$match, message="Don't extract primitive values; inline them at the point of use")
+}

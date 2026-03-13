@@ -1,132 +1,155 @@
+// biome-ignore-all lint/correctness/useHookAtTopLevel: test file
+// biome-ignore-all lint/style/noRestrictedGlobals: test file
 import {Effect} from 'effect'
 
-// biome-ignore lint: packages/linter/src/no-react-type-imports.grit
+// biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
-import {useCallback, useImperativeHandle, useMemo} from 'react'
+import {memo, useCallback, useImperativeHandle, useMemo} from 'react'
 
-// no-type-assertion
 function test_type_assertion(value: unknown) {
-	// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+	// biome-ignore lint/plugin: type assertion
 	return value as string
 }
 
-// no-native-methods (array)
 function test_array_native(arr: string[]) {
-	// biome-ignore lint: packages/linter/src/no-native-methods.grit
+	// biome-ignore lint/plugin: native methods
 	return arr.map(x => x)
 }
 
-// no-effect-gen-with-args
-// biome-ignore lint: packages/linter/src/no-effect-gen-with-args.grit
+// biome-ignore lint/plugin: effect gen args
 const bad_gen_with_args = (name: string) => Effect.gen(function* () {})
 
-// no-native-methods (string)
 function test_string_trim(s: string) {
-	// biome-ignore lint: packages/linter/src/no-native-methods.grit
+	// biome-ignore lint/plugin: native methods
 	return s.trim()
 }
 
-// no-arg-destructuring
-// biome-ignore lint: packages/linter/src/no-arg-destructuring.grit
+// biome-ignore lint/plugin: arg destructuring
 function test_arg_destructuring({name}: {name: string}) {
 	return name
 }
 
-// no-access-variables (property access)
 function test_access(props: {user: {name: string}}) {
-	// biome-ignore lint: packages/linter/src/no-access-variables.grit
+	// biome-ignore lint/plugin: access variable
 	const name = props.user.name
 	return name
 }
 
-// no-access-variables (variable alias)
 function test_alias(db: unknown) {
-	// biome-ignore lint: packages/linter/src/no-access-variables.grit
+	// biome-ignore lint/plugin: access variable
 	const database = db
 	return database
 }
 
-// no-simple-check-variables
 function test_simple_check(role: string) {
-	// biome-ignore lint: packages/linter/src/no-simple-check-variables.grit
+	// biome-ignore lint/plugin: check variable
 	const isAdmin = role === 'admin'
 	return isAdmin
 }
 
-// no-return-undefined-null
 function test_return_null() {
-	// biome-ignore lint: packages/linter/src/no-return-undefined-null.grit
+	// biome-ignore lint/plugin: return null
 	return null
 }
 
-// no-react-hooks (memoization)
 function test_react_hooks() {
-	// biome-ignore lint: packages/linter/src/no-react-hooks.grit
+	// biome-ignore lint/plugin: react hooks
 	useCallback(() => {}, [])
 }
 
-// no-arrow-for-named
-// biome-ignore lint: packages/linter/src/no-arrow-for-named.grit
+// biome-ignore lint/plugin: react hooks
+const MemoComponent = memo(() => <div>hello</div>)
+
+// biome-ignore lint/plugin: arrow function
 const bad_arrow_fn = (x: string) => x
 
-// no-ternary-in-jsx
+// biome-ignore lint/plugin: function expression
+const bad_fn_expr = function (x: string) {
+	return x
+}
+
+// biome-ignore lint/plugin: function expression
+const bad_named_fn_expr = function bad_named_fn_expr(x: string) {
+	return x
+}
+
 function test_ternary_null(show: boolean) {
-	// biome-ignore lint: packages/linter/src/no-ternary-in-jsx.grit
+	// biome-ignore lint/plugin: ternary jsx
 	return show ? <div>hello</div> : null
 }
 
-// no-inline-style
 function test_inline_style() {
-	// biome-ignore lint: packages/linter/src/no-inline-style.grit
+	// biome-ignore lint/plugin: inline style
 	return <div style={{color: 'red'}}>hello</div>
 }
 
-// cn-classname
 function test_cn_classname(active: boolean) {
-	// biome-ignore lint: packages/linter/src/cn-classname.grit
+	// biome-ignore lint/plugin: cn classname
 	return <div className={active ? 'active' : 'inactive'}>hi</div>
 }
 
-// no-variable-type-annotation
-// biome-ignore lint: packages/linter/src/no-variable-type-annotation.grit
+// biome-ignore lint/plugin: type annotation
 const bad_annotation: string[] = []
 
-// no-return-type-annotation - named function
-// biome-ignore lint: packages/linter/src/no-return-type-annotation.grit
+// biome-ignore lint/plugin: return type
 function bad_return_type(): string {
 	return ''
 }
 
-// no-return-type-annotation - arrow function assigned to const
-// biome-ignore lint: packages/linter/src/no-return-type-annotation.grit
+// biome-ignore lint/plugin: return type
 const bad_arrow_return = (x: number): string => String(x)
 
-// no-return-type-annotation - callback arrow function
-// biome-ignore lint: packages/linter/src/no-return-type-annotation.grit
+// biome-ignore lint/plugin: return type
 const arr = [1, 2, 3].map((x): string => String(x))
 
-// no-typeof-window-undefined
 function test_typeof_window() {
-	// biome-ignore lint: packages/linter/src/no-typeof-window-undefined.grit
+	// biome-ignore lint/plugin: typeof window
 	if (typeof window === 'undefined') return null
 }
 
-// no-tailwind-class-variables
-// biome-ignore lint: packages/linter/src/no-tailwind-class-variables.grit
+// biome-ignore lint/plugin: tailwind class
 const PANEL_CLASS = 'border border-border/70 bg-background/92'
 
-// no-simple-function-variables (arrow)
-// biome-ignore lint: packages/linter/src/no-simple-function-variables.grit
+// biome-ignore lint/plugin: simple function
 const clampUnit = (value: number) => Math.max(0, Math.min(0.999999, value))
 
-// no-simple-function-variables (function expression)
-// biome-ignore lint: packages/linter/src/no-simple-function-variables.grit
+// biome-ignore lint/plugin: simple function
 const clampUnit2 = function (value: number) {
 	return Math.max(0, Math.min(0.999999, value))
 }
 
-// no-native-methods (split)
 function test_split(str: string) {
-	// biome-ignore lint: packages/linter/src/no-native-methods.grit
+	// biome-ignore lint/plugin: native methods
 	return str.split(':')
 }
+
+// biome-ignore lint/plugin: primitive const
+const PRIMITIVE_STRING = 'hello'
+
+// biome-ignore lint/plugin: primitive const
+const PRIMITIVE_NUMBER = 42
+
+// biome-ignore lint/plugin: primitive const
+const PRIMITIVE_BOOLEAN = true
+
+// biome-ignore lint/plugin: primitive const
+const AS_CONST_STRING = 'value' as const
+
+// biome-ignore lint/plugin: primitive const
+const AS_CONST_NUMBER = 42 as const
+
+// This should NOT be flagged - it's an object
+const VALID_OBJECT = {foo: 'bar'}
+
+// This should NOT be flagged - it's an array
+const VALID_ARRAY = [1, 2, 3]
+
+// This should NOT be flagged - it's a function
+// biome-ignore lint/plugin: arrow function
+const VALID_FUNCTION = () => 'hello'
+
+// biome-ignore lint/plugin: effect fail
+const bad_fail = Effect.fail(new Error('test'))
+
+// biome-ignore lint/plugin: effect succeed
+const bad_succeed = Effect.succeed('value')

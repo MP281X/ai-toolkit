@@ -15,13 +15,13 @@ const router = createRouter({
 })
 
 declare module '@tanstack/react-router' {
-	// biome-ignore lint/style/useConsistentTypeDefinitions: tanstack router
+	// biome-ignore lint/style/useConsistentTypeDefinitions: tanstack
 	interface Register {
 		router: typeof router
 	}
 }
 
-// biome-ignore lint/style/noNonNullAssertion: root
+// biome-ignore lint/style/noNonNullAssertion: dom root
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

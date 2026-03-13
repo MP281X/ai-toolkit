@@ -20,21 +20,6 @@ metadata:
 ```
 
 
-## Return types
-
-Never add explicit return type annotations. TypeScript infers them.
-
-```typescript
-// Bad
-const format = (name: string): string => String.trim(name)
-function process(items: string[]): number { return items.length }
-
-// Good
-const format = (name: string) => String.trim(name)
-function process(items: string[]) { return items.length }
-```
-
-
 ## Imports
 
 Same-package imports use relative paths with `.ts` extension.

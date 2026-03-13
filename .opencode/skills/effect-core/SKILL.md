@@ -58,23 +58,6 @@ const saveAndNotify = flow(
 )
 ```
 
-Rewrite Effect.succeed/fail branching as generators:
-
-```typescript
-// Bad
-function resolve(value: string) {
-  const found = Array.findFirst(items, item => item.id === value)
-  if (Option.isNone(found)) return Effect.fail(new NotFound())
-  return Effect.succeed(found.value)
-}
-
-// Good
-const resolve = Effect.fnUntraced(function* (value: string) {
-  const found = yield* Array.findFirst(items, item => item.id === value)
-  return found
-})
-```
-
 
 ## Services
 
@@ -171,13 +154,9 @@ export class MyService extends ServiceMap.Service<...>()('MyService') {
 
 ## Domain errors
 
-Each service has one error type using Schema.TaggedErrorClass.
+Each service has one error type using Schema.TaggedErrorClass. Yield domain errors directly and map external causes into that type.
 
 ```typescript
-// Bad
-yield* Effect.fail(new Error('not found'))
-
-// Good
 export class UsersError extends Schema.TaggedErrorClass<UsersError>()('UsersError', {
   cause: Schema.optional(Schema.Unknown),
   message: Schema.optional(Schema.NonEmptyString)

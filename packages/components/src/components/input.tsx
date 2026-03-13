@@ -97,7 +97,7 @@ function EditorKeyboard(props: {
 	const [editor] = useLexicalComposerContext()
 
 	useLayoutEffect(() => {
-		// biome-ignore lint/style/noParameterAssign: setting forwarded ref
+		// biome-ignore lint/style/noParameterAssign: setting ref
 		props.editorRef.current = editor
 		if (!props.disabled) {
 			editor.focus()
@@ -151,7 +151,7 @@ function EditorKeyboard(props: {
 		[editor, props.menuOpen, props.onDismiss, props.onNavigate, props.onSelect, props.onSubmit]
 	)
 
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
@@ -165,7 +165,7 @@ export function ChatInput(props: ChatInputProps) {
 		if (!isValidElement(child)) continue
 
 		if (child.type === Autocomplete) {
-			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			// biome-ignore lint/plugin: type assertion
 			const autocompleteChild = child as React.ReactElement<AutocompleteConfig>
 			const options = Array.empty<ResolvedOption>()
 
@@ -174,7 +174,7 @@ export function ChatInput(props: ChatInputProps) {
 
 				if (optionChild.type !== AutocompleteOption) continue
 
-				// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+				// biome-ignore lint/plugin: type assertion
 				const autocompleteOptionChild = optionChild as React.ReactElement<AutocompleteOptionConfig>
 				options.push({
 					value: autocompleteOptionChild.props.value,
@@ -190,7 +190,7 @@ export function ChatInput(props: ChatInputProps) {
 		}
 
 		if (child.type === Snippets) {
-			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			// biome-ignore lint/plugin: type assertion
 			const snippetsChild = child as React.ReactElement<{children: React.ReactNode}>
 
 			for (const snippetChild of Children.toArray(snippetsChild.props.children)) {
@@ -198,7 +198,7 @@ export function ChatInput(props: ChatInputProps) {
 
 				if (snippetChild.type !== Snippet) continue
 
-				// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+				// biome-ignore lint/plugin: type assertion
 				const snippetElement = snippetChild as React.ReactElement<SnippetConfig>
 				snippets.push({insert: snippetElement.props.insert, children: snippetElement.props.children})
 			}
@@ -207,13 +207,13 @@ export function ChatInput(props: ChatInputProps) {
 		}
 
 		if (child.type === Toolbar) {
-			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			// biome-ignore lint/plugin: type assertion
 			toolbar = (child as React.ReactElement<{children: React.ReactNode}>).props.children
 			continue
 		}
 
 		if (child.type === InputActions) {
-			// biome-ignore lint: packages/linter/src/no-type-assertion.grit
+			// biome-ignore lint/plugin: type assertion
 			actions = (child as React.ReactElement<{children?: React.ReactNode}>).props.children ?? null
 		}
 	}
@@ -251,7 +251,7 @@ export function ChatInput(props: ChatInputProps) {
 
 		if (Predicate.isNullish(editorRef.current)) return
 
-		// biome-ignore lint: packages/linter/src/no-access-variables.grit
+		// biome-ignore lint/plugin: access variable
 		const nextValue = props.value
 
 		const currentValue = editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
@@ -332,7 +332,7 @@ export function ChatInput(props: ChatInputProps) {
 										{entry.children ?? (
 											<div className="flex items-center gap-2">
 												{Predicate.isNotNullish(entry.icon) && <span>{entry.icon}</span>}
-												{/* biome-ignore lint: dynamic token colors come from user-provided autocomplete config */}
+												{/* biome-ignore lint/plugin: dynamic colors */}
 												<span className="font-medium" style={{color: entry.color}}>
 													{active.char}
 													{entry.value}
@@ -613,7 +613,7 @@ export function ChatInput(props: ChatInputProps) {
 								multiple
 								disabled={props.disabled ?? false}
 								onChange={event => {
-									// biome-ignore lint: packages/linter/src/no-access-variables.grit
+									// biome-ignore lint/plugin: access variable
 									const files = event.currentTarget.files
 									if (Predicate.isNullish(files) || Predicate.isNullish(editorRef.current)) {
 										return
@@ -702,32 +702,32 @@ export function ChatInput(props: ChatInputProps) {
 }
 
 function Autocomplete(_: AutocompleteConfig) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
 function AutocompleteOption(_: AutocompleteOptionConfig) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
 function Snippets(_: {children: React.ReactNode}) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
 function Snippet(_: SnippetConfig) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
 function Toolbar(_: {children: React.ReactNode}) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 
 function InputActions(_: {children?: React.ReactNode}) {
-	// biome-ignore lint: necessary to make so this is considered a component
+	// biome-ignore lint/plugin: component marker
 	return null
 }
 

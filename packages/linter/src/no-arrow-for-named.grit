@@ -3,7 +3,11 @@ language js(typescript, jsx)
 
 or {
 	`const $name = ($args) => $body`,
-	`export const $name = ($args) => $body`
+	`export const $name = ($args) => $body`,
+	`const $name = function ($args) { $body }`,
+	`export const $name = function ($args) { $body }`,
+	`const $name = function $fnName($args) { $body }`,
+	`export const $name = function $fnName($args) { $body }`
 } as $match where {
-	register_diagnostic(span=$match, message="Use function declaration instead of arrow function for named functions")
+	register_diagnostic(span=$match, message="Use function declaration instead of function expression for named functions")
 }

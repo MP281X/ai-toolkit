@@ -121,6 +121,6 @@ export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
 }) {
 	static layer = Layer.effect(this, this.make)
 
-	// biome-ignore lint: _
+	// biome-ignore lint/plugin: mock service
 	static layerMock = Layer.succeed(this, this.of({} as never))
 }

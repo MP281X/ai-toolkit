@@ -8,7 +8,7 @@ import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import type {MutableRefObject, ReactNode} from 'react'
-import {memo, Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
+import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/portfolio/contracts.ts'
@@ -555,7 +555,7 @@ function RealtimeLayer(input: {readonly identityColor: string; readonly viewport
 			<div className="pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border border-border/70 bg-background/95 px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
 				<span
 					className="size-2"
-					// biome-ignore lint: packages/linter/src/no-inline-style.grit
+					// biome-ignore lint/plugin: dynamic color
 					style={{backgroundColor: input.identityColor}}
 				/>
 				<span className="text-primary">{state.visitors.length}</span>
@@ -565,11 +565,11 @@ function RealtimeLayer(input: {readonly identityColor: string; readonly viewport
 	)
 }
 
-const GridOverlay = memo(function GridOverlay() {
+function GridOverlay() {
 	return (
 		<div
-			className="pointer-events-none fixed inset-0 z-[1]"
-			// biome-ignore lint: packages/linter/src/no-inline-style.grit
+			className="pointer-events-none fixed inset-0 z-1"
+			// biome-ignore lint/plugin: dynamic color
 			style={{
 				backgroundImage:
 					'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
@@ -577,12 +577,9 @@ const GridOverlay = memo(function GridOverlay() {
 			}}
 		/>
 	)
-})
+}
 
-const TrailCanvas = memo(function TrailCanvas(input: {
-	readonly trails: readonly PortfolioTrail[]
-	readonly viewport: Viewport
-}) {
+function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonly viewport: Viewport}) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
 	useEffect(() => {
@@ -634,14 +631,10 @@ const TrailCanvas = memo(function TrailCanvas(input: {
 		context.globalAlpha = 1
 	}, [input.trails, input.viewport])
 
-	return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[1]" />
-})
+	return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-1" />
+}
 
-const CursorEl = memo(function CursorEl(input: {
-	readonly cursor: PortfolioVisitor
-	readonly isMe: boolean
-	readonly viewport: Viewport
-}) {
+function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: boolean; readonly viewport: Viewport}) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
 	const latestRef = useRef({cursor: input.cursor, isMe: input.isMe, viewport: input.viewport})
 	const motionRef = useRef(
@@ -681,17 +674,17 @@ const CursorEl = memo(function CursorEl(input: {
 		<div
 			ref={nodeRef}
 			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
-			// biome-ignore lint: packages/linter/src/no-inline-style.grit
+			// biome-ignore lint/plugin: dynamic color
 			style={{
 				transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`
 			}}
 		>
 			<div className="flex items-center gap-1">
-				{/* biome-ignore lint: packages/linter/src/no-inline-style.grit */}
+				{/* biome-ignore lint/plugin: dynamic color */}
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
 				<span
 					className="whitespace-nowrap border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
-					// biome-ignore lint: packages/linter/src/no-inline-style.grit
+					// biome-ignore lint/plugin: dynamic color
 					style={{borderColor: input.cursor.color}}
 				>
 					{input.cursor.name}
@@ -700,7 +693,7 @@ const CursorEl = memo(function CursorEl(input: {
 			</div>
 		</div>
 	)
-})
+}
 
 function Section(input: {
 	readonly id: number
