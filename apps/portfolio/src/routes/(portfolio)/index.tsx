@@ -1,5 +1,5 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Number, pipe, Stream, String} from 'effect'
+import {Array, Effect, Match, Number, pipe, Stream, String} from 'effect'
 
 import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
@@ -11,7 +11,8 @@ import type {MutableRefObject, ReactNode} from 'react'
 import {memo, Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
-import type {PortfolioTrail, PortfolioVisitor} from '#rpcs/portfolio/contracts.ts'
+import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/portfolio/contracts.ts'
+import {PortfolioState} from '#rpcs/portfolio/contracts.ts'
 
 const cursorPalette = [
 	'oklch(0.74 0.19 118)',
@@ -68,12 +69,73 @@ function getIdentity() {
 
 const identity = getIdentity()
 
+function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
+	for (let index = 0; index < visitors.length; index++) {
+		if (visitors[index]?.id !== visitor.id) continue
+
+		const nextVisitors = Array.copy(visitors)
+		nextVisitors[index] = visitor
+		return nextVisitors
+	}
+
+	return Array.appendAll(visitors, [visitor])
+}
+
+function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
+	const nextVisitors = Array.empty<PortfolioVisitor>()
+
+	for (const visitor of visitors) {
+		if (visitor.id === id) continue
+		nextVisitors[nextVisitors.length] = visitor
+	}
+
+	return nextVisitors.length === visitors.length ? visitors : nextVisitors
+}
+
+function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
+	const nextTrails = Array.append(trails, trail)
+	return nextTrails.length > 180 ? Array.drop(nextTrails, nextTrails.length - 180) : nextTrails
+}
+
+function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
+	return pipe(
+		Match.value(event),
+		Match.tag('snapshot', next => new PortfolioState({visitors: next.visitors, trails: next.trails})),
+		Match.tag(
+			'visitor-upserted',
+			next =>
+				new PortfolioState({
+					visitors: upsertVisitor(state.visitors, next.visitor),
+					trails: state.trails
+				})
+		),
+		Match.tag(
+			'visitor-removed',
+			next =>
+				new PortfolioState({
+					visitors: removeVisitor(state.visitors, next.id),
+					trails: state.trails
+				})
+		),
+		Match.tag(
+			'trail-added',
+			next =>
+				new PortfolioState({
+					visitors: state.visitors,
+					trails: appendTrail(state.trails, next.trail)
+				})
+		),
+		Match.exhaustive
+	)
+}
+
 const portfolioAtom = Atom.keepAlive(
 	AtomRuntime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('portfolio.join', {id: identity.id, name: identity.name, color: identity.color})),
-			Stream.unwrap
+			Stream.unwrap,
+			Stream.scan(new PortfolioState({}), applyPortfolioEvent)
 		)
 	)
 )
@@ -230,8 +292,8 @@ function subscribeFrame(listener: (now: number) => void) {
 	}
 }
 
-function getDisplayCursorTarget(cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport, now: number) {
-	if (isMe && localPointer && now - localPointer.updatedAt <= 300) {
+function getDisplayCursorTarget(cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+	if (isMe && localPointer) {
 		return {
 			x: localPointer.x * viewport.width,
 			y: localPointer.y * viewport.height
@@ -284,14 +346,8 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 	}
 }
 
-function syncCursorMotion(
-	motion: CursorMotion,
-	cursor: PortfolioVisitor,
-	isMe: boolean,
-	viewport: Viewport,
-	now: number
-) {
-	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport, now)
+function syncCursorMotion(motion: CursorMotion, cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
 		return createCursorMotion(nextTarget, viewport)
@@ -323,6 +379,13 @@ function useViewport() {
 		width: Number.parse(width) || 0,
 		height: Number.parse(height) || 0
 	} satisfies Viewport
+}
+
+function getTrailCell(trail: PortfolioTrail, viewport: Viewport) {
+	return {
+		col: Math.floor((trail.x * viewport.width) / 26),
+		row: Math.floor((trail.y * viewport.height) / 26)
+	}
 }
 
 function Panel(input: {readonly className?: string; readonly children: ReactNode}) {
@@ -420,11 +483,13 @@ function PortfolioRoute() {
 						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
 						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
 
-						if (now - lastSentPointerRef.current.sentAt < 55 && deltaX * deltaX + deltaY * deltaY < 0.002 * 0.002) {
+						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
 							queuedPointerRef.current = undefined
 							return
 						}
 					}
+
+					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
 
 					lastSentPointerRef.current = {
 						x: queuedPointerRef.current.x,
@@ -508,7 +573,7 @@ const GridOverlay = memo(function GridOverlay() {
 			style={{
 				backgroundImage:
 					'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
-				backgroundSize: '24px 24px'
+				backgroundSize: '26px 26px'
 			}}
 		/>
 	)
@@ -541,16 +606,33 @@ const TrailCanvas = memo(function TrailCanvas(input: {
 		context.clearRect(0, 0, input.viewport.width, input.viewport.height)
 		context.globalAlpha = 0.22
 
-		for (const trail of input.trails) {
-			const col = Math.floor((trail.x * input.viewport.width) / 24)
-			const row = Math.floor((trail.y * input.viewport.height) / 24)
+		const previousByVisitor = new Map<string, {trail: PortfolioTrail; col: number; row: number}>()
 
-			context.fillStyle = trail.color
-			context.fillRect(col * 24 + 1, row * 24 + 1, 22, 22)
+		for (const trail of input.trails) {
+			const current = {...getTrailCell(trail, input.viewport), trail}
+			const previous = previousByVisitor.get(trail.visitorId)
+
+			if (previous) {
+				const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
+
+				for (let step = 0; step <= stepCount; step++) {
+					const progress = stepCount === 0 ? 1 : step / stepCount
+					const col = Math.round(previous.col + (current.col - previous.col) * progress)
+					const row = Math.round(previous.row + (current.row - previous.row) * progress)
+
+					context.fillStyle = progress < 1 ? previous.trail.color : current.trail.color
+					context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
+				}
+			} else {
+				context.fillStyle = current.trail.color
+				context.fillRect(current.col * 26 + 1, current.row * 26 + 1, 24, 24)
+			}
+
+			previousByVisitor.set(trail.visitorId, current)
 		}
 
 		context.globalAlpha = 1
-	}, [input.trails, input.viewport.height, input.viewport.width])
+	}, [input.trails, input.viewport])
 
 	return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[1]" />
 })
@@ -563,15 +645,12 @@ const CursorEl = memo(function CursorEl(input: {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
 	const latestRef = useRef({cursor: input.cursor, isMe: input.isMe, viewport: input.viewport})
 	const motionRef = useRef(
-		createCursorMotion(
-			getDisplayCursorTarget(input.cursor, input.isMe, input.viewport, performance.now()),
-			input.viewport
-		)
+		createCursorMotion(getDisplayCursorTarget(input.cursor, input.isMe, input.viewport), input.viewport)
 	)
 
 	useEffect(() => {
 		latestRef.current = {cursor: input.cursor, isMe: input.isMe, viewport: input.viewport}
-		motionRef.current = syncCursorMotion(motionRef.current, input.cursor, input.isMe, input.viewport, performance.now())
+		motionRef.current = syncCursorMotion(motionRef.current, input.cursor, input.isMe, input.viewport)
 
 		if (nodeRef.current) setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
 	}, [input.cursor, input.isMe, input.viewport])
@@ -589,8 +668,7 @@ const CursorEl = memo(function CursorEl(input: {
 					motionRef.current,
 					latestRef.current.cursor,
 					latestRef.current.isMe,
-					latestRef.current.viewport,
-					now
+					latestRef.current.viewport
 				),
 				now
 			)

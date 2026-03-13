@@ -18,5 +18,5 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(Git.layerMock),
 	// base layers
 	Layer.provideMerge(OtelLayer('server')),
-	Layer.provideMerge(RpcSerialization.layerNdjson)
+	Layer.provideMerge(RpcSerialization.layerMsgPack)
 )
