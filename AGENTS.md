@@ -2,7 +2,6 @@
 
 Global rules for all agents.
 
-
 ## Research Required
 
 Always search `.opencode/resources/{reponame}/` before implementing.
@@ -14,7 +13,6 @@ NEVER research in node_modules
 Use explore agent for parallel research across packages
 Critical for Effect v4: training data only covers v3
 ```
-
 
 ## Validation
 

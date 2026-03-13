@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`import($path)` as $match where {
+	register_diagnostic(span=$match, message="Never use dynamic imports. Import at module level instead")
+}

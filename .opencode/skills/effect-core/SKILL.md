@@ -17,31 +17,33 @@ metadata:
 
 ## Effect.gen
 
-Use for multi-step computations with no arguments.
+Use for multi-step computations that cannot be expressed as a pipe.
 
 ```typescript
-// Bad
+// Bad - fnUntraced with no arguments
 const load = Effect.fnUntraced(function* () {
-  const db = yield* Database
-  return yield* db.query('SELECT * FROM users')
+  const a = yield* fetchA()
+  const b = yield* fetchB(a)
+  return b
 })
 
-// Good
+// Good - gen for multi-step without arguments
 const load = Effect.gen(function* () {
-  const db = yield* Database
-  return yield* db.query('SELECT * FROM users')
+  const a = yield* fetchA()
+  const b = yield* fetchB(a)
+  return b
 })
 ```
 
 
 ## Effect.fnUntraced
 
-Use for functions with arguments.
+Use for functions with arguments that cannot be expressed as a flow.
 
 ```typescript
-// Good
+// Good - fnUntraced with arguments
 const save = Effect.fnUntraced(function* (name: string) {
-  const id = yield* db.insert('users', {name})
+  const id = yield* db.insert(name)
   yield* log(`created ${id}`)
 })
 ```
@@ -51,7 +53,7 @@ Use with `flow` for composition:
 ```typescript
 const saveAndNotify = flow(
   Effect.fnUntraced(function* (name: string) {
-    const id = yield* db.insert('users', {name})
+    const id = yield* db.insert(name)
     return id
   }),
   Effect.flatMap(id => sendNotification(id))
@@ -64,41 +66,39 @@ const saveAndNotify = flow(
 Always use ServiceMap.Service class syntax.
 
 ```typescript
-// Bad
+// Bad - plain object
 const Database = {query: (sql: string) => Effect.succeed([])}
 
-// Good
+// Good - Service class
 class Database extends ServiceMap.Service<Database, {
   readonly query: (sql: string) => Effect.Effect<ReadonlyArray<unknown>, DbError>
 }>()('Database') {}
 ```
 
-Inside service `make`, use pipe, flow, and Effect.fnUntraced:
+Inside service `make`, use pipe and Effect.fnUntraced:
 
 ```typescript
-// Bad
+// Bad - nested gen
 export class Users extends ServiceMap.Service<Users>()('Users', {
   make: Effect.gen(function* () {
     const db = yield* Database
     return {
-      delete: (id: string) => Effect.gen(function* () {
-        yield* db.exec('DELETE FROM users WHERE id = ?', [id])
-      })
+      delete: (id: string) => db.exec(id)
     }
   })
 }) {}
 
-// Good
+// Good - pipe and fnUntraced
 export class Users extends ServiceMap.Service<Users>()('Users', {
   make: Effect.gen(function* () {
     const db = yield* Database
     return {
       list: pipe(
-        db.query('SELECT * FROM users'),
+        db.query('SELECT *'),
         Effect.mapError(cause => new UsersError({cause}))
       ),
       delete: Effect.fnUntraced(function* (id: string) {
-        yield* db.exec('DELETE FROM users WHERE id = ?', [id])
+        yield* db.exec(id)
       })
     }
   })
@@ -113,94 +113,34 @@ export class Users extends ServiceMap.Service<Users>()('Users', {
 Define the layer inside the service class. Name external implementations with `Live` suffix.
 
 ```typescript
-// Bad - circular dependency
-// sdk.ts:
-import {MyService} from './service.ts'
+// Bad - separate layer file
 export const MyServiceLayer = Layer.effect(MyService)(makeService)
 
-// Good - layer inside service class
-// sdk.ts:
-export const MyServiceLive = Effect.gen(function* () {
-  return {process, transform}
-})
-// service.ts:
-import {MyServiceLive} from './sdk.ts'
+// Good - layer inside class
 export class MyService extends ServiceMap.Service<...>()('MyService') {
   static layer = Layer.effect(this, MyServiceLive)
 }
 ```
 
 
-## No dynamic imports
-
-Never use `import()` inside Effect code.
-
-```typescript
-// Bad
-static layer = MyService.toLayer(
-  Effect.gen(function* () {
-    const {make} = yield* Effect.promise(() => import('./impl'))
-    return yield* make
-  })
-)
-
-// Good
-import {MyServiceLive} from './impl.ts'
-export class MyService extends ServiceMap.Service<...>()('MyService') {
-  static layer = Layer.effect(this)(MyServiceLive)
-}
-```
-
-
 ## Domain errors
 
-Each service has one error type using Schema.TaggedErrorClass. Yield domain errors directly and map external causes into that type.
+Each service has one error type using Schema.TaggedErrorClass. Yield domain errors directly.
 
 ```typescript
 export class UsersError extends Schema.TaggedErrorClass<UsersError>()('UsersError', {
   cause: Schema.optional(Schema.Unknown),
-  message: Schema.optional(Schema.NonEmptyString)
+  message: Schema.optional(Schema.String)
 }) {}
 
+// Yield directly
 yield* new UsersError({message: 'not found'})
 
+// Map external errors
 yield* pipe(
   externalOp,
   Effect.mapError(cause => new UsersError({cause}))
 )
-```
-
-
-## Streams
-
-Use Effect.forkScoped for background streams.
-
-```typescript
-// Bad
-yield* Effect.fork(pipe(events, Stream.runDrain))
-
-// Good
-yield* Effect.forkScoped(
-  pipe(
-    events,
-    Stream.debounce(Duration.millis(50)),
-    Stream.runDrain
-  )
-)
-```
-
-
-## Layers
-
-Use Layer.mergeAll for composition. Use Layer.provide for wiring.
-
-```typescript
-// Bad
-Effect.provide(Db.layer)(Effect.provide(Http.layer)(doWork))
-
-// Good
-const Live = Layer.mergeAll(Db.layer, Http.layer)
-Effect.runPromise(pipe(doWork, Effect.provide(Live)))
 ```
 
 
@@ -214,5 +154,4 @@ Effect.forEach(items, processItem)
 
 // Good
 Effect.forEach(items, processItem, {concurrency: 'unbounded'})
-Effect.all([effectA, effectB], {concurrency: 'unbounded'})
 ```

@@ -1,0 +1,14 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`Effect.fail($_)` as $match where {
+		register_diagnostic(span=$match, message="Effect.fail is banned - use yield* with Schema.TaggedErrorClass directly instead")
+	},
+	`Effect.succeed($_)` as $match where {
+		register_diagnostic(span=$match, message="Effect.succeed is banned - use Effect.gen or Effect.fnUntraced instead")
+	},
+	`($args) => Effect.gen($body)` as $match where {
+		register_diagnostic(span=$match, message="Use Effect.fnUntraced instead of wrapping Effect.gen in an arrow function")
+	}
+}

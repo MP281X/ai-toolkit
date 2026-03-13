@@ -6,7 +6,7 @@
 		"./packages/linter/src/no-renamed-imports.grit",
 		"./packages/linter/src/no-return-undefined-null.grit",
 		"./packages/linter/src/no-native-methods.grit",
-		"./packages/linter/src/no-effect-gen-with-args.grit",
+		"./packages/linter/src/no-effect-antipatterns.grit",
 		"./packages/linter/src/no-arg-destructuring.grit",
 		"./packages/linter/src/no-access-variables.grit",
 		"./packages/linter/src/no-simple-check-variables.grit",
@@ -22,8 +22,12 @@
 		"./packages/linter/src/no-tailwind-class-variables.grit",
 		"./packages/linter/src/no-simple-function-variables.grit",
 		"./packages/linter/src/no-primitive-const.grit",
-		"./packages/linter/src/no-effect-fail.grit",
-		"./packages/linter/src/no-effect-succeed.grit"
+		"./packages/linter/src/no-length-check.grit",
+		"./packages/linter/src/no-typeof.grit",
+		"./packages/linter/src/no-manual-tag-check.grit",
+		"./packages/linter/src/no-in-operator.grit",
+		"./packages/linter/src/no-nullish-checks.grit",
+		"./packages/linter/src/no-dynamic-imports.grit"
 	],
 
 	"linter": {

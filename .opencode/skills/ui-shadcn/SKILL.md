@@ -42,33 +42,6 @@ import { Card, CardContent } from '@components/ui/card'
 ```
 
 
-## Compose primitives
-
-Use Dialog instead of custom modals.
-
-```tsx
-// Bad - custom modal
-function UserModal({open}) {
-  if (!open) return
-  return (
-    <div className="fixed inset-0 bg-black/50">
-      <div className="bg-white p-4">...</div>
-    </div>
-  )
-}
-
-// Good - Dialog primitive
-<Dialog>
-  <DialogTrigger>Open</DialogTrigger>
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>Title</DialogTitle>
-    </DialogHeader>
-  </DialogContent>
-</Dialog>
-```
-
-
 ## Don't fork components
 
 Wrap at screen level. Never edit shadcn source.
@@ -84,34 +57,6 @@ function UserScreen() {
     </Card>
   )
 }
-```
-
-
-## Theme tokens
-
-Always use theme tokens. Never hardcode.
-
-```typescript
-// Bad
-<div style={{ backgroundColor: '#3b82f6' }}>
-<div className="p-[13px]">
-
-// Good
-<div className="bg-primary">
-<div className="p-2">
-```
-
-Prefer existing tokens before arbitrary values.
-
-```typescript
-// Bad - arbitrary when token fits
-<span className="text-[#f97316]">Warning</span>
-
-// Good - theme token
-<span className="text-destructive">Error</span>
-
-// Acceptable - truly one-off
-<span className="text-[#4ade80]">Passing</span>
 ```
 
 

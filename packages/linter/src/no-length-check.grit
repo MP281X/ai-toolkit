@@ -1,0 +1,24 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	or {
+		`$expr.length === 0`,
+		`$expr.length == 0`,
+		`$expr.length < 1`,
+		`0 === $expr.length`,
+		`0 == $expr.length`
+	} as $match where {
+		register_diagnostic(span=$match, message="Use String.isEmpty or Array.isArrayEmpty instead of manual length checks")
+	},
+	or {
+		`$expr.length > 0`,
+		`$expr.length >= 1`,
+		`$expr.length !== 0`,
+		`$expr.length != 0`,
+		`0 < $expr.length`,
+		`1 <= $expr.length`
+	} as $match where {
+		register_diagnostic(span=$match, message="Use String.isNonEmpty or Array.isArrayNonEmpty instead of manual length checks")
+	}
+}

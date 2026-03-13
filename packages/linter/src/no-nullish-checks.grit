@@ -1,0 +1,23 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+	`$expr == null` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isNullish for null/undefined checks")
+	},
+	`$expr != null` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isNotNullish for null/undefined checks")
+	},
+	`$expr === null` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isNull for strict null checks")
+	},
+	`$expr !== null` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isNotNull for strict not-null checks")
+	},
+	`$expr === undefined` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isUndefined for undefined checks")
+	},
+	`$expr !== undefined` as $match where {
+		register_diagnostic(span=$match, message="Use Predicate.isNotUndefined for not-undefined checks")
+	}
+}

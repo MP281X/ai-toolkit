@@ -1,8 +1,8 @@
 ---
 name: refactor
-description: Post-implementation cleanup ONLY
+description: Simplify code, remove unnecessary code, and cleanup legacy patterns
 metadata:
-  patterns: dead code removal, defensive checks, thin wrappers, simplification
+  patterns: simplification, dead code removal, defensive checks, flattening
 ---
 
 ## Source files
@@ -15,25 +15,9 @@ metadata:
 ```
 
 
-## Required skills
-
-This skill MUST load and apply ALL relevant skills. The refactor pass is the final enforcement of every guideline.
-
-```typescript
-// Process:
-// 1. Inspect code
-// 2. Load all relevant skills
-// 3. Research .opencode/resources/
-// 4. Apply EVERY skill rule strictly
-// 5. Simplify even if code is duplicated
-// 6. Run `bun run fix && bun run check`
-// 7. Report simplifications and skill violations fixed
-```
-
-
 ## Remove defensive checks
 
-Attempt and handle failure.
+Attempt and handle failure instead of checking first.
 
 ```typescript
 // Bad - check then act
@@ -51,7 +35,7 @@ yield* pipe(
 
 ## Remove redundant validation
 
-Trust the Effect chain.
+Trust the types and Effect chain.
 
 ```typescript
 // Bad - checking what types guarantee
@@ -91,12 +75,12 @@ const result = yield* pipe(
 
 ## Inline transient containers
 
-Inline transient containers when extraction adds no reuse.
+Inline when extraction adds no reuse.
 
 ```typescript
-// Bad - extracted container only feeds one schema default
-const emptyParts: readonly Part[] = []
-const schema = Schema.withConstructorDefault(() => Option.some(emptyParts))
+// Bad - extracted for single use
+const empty: readonly Item[] = []
+const schema = Schema.withConstructorDefault(() => Option.some(empty))
 
 // Good
 const schema = Schema.withConstructorDefault(() => Option.some([]))
@@ -105,18 +89,18 @@ const schema = Schema.withConstructorDefault(() => Option.some([]))
 
 ## Delete routing functions
 
-Don't create functions that only branch to other functions.
+Do not create functions that only branch.
 
 ```typescript
-// Bad
-function getItems(kind: 'active' | 'archived') {
-  if (kind === 'active') return getActive()
-  return getArchived()
+// Bad - pure branching
+function getItems(kind: 'a' | 'b') {
+  if (kind === 'a') return getA()
+  return getB()
 }
 
-// Good
-getActive()
-getArchived()
+// Good - call directly
+getA()
+getB()
 ```
 
 
@@ -125,26 +109,30 @@ getArchived()
 Remove section banners and obvious comments.
 
 ```typescript
-// Bad - section banners
-// ── Provider Resolution ──
-function resolve(config: Config) { ... }
-
-// ── Data Transformation ──
-const transformers = { ... }
-
-// Good
-function resolve(config: Config) { ... }
-const transformers = { ... }
+// Bad - section banner
+// ── Helpers ──
+function helper() { ... }
 
 // Bad - obvious comment
-// Convert file to base64
-async function fileToBase64(file: File) { ... }
+// Convert to string
+function toString(x: number) { ... }
 
 // Good
-async function fileToBase64(file: File) { ... }
+function helper() { ... }
+function toString(x: number) { ... }
 ```
 
 
 ## Remove dead code
 
-Remove commented-out code and abandoned branches.
+Remove commented-out code and unused code.
+
+```typescript
+// Bad - commented code
+// function old() { ... }
+
+// Bad - unused function
+function unused() { ... }
+
+// Good - delete both
+```

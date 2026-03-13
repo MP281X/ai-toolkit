@@ -9,151 +9,108 @@ metadata:
 
 ```
 .opencode/resources/effect/packages/effect/src/unstable/reactivity/Atom.ts
-.opencode/resources/effect/packages/atom/react/src/Hooks.ts
 ```
 
 
-## Atom definition
+## Module scope atoms
 
-Define atoms at module scope.
+Define all atoms at module scope using AtomRuntime. Keep all logic out of components.
 
 ```typescript
-// Bad - atom inside component
-function RouteComponent() {
-  const itemsAtom = Atom.keepAlive(...)
-  const items = useAtomValue(itemsAtom)
+import {AtomRuntime} from '#lib/atomRuntime.ts'
+
+// Bad - React state inside component
+function Component() {
+  const [data, setData] = useState()
+  useEffect(() => {
+    fetchData().then(setData)
+  }, [])
 }
 
-// Good - atom at module scope
+// Good - atom at module scope with Effect
+const dataAtom = AtomRuntime.atom(
+  Effect.gen(function* () {
+    const value = yield* fetchData()
+    return value
+  })
+)
+
+function Component() {
+  const {value: data} = useAtomSuspense(dataAtom)
+  return <div>{data}</div>
+}
+```
+
+
+## Stream atoms
+
+For real-time data from RpcClient, use keepAlive with Stream.unwrap.
+
+```typescript
 const itemsAtom = Atom.keepAlive(
   AtomRuntime.atom(
     pipe(
       RpcClient.asEffect(),
-      Effect.map(client => client('items.stream', void 0)),
+      Effect.map(client => client('rpc.method', void 0)),
       Stream.unwrap
     )
   )
 )
 
-function RouteComponent() {
+function Component() {
   const {value: items} = useAtomSuspense(itemsAtom)
+  return <List items={items} />
 }
-```
-
-
-## Stream shaping
-
-Keep stream logic inside the atom.
-
-```typescript
-// Bad - transform in component
-const itemsAtom = Atom.keepAlive(...)
-function RouteComponent() {
-  const {value: items} = useAtomSuspense(itemsAtom)
-  const visible = Array.filter(items, item => item.visible)
-}
-
-// Good - shape in atom definition
-const visibleItemsAtom = Atom.keepAlive(
-  AtomRuntime.atom(
-    pipe(
-      RpcClient.asEffect(),
-      Effect.map(client =>
-        client('items.stream', void 0).pipe(
-          Stream.map(items => Array.filter(items, item => item.visible))
-        )
-      ),
-      Stream.unwrap
-    )
-  )
-)
 ```
 
 
 ## Reading atoms
 
-Use useAtomSuspense for async, useAtomValue for sync.
+Use useAtomSuspense. The route has a Suspense boundary.
 
 ```typescript
-// Bad - useAtomValue on async atom
-function RouteComponent() {
-  const items = useAtomValue(itemsAtom)
-}
-
-// Good
-function RouteComponent() {
+function Component() {
   const {value: items} = useAtomSuspense(itemsAtom)
-  const count = useAtomValue(countAtom)
+  return <List items={items} />
 }
 ```
 
 
 ## Mutations
 
-Use useAtomSet with RpcClient.mutation.
+Use useAtomSet for mutations.
 
 ```typescript
-// Bad - useState + manual fetch
-function RouteComponent() {
-  const [isLoading, setIsLoading] = useState(false)
-  const create = async (name: string) => {
-    setIsLoading(true)
-    await api.post('/items', {name})
-    setIsLoading(false)
-  }
-}
-
-// Good - useAtomSet
-function RouteComponent() {
-  const createItem = useAtomSet(RpcClient.mutation('items.create'))
-  createItem({payload: {name: 'Draft'}})
+function Component() {
+  const createItem = useAtomSet(createAtom)
+  createItem({name: 'New'})
 }
 ```
 
 
-## Hooks
+## Logic in atoms
 
-Use dedicated atom hooks.
+Move all logic into atoms. Components should only read values and trigger mutations.
 
 ```typescript
-// Bad - manual re-fetch pattern
-function RouteComponent() {
-  const [_, setTick] = useState(0)
-  const refresh = () => setTick(t => t + 1)
+// Bad - React useState and useEffect
+function Component() {
+  const [state, setState] = useState({items: [], selected: null})
+  useEffect(() => {
+    fetchItems().then(items => setState(s => ({...s, items})))
+  }, [])
 }
 
-// Good
-function RouteComponent() {
-  const refresh = useAtomRefresh(itemsAtom)
-  useAtomSubscribe(itemsAtom, items => {
-    void items
+// Good - all logic in atom
+const itemsAtom = AtomRuntime.atom(
+  Effect.gen(function* () {
+    const items = yield* fetchItems()
+    return items
   })
-}
-```
+)
 
-
-## Route wiring
-
-Atoms at module scope, route logic in component.
-
-```typescript
-// Bad - atoms inline, useEffect for data
-export const Route = createFileRoute('/items/')({
-  component: () => {
-    const [data, setData] = useState(null)
-    useEffect(() => { fetchData().then(setData) }, [])
-    return <div>{data}</div>
-  }
-})
-
-// Good
-export const Route = createFileRoute('/items/')({
-  component: RouteComponent
-})
-
-function RouteComponent() {
-  const {value: data} = useAtomSuspense(dataAtom)
-  const mutate = useAtomSet(RpcClient.mutation('rpc.method'))
-  return <div>...</div>
+function Component() {
+  const {value: items} = useAtomSuspense(itemsAtom)
+  return <List items={items} />
 }
 ```

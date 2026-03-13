@@ -28,6 +28,10 @@ const resources = [
 	{
 		name: 'opencode',
 		url: 'https://github.com/anomalyco/opencode'
+	},
+	{
+		name: 'exa-js',
+		url: 'https://github.com/exa-labs/exa-js'
 	}
 ]
 
