@@ -11,6 +11,9 @@ language js(typescript, jsx)
 		},
 		`useImperativeHandle` where {
 			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useImperativeHandle as it interferes with the compiler")
+		},
+		`memo` where {
+			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use memo as it interferes with the compiler")
 		}
 	}
 }

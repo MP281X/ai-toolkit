@@ -89,28 +89,12 @@ const result = yield* pipe(
 ```
 
 
-## Inline single-use functions
+## Inline transient containers
 
-Never extract single-use, single-line functions.
-
-```typescript
-// Bad
-function format(name: string) {
-  return String.trim(name)
-}
-const clean = format(input)
-
-// Good
-const clean = String.trim(input)
-```
-
-
-## Inline single-use constants
-
-Never extract single-use constants.
+Inline transient containers when extraction adds no reuse.
 
 ```typescript
-// Bad
+// Bad - extracted container only feeds one schema default
 const emptyParts: readonly Part[] = []
 const schema = Schema.withConstructorDefault(() => Option.some(emptyParts))
 
@@ -163,4 +147,4 @@ async function fileToBase64(file: File) { ... }
 
 ## Remove dead code
 
-Remove commented-out code. TypeScript (`noUnusedLocals`, `noUnusedParameters`) enforces removal of unused imports, variables, and parameters.
+Remove commented-out code and abandoned branches.

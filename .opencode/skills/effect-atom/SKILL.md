@@ -125,7 +125,9 @@ function RouteComponent() {
 // Good
 function RouteComponent() {
   const refresh = useAtomRefresh(itemsAtom)
-  useAtomSubscribe(itemsAtom, items => console.log(items))
+  useAtomSubscribe(itemsAtom, items => {
+    void items
+  })
 }
 ```
 

@@ -140,19 +140,6 @@ import {SomeIcon} from 'existing-library'
 ```
 
 
-## Styling
-
-Use `cn()` for ALL conditional className.
-
-```typescript
-// Bad
-<div className={`button ${isActive ? 'active' : ''}`}>
-
-// Good
-<div className={cn('button', isActive && 'active')}>
-```
-
-
 ## Layout density
 
 Build compact, information-dense layouts.

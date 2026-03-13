@@ -69,7 +69,7 @@ $ARGUMENTS
 4. **Add test case**
    In `packages/linter/src/-test.tsx`:
    ```typescript
-   // biome-ignore lint: packages/linter/src/{rule-name}.grit
+   // biome-ignore lint/plugin: <short reason>
    const badCode = "code that triggers the rule"
    ```
 
@@ -78,6 +78,22 @@ $ARGUMENTS
 
 6. **Verify**
    Run `bun run check` - should pass without errors
+
+## Suppression Format
+
+**Use simplified suppression comments throughout the codebase:**
+
+- **Custom plugin rules:** `// biome-ignore lint/plugin: <short reason>`
+  - Keep reason to 1-5 words
+  - Examples: `testing`, `dynamic color`, `type assertion`, `setting ref`
+
+- **Built-in Biome rules:** `// biome-ignore lint/<group>/<rule>: <short reason>`
+  - Example: `// biome-ignore lint/style/noParameterAssign: setting ref`
+
+**NOT allowed:**
+- Full file paths like `packages/linter/src/no-rule.grit`
+- Long explanations (keep it short!)
+- Copy-pasting full error messages into suppressions
 
 ## Output
 

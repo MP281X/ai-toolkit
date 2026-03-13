@@ -11,7 +11,7 @@ const marked = new Marked({gfm: true, breaks: true, async: false})
 function Inline(props: {content: string}) {
 	const html = marked.parse(props.content)
 
-	// biome-ignore lint/security/noDangerouslySetInnerHtml: markdown rendering requires innerHTML
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: markdown html
 	return <div dangerouslySetInnerHTML={{__html: html}} />
 }
 

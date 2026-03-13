@@ -20,7 +20,10 @@
 		"./packages/linter/src/no-return-type-annotation.grit",
 		"./packages/linter/src/no-typeof-window-undefined.grit",
 		"./packages/linter/src/no-tailwind-class-variables.grit",
-		"./packages/linter/src/no-simple-function-variables.grit"
+		"./packages/linter/src/no-simple-function-variables.grit",
+		"./packages/linter/src/no-primitive-const.grit",
+		"./packages/linter/src/no-effect-fail.grit",
+		"./packages/linter/src/no-effect-succeed.grit"
 	],
 
 	"linter": {
