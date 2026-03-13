@@ -1,6 +1,6 @@
 import {String} from 'effect'
 
-import {MessageSquare, Paperclip, Repeat} from '@ai-toolkit/components/icons'
+import {MessageSquare, Paperclip} from '@ai-toolkit/components/icons'
 import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {createFileRoute, Outlet, useLocation, useNavigate} from '@tanstack/react-router'
@@ -37,13 +37,6 @@ function Layout() {
 							icon={<Paperclip className="size-3.5" />}
 						>
 							Input
-						</TreeExplorerItem>
-						<TreeExplorerItem
-							onClick={() => navigate({to: '/playground/diff'})}
-							selected={isCurrentPage('/playground/diff')}
-							icon={<Repeat className="size-3.5" />}
-						>
-							Diff
 						</TreeExplorerItem>
 					</TreeExplorerSection>
 				</TreeExplorer>
