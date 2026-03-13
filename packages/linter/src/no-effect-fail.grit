@@ -1,6 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-`Effect.fail($_)` as $match where {
-	register_diagnostic(span=$match, message="Effect.fail is banned - use yield* with Schema.TaggedErrorClass directly instead")
-}

@@ -20,34 +20,38 @@ $ARGUMENTS
 
 ## Workflow
 
-1. **Explore existing rules**
+1. **Explore existing rules first**
    Check `packages/linter/src/*.grit` and `.opencode/skills/*/SKILL.md` to:
-   - See if a similar rule already exists
-   - Identify if this should update an existing rule or create a new one
-   - Ensure no duplication
+   - See if a plugin already covers the reported pattern
+   - See if two existing plugins are similar enough to merge
+   - Identify whether a skill entry already exists and can be removed or simplified
+   - Avoid duplicate guidance across plugins and skills
 
-2. **Determine implementation type**
+2. **Choose the implementation source of truth**
 
-   **PREFERENCE: Create a Biome plugin first** if the rule can be expressed with GritQL pattern matching:
-   - Syntax matching
-   - Import/export patterns
-   - Function/method call patterns
-   - JSX/CSS attribute patterns
-   - AST-based patterns
+   **Biome plugin wins whenever possible.**
 
-   **Use a skill update ONLY if** the rule absolutely cannot be expressed with GritQL:
-   - Requires semantic analysis across scopes
-   - Needs type-flow understanding
-   - Requires external knowledge
+   If the requested pattern can be expressed in GritQL, keep the rule in a Biome plugin even if the plugin is broader or slightly less strict than the user's exact request.
 
-   **Important: Prefer strict rules with potential false positives over no rule at all.** Code is written by AI agents - it's better to flag edge cases (which can be suppressed) than miss actual errors. When in doubt, create a plugin.
+   **Do not add or expand a skill when a plugin already covers the behavior well enough.**
+   Skills should only carry guidance that cannot be enforced by a plugin.
 
-   Ask the user if you're unsure which to use.
+   **If two plugins are similar, prefer merging them** instead of creating a near-duplicate rule.
+
+   Use a skill update only if the rule cannot reasonably be enforced with GritQL, for example when it requires:
+   - Cross-scope semantic understanding
+   - Type-flow reasoning
+   - External or architectural knowledge
+
+   **Important: Prefer a plugin with some acceptable false positives over skill-only guidance.** Code is written by AI agents, so enforceable rules are more valuable than perfect coverage.
 
 3. **Implement the rule**
 
    **For Biome plugins:**
-   Create `packages/linter/src/{descriptive-name}.grit`:
+   - Prefer updating or merging an existing `.grit` file before creating a new one
+   - Create `packages/linter/src/{descriptive-name}.grit` only when no existing plugin is a good home
+   - Keep diagnostics clear and actionable, focused on what to do instead
+
    ```grit
    engine biome(1.0)
    language js(typescript,jsx)
@@ -57,27 +61,55 @@ $ARGUMENTS
    }
    ```
 
-   Reference existing `.grit` files for pattern syntax.
-
    **For skill updates:**
-   - Read the appropriate skill file in `.opencode/skills/`
-   - Add rule with Bad/Good examples following the existing format
-   - Use generic names (MyService, Config, Data)
-   - One sentence explanation maximum
-   - No file or project references
+   - Only add guidance that is not already enforced by a plugin
+   - Remove duplicated skill guidance when a plugin now covers it
+   - Keep each topic in this exact structure:
 
-4. **Add test case**
-   In `packages/linter/src/-test.tsx`:
+   ```md
+   ## {topic}
+
+   {description: one short sentence}
+
    ```typescript
-   // biome-ignore lint/plugin: <short reason>
-   const badCode = "code that triggers the rule"
+   // Bad
+   {minimal bad example}
+
+   // Good
+   {minimal good example}
+   ```
+   ```
+
+   - Use generic and reusable identifiers only
+   - Do not reference app-specific files, services, routes, RPCs, codebase details, other skills, or plugin names inside the example block
+   - Keep examples extremely small and focused so they show only the rule itself and nothing else
+   - Avoid imports, setup, surrounding context, and extra helper code unless absolutely required to understand the rule
+
+4. **Add or update tests for every plugin rule**
+   In `packages/linter/src/-test.tsx`:
+   - Add a minimal generic example that triggers the rule
+   - Use a short suppression comment
+   - Do not paste codebase-specific examples from the user directly into tests
+   - Simplify names and surrounding code so the test demonstrates only the pattern being linted
+
+   ```typescript
+   // biome-ignore lint/plugin: short reason
+   const value = thing.length === 0
    ```
 
 5. **Register the plugin** (if applicable)
-   Add path to `biome.json` plugins array
+   Add or update the path in the `biome.json` plugins array
 
 6. **Verify**
-   Run `bun run check` - should pass without errors
+   Biome rules must always be tested.
+   Assume the command starts from a clean state with no validation errors.
+   Run:
+   - `bun run fix`
+   - `bun run check`
+
+   If either command reports errors, fix all errors introduced by the rule change, merged plugin, tests, or skill edits, then run both commands again.
+
+   Do not stop at the first failure. Keep iterating until both commands pass cleanly before finishing.
 
 ## Suppression Format
 
@@ -100,6 +132,9 @@ $ARGUMENTS
 Report:
 - Rule name and implementation type (plugin or skill)
 - Whether similar rules were found and how they were handled
+- Whether an existing plugin was reused or multiple plugins were merged
 - Files created/modified
 - The error message used
+- How the plugin was tested
+- Whether validation required follow-up fixes
 - Verification status

@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`'$prop' in $expr` as $match where {
+	register_diagnostic(span=$match, message="Use Predicate.hasProperty instead of the 'in' operator; use Predicate.hasProperty('prop')(object)")
+}

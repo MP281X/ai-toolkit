@@ -153,3 +153,48 @@ const bad_fail = Effect.fail(new Error('test'))
 
 // biome-ignore lint/plugin: effect succeed
 const bad_succeed = Effect.succeed('value')
+
+function test_typeof(value: unknown) {
+	// biome-ignore lint/plugin: typeof check
+	return typeof value === 'string'
+}
+
+function test_nonempty_check(text: string, arr: string[]) {
+	// biome-ignore lint/plugin: nonempty check
+	if (text.length > 0) return text
+	// biome-ignore lint/plugin: nonempty check
+	if (arr.length > 0) return arr
+	return
+}
+
+function test_empty_check(text: string, arr: string[]) {
+	// biome-ignore lint/plugin: empty check
+	if (text.length === 0) return 'empty'
+	// biome-ignore lint/plugin: empty check
+	if (arr.length === 0) return 'empty'
+	return
+}
+
+function test_tag_check(option: {readonly _tag: 'Some' | 'None'}) {
+	// biome-ignore lint/plugin: tag check
+	return option._tag === 'Some'
+}
+
+function test_in_operator(obj: object) {
+	// biome-ignore lint/plugin: in operator
+	return 'name' in obj
+}
+
+function test_nullish_checks(value: unknown) {
+	// biome-ignore lint/plugin: nullish check
+	if (value == null) return
+	// biome-ignore lint/plugin: nullish check
+	if (value != null) return
+	// biome-ignore lint/plugin: nullish check
+	if (value === null) return
+	// biome-ignore lint/plugin: nullish check
+	if (value !== null) return
+}
+
+// biome-ignore lint/plugin: nullish check
+void import('effect')

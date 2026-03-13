@@ -19,29 +19,28 @@ Use Schema.Class instead of interfaces.
 
 ```typescript
 // Bad
-interface Usage { input: number; output: number }
+interface User { name: string; age: number }
 
 // Good
-export class Usage extends Schema.Class<Usage>('Usage')({
-  input: Schema.Number,
-  output: Schema.Number
+export class User extends Schema.Class<User>('User')({
+  name: Schema.String,
+  age: Schema.Number
 }) {}
 ```
 
-Use Schema.optional and Schema.optionalKey for nullable/absent fields:
+Use Schema.optional for nullable fields:
 
 ```typescript
 // Bad
 export class Event extends Schema.Class<Event>('Event')({
-  id: Schema.NonEmptyString,
+  id: Schema.String,
   data: Schema.String
 }) {}
 
 // Good
 export class Event extends Schema.Class<Event>('Event')({
-  id: Schema.NonEmptyString,
-  kind: Schema.optional(Schema.String),
-  data: Schema.optionalKey(Schema.String)
+  id: Schema.String,
+  data: Schema.optional(Schema.String)
 }) {}
 ```
 
@@ -53,12 +52,12 @@ Use Schema.TaggedClass for _tag fields.
 ```typescript
 // Bad
 export class TextDelta extends Schema.Class<TextDelta>('TextDelta')({
-  _tag: Schema.Literal('text-delta'),
+  _tag: Schema.Literal('text'),
   text: Schema.String
 }) {}
 
 // Good
-export class TextDelta extends Schema.TaggedClass<TextDelta>()('text-delta', {
+export class TextDelta extends Schema.TaggedClass<TextDelta>()('text', {
   text: Schema.String
 }) {}
 ```
@@ -86,12 +85,12 @@ Use Schema.Literals for fixed-value unions.
 
 ```typescript
 // Bad
-type Role = 'user' | 'assistant'
-const Role = Schema.Literals(['user', 'assistant'])
+type Role = 'user' | 'admin'
+const Role = Schema.Literal('user', 'admin')
 
 // Good
 type Role = typeof Role.Type
-const Role = Schema.Literals(['user', 'assistant'])
+const Role = Schema.Literal('user', 'admin')
 ```
 
 
@@ -101,11 +100,11 @@ Use Schema.Union for discriminated unions.
 
 ```typescript
 // Bad
-type Part = TextPart | FilePart | ToolPart
+type Part = TextPart | FilePart
 
 // Good
 type Part = typeof Part.Type
-const Part = Schema.Union([TextPart, FilePart, ToolPart])
+const Part = Schema.Union(TextPart, FilePart)
 ```
 
 
@@ -115,22 +114,18 @@ Use Schema.withConstructorDefault for default fields.
 
 ```typescript
 // Bad
-export class Message extends Schema.Class<Message>('Message')({
-  id: Schema.NonEmptyString,
-  createdAt: Schema.Number,
-  parts: Schema.Array(Part)
+export class Item extends Schema.Class<Item>('Item')({
+  id: Schema.String,
+  createdAt: Schema.Number
 }) {}
 
 // Good
-export class Message extends Schema.Class<Message>('Message')({
-  id: Schema.NonEmptyString.pipe(
-    Schema.withConstructorDefault(() => Option.some(crypto.randomUUID()))
+export class Item extends Schema.Class<Item>('Item')({
+  id: Schema.String.pipe(
+    Schema.withConstructorDefault(() => 'default-id')
   ),
   createdAt: Schema.Number.pipe(
-    Schema.withConstructorDefault(() => Option.some(Date.now()))
-  ),
-  parts: Schema.Array(Part).pipe(
-    Schema.withConstructorDefault(() => Option.some([] as const))
+    Schema.withConstructorDefault(() => Date.now())
   )
 }) {}
 ```
@@ -142,42 +137,21 @@ Use `new` for trusted internal construction.
 
 ```typescript
 // Bad
-const event = yield* Schema.decodeUnknown(TextDelta)({messageId: '123', text: 'hello'})
+const event = yield* Schema.decodeUnknown(Event)({id: '123'})
 
 // Good
-const event = new TextDelta({messageId: '123', text: 'hello'})
+const event = new Event({id: '123'})
 ```
 
-Use Schema.decodeUnknownSync for trusted data and fail fast:
+Use Schema.decodeUnknownSync for trusted data:
 
 ```typescript
 // Bad - soft-failing decode
-const exit = Schema.decodeUnknownExit(MySchema)(value)
+const exit = Schema.decodeUnknownExit(Schema)(value)
 if (Exit.isFailure(exit)) return
 
 // Good - fail fast
-const decoded = Schema.decodeUnknownSync(MySchema)(value)
-```
-
-
-## JSON Schema
-
-Derive JSON Schema from Schema definitions.
-
-```typescript
-// Bad - manual JSON schema
-tool({
-  inputSchema: jsonSchema({
-    type: 'object',
-    properties: {query: {type: 'string'}},
-    required: ['query']
-  })
-})
-
-// Good - derive from schema
-tool({
-  inputSchema: jsonSchema(Schema.toJsonSchemaDocument(SearchQuery.fields))
-})
+const decoded = Schema.decodeUnknownSync(Schema)(value)
 ```
 
 
@@ -186,25 +160,22 @@ tool({
 Inline small schemas. Use `.fields` only for clear reuse.
 
 ```typescript
-// Bad - extracted literal with no reuse benefit
-export type ToolName = typeof ToolName.Type
-export const ToolName = Schema.Literals(['question', 'websearch'])
+// Bad - extracted with no reuse
+export const Status = Schema.Literal('active', 'inactive')
 
 // Good - inline
-role: Schema.Literals(['user', 'assistant'])
+status: Schema.Literal('active', 'inactive')
 
 // Good - use .fields when reusing
-Schema.decodeUnknownSync(QuestionTool.fields.input)(value)
+Schema.decodeUnknownSync(User.fields.name)(value)
 ```
 
 Spread `.fields` for composition. No inheritance helpers.
 
 ```typescript
 // Bad - inheritance helper
-class BaseEntity extends Schema.Class<BaseEntity>('BaseEntity')({
-  createdAt: Schema.Number
-}) {}
-class User extends BaseEntity { ... }
+class Base extends Schema.Class<Base>('Base')({createdAt: Schema.Number}) {}
+class User extends Base { ... }
 
 // Good - spread .fields
 export class Timestamped extends Schema.Class<Timestamped>('Timestamped')({
@@ -213,7 +184,7 @@ export class Timestamped extends Schema.Class<Timestamped>('Timestamped')({
 
 export class User extends Schema.Class<User>('User')({
   ...Timestamped.fields,
-  name: Schema.NonEmptyString
+  name: Schema.String
 }) {}
 ```
 
@@ -224,19 +195,15 @@ Always infer types from schemas.
 
 ```typescript
 // Bad - manual type
-type Usage = {input: number; output: number}
-class Usage extends Schema.Class<Usage>('Usage')({...}) {}
-
-// Bad - missing type export
-export const Config = Schema.Struct({agent: AgentId})
+type User = {name: string}
+class User extends Schema.Class<User>('User')({...}) {}
 
 // Good - Class provides type
-export class Usage extends Schema.Class<Usage>('Usage')({
-  input: Schema.Number,
-  output: Schema.Number
+export class User extends Schema.Class<User>('User')({
+  name: Schema.String
 }) {}
 
-// Good - export type for non-class schemas
+// Good - export type for Struct
 type Config = typeof Config.Type
-export const Config = Schema.Struct({agent: AgentId})
+export const Config = Schema.Struct({key: Schema.String})
 ```
