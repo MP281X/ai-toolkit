@@ -13,7 +13,6 @@ import { Route as PlaygroundRouteRouteImport } from './routes/playground/route'
 import { Route as PlaygroundIndexRouteImport } from './routes/playground/index'
 import { Route as portfolioIndexRouteImport } from './routes/(portfolio)/index'
 import { Route as PlaygroundInputIndexRouteImport } from './routes/playground/input/index'
-import { Route as PlaygroundDiffIndexRouteImport } from './routes/playground/diff/index'
 import { Route as PlaygroundChatIndexRouteImport } from './routes/playground/chat/index'
 
 const PlaygroundRouteRoute = PlaygroundRouteRouteImport.update({
@@ -36,11 +35,6 @@ const PlaygroundInputIndexRoute = PlaygroundInputIndexRouteImport.update({
   path: '/input/',
   getParentRoute: () => PlaygroundRouteRoute,
 } as any)
-const PlaygroundDiffIndexRoute = PlaygroundDiffIndexRouteImport.update({
-  id: '/diff/',
-  path: '/diff/',
-  getParentRoute: () => PlaygroundRouteRoute,
-} as any)
 const PlaygroundChatIndexRoute = PlaygroundChatIndexRouteImport.update({
   id: '/chat/',
   path: '/chat/',
@@ -52,14 +46,12 @@ export interface FileRoutesByFullPath {
   '/': typeof portfolioIndexRoute
   '/playground/': typeof PlaygroundIndexRoute
   '/playground/chat/': typeof PlaygroundChatIndexRoute
-  '/playground/diff/': typeof PlaygroundDiffIndexRoute
   '/playground/input/': typeof PlaygroundInputIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof portfolioIndexRoute
   '/playground': typeof PlaygroundIndexRoute
   '/playground/chat': typeof PlaygroundChatIndexRoute
-  '/playground/diff': typeof PlaygroundDiffIndexRoute
   '/playground/input': typeof PlaygroundInputIndexRoute
 }
 export interface FileRoutesById {
@@ -68,7 +60,6 @@ export interface FileRoutesById {
   '/(portfolio)/': typeof portfolioIndexRoute
   '/playground/': typeof PlaygroundIndexRoute
   '/playground/chat/': typeof PlaygroundChatIndexRoute
-  '/playground/diff/': typeof PlaygroundDiffIndexRoute
   '/playground/input/': typeof PlaygroundInputIndexRoute
 }
 export interface FileRouteTypes {
@@ -78,22 +69,15 @@ export interface FileRouteTypes {
     | '/'
     | '/playground/'
     | '/playground/chat/'
-    | '/playground/diff/'
     | '/playground/input/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/playground'
-    | '/playground/chat'
-    | '/playground/diff'
-    | '/playground/input'
+  to: '/' | '/playground' | '/playground/chat' | '/playground/input'
   id:
     | '__root__'
     | '/playground'
     | '/(portfolio)/'
     | '/playground/'
     | '/playground/chat/'
-    | '/playground/diff/'
     | '/playground/input/'
   fileRoutesById: FileRoutesById
 }
@@ -132,13 +116,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlaygroundInputIndexRouteImport
       parentRoute: typeof PlaygroundRouteRoute
     }
-    '/playground/diff/': {
-      id: '/playground/diff/'
-      path: '/diff'
-      fullPath: '/playground/diff/'
-      preLoaderRoute: typeof PlaygroundDiffIndexRouteImport
-      parentRoute: typeof PlaygroundRouteRoute
-    }
     '/playground/chat/': {
       id: '/playground/chat/'
       path: '/chat'
@@ -152,14 +129,12 @@ declare module '@tanstack/react-router' {
 interface PlaygroundRouteRouteChildren {
   PlaygroundIndexRoute: typeof PlaygroundIndexRoute
   PlaygroundChatIndexRoute: typeof PlaygroundChatIndexRoute
-  PlaygroundDiffIndexRoute: typeof PlaygroundDiffIndexRoute
   PlaygroundInputIndexRoute: typeof PlaygroundInputIndexRoute
 }
 
 const PlaygroundRouteRouteChildren: PlaygroundRouteRouteChildren = {
   PlaygroundIndexRoute: PlaygroundIndexRoute,
   PlaygroundChatIndexRoute: PlaygroundChatIndexRoute,
-  PlaygroundDiffIndexRoute: PlaygroundDiffIndexRoute,
   PlaygroundInputIndexRoute: PlaygroundInputIndexRoute,
 }
 

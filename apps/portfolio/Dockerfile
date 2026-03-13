@@ -1,4 +1,4 @@
-FROM oven/bun:slim
+FROM oven/bun:alpine
 
 WORKDIR /app
 
@@ -6,8 +6,4 @@ ENV NODE_ENV=production
 
 COPY dist ./dist
 
-RUN chmod +x /app/dist/server
-
-EXPOSE 3000
-
-CMD ["./dist/server"]
+CMD ["bun", "./dist/server.js"]
