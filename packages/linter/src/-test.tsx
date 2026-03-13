@@ -2,7 +2,7 @@ import {Effect} from 'effect'
 
 // biome-ignore lint: packages/linter/src/no-react-type-imports.grit
 import type {ReactNode} from 'react'
-import {useCallback, useEffect, useImperativeHandle, useMemo} from 'react'
+import {useCallback, useImperativeHandle, useMemo} from 'react'
 
 // no-type-assertion
 function test_type_assertion(value: unknown) {
