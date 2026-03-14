@@ -27,7 +27,9 @@
 		"./packages/linter/src/no-manual-tag-check.grit",
 		"./packages/linter/src/no-in-operator.grit",
 		"./packages/linter/src/no-nullish-checks.grit",
-		"./packages/linter/src/no-dynamic-imports.grit"
+		"./packages/linter/src/no-dynamic-imports.grit",
+		"./packages/linter/src/no-wrapper-functions.grit",
+		"./packages/linter/src/no-else.grit"
 	],
 
 	"linter": {

@@ -4,6 +4,7 @@ import {Config, Effect, Layer, Option} from 'effect'
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'
 import {SimpleSpanProcessor} from '@opentelemetry/sdk-trace-web'
 
+// biome-ignore lint/plugin: exported API
 export function OtelLayer(serviceName: string) {
 	return Layer.unwrap(
 		Effect.map(

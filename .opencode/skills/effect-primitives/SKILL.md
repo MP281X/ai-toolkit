@@ -69,28 +69,42 @@ pipe(
 ```
 
 
-## Match for literals
+## Control flow
 
-Use Match for all literal matching. Never use switch statements or if-else chains.
+Never use `else` or `else if`. Use `if` for early returns only. Use `switch` for matching discriminators. Use `Match` module for everything else.
 
 ```typescript
-// Bad - if-else
-if (event.type === 'click') return handleClick()
-else if (event.type === 'scroll') return handleScroll()
+// Good - if for early return
+if (Predicate.isNullish(value)) return
+if (items.length === 0) return fallback
 
-// Bad - switch
+// Good - switch for discriminators
 switch (event.type) {
   case 'click': return handleClick()
   case 'scroll': return handleScroll()
 }
 
-// Good
+// Good - Match for complex matching
 pipe(
-  Match.value(event.type),
-  Match.when('click', () => handleClick()),
-  Match.when('scroll', () => handleScroll()),
-  Match.orElse(() => handleOther())
+  Match.value(status),
+  Match.when('active', () => handleActive()),
+  Match.when(Predicate.isString, String.trim),
+  Match.orElse(() => fallback)
 )
+
+// Bad - else (use early return instead)
+if (condition) {
+  doA()
+} else {
+  doB()
+}
+
+// Good - early return eliminates else
+if (condition) {
+  doA()
+  return
+}
+doB()
 ```
 
 

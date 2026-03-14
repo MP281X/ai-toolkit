@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`if ($cond) { $body } else { $elseBody }` as $match where {
+	register_diagnostic(span=$match, message="Never use else; use early return, switch, or Match instead")
+}
