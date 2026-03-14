@@ -1,6 +1,6 @@
 // biome-ignore-all lint/correctness/useHookAtTopLevel: test file
 // biome-ignore-all lint/style/noRestrictedGlobals: test file
-import {Effect} from 'effect'
+import {Array, Effect} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
@@ -11,6 +11,7 @@ function test_type_assertion(value: unknown) {
 	return value as string
 }
 
+// biome-ignore lint/plugin: testing
 function test_array_native(arr: string[]) {
 	// biome-ignore lint/plugin: native methods
 	return arr.map(x => x)
@@ -19,6 +20,7 @@ function test_array_native(arr: string[]) {
 // biome-ignore lint/plugin: effect gen args
 const bad_gen_with_args = (name: string) => Effect.gen(function* () {})
 
+// biome-ignore lint/plugin: testing
 function test_string_trim(s: string) {
 	// biome-ignore lint/plugin: native methods
 	return s.trim()
@@ -118,6 +120,7 @@ const clampUnit2 = function (value: number) {
 	return Math.max(0, Math.min(0.999999, value))
 }
 
+// biome-ignore lint/plugin: testing
 function test_split(str: string) {
 	// biome-ignore lint/plugin: native methods
 	return str.split(':')
@@ -147,6 +150,16 @@ const VALID_ARRAY = [1, 2, 3]
 // This should NOT be flagged - it's a function
 // biome-ignore lint/plugin: arrow function
 const VALID_FUNCTION = () => 'hello'
+
+// biome-ignore lint/plugin: wrapper function
+function test_wrapper_fn(x: number) {
+	return Math.abs(x)
+}
+
+// biome-ignore lint/plugin: wrapper constructor
+function test_wrapper_ctor(name: string) {
+	return new Error(name)
+}
 
 // biome-ignore lint/plugin: effect fail
 const bad_fail = Effect.fail(new Error('test'))
@@ -198,3 +211,12 @@ function test_nullish_checks(value: unknown) {
 
 // biome-ignore lint/plugin: nullish check
 void import('effect')
+
+function test_else(items: string[], result: string[]) {
+	// biome-ignore lint/plugin: else clause
+	if (Array.isArrayNonEmpty(items)) {
+		result.push('has items')
+	} else {
+		result.push('empty')
+	}
+}

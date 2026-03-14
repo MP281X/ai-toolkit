@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`function $name($params) { return $expr }` as $match where {
+	$expr <: or {
+		`$callee($_)` where { not $callee <: `pipe` },
+		`new $_($_)`
+	},
+	register_diagnostic(span=$match, message="Don't create wrapper functions that just delegate to another call; inline at the call site")
+}

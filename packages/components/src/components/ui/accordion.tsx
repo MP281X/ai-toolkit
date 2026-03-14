@@ -59,4 +59,4 @@ function AccordionContent({className, children, ...props}: AccordionPrimitive.Pa
 	)
 }
 
-export {Accordion, AccordionItem, AccordionTrigger, AccordionContent}
+export {Accordion, AccordionContent, AccordionItem, AccordionTrigger}

@@ -27,6 +27,7 @@ export const resolveLanguage = flow(
 	Match.orElse(() => 'text' as const)
 )
 
+// biome-ignore lint/plugin: exported API
 export function highlightCode(code: string, lang?: string) {
 	return highlighter.codeToHtml(code, {
 		lang: resolveLanguage(lang),

@@ -262,10 +262,6 @@ function getViewport() {
 	} satisfies Viewport
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-	return Math.max(minimum, Math.min(maximum, value))
-}
-
 function subscribeFrame(listener: (now: number) => void) {
 	frameListeners.add(listener)
 
@@ -331,7 +327,7 @@ function updateCursorMotion(motion: CursorMotion, target: {x: number; y: number}
 }
 
 function stepCursorMotion(motion: CursorMotion, now: number) {
-	const frameDelta = motion.lastFrameAt > 0 ? clamp(now - motion.lastFrameAt, 8, 64) : 16
+	const frameDelta = motion.lastFrameAt > 0 ? Math.max(8, Math.min(64, now - motion.lastFrameAt)) : 16
 	const deltaX = motion.targetX - motion.x
 	const deltaY = motion.targetY - motion.y
 	const catchUp = Math.min(1, (1 - Math.exp(-frameDelta / 130)) * (1 + Math.hypot(deltaX, deltaY) / 220))
@@ -340,8 +336,8 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 
 	return {
 		...motion,
-		x: Math.abs(deltaX) < 0.3 ? motion.targetX : clamp(nextX, 0, motion.viewportWidth),
-		y: Math.abs(deltaY) < 0.3 ? motion.targetY : clamp(nextY, 0, motion.viewportHeight),
+		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Math.max(0, Math.min(motion.viewportWidth, nextX)),
+		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY)),
 		lastFrameAt: now
 	}
 }
@@ -463,8 +459,8 @@ function PortfolioRoute() {
 				if (!(viewport.width && viewport.height)) return
 
 				const nextPointer = {
-					x: clamp(event.clientX / viewport.width, 0, 0.999999),
-					y: clamp(event.clientY / viewport.height, 0, 0.999999)
+					x: Math.max(0, Math.min(0.999999, event.clientX / viewport.width)),
+					y: Math.max(0, Math.min(0.999999, event.clientY / viewport.height))
 				}
 
 				localPointer = {x: nextPointer.x, y: nextPointer.y, updatedAt: performance.now()}
@@ -609,20 +605,22 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 			const current = {...getTrailCell(trail, input.viewport), trail}
 			const previous = previousByVisitor.get(trail.visitorId)
 
-			if (previous) {
-				const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
-
-				for (let step = 0; step <= stepCount; step++) {
-					const progress = stepCount === 0 ? 1 : step / stepCount
-					const col = Math.round(previous.col + (current.col - previous.col) * progress)
-					const row = Math.round(previous.row + (current.row - previous.row) * progress)
-
-					context.fillStyle = progress < 1 ? previous.trail.color : current.trail.color
-					context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
-				}
-			} else {
+			if (!previous) {
 				context.fillStyle = current.trail.color
 				context.fillRect(current.col * 26 + 1, current.row * 26 + 1, 24, 24)
+				previousByVisitor.set(trail.visitorId, current)
+				continue
+			}
+
+			const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
+
+			for (let step = 0; step <= stepCount; step++) {
+				const progress = stepCount === 0 ? 1 : step / stepCount
+				const col = Math.round(previous.col + (current.col - previous.col) * progress)
+				const row = Math.round(previous.row + (current.row - previous.row) * progress)
+
+				context.fillStyle = progress < 1 ? previous.trail.color : current.trail.color
+				context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
 			}
 
 			previousByVisitor.set(trail.visitorId, current)

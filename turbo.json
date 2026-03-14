@@ -12,7 +12,7 @@
 		"build:client": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
 		"build:server": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
 
-		"fix": { "cache": false },
-		"check": { "cache": false }
+		"fix": { "dependsOn": ["^fix"] },
+		"check": { "dependsOn": ["^check"] }
 	}
 }

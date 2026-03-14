@@ -36,22 +36,24 @@ const resources = [
 ]
 
 export const plugin = (async context => {
-	function toast(message: unknown) {
-		return Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'info'}}))
-	}
-
 	void Effect.runPromise(
 		pipe(
 			Effect.forEach(
 				resources,
 				Effect.fnUntraced(function* (resource) {
 					yield* Git.use(git => git.clone(resource.url, `.opencode/resources/${resource.name}`))
-					yield* toast(`cloned ${resource.name}`)
+					yield* Effect.sync(() =>
+						context.client.tui.showToast({body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}})
+					)
 				}),
 				{concurrency: 'unbounded'}
 			),
-			Effect.tapDefect(toast),
-			Effect.tapError(toast),
+			Effect.tapDefect(message =>
+				Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}}))
+			),
+			Effect.tapError(message =>
+				Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}}))
+			),
 			Effect.provide(Git.layer),
 			Effect.provide(BunServices.layer)
 		)

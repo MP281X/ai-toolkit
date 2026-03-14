@@ -9,13 +9,19 @@ export function Conversation(props: {children?: React.ReactElement[]; className?
 	const scrollRef = useRef<HTMLDivElement>(null)
 	const [showScrollButton, setShowScroll] = useState(false)
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on change
 	useLayoutEffect(() => {
 		// biome-ignore lint/plugin: access variable
 		const element = scrollRef.current
-		if (!(element && stickRef.current)) return
-		element.scrollTop = element.scrollHeight
-	}, [props.children?.length])
+		if (!element) return
+
+		const observer = new MutationObserver(() => {
+			if (!stickRef.current) return
+			element.scrollTop = element.scrollHeight
+		})
+
+		observer.observe(element, {childList: true, subtree: true, characterData: true})
+		return () => observer.disconnect()
+	}, [])
 
 	function handleScroll() {
 		// biome-ignore lint/plugin: access variable
@@ -37,10 +43,10 @@ export function Conversation(props: {children?: React.ReactElement[]; className?
 	}
 
 	return (
-		<div className={cn('relative flex h-full flex-col', props.className)}>
+		<div className={'relative flex min-h-0 flex-1 flex-col'}>
 			<div
 				ref={scrollRef}
-				className="flex flex-1 flex-col divide-y divide-border overflow-y-auto px-3 py-1"
+				className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', props.className)}
 				onScroll={handleScroll}
 			>
 				{props.children}
