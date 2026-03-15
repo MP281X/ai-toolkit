@@ -4,16 +4,16 @@ language js(typescript, jsx)
 `$fn($...)` as $match where {
 	$fn <: or {
 		`useCallback` where {
-			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useCallback as it interferes with the compiler")
+			register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization and manual `useCallback` interferes with it")
 		},
 		`useMemo` where {
-			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useMemo as it interferes with the compiler")
+			register_diagnostic(span=$fn, message="Do not use `useMemo` here. React Compiler already handles this memoization and manual `useMemo` interferes with it")
 		},
 		`useImperativeHandle` where {
-			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use useImperativeHandle as it interferes with the compiler")
+			register_diagnostic(span=$fn, message="Do not use `useImperativeHandle` here. React Compiler already handles the optimization path and this API interferes with it")
 		},
 		`memo` where {
-			register_diagnostic(span=$fn, message="React Compiler handles memoization automatically; do not use memo as it interferes with the compiler")
+			register_diagnostic(span=$fn, message="Do not use `memo` here. React Compiler already handles this optimization and manual `memo` interferes with it")
 		}
 	}
 }

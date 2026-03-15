@@ -11,5 +11,5 @@ language js(typescript, jsx)
 		`<$_ />`,
 		`<>$_</>`
 	},
-	register_diagnostic(span=$match, message="Prefer '$cond && ...' over ternary with null/undefined; logical AND is cleaner for conditional rendering")
+	register_diagnostic(span=$match, message="When the false branch is empty, use `$cond && <...>` instead of a ternary with `null` or `undefined`; logical AND is the cleaner conditional rendering pattern")
 }

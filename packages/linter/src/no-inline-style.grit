@@ -2,5 +2,5 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 `style={$_}` as $match where {
-	register_diagnostic(span=$match, message="Use Tailwind classes instead of inline style props")
+	register_diagnostic(span=$match, message="Do not use inline `style` props. Keep styling in the shared Tailwind and token system with `className`")
 }

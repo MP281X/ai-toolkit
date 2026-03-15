@@ -2,7 +2,7 @@
 name: effect-atom
 description: React state management with Effect Atom
 metadata:
-  patterns: Atom, useAtomValue, useAtomSuspense, mutations, subscriptions
+  patterns: AtomRuntime, atoms, useAtomSuspense, useAtomSet
 ---
 
 ## Source files
@@ -11,106 +11,49 @@ metadata:
 .opencode/resources/effect/packages/effect/src/unstable/reactivity/Atom.ts
 ```
 
+## Purpose
 
-## Module scope atoms
+- Use atoms as the logic and state-management layer for screens
+- Keep async work, business logic, subscriptions, and mutations in atoms
+- Keep components mostly render-local; tiny presentational state can stay local
+- Research the local source file above before assuming Atom APIs or capabilities
 
-Define all atoms at module scope using AtomRuntime. Keep all logic out of components.
+
+## Reads and writes
+
+- Prefer `useAtomSuspense` for reads and `useAtomSet` for writes
 
 ```typescript
-import {AtomRuntime} from '#lib/atomRuntime.ts'
-
-// Bad - React state inside component
-function Component() {
-  const [data, setData] = useState()
-  useEffect(() => {
-    fetchData().then(setData)
-  }, [])
-}
-
-// Good - atom at module scope with Effect
-const dataAtom = AtomRuntime.atom(
-  Effect.gen(function* () {
-    const value = yield* fetchData()
-    return value
-  })
-)
-
-function Component() {
-  const {value: data} = useAtomSuspense(dataAtom)
-  return <div>{data}</div>
+function Screen() {
+  const {value: user} = useAtomSuspense(userAtom)
+  const saveUser = useAtomSet(saveUserAtom)
+  return <button onClick={() => saveUser(user)}>save</button>
 }
 ```
 
+## Streams and real-time
 
-## Stream atoms
-
-For real-time data from RpcClient, use keepAlive with Stream.unwrap.
+- For real-time data, keep the stream inside the atom and research `keepAlive` and `Stream.unwrap`
 
 ```typescript
-const itemsAtom = Atom.keepAlive(
+const eventsAtom = Atom.keepAlive(
   AtomRuntime.atom(
     pipe(
       RpcClient.asEffect(),
-      Effect.map(client => client('rpc.method', void 0)),
+      Effect.map(client => client('events.subscribe', void 0)),
       Stream.unwrap
     )
   )
 )
-
-function Component() {
-  const {value: items} = useAtomSuspense(itemsAtom)
-  return <List items={items} />
-}
 ```
 
+## Tiny UI state
 
-## Reading atoms
-
-Use useAtomSuspense. The route has a Suspense boundary.
-
-```typescript
-function Component() {
-  const {value: items} = useAtomSuspense(itemsAtom)
-  return <List items={items} />
-}
-```
-
-
-## Mutations
-
-Use useAtomSet for mutations.
+- Tiny presentational state can stay local
 
 ```typescript
-function Component() {
-  const createItem = useAtomSet(createAtom)
-  createItem({name: 'New'})
-}
-```
-
-
-## Logic in atoms
-
-Move all logic into atoms. Components should only read values and trigger mutations.
-
-```typescript
-// Bad - React useState and useEffect
-function Component() {
-  const [state, setState] = useState({items: [], selected: null})
-  useEffect(() => {
-    fetchItems().then(items => setState(s => ({...s, items})))
-  }, [])
-}
-
-// Good - all logic in atom
-const itemsAtom = AtomRuntime.atom(
-  Effect.gen(function* () {
-    const items = yield* fetchItems()
-    return items
-  })
-)
-
-function Component() {
-  const {value: items} = useAtomSuspense(itemsAtom)
-  return <List items={items} />
+function Toolbar() {
+  const [open, setOpen] = useState(false)
+  return <Popover open={open} onOpenChange={setOpen} />
 }
 ```

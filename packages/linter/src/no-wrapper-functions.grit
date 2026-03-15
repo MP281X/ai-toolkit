@@ -6,5 +6,5 @@ language js(typescript, jsx)
 		`$callee($_)` where { not $callee <: `pipe` },
 		`new $_($_)`
 	},
-	register_diagnostic(span=$match, message="Don't create wrapper functions that just delegate to another call; inline at the call site")
+	register_diagnostic(span=$match, message="Don't create wrapper functions that only delegate to another call. Inline them first; these wrappers add indirection and often create the exact type and inference problems you are trying to patch")
 }

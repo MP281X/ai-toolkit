@@ -6,5 +6,5 @@ or {
 	`let $name: $type = $expr`
 } as $match where {
 	not $filename <: r".*/components/ui/.*",
-	register_diagnostic(span=$match, message="Rely on type inference; remove explicit type annotations on variables. Use typed factories (Array.empty<T>(), Record.empty<K,V>()) for empty containers")
+	register_diagnostic(span=$match, message="Don't add explicit variable type annotations in implementation code. They add noise, reduce inference, and often coerce wrong code into compiling instead of fixing the real problem. Rewrite the code so TypeScript infers the type naturally. For empty containers, use typed factories like `Array.empty<T>()` or `Record.empty<K, V>()`")
 }

@@ -61,5 +61,5 @@ language js(typescript, jsx)
 		`Array`,
 		`String`
 	},
-	register_diagnostic(span=$match, message="Use Array or String module from 'effect' instead of native prototype methods")
+	register_diagnostic(span=$match, message="Do not use native prototype methods here. Use the Effect modules instead: `Array.*` for arrays, `String.*` for strings, and `Record.*` for object-like data")
 }

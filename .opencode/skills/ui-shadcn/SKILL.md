@@ -2,175 +2,116 @@
 name: ui-shadcn
 description: UI components and styling
 metadata:
-  patterns: shadcn primitives, theme tokens, cn(), layout, brutalist, density
+  patterns: shadcn primitives, theme tokens, density, icons
 ---
 
 ## Source files
 
 ```
 **/src/**/theme.css
-**/src/components/ui/
+**/src/components/ui/**
+apps/*/components.json
 ```
 
+## Purpose
 
-## Check primitives
+- Preserve and reuse the existing shadcn components, tokens, and theme
+- Research the local files above before building custom UI
+- Prefer dense, information-rich layouts and avoid decorative filler
+- Prefer icons for repeated actions when clarity is still preserved
 
-Always check available primitives before building custom.
+## Existing primitives
+
+- Check existing primitives before building custom components
+- List the installed shadcn components first so you do not rebuild or reinstall something that already exists
 
 ```bash
-bun shadcn list @shadcn
-bun shadcn add <name> --yes --overwrite
+bunx --bun shadcn@latest list
 ```
 
-
-## Use primitives
-
-Never create custom components without checking first.
-
 ```typescript
-// Bad - custom card
-export function MyCard({ children }) {
-  return <div className="border rounded p-4">{children}</div>
+// Bad
+export function MyCard(props: {content: React.ReactNode}) {
+  return <div className="border p-4">{props.content}</div>
 }
 
-// Good - use shadcn Card
-import { Card, CardContent } from '@components/ui/card'
-
+// Good
 <Card>
-  <CardContent>{children}</CardContent>
+  <CardContent>{content}</CardContent>
 </Card>
 ```
 
+## Add missing primitives
 
-## Don't fork components
+- If the component you need is not installed, add it with the shadcn CLI instead of hand-copying source
 
-Wrap at screen level. Never edit shadcn source.
+```bash
+# List available components
+bunx --bun shadcn@latest list
+
+# Add one component
+bunx --bun shadcn@latest add button
+
+# Add multiple components
+bunx --bun shadcn@latest add dialog card input
+```
 
 ```typescript
-// Bad - editing src/components/ui/card.tsx
+// Bad
+export function MyDialog(props: {children: React.ReactNode}) {
+  return <div className="border p-4">{props.children}</div>
+}
 
-// Good - wrap at screen level
+// Good
+<Dialog>
+  <DialogContent>{children}</DialogContent>
+</Dialog>
+```
+
+## Wrap, don't fork
+
+- Wrap existing UI primitives at screen level instead of forking them
+
+```typescript
 function UserScreen() {
-  return (
-    <Card className="custom-layout">
-      <CardContent>Content</CardContent>
-    </Card>
-  )
+  return <Card className="p-2"><CardContent>content</CardContent></Card>
 }
 ```
 
+## Dense actions
 
-## Icons
-
-Prefer icons over text labels.
+- Prefer icons for repeated actions when clarity is still preserved
 
 ```typescript
-// Bad - text buttons
+// Bad
 <Button>Delete</Button>
-<Button>Settings</Button>
 
-// Good - icon-only
+// Good
 <Button size="icon" title="Delete"><Trash2 className="size-4" /></Button>
-<Button size="icon" title="Settings"><Settings className="size-4" /></Button>
 ```
 
-Use the icon library in repo dependencies.
+## Theme consistency
+
+- Keep styling consistent with the existing app theme
 
 ```typescript
-// Bad
-import {SomeIcon} from 'new-icon-library'
-
 // Good
-import {SomeIcon} from 'existing-library'
+<div className="border-border bg-background text-foreground" />
 ```
 
+## Visual defaults
 
-## Layout density
-
-Build compact, information-dense layouts.
-
-```typescript
-// Bad - generous padding
-<div className="p-8 space-y-6">
-  <div className="mb-6">...</div>
-</div>
-
-// Good - tight spacing
-<div className="p-2 space-y-1">
-  <div>...</div>
-</div>
-```
-
-For dense data, minimal padding and borders for separation:
-
-```typescript
-// Bad
-<div className="py-4 px-3 border-b">...</div>
-
-// Good
-<div className="py-1 px-2 border-b">...</div>
-```
-
-
-## Remove redundancy
-
-Every element must serve a distinct purpose.
-
-```typescript
-// Bad - header only labels content
-<div>
-  <h3>Users</h3>
-  <p className="text-muted-foreground">Manage your users here.</p>
-  <UserList />
-</div>
-
-// Good
-<UserList />
-```
-
-One trigger per action.
-
-```typescript
-// Bad - delete in row and detail panel
-<TableRow>
-  <TableCell>{user.name}</TableCell>
-  <TableCell><Button size="icon"><Trash2 /></Button></TableCell>
-</TableRow>
-// ...and in detail panel
-<Button variant="destructive">Delete user</Button>
-
-// Good
-<TableRow>
-  <TableCell>{user.name}</TableCell>
-  <TableCell><Button size="icon"><Trash2 /></Button></TableCell>
-</TableRow>
-```
-
-
-## Component-scoped constants
-
-Keep constants inside components.
-
-```typescript
-// Bad - module-level constant
-const filtered = Array.filter(items, item => item.active)
-
-export function ItemList(props) {
-  // uses filtered
-}
-
-// Good
-export function ItemList(props) {
-  const filtered = Array.filter(items, item => item.active)
-}
-```
-
-
-## Visual design
-
-- Squared, hard edges — `--radius: 0`. Never `rounded-full` or `rounded-[*]`
-- High contrast, visible borders on all containers
-- NO gradients, glass effects, blur, or shadows
-- Minimal, functional motion only
-- Monospace font throughout
+- Squared, hard edges; avoid rounded pills and soft cards
+- High contrast with visible borders on containers
+- No gradients, glass effects, blur, or shadows
+- Minimal functional motion only
+- Monospace-first typography
 - Dense first: optimize for information density
+
+```typescript
+// Bad
+<div className="rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-300 shadow-xl" />
+
+// Good
+<div className="border border-border bg-background font-mono text-foreground" />
+```

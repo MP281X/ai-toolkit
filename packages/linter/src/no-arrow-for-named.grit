@@ -9,5 +9,5 @@ or {
 	`const $name = function $fnName($args) { $body }`,
 	`export const $name = function $fnName($args) { $body }`
 } as $match where {
-	register_diagnostic(span=$match, message="Use function declaration instead of function expression for named functions")
+	register_diagnostic(span=$match, message="Use a function declaration for named functions. Reserve arrow functions for inline callbacks only; this keeps code consistent and easier to lint")
 }

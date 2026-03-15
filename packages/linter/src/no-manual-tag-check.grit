@@ -2,5 +2,5 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 `$expr._tag === $tag` as $match where {
-	register_diagnostic(span=$match, message="Use Effect module helpers instead of manual _tag checks; use Option.isSome/isNone for Option, Match.is for union tags, or Predicate.isTagged for custom tagged types")
+	register_diagnostic(span=$match, message="Do not manually inspect `_tag`. Use the helper for the actual ADT instead: `Option.isSome/isNone` for Option, `Match.is(...)` for tagged unions, or `Predicate.isTagged(...)` for custom tagged values. This is the idiomatic and usually safer narrowing")
 }

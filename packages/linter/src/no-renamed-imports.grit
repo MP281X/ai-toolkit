@@ -4,8 +4,8 @@ language js(typescript, jsx)
 or {
 	`import { $specifiers } from $_`,
 	`import type { $specifiers } from $_`
-} where {
-	$specifiers <: contains `$name as $alias` as $match where {
-		register_diagnostic(span=$match, message="Don't rename imports; use the original exported name")
+} as $importMatch where {
+	$specifiers <: contains `$name as $alias` where {
+		register_diagnostic(span=$importMatch, message="Don't rename imports. Use the original exported name exactly; aliases create inconsistency, hide collisions, and can bypass other lint rules")
 	}
 }
