@@ -1,6 +1,6 @@
 import {Array, Predicate, pipe, Record, String} from 'effect'
 
-import {ArrowUpIcon, Paperclip} from '@ai-toolkit/components/icons'
+import {ArrowUpIcon, Paperclip, Square} from '@ai-toolkit/components/icons'
 import {Button, buttonVariants} from '@ai-toolkit/components/ui/button'
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
@@ -61,6 +61,7 @@ type ChatInputProps = {
 	value?: string
 	onValueChange?: (value: string) => void
 	onSubmit: (payload: {text: string; completions: AutocompleteEntry[]; attachments: File[]}) => void
+	onCancel: () => void
 	placeholder?: string
 	children?: React.ReactNode
 	disabled?: boolean
@@ -640,6 +641,15 @@ export function ChatInput(props: ChatInputProps) {
 								}}
 							/>
 							{actions}
+							<Button
+								onClick={() => props.onCancel()}
+								variant="outline"
+								size="icon-xs"
+								disabled={props.disabled ?? false}
+								className="rounded-none"
+							>
+								<Square className="size-3.5 fill-current" />
+							</Button>
 							<Button
 								onClick={() => {
 									if (Predicate.isNullish(editorRef.current)) return

@@ -7,6 +7,7 @@
 				"diagnosticSeverity": {
 					"anyUnknownInErrorContext": "error",
 					"deterministicKeys": "error",
+					"extendsNativeError": "error",
 					"instanceOfSchema": "error",
 					"missedPipeableOpportunity": "error",
 					"nodeBuiltinImport": "error",
