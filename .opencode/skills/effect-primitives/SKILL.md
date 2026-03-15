@@ -20,34 +20,20 @@ metadata:
 ## Purpose
 
 - Use Effect modules as the default TypeScript vocabulary in this repo
-- Research the local source files above before assuming helper names or signatures
+- Start with these modules before reaching for native JS methods, nullish checks, or ad-hoc helpers
 - If the code becomes hard to infer or compose, simplify and use the Effect primitives
 
-## flow vs pipe
+## Where to look
 
-- Use `flow` when the input only feeds the first step
-- Use `pipe` for multi-step value transforms
+- Composition style: `Function.ts` for `pipe`, `flow`, `dual`, `identity`, `constant`, `tap`
+- Value-producing branching: `Match.ts`
+- Type guards and reusable checks: `Predicate.ts`
+- Array / object transforms: `Array.ts`, `Record.ts`
+- String transforms: `String.ts`
+- Nullish / optional values: `Option.ts`
 
-```typescript
-// Bad
-const normalize = (value: string) => pipe(value, String.trim, String.toUpperCase)
+## Best practices
 
-// Good
-const normalize = flow(String.trim, String.toUpperCase)
-```
-
-## Match for value-producing branches
-
-- Prefer `Match` when branching produces a value
-
-```typescript
-// Bad
-const normalize = (value: string) => value === 'bash' ? 'sh' : value
-
-// Good
-const normalize = flow(
-  (value: string) => Match.value(value),
-  Match.when('bash', () => 'sh'),
-  Match.orElse(Function.identity)
-)
-```
+- Reach for Effect modules before native JS methods, `typeof`, or nullish checks
+- Use `flow` when only the first step needs the input and `pipe` when you already have the value in hand
+- Use `Match` when branching produces a value and the imperative version starts to sprawl

@@ -4,7 +4,7 @@ import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 import {GitDiff, GitError} from './schema.ts'
 
-export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/Git', {
+export class Git extends ServiceMap.Service<Git>()('@ai-toolkit/git/service/Git', {
 	make: Effect.gen(function* () {
 		const execLines = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.lines)
 		const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)

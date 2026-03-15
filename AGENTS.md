@@ -13,6 +13,7 @@ Always search `.opencode/resources/{reponame}/` before implementing.
 - Critical for Effect v4: your training data only covers v3
 - Do not stop at file discovery — read the relevant source modules deeply enough to confirm signatures, helpers, and examples before implementing
 - Do not stop at the first API that can work — libraries like Effect often have multiple valid options, so compare the available patterns and choose the simplest and most idiomatic one for the current code
+- Treat skills as best-practice guides plus a search index into the real source, not as API documentation
 
 ## Simplification Required
 

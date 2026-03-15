@@ -24,6 +24,7 @@
 	"devDependencies": {
 		"turbo": "latest",
 		"@biomejs/biome": "latest",
+		"@effect/language-service": "latest",
 
 		"typescript": "latest",
 		"@typescript/native-preview": "latest",
