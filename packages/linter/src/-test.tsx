@@ -1,6 +1,6 @@
 // biome-ignore-all lint/correctness/useHookAtTopLevel: test file
 // biome-ignore-all lint/style/noRestrictedGlobals: test file
-import {Array, Effect} from 'effect'
+import {Array, Effect, Match} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
@@ -19,6 +19,14 @@ function test_array_native(arr: string[]) {
 
 // biome-ignore lint/plugin: effect gen args
 const bad_gen_with_args = (name: string) => Effect.gen(function* () {})
+
+const valid_gen = Effect.gen(function* () {
+	return 'ok'
+})
+
+const valid_fn_untraced = Effect.fnUntraced(function* (name: string) {
+	return name
+})
 
 // biome-ignore lint/plugin: testing
 function test_string_trim(s: string) {
@@ -88,6 +96,12 @@ function test_inline_style() {
 function test_cn_classname(active: boolean) {
 	// biome-ignore lint/plugin: cn classname
 	return <div className={active ? 'active' : 'inactive'}>hi</div>
+}
+
+// biome-ignore lint/plugin: wrapper function
+function test_pipe_method() {
+	// biome-ignore lint/plugin: pipe method
+	return Match.value('active').pipe(Match.orElse(() => 'inactive'))
 }
 
 // biome-ignore lint/plugin: type annotation
@@ -220,3 +234,14 @@ function test_else(items: string[], result: string[]) {
 		result.push('empty')
 	}
 }
+
+function valid_multiline_braced_return(content: ReactNode) {
+	if (content) {
+		return <div>{content}</div>
+	}
+
+	return <span>empty</span>
+}
+
+void valid_gen
+void valid_fn_untraced

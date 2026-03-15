@@ -1,4 +1,4 @@
-import {Option, Schema} from 'effect'
+import {Option, pipe, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
@@ -18,8 +18,14 @@ export class PortfolioTrail extends Schema.Class<PortfolioTrail>('PortfolioTrail
 }) {}
 
 export class PortfolioState extends Schema.Class<PortfolioState>('PortfolioState')({
-	visitors: Schema.Array(PortfolioVisitor).pipe(Schema.withConstructorDefault(() => Option.some([] as const))),
-	trails: Schema.Array(PortfolioTrail).pipe(Schema.withConstructorDefault(() => Option.some([] as const)))
+	visitors: pipe(
+		Schema.Array(PortfolioVisitor),
+		Schema.withConstructorDefault(() => Option.some([] as const))
+	),
+	trails: pipe(
+		Schema.Array(PortfolioTrail),
+		Schema.withConstructorDefault(() => Option.some([] as const))
+	)
 }) {}
 
 export class PortfolioSnapshot extends Schema.TaggedClass<PortfolioSnapshot>()('snapshot', {

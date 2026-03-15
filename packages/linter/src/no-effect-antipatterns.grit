@@ -3,12 +3,12 @@ language js(typescript, jsx)
 
 or {
 	`Effect.fail($_)` as $match where {
-		register_diagnostic(span=$match, message="Effect.fail is banned - use yield* with Schema.TaggedErrorClass directly instead")
+		register_diagnostic(span=$match, message="Do not wrap tagged domain errors with `Effect.fail`. Yield them directly with `yield* new DomainError(...)` from `Effect.gen` or `Effect.fnUntraced` instead. Only define a `Schema.TaggedErrorClass` if you do not already have one")
 	},
 	`Effect.succeed($_)` as $match where {
-		register_diagnostic(span=$match, message="Effect.succeed is banned - use Effect.gen or Effect.fnUntraced instead")
+		register_diagnostic(span=$match, message="Do not use `Effect.succeed` here. If you are already in `Effect.gen` or `Effect.fnUntraced`, return the plain value directly; otherwise rewrite the code around the proper Effect constructor")
 	},
 	`($args) => Effect.gen($body)` as $match where {
-		register_diagnostic(span=$match, message="Use Effect.fnUntraced instead of wrapping Effect.gen in an arrow function")
+		register_diagnostic(span=$match, message="Do not wrap `Effect.gen` in an arrow function. For argument-taking functions use `Effect.fnUntraced(function* (args) { ... })` instead")
 	}
 }

@@ -14,5 +14,5 @@ or {
 	// Callback function expressions (as arguments)
 	`function ($params): $type { $body }`
 } as $match where {
-	register_diagnostic(span=$match, message="Never add explicit return type annotations. TypeScript infers them.")
+	register_diagnostic(span=$match, message="Never add explicit return type annotations in implementation code. They hide broken implementations and reduce useful inference; rewrite the function until TypeScript infers the correct return type")
 }

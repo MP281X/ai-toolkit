@@ -1,6 +1,6 @@
 ---
 description: Add a new linting rule via Biome GritQL plugin or skill update
-agent: general
+agent: development
 ---
 
 ## User Feedback
@@ -16,6 +16,12 @@ $ARGUMENTS
 - What should the developer do instead (the correct pattern)?
 - Examples of incorrect code that should trigger the rule
 
+**Do not stop at the surface request. Ask until you understand the intent behind the rule:**
+- Why is this pattern bad in this codebase?
+- What failure mode is the rule trying to prevent?
+- Is the goal readability, consistency, stronger inference, avoiding AI workarounds, or architectural correctness?
+- Should the message teach a replacement, a design rewrite, or both?
+
 **You can ask questions at ANY point in the workflow, not just at the start.**
 
 ## Workflow
@@ -27,6 +33,9 @@ $ARGUMENTS
    - Identify whether a skill entry already exists and can be removed or simplified
    - Avoid duplicate guidance across plugins and skills
 
+   Also inspect `AGENTS.md` and relevant source files in `.opencode/resources/` so the new rule matches the actual repo philosophy and package APIs.
+   When researching APIs, do not stop at the first viable helper - compare the nearby alternatives and choose the simplest, most idiomatic pattern before encoding it into a rule or skill.
+
 2. **Choose the implementation source of truth**
 
    **Biome plugin wins whenever possible.**
@@ -35,6 +44,9 @@ $ARGUMENTS
 
    **Do not add or expand a skill when a plugin already covers the behavior well enough.**
    Skills should only carry guidance that cannot be enforced by a plugin.
+
+   **There must be no overlap between plugins and skills.**
+   If a plugin already enforces the behavior, delete or simplify the matching skill guidance instead of repeating it.
 
    **If two plugins are similar, prefer merging them** instead of creating a near-duplicate rule.
 
@@ -51,6 +63,9 @@ $ARGUMENTS
    - Prefer updating or merging an existing `.grit` file before creating a new one
    - Create `packages/linter/src/{descriptive-name}.grit` only when no existing plugin is a good home
    - Keep diagnostics clear and actionable, focused on what to do instead
+   - Diagnostic text should explain the replacement and, when useful, the likely design mistake
+   - Prefer rules that push the agent toward simpler code rather than clever workarounds
+   - If a rule is noisy, brittle, or hard to suppress correctly, simplify or remove it instead of keeping a misleading rule
 
    ```grit
    engine biome(1.0)
@@ -64,6 +79,9 @@ $ARGUMENTS
    **For skill updates:**
    - Only add guidance that is not already enforced by a plugin
    - Remove duplicated skill guidance when a plugin now covers it
+   - Keep skills short and source-driven
+   - Point to the relevant files in `.opencode/resources/...`
+   - Do not try to document whole APIs; teach patterns, boundaries, and best practices only
    - Keep each topic in this exact structure:
 
    ```md
@@ -84,6 +102,7 @@ $ARGUMENTS
    - Do not reference app-specific files, services, routes, RPCs, codebase details, other skills, or plugin names inside the example block
    - Keep examples extremely small and focused so they show only the rule itself and nothing else
    - Avoid imports, setup, surrounding context, and extra helper code unless absolutely required to understand the rule
+   - Every topic needs an example; do not leave guidance as bare text only
 
 4. **Add or update tests for every plugin rule**
    In `packages/linter/src/-test.tsx`:
@@ -91,6 +110,8 @@ $ARGUMENTS
    - Use a short suppression comment
    - Do not paste codebase-specific examples from the user directly into tests
    - Simplify names and surrounding code so the test demonstrates only the pattern being linted
+   - If Biome says a suppression comment has no effect, the rule/test hookup is wrong and must be fixed
+   - Keep `packages/linter/src/-test.tsx` as the source of truth unless explicitly told otherwise
 
    ```typescript
    // biome-ignore lint/plugin: short reason
@@ -107,9 +128,9 @@ $ARGUMENTS
    - `bun run fix`
    - `bun run check`
 
-   If either command reports errors, fix all errors introduced by the rule change, merged plugin, tests, or skill edits, then run both commands again.
+   If either command reports errors or warnings, fix all issues introduced by the rule change, merged plugin, tests, or skill edits, then run both commands again.
 
-   Do not stop at the first failure. Keep iterating until both commands pass cleanly before finishing.
+   Do not stop at the first failure. Keep iterating until both commands pass cleanly with no warnings before finishing.
 
 ## Suppression Format
 

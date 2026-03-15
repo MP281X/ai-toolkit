@@ -3,5 +3,5 @@ language js(typescript, jsx)
 
 `className={$expr}` as $match where {
 	$expr <: `$cond ? $a : $b`,
-	register_diagnostic(span=$match, message="Use cn() for conditional classNames instead of ternary expressions")
+	register_diagnostic(span=$match, message="Do not use ternaries inside className. Use `className={cn(base, condition && 'class-a', !condition && 'class-b')}` or an equivalent cn() call so conditional classes stay explicit and Tailwind-safe")
 }

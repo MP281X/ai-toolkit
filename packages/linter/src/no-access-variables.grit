@@ -4,7 +4,7 @@ language js(typescript, jsx)
 or {
 	`const $name = $obj.$prop` as $match where {
 		not $obj <: contains `$_($...)`,
-		register_diagnostic(span=$match, message="Don't extract access-only variables; inline property access at the point of use")
+		register_diagnostic(span=$match, message="Don't extract access-only variables. Inline the property access at the use site; this indirection adds no logic and often weakens readability and inference")
 	},
 	`const $name = $var` as $match where {
 		$var <: r"[a-zA-Z_$][a-zA-Z0-9_$]*",
@@ -16,6 +16,6 @@ or {
 			`null`,
 			`undefined`
 		},
-		register_diagnostic(span=$match, message="Don't extract access-only variables; inline property access at the point of use")
+		register_diagnostic(span=$match, message="Don't extract access-only variables. Inline the value at the use site; this alias adds no logic and usually makes the code harder to review")
 	}
 }

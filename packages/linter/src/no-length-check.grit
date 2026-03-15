@@ -9,7 +9,7 @@ or {
 		`0 === $expr.length`,
 		`0 == $expr.length`
 	} as $match where {
-		register_diagnostic(span=$match, message="Use String.isEmpty or Array.isArrayEmpty instead of manual length checks")
+		register_diagnostic(span=$match, message="Do not write manual empty checks with `.length`. Use the correct helper instead: `String.isEmpty`, `Array.isArrayEmpty`, or `Array.isReadonlyArrayEmpty`")
 	},
 	or {
 		`$expr.length > 0`,
@@ -19,6 +19,6 @@ or {
 		`0 < $expr.length`,
 		`1 <= $expr.length`
 	} as $match where {
-		register_diagnostic(span=$match, message="Use String.isNonEmpty or Array.isArrayNonEmpty instead of manual length checks")
+		register_diagnostic(span=$match, message="Do not write manual non-empty checks with `.length`. Use the correct helper instead: `String.isNonEmpty`, `Array.isArrayNonEmpty`, or `Array.isReadonlyArrayNonEmpty`")
 	}
 }

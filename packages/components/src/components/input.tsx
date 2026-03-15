@@ -615,9 +615,7 @@ export function ChatInput(props: ChatInputProps) {
 								onChange={event => {
 									// biome-ignore lint/plugin: access variable
 									const files = event.currentTarget.files
-									if (Predicate.isNullish(files) || Predicate.isNullish(editorRef.current)) {
-										return
-									}
+									if (Predicate.isNullish(files) || Predicate.isNullish(editorRef.current)) return
 
 									const entries = Array.map(Array.fromIterable(files), file => ({file, matchText: file.name}))
 									event.currentTarget.value = ''
@@ -628,9 +626,7 @@ export function ChatInput(props: ChatInputProps) {
 										if (!lexical.$isRangeSelection(selection)) {
 											lexical.$getRoot().selectEnd()
 											selection = lexical.$getSelection()
-											if (!lexical.$isRangeSelection(selection)) {
-												return
-											}
+											if (!lexical.$isRangeSelection(selection)) return
 										}
 
 										for (const entry of entries) {
@@ -646,16 +642,12 @@ export function ChatInput(props: ChatInputProps) {
 							{actions}
 							<Button
 								onClick={() => {
-									if (Predicate.isNullish(editorRef.current)) {
-										return
-									}
+									if (Predicate.isNullish(editorRef.current)) return
 
 									const text = String.trim(
 										editorRef.current.getEditorState().read(() => lexical.$getRoot().getTextContent())
 									)
-									if (String.isEmpty(text)) {
-										return
-									}
+									if (String.isEmpty(text)) return
 
 									props.onSubmit({
 										text,

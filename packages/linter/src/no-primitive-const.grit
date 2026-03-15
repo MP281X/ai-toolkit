@@ -14,5 +14,5 @@ language js(typescript, jsx)
 			`false`
 		}
 	},
-	register_diagnostic(span=$match, message="Don't extract primitive values; inline them at the point of use")
+	register_diagnostic(span=$match, message="Don't extract primitive values into standalone constants or fake config variables. Inline them at the use site; the extra indirection makes the code harder to read and review")
 }

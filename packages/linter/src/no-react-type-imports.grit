@@ -7,5 +7,5 @@ or {
 	`import type * as $_ from 'react'`,
 	`import type * as $_ from "react"`
 } as $match where {
-	register_diagnostic(span=$match, message="React types are globally available; use React.ReactNode, React.FC etc. instead of importing from 'react'")
+	register_diagnostic(span=$match, message="Do not import React types from `react` here. They are already globally available, so the import is useless noise; use `React.ReactNode`, `React.FC`, and similar names directly")
 }

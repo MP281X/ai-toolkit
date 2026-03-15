@@ -3,21 +3,21 @@ language js(typescript, jsx)
 
 or {
 	`$expr == null` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isNullish for null/undefined checks")
+		register_diagnostic(span=$match, message="Do not write ad hoc nullish checks. Use `Predicate.isNullish(expr)` instead")
 	},
 	`$expr != null` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isNotNullish for null/undefined checks")
+		register_diagnostic(span=$match, message="Do not write ad hoc nullish checks. Use `Predicate.isNotNullish(expr)` instead")
 	},
 	`$expr === null` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isNull for strict null checks")
+		register_diagnostic(span=$match, message="Do not write strict null checks manually. Use `Predicate.isNull(expr)` instead")
 	},
 	`$expr !== null` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isNotNull for strict not-null checks")
+		register_diagnostic(span=$match, message="Do not write strict not-null checks manually. Use `Predicate.isNotNull(expr)` instead")
 	},
 	`$expr === undefined` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isUndefined for undefined checks")
+		register_diagnostic(span=$match, message="Do not write undefined checks manually. Use `Predicate.isUndefined(expr)` instead")
 	},
 	`$expr !== undefined` as $match where {
-		register_diagnostic(span=$match, message="Use Predicate.isNotUndefined for not-undefined checks")
+		register_diagnostic(span=$match, message="Do not write not-undefined checks manually. Use `Predicate.isNotUndefined(expr)` instead")
 	}
 }

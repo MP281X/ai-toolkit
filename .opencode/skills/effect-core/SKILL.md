@@ -14,144 +14,80 @@ metadata:
 .opencode/resources/effect/packages/effect/src/Stream.ts
 ```
 
+## Purpose
+
+- Research the local source files above before using runtime APIs
+- Use `Effect.gen` for lazy sequential Effects with no arguments
+- Use `Effect.fnUntraced` for lazy sequential Effect functions with arguments
+- When you define a service boundary, use `ServiceMap.Service`, keep the layer close, and model one tagged domain error intentionally
 
 ## Effect.gen
 
-Use for multi-step computations that cannot be expressed as a pipe.
-
 ```typescript
-// Bad - fnUntraced with no arguments
-const load = Effect.fnUntraced(function* () {
-  const a = yield* fetchA()
-  const b = yield* fetchB(a)
-  return b
-})
+// Bad
+const loadUser = pipe(
+  repo.getCurrent(),
+  Effect.flatMap(user =>
+    pipe(
+      loadProfile(user.id),
+      Effect.map(profile => ({user, profile}))
+    )
+  )
+)
 
-// Good - gen for multi-step without arguments
-const load = Effect.gen(function* () {
-  const a = yield* fetchA()
-  const b = yield* fetchB(a)
-  return b
+// Good
+const loadUser = Effect.gen(function* () {
+  const user = yield* repo.getCurrent()
+  const profile = yield* loadProfile(user.id)
+  return {user, profile}
 })
 ```
-
 
 ## Effect.fnUntraced
 
-Use for functions with arguments that cannot be expressed as a flow.
-
 ```typescript
-// Good - fnUntraced with arguments
-const save = Effect.fnUntraced(function* (name: string) {
-  const id = yield* db.insert(name)
-  yield* log(`created ${id}`)
+// Bad
+const loadUser = flow(
+  repo.get,
+  Effect.flatMap(user =>
+    pipe(
+      loadProfile(user.id),
+      Effect.map(profile => ({user, profile}))
+    )
+  )
+)
+
+// Good
+const loadUser = Effect.fnUntraced(function* (id: string) {
+  const user = yield* repo.get(id)
+  const profile = yield* loadProfile(user.id)
+  return {user, profile}
 })
 ```
 
-Use with `flow` for composition:
-
-```typescript
-const saveAndNotify = flow(
-  Effect.fnUntraced(function* (name: string) {
-    const id = yield* db.insert(name)
-    return id
-  }),
-  Effect.flatMap(id => sendNotification(id))
-)
-```
-
-
-## Services
-
-Always use ServiceMap.Service class syntax.
-
-```typescript
-// Bad - plain object
-const Database = {query: (sql: string) => Effect.succeed([])}
-
-// Good - Service class
-class Database extends ServiceMap.Service<Database, {
-  readonly query: (sql: string) => Effect.Effect<ReadonlyArray<unknown>, DbError>
-}>()('Database') {}
-```
-
-Inside service `make`, use pipe and Effect.fnUntraced:
-
-```typescript
-// Bad - nested gen
-export class Users extends ServiceMap.Service<Users>()('Users', {
-  make: Effect.gen(function* () {
-    const db = yield* Database
-    return {
-      delete: (id: string) => db.exec(id)
-    }
-  })
-}) {}
-
-// Good - pipe and fnUntraced
-export class Users extends ServiceMap.Service<Users>()('Users', {
-  make: Effect.gen(function* () {
-    const db = yield* Database
-    return {
-      list: pipe(
-        db.query('SELECT *'),
-        Effect.mapError(cause => new UsersError({cause}))
-      ),
-      delete: Effect.fnUntraced(function* (id: string) {
-        yield* db.exec(id)
-      })
-    }
-  })
-}) {
-  static layer = Layer.effect(this, this.make)
-}
-```
-
-
 ## Layer.effect
 
-Define the layer inside the service class. Name external implementations with `Live` suffix.
+- Define the layer inside the service class. Name external implementations with `Live` suffix.
 
 ```typescript
-// Bad - separate layer file
-export const MyServiceLayer = Layer.effect(MyService)(makeService)
+// Bad
+export const MyServiceLayer = Layer.effect(MyService, makeService)
 
-// Good - layer inside class
-export class MyService extends ServiceMap.Service<...>()('MyService') {
+// Good
+export class MyService extends ServiceMap.Service<MyService>()('MyService') {
   static layer = Layer.effect(this, MyServiceLive)
 }
 ```
 
 
-## Domain errors
-
-Each service has one error type using Schema.TaggedErrorClass. Yield domain errors directly.
-
-```typescript
-export class UsersError extends Schema.TaggedErrorClass<UsersError>()('UsersError', {
-  cause: Schema.optional(Schema.Unknown),
-  message: Schema.optional(Schema.String)
-}) {}
-
-// Yield directly
-yield* new UsersError({message: 'not found'})
-
-// Map external errors
-yield* pipe(
-  externalOp,
-  Effect.mapError(cause => new UsersError({cause}))
-)
-```
-
-
 ## Concurrency
 
-Use `unbounded` when parallel is safe.
+- Research concurrency helpers like `concurrency: 'unbounded'` when work is independent
 
 ```typescript
 // Bad
-Effect.forEach(items, processItem)
+yield* Effect.forEach(items, runItem)
 
 // Good
-Effect.forEach(items, processItem, {concurrency: 'unbounded'})
+yield* Effect.forEach(items, runItem, {concurrency: 'unbounded'})
 ```

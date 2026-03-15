@@ -13,11 +13,10 @@ Build precise plan through research and clarification. Stay read-only until user
 ## Workflow
 
 1. Launch explore agents to map codebase and affected areas
-2. Research `.opencode/resources/` for external APIs
-3. Use question tool exclusively for all questions/clarifications
-4. Keep iterating via question until you fully understand and have clarified all requirements
-5. When you are sure the plan is complete, write the plan to `.opencode/plans/{kebab-case-slug}.md`
-6. After writing, ask the user if they want to change anything before ending
+2. Use question tool exclusively for all questions/clarifications
+3. Keep iterating via question until you fully understand and have clarified all requirements
+4. When you are sure the plan is complete, write the plan to `.opencode/plans/{kebab-case-slug}.md`
+5. After writing, ask the user if they want to change anything before ending
 
 
 ## Discussion Style
