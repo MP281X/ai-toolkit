@@ -5,16 +5,18 @@
 
 	"exports": {
 		"./service": "./src/service.ts",
-		"./tool": "./src/tool.ts",
+		"./schema": "./src/schema.ts",
 		"./catalog": "./src/catalog.ts"
 	},
 
 	"scripts": {
 		"fix": "biome check --write --unsafe",
-		"check": "tsgo --noEmit && biome check"
+		"check": "biome check && tsgo --noEmit && effect-language-service diagnostics --project ./tsconfig.json"
 	},
 
 	"dependencies": {
+		"exa-js": "latest",
+
 		"@effect/ai-openai": "^4.0.0-beta",
 		"@effect/ai-anthropic": "^4.0.0-beta",
 		"@effect/ai-openrouter": "^4.0.0-beta",

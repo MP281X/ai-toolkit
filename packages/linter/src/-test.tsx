@@ -1,10 +1,14 @@
 // biome-ignore-all lint/correctness/useHookAtTopLevel: test file
 // biome-ignore-all lint/style/noRestrictedGlobals: test file
-import {Array, Effect, Match} from 'effect'
+import {Array, Data, Effect, Match, Schema} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
-import {memo, useCallback, useImperativeHandle, useMemo} from 'react'
+import {memo, useCallback} from 'react'
+
+export class TestError extends Schema.TaggedErrorClass<TestError>()('TestError', {
+	cause: Schema.optional(Schema.Defect)
+}) {}
 
 function test_type_assertion(value: unknown) {
 	// biome-ignore lint/plugin: type assertion
@@ -176,7 +180,7 @@ function test_wrapper_ctor(name: string) {
 }
 
 // biome-ignore lint/plugin: effect fail
-const bad_fail = Effect.fail(new Error('test'))
+const bad_fail = Effect.fail(new TestError({}))
 
 // biome-ignore lint/plugin: effect succeed
 const bad_succeed = Effect.succeed('value')
