@@ -79,10 +79,34 @@ $ARGUMENTS
    **For skill updates:**
    - Only add guidance that is not already enforced by a plugin
    - Remove duplicated skill guidance when a plugin now covers it
-   - Keep skills short and source-driven
-   - Point to the relevant files in `.opencode/resources/...`
-   - Do not try to document whole APIs; teach patterns, boundaries, and best practices only
-   - Keep each topic in this exact structure:
+   - Keep skills short, source-driven, and focused on best practices plus an index for further research
+   - Put most of the effort into these sections, in this order:
+
+   ```md
+   ## Source files
+
+   ```
+   .opencode/resources/...
+   ```
+
+   ## Purpose
+
+   - 2-4 bullets explaining the boundary / mental model
+
+   ## Where to look
+
+   - task -> file / function bullets
+   ```
+
+   - In `Source files`, list the best entry points first; prefer docs first when they exist, then the non-obvious implementation files that actually answer agent questions
+   - In `Purpose`, explain what role the module plays in this repo and the best practices the agent tends to miss
+   - In `Where to look`, map concrete needs to exact files / functions, especially the things an agent would not find immediately
+   - Do not explain signatures or list available APIs just because they exist; the agent can research the current source on demand
+   - Do not try to document whole APIs; teach search paths, boundaries, and project-relevant best practices only
+   - Avoid capability dumps or long catalogs of helpers that are unlikely to matter in this repo
+   - Add a `## Best practices` section when it helps encode repeated failure modes or repo-specific habits
+   - Add topical sections only when they clarify a project-relevant pattern that the agent repeatedly gets wrong; they are optional
+   - If you add a topical section with an example, keep it in this structure:
 
    ```md
    ## {topic}
@@ -102,7 +126,7 @@ $ARGUMENTS
    - Do not reference app-specific files, services, routes, RPCs, codebase details, other skills, or plugin names inside the example block
    - Keep examples extremely small and focused so they show only the rule itself and nothing else
    - Avoid imports, setup, surrounding context, and extra helper code unless absolutely required to understand the rule
-   - Every topic needs an example; do not leave guidance as bare text only
+   - Prefer a few good examples over exhaustive coverage, and omit examples entirely when the index + best practices are enough
 
 4. **Add or update tests for every plugin rule**
    In `packages/linter/src/-test.tsx`:

@@ -5,6 +5,6 @@
 
 	"scripts": {
 		"fix": "biome check --write --unsafe",
-		"check": "tsgo --noEmit && biome check"
+		"check": "biome check && tsgo --noEmit && effect-language-service diagnostics --project ./tsconfig.json"
 	}
 }

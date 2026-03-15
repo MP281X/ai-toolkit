@@ -9,85 +9,28 @@ metadata:
 
 ```
 .opencode/resources/effect/packages/effect/src/Effect.ts
-.opencode/resources/effect/packages/effect/src/ServiceMap.ts
 .opencode/resources/effect/packages/effect/src/Layer.ts
+.opencode/resources/effect/packages/effect/src/ServiceMap.ts
 .opencode/resources/effect/packages/effect/src/Stream.ts
+.opencode/resources/effect/packages/effect/src/Schedule.ts
 ```
 
 ## Purpose
 
-- Research the local source files above before using runtime APIs
-- Use `Effect.gen` for lazy sequential Effects with no arguments
-- Use `Effect.fnUntraced` for lazy sequential Effect functions with arguments
-- When you define a service boundary, use `ServiceMap.Service`, keep the layer close, and model one tagged domain error intentionally
+- Start in `Effect.ts`; most of the important runtime choices are there, not in helpers built on top
+- Use `Effect.gen` for lazy sequential effects with no arguments and `Effect.fnUntraced` for argument-taking effect functions
+- Keep service boundaries small: define the `ServiceMap.Service` and its `Layer` close together
+- Before writing custom orchestration, inspect the nearby concurrency, service-access, and provide APIs in `Effect.ts`
 
-## Effect.gen
+## Where to look
 
-```typescript
-// Bad
-const loadUser = pipe(
-  repo.getCurrent(),
-  Effect.flatMap(user =>
-    pipe(
-      loadProfile(user.id),
-      Effect.map(profile => ({user, profile}))
-    )
-  )
-)
+- Sequential effect definitions: `Effect.gen`, `Effect.fnUntraced`
+- Service access and provision: `Effect.service`, `Effect.serviceOption`, `Effect.services`, `Effect.provide*`
+- Service construction: `ServiceMap.Service`, `Layer.effect`, `Layer.succeed`, `Layer.merge`
+- Concurrency helpers: `Effect.forEach` options, `race*`, `timeout*`, `retry*`, and `Schedule.ts`
+- Stream integration: `Stream.ts` when the value is really a stream, not a loop around `Effect`
 
-// Good
-const loadUser = Effect.gen(function* () {
-  const user = yield* repo.getCurrent()
-  const profile = yield* loadProfile(user.id)
-  return {user, profile}
-})
-```
+## Best practices
 
-## Effect.fnUntraced
-
-```typescript
-// Bad
-const loadUser = flow(
-  repo.get,
-  Effect.flatMap(user =>
-    pipe(
-      loadProfile(user.id),
-      Effect.map(profile => ({user, profile}))
-    )
-  )
-)
-
-// Good
-const loadUser = Effect.fnUntraced(function* (id: string) {
-  const user = yield* repo.get(id)
-  const profile = yield* loadProfile(user.id)
-  return {user, profile}
-})
-```
-
-## Layer.effect
-
-- Define the layer inside the service class. Name external implementations with `Live` suffix.
-
-```typescript
-// Bad
-export const MyServiceLayer = Layer.effect(MyService, makeService)
-
-// Good
-export class MyService extends ServiceMap.Service<MyService>()('MyService') {
-  static layer = Layer.effect(this, MyServiceLive)
-}
-```
-
-
-## Concurrency
-
-- Research concurrency helpers like `concurrency: 'unbounded'` when work is independent
-
-```typescript
-// Bad
-yield* Effect.forEach(items, runItem)
-
-// Good
-yield* Effect.forEach(items, runItem, {concurrency: 'unbounded'})
-```
+- Use `Effect.gen` for sequential effects without arguments and `Effect.fnUntraced` for effect functions with arguments
+- Keep service definitions and live layers close together instead of scattering them across files
