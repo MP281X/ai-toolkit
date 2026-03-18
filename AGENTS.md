@@ -2,7 +2,17 @@
 
 Global rules for all agents.
 
-## Research Required
+## Skills
+
+Before launching explore agents or researching, check if a relevant skill exists.
+
+Skills contain a minimal index that can guide or replace research:
+
+- `Source files` — direct paths to implementation files in `.opencode/resources/`
+- `Where to look` — maps specific tasks to exact files and functions
+- `Purpose` — explains the boundary and mental model
+
+## Research
 
 Always search `.opencode/resources/{reponame}/` before implementing.
 
@@ -15,7 +25,7 @@ Always search `.opencode/resources/{reponame}/` before implementing.
 - Do not stop at the first API that can work — libraries like Effect often have multiple valid options, so compare the available patterns and choose the simplest and most idiomatic one for the current code
 - Treat skills as best-practice guides plus a search index into the real source, not as API documentation
 
-## Simplification Required
+## Code Quality
 
 If the code is hard to type correctly, the design is probably wrong.
 

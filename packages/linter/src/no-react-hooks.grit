@@ -1,19 +1,37 @@
 engine biome(1.0)
 language js(typescript, jsx)
 
-`$fn($...)` as $match where {
-	$fn <: or {
-		`useCallback` where {
-			register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization and manual `useCallback` interferes with it")
-		},
-		`useMemo` where {
-			register_diagnostic(span=$fn, message="Do not use `useMemo` here. React Compiler already handles this memoization and manual `useMemo` interferes with it")
-		},
-		`useImperativeHandle` where {
-			register_diagnostic(span=$fn, message="Do not use `useImperativeHandle` here. React Compiler already handles the optimization path and this API interferes with it")
-		},
-		`memo` where {
-			register_diagnostic(span=$fn, message="Do not use `memo` here. React Compiler already handles this optimization and manual `memo` interferes with it")
+or {
+	`$fn($...)` as $match where {
+		$fn <: or {
+			`useCallback` where {
+				register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization and manual `useCallback` interferes with it")
+			},
+			`useMemo` where {
+				register_diagnostic(span=$fn, message="Do not use `useMemo` here. React Compiler already handles this memoization and manual `useMemo` interferes with it")
+			},
+			`memo` where {
+				register_diagnostic(span=$fn, message="Do not use `memo` here. React Compiler already handles this optimization and manual `memo` interferes with it")
+			},
+			`forwardRef` where {
+				register_diagnostic(span=$fn, message="Do not use `forwardRef` here. React 19 supports passing `ref` as a regular prop directly to components, making `forwardRef` unnecessary")
+			}
+		}
+	},
+	`$fn<$_>($...)` as $match where {
+		$fn <: or {
+			`useCallback` where {
+				register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization and manual `useCallback` interferes with it")
+			},
+			`useMemo` where {
+				register_diagnostic(span=$fn, message="Do not use `useMemo` here. React Compiler already handles this memoization and manual `useMemo` interferes with it")
+			},
+			`memo` where {
+				register_diagnostic(span=$fn, message="Do not use `memo` here. React Compiler already handles this optimization and manual `memo` interferes with it")
+			},
+			`forwardRef` where {
+				register_diagnostic(span=$fn, message="Do not use `forwardRef` here. React 19 supports passing `ref` as a regular prop directly to components, making `forwardRef` unnecessary")
+			}
 		}
 	}
 }

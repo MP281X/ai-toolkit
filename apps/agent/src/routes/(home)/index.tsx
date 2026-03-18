@@ -3,12 +3,14 @@ import {Array, Effect, Match, pipe, Stream, String} from 'effect'
 
 import {partsStreamReducer} from '@ai-toolkit/ai/schema'
 import {Conversation} from '@ai-toolkit/components/conversation'
-import {Code, CodeXml} from '@ai-toolkit/components/icons'
-import {ChatInput, Snippet, Snippets, Toolbar} from '@ai-toolkit/components/input'
+import {ArrowUpIcon, Square} from '@ai-toolkit/components/icons'
+import {AutocompleteInput} from '@ai-toolkit/components/input'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
+import {Button} from '@ai-toolkit/components/ui/button'
 import {createFileRoute} from '@tanstack/react-router'
 import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
+import {useRef} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
 
@@ -63,6 +65,7 @@ function RouteComponent() {
 	const {value: messages} = useAtomSuspense(messagesAtom)
 	const sendPrompt = useAtomSet(sendPromptAtom)
 	const stopAgent = useAtomSet(stopAgentAtom)
+	const inputRef = useRef<AutocompleteInput.Handle<{id: number; label: string}>>(null)
 
 	return (
 		<div className="flex h-full w-full flex-col overflow-hidden">
@@ -106,18 +109,48 @@ function RouteComponent() {
 				))}
 			</Conversation>
 
-			<ChatInput onSubmit={sendPrompt} onCancel={stopAgent}>
-				<Toolbar>openrouter/free</Toolbar>
+			<div className="border-border/60 border-t bg-background px-3 py-3">
+				<div className="flex flex-col gap-2">
+					<AutocompleteInput
+						ref={inputRef}
+						placeholder="Send a message..."
+						options={{
+							'@': {
+								color: '#60a5fa',
+								values: Array.makeBy(50, i => ({id: i, label: `openrouter/${i}`}))
+							}
+						}}
+					>
+						{entry => (
+							// biome-ignore lint/plugin: _
+							<span className="font-medium" style={{color: entry.color}}>
+								{entry.value.label}
+							</span>
+						)}
+					</AutocompleteInput>
 
-				<Snippets>
-					<Snippet insert={'```\n\n```\n'}>
-						<Code className="size-3.5" />
-					</Snippet>
-					<Snippet insert={'<section>\n\n</section>\n'}>
-						<CodeXml className="size-3.5" />
-					</Snippet>
-				</Snippets>
-			</ChatInput>
+					<div className="flex items-center justify-between">
+						<div className="text-muted-foreground text-xs">openrouter/free</div>
+						<div className="flex items-center gap-2">
+							<Button onClick={() => stopAgent()} variant="outline" size="icon-xs">
+								<Square className="size-3.5 fill-current" />
+							</Button>
+							<Button
+								onClick={() => {
+									const text = inputRef.current?.text ?? ''
+									if (String.isEmpty(text)) return
+
+									sendPrompt({text, attachments: Array.fromIterable(inputRef.current?.files ?? [])})
+									inputRef.current?.clear()
+								}}
+								size="icon-xs"
+							>
+								<ArrowUpIcon className="size-3.5" />
+							</Button>
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	)
 }
