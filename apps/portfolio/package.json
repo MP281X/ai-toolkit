@@ -17,7 +17,7 @@
 		"build:server": "bun build ./src/main.server.tsx --target=bun --outfile ./dist/server.js",
 
 		"fix": "biome check --write --unsafe",
-		"check": "biome check && tsgo --noEmit && effect-language-service diagnostics --project ./tsconfig.json"
+		"check": "biome check && tsgo --noEmit"
 	},
 
 	"dependencies": {

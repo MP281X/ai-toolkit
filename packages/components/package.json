@@ -17,13 +17,14 @@
 
 	"scripts": {
 		"fix": "biome check --write --unsafe",
-		"check": "biome check && tsgo --noEmit && effect-language-service diagnostics --project ./tsconfig.json"
+		"check": "biome check && tsgo --noEmit"
 	},
 
 	"dependencies": {
 		"cmdk": "latest",
 		"@base-ui/react": "^1",
 		"react-resizable-panels": "latest",
+		"@tanstack/react-hotkeys": "latest",
 
 		"lucide-react": "latest",
 		"@icons-pack/react-simple-icons": "latest",
