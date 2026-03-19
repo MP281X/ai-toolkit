@@ -61,5 +61,5 @@ language js(typescript, jsx)
 		`Array`,
 		`String`
 	},
-	register_diagnostic(span=$match, message="Do not use native prototype methods here. Use the Effect modules instead: `Array.*` for arrays, `String.*` for strings, and `Record.*` for object-like data")
+	register_diagnostic(span=$match, message="Do not use native prototype methods here. Use the Effect modules instead: `Array.*` for arrays, `String.*` for strings, and `Record.*` for object-like data. Suppress this rule with `// biome-ignore lint/plugin: not a prototype method` only when calling external API methods that happen to share the same name as JS prototype methods")
 }

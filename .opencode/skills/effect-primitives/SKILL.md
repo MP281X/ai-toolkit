@@ -1,6 +1,6 @@
 ---
 name: effect-primitives
-description: REQUIRED for all TypeScript code
+description: Effect functional primitives — pipe, flow, Match, Array, Option
 metadata:
   patterns: pipe, flow, Match, Array, String, Record, Predicate, Option
 ---
