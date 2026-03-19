@@ -3,7 +3,7 @@ import {Array, Effect, Match, pipe, Stream, String} from 'effect'
 
 import {partsStreamReducer} from '@ai-toolkit/ai/schema'
 import {Conversation} from '@ai-toolkit/components/conversation'
-import {ArrowUpIcon, Square} from '@ai-toolkit/components/icons'
+import {ArrowUpIcon, BotIcon, Square} from '@ai-toolkit/components/icons'
 import {AutocompleteInput} from '@ai-toolkit/components/input'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {Button} from '@ai-toolkit/components/ui/button'
@@ -67,6 +67,14 @@ function RouteComponent() {
 	const stopAgent = useAtomSet(stopAgentAtom)
 	const inputRef = useRef<AutocompleteInput.Handle<{id: number; label: string}>>(null)
 
+	function submit() {
+		const text = inputRef.current?.getText() ?? ''
+		if (String.isEmpty(text)) return
+
+		sendPrompt({text, attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])})
+		inputRef.current?.clear()
+	}
+
 	return (
 		<div className="flex h-full w-full flex-col overflow-hidden">
 			<Conversation className="gap-3 p-3">
@@ -113,19 +121,25 @@ function RouteComponent() {
 				<div className="flex flex-col gap-2">
 					<AutocompleteInput
 						ref={inputRef}
+						onSubmit={submit}
 						placeholder="Send a message..."
 						options={{
 							'@': {
 								color: '#60a5fa',
 								values: Array.makeBy(50, i => ({id: i, label: `openrouter/${i}`}))
+							},
+							'#': {
+								color: '#56815f',
+								values: Array.makeBy(50, i => ({id: i, label: `ciao/${i}`}))
 							}
 						}}
 					>
 						{entry => (
-							// biome-ignore lint/plugin: _
-							<span className="font-medium" style={{color: entry.color}}>
-								{entry.value.label}
-							</span>
+							<>
+								{/* biome-ignore lint/plugin: dynamic colors are part of the autocomplete entry API here */}
+								<BotIcon className="size-4 shrink-0" style={{color: entry.color}} />
+								<span className="truncate text-foreground">{entry.value.label}</span>
+							</>
 						)}
 					</AutocompleteInput>
 
@@ -135,16 +149,7 @@ function RouteComponent() {
 							<Button onClick={() => stopAgent()} variant="outline" size="icon-xs">
 								<Square className="size-3.5 fill-current" />
 							</Button>
-							<Button
-								onClick={() => {
-									const text = inputRef.current?.text ?? ''
-									if (String.isEmpty(text)) return
-
-									sendPrompt({text, attachments: Array.fromIterable(inputRef.current?.files ?? [])})
-									inputRef.current?.clear()
-								}}
-								size="icon-xs"
-							>
+							<Button onClick={submit} size="icon-xs">
 								<ArrowUpIcon className="size-3.5" />
 							</Button>
 						</div>
