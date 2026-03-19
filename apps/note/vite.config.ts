@@ -16,7 +16,7 @@ export default defineConfig({
 	],
 	server: {
 		proxy: {
-			'/api/rpc': {target: 'http://localhost:3011', changeOrigin: true, ws: true}
+			'/api/rpc': {target: 'http://localhost:3031', changeOrigin: true, ws: true}
 		}
 	},
 	build: {

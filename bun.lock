@@ -67,6 +67,25 @@
         "vite": "latest",
       },
     },
+    "apps/note": {
+      "name": "@ai-toolkit/note",
+      "dependencies": {
+        "@ai-toolkit/components": "workspace:*",
+        "@ai-toolkit/opentelemetry": "workspace:*",
+        "@tanstack/react-router": "latest",
+        "@tanstack/router-plugin": "latest",
+        "react": "^19",
+        "react-dom": "^19",
+      },
+      "devDependencies": {
+        "@rolldown/plugin-babel": "latest",
+        "@tailwindcss/vite": "latest",
+        "@vitejs/plugin-react": "latest",
+        "babel-plugin-react-compiler": "latest",
+        "tailwindcss": "latest",
+        "vite": "latest",
+      },
+    },
     "apps/portfolio": {
       "name": "@ai-toolkit/portfolio",
       "dependencies": {
@@ -154,6 +173,8 @@
     "@ai-toolkit/git": ["@ai-toolkit/git@workspace:packages/git"],
 
     "@ai-toolkit/linter": ["@ai-toolkit/linter@workspace:packages/linter"],
+
+    "@ai-toolkit/note": ["@ai-toolkit/note@workspace:apps/note"],
 
     "@ai-toolkit/opentelemetry": ["@ai-toolkit/opentelemetry@workspace:packages/opentelemetry"],
 
