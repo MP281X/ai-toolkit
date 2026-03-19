@@ -1,5 +1,5 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Match, Number, pipe, Stream, String} from 'effect'
+import {Array, Effect, Match, Number, Option, pipe, Stream, String} from 'effect'
 
 import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
@@ -372,8 +372,8 @@ function useViewport() {
 	const [width = '0', height = '0'] = pipe(snapshot, String.split(':'))
 
 	return {
-		width: Number.parse(width) || 0,
-		height: Number.parse(height) || 0
+		width: Option.getOrElse(Number.parse(width), () => 0),
+		height: Option.getOrElse(Number.parse(height), () => 0)
 	} satisfies Viewport
 }
 

@@ -9,7 +9,6 @@ export default defineConfig({
 		//
 		tanstackRouter({target: 'react', autoCodeSplitting: true}),
 		react(),
-		// @ts-expect-error types
 		babel({
 			presets: [reactCompilerPreset()],
 			parserOpts: {plugins: ['jsx', 'typescript']}
