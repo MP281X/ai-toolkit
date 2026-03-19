@@ -1,10 +1,10 @@
 // biome-ignore-all lint/correctness/useHookAtTopLevel: test file
 // biome-ignore-all lint/style/noRestrictedGlobals: test file
-import {Array, Data, Effect, Match, Schema} from 'effect'
+import {Array, Effect, Match, Schema} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
-import {memo, useCallback} from 'react'
+import {forwardRef, memo, useCallback} from 'react'
 
 export class TestError extends Schema.TaggedErrorClass<TestError>()('TestError', {
 	cause: Schema.optional(Schema.Defect)
@@ -246,6 +246,9 @@ function valid_multiline_braced_return(content: ReactNode) {
 
 	return <span>empty</span>
 }
+
+// biome-ignore lint/plugin: react hooks
+const ForwardedComponent = forwardRef<HTMLDivElement>((props, ref) => <div ref={ref} />)
 
 void valid_gen
 void valid_fn_untraced
