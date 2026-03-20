@@ -2,22 +2,12 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 or {
-	`$expr == null` as $match where {
-		register_diagnostic(span=$match, message="Do not write ad hoc nullish checks. Use `Predicate.isNullish(expr)` instead")
-	},
-	`$expr != null` as $match where {
-		register_diagnostic(span=$match, message="Do not write ad hoc nullish checks. Use `Predicate.isNotNullish(expr)` instead")
-	},
-	`$expr === null` as $match where {
-		register_diagnostic(span=$match, message="Do not write strict null checks manually. Use `Predicate.isNull(expr)` instead")
-	},
-	`$expr !== null` as $match where {
-		register_diagnostic(span=$match, message="Do not write strict not-null checks manually. Use `Predicate.isNotNull(expr)` instead")
-	},
-	`$expr === undefined` as $match where {
-		register_diagnostic(span=$match, message="Do not write undefined checks manually. Use `Predicate.isUndefined(expr)` instead")
-	},
+	`$expr == null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNullish(x)`.") },
+	`$expr != null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNotNullish(x)`.") },
+	`$expr === null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNull(x)`.") },
+	`$expr !== null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNotNull(x)`.") },
+	`$expr === undefined` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isUndefined(x)`.") },
 	`$expr !== undefined` as $match where {
-		register_diagnostic(span=$match, message="Do not write not-undefined checks manually. Use `Predicate.isNotUndefined(expr)` instead")
+		register_diagnostic(span=$match, message="Use `Predicate.isNotUndefined(x)`.")
 	}
 }

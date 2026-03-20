@@ -12,6 +12,10 @@
 # packages
 **/node_modules
 
+# application data
+**/.data
+
+# opencode
 .opencode/resources
 
 # nix

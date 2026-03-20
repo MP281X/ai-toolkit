@@ -11,5 +11,5 @@ language js(typescript, jsx)
 		`$_ <= $_`,
 		`!$_`
 	},
-	register_diagnostic(span=$match, message="Don't extract simple boolean checks into variables. Inline the condition at the branch or use site so the logic stays local and the narrowing stays attached to the check")
+	register_diagnostic(span=$match, message="Inline the check. Extracting booleans detaches narrowing from the branch.")
 }

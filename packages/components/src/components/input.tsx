@@ -124,7 +124,6 @@ function renderEntry<TValue extends AutocompleteInput.Value>(
 
 	return (
 		<>
-			{/* biome-ignore lint/plugin: dynamic colors are part of the token/menu API here */}
 			<span className="font-medium" style={{color: entry.color}}>
 				{entry.trigger}
 			</span>
@@ -448,7 +447,7 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 					<div className="relative max-h-90 min-h-24 overflow-y-auto">
 						<PlainTextPlugin
 							contentEditable={
-								<ContentEditable className="wrap-break-word block min-h-24 w-full whitespace-pre-wrap px-3 py-2 text-[13px] leading-relaxed outline-none" />
+								<ContentEditable className="wrap-break-word block min-h-24 w-full whitespace-pre-wrap p-2 text-[13px] leading-relaxed outline-none" />
 							}
 							placeholder={
 								<div className="pointer-events-none absolute inset-x-3 top-2 select-none text-[13px] text-muted-foreground">
@@ -469,6 +468,19 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 					options={props.options}
 				/>
 			</LexicalComposer>
+		</div>
+	)
+}
+
+AutocompleteInput.ToolBar = (props: {children: React.ReactNode; className?: string}) => {
+	return (
+		<div
+			className={cn(
+				'flex w-full flex-row items-center justify-between border border-input border-t-0 bg-input/30 p-2',
+				props.className
+			)}
+		>
+			{props.children}
 		</div>
 	)
 }

@@ -2,5 +2,5 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 `import($path)` as $match where {
-	register_diagnostic(span=$match, message="Never use dynamic imports here. Keep the module graph explicit with module-level static imports so behavior stays easy to reason about and refactor")
+	register_diagnostic(span=$match, message="Use static imports. Dynamic imports hide the module graph.")
 }

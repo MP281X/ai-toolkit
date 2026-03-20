@@ -1,6 +1,6 @@
 // biome-ignore-all lint/correctness/useHookAtTopLevel: test file
 // biome-ignore-all lint/style/noRestrictedGlobals: test file
-import {Array, Effect, Match, Schema} from 'effect'
+import {Array, Effect, Match, pipe, Schema} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
@@ -93,7 +93,6 @@ function test_ternary_null(show: boolean) {
 }
 
 function test_inline_style() {
-	// biome-ignore lint/plugin: inline style
 	return <div style={{color: 'red'}}>hello</div>
 }
 
@@ -177,38 +176,6 @@ function test_wrapper_fn(x: number) {
 // biome-ignore lint/plugin: wrapper constructor
 function test_wrapper_ctor(name: string) {
 	return new Error(name)
-}
-
-// biome-ignore lint/plugin: effect fail
-const bad_fail = Effect.fail(new TestError({}))
-
-// biome-ignore lint/plugin: effect succeed
-const bad_succeed = Effect.succeed('value')
-
-function test_typeof(value: unknown) {
-	// biome-ignore lint/plugin: typeof check
-	return typeof value === 'string'
-}
-
-function test_nonempty_check(text: string, arr: string[]) {
-	// biome-ignore lint/plugin: nonempty check
-	if (text.length > 0) return text
-	// biome-ignore lint/plugin: nonempty check
-	if (arr.length > 0) return arr
-	return
-}
-
-function test_empty_check(text: string, arr: string[]) {
-	// biome-ignore lint/plugin: empty check
-	if (text.length === 0) return 'empty'
-	// biome-ignore lint/plugin: empty check
-	if (arr.length === 0) return 'empty'
-	return
-}
-
-function test_tag_check(option: {readonly _tag: 'Some' | 'None'}) {
-	// biome-ignore lint/plugin: tag check
-	return option._tag === 'Some'
 }
 
 function test_in_operator(obj: object) {

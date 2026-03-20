@@ -1,13 +1,12 @@
 ---
 description: Generate commit message from staged changes and plans. Commit, rebase, push.
-model: opencode/minimax-m2.5-free
-agent: development
+model: opencode-go/minimax-m2.7
+agent: general
 ---
 
 ## Request
 
 commit and push
-
 
 ## Inputs
 

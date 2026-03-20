@@ -136,7 +136,6 @@ function RouteComponent() {
 					>
 						{entry => (
 							<>
-								{/* biome-ignore lint/plugin: dynamic colors are part of the autocomplete entry API here */}
 								<BotIcon className="size-4 shrink-0" style={{color: entry.color}} />
 								<span className="truncate text-foreground">{entry.value.label}</span>
 							</>
