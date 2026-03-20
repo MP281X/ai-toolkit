@@ -4,5 +4,5 @@ language js(typescript, jsx)
 `$expr as $type` as $match where {
 	not $match <: `$_ as const`,
 	not $filename <: r".*/components/ui/.*",
-	register_diagnostic(span=$match, message="Never use `as` type assertions in implementation code. They usually hide a bad design instead of fixing it. First inline helpers, remove wrappers, simplify branches, and rewrite the data flow until TypeScript infers the correct type")
+	register_diagnostic(span=$match, message="Remove `as` assertion. Inline, simplify, rewrite until inference works.")
 }

@@ -7,7 +7,6 @@ import {cn} from '@ai-toolkit/components/utils'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import type {MutableRefObject, ReactNode} from 'react'
 import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
@@ -384,7 +383,7 @@ function getTrailCell(trail: PortfolioTrail, viewport: Viewport) {
 	}
 }
 
-function Panel(input: {readonly className?: string; readonly children: ReactNode}) {
+function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
 	return (
 		<div className={cn('border border-border/70 bg-background/88 backdrop-blur-sm', input.className)}>
 			{input.children}
@@ -549,11 +548,7 @@ function RealtimeLayer(input: {readonly identityColor: string; readonly viewport
 			))}
 
 			<div className="pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border border-border/70 bg-background/95 px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
-				<span
-					className="size-2"
-					// biome-ignore lint/plugin: dynamic color
-					style={{backgroundColor: input.identityColor}}
-				/>
+				<span className="size-2" style={{backgroundColor: input.identityColor}} />
 				<span className="text-primary">{state.visitors.length}</span>
 				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
 			</div>
@@ -565,7 +560,6 @@ function GridOverlay() {
 	return (
 		<div
 			className="pointer-events-none fixed inset-0 z-1"
-			// biome-ignore lint/plugin: dynamic color
 			style={{
 				backgroundImage:
 					'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
@@ -672,17 +666,14 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 		<div
 			ref={nodeRef}
 			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
-			// biome-ignore lint/plugin: dynamic color
 			style={{
 				transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`
 			}}
 		>
 			<div className="flex items-center gap-1">
-				{/* biome-ignore lint/plugin: dynamic color */}
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
 				<span
 					className="whitespace-nowrap border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
-					// biome-ignore lint/plugin: dynamic color
 					style={{borderColor: input.cursor.color}}
 				>
 					{input.cursor.name}
@@ -696,8 +687,8 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 function Section(input: {
 	readonly id: number
 	readonly className?: string
-	readonly children: ReactNode
-	readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>
+	readonly children: React.ReactNode
+	readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>
 }) {
 	return (
 		<section
@@ -727,7 +718,7 @@ function SectionLabel(input: {readonly title: string}) {
 	)
 }
 
-function HeroSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function HeroSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={0} sectionRefs={input.sectionRefs}>
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
@@ -759,7 +750,7 @@ function HeroSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement
 	)
 }
 
-function AboutSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={1} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="About" />
@@ -778,7 +769,7 @@ function AboutSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElemen
 	)
 }
 
-function SkillsSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={2} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Skills" />
@@ -799,7 +790,7 @@ function SkillsSection(input: {readonly sectionRefs: MutableRefObject<(HTMLEleme
 	)
 }
 
-function ExperienceSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={3} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Experience" />
@@ -838,7 +829,7 @@ function ExperienceSection(input: {readonly sectionRefs: MutableRefObject<(HTMLE
 	)
 }
 
-function EducationSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={4} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Education & Languages" />
@@ -869,7 +860,7 @@ function EducationSection(input: {readonly sectionRefs: MutableRefObject<(HTMLEl
 	)
 }
 
-function ContactSection(input: {readonly sectionRefs: MutableRefObject<(HTMLElement | null)[]>}) {
+function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
 	return (
 		<Section id={5} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Contact" />

@@ -70,6 +70,7 @@
     "apps/note": {
       "name": "@ai-toolkit/note",
       "dependencies": {
+        "@ai-toolkit/ai": "workspace:*",
         "@ai-toolkit/components": "workspace:*",
         "@ai-toolkit/opentelemetry": "workspace:*",
         "@tanstack/react-router": "latest",

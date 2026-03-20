@@ -2,5 +2,5 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 `typeof $expr` as $match where {
-	register_diagnostic(span=$match, message="Do not use `typeof` here. Use Effect Predicate helpers instead, for example `Predicate.isString(expr)`, `Predicate.isNumber(expr)`, or `Predicate.isObject(expr)`, so runtime checks stay in one consistent vocabulary")
+	register_diagnostic(span=$match, message="Use Predicate helpers: `Predicate.isString(x)`, `Predicate.isNumber(x)`, `Predicate.isObject(x)`.")
 }
