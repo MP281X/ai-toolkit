@@ -1,7 +1,7 @@
 import {Schema} from 'effect'
 
-import {ToolKit} from '@ai-toolkit/ai/schema'
-import {AiError, Prompt, Response} from 'effect/unstable/ai'
+import {WebFetchToolKit, WebSearchToolKit} from '@ai-toolkit/ai/tools'
+import {AiError, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export class RpcContracts extends RpcGroup.make(
@@ -13,6 +13,6 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agent.events', {
 		stream: true,
 		error: AiError.AiError,
-		success: Schema.Union([Prompt.Message, Response.StreamPart(ToolKit)])
+		success: Schema.Union([Prompt.Message, Response.StreamPart(Toolkit.merge(WebSearchToolKit, WebFetchToolKit))])
 	})
 ) {}

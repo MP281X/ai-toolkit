@@ -26,12 +26,25 @@ The configuration system is NOT append-only. Every self-improve step MUST leave 
 - Remove lines now covered elsewhere
 - Simplify wording until the root cause is obvious
 
-## Triggers
+## When to use this skill
 
-1. Post-task — MANDATORY after validation passes in build and development agents
-2. Retry loop — same mistake, new rewrite, still wrong
-3. User correction — the user redirects the approach or signals frustration
-4. On demand — the user asks to add or update a rule, skill, or guideline
+ONLY for **big, repetitive, systemic problems** — let the agent self-reflect:
+
+**STOP and use this skill when:**
+- You notice the **same error pattern** keeps appearing
+- You're in a **retry loop** (fix → error → fix → error)
+- The **user corrects you multiple times** on the same thing
+- You feel "stuck" on an issue that won't resolve
+
+**IGNORE and continue when:**
+- Error happens once and you immediately self-correct
+- Minor wording preferences
+- Style nits that don't affect correctness
+- Single typos or obvious mistakes
+
+**Self-reflection prompt:** *"Looking back at this conversation, what patterns caused friction? Would a rule, skill, or biome check have prevented this?"*
+
+Only proceed if the answer reveals a **systemic gap** — not a one-off mistake.
 
 ## Priority escalation
 
@@ -42,12 +55,45 @@ The configuration system is NOT append-only. Every self-improve step MUST leave 
 
 ## Process
 
-1. Review the conversation for repeated errors, user corrections, and retry loops
-2. Pick 1-2 highest-impact systemic issues
-3. Derive the root cause: what led to this code shape
-4. Fix the cheapest layer first
-5. Remove redundancy in the other layers
-6. Update skill source-file indexes when research found better references
+### Phase 1: Deep Analysis (REQUIRED)
+
+Before ANY edit, read and understand the complete system:
+
+1. **Read all agents** — `.opencode/agents/*.md`
+2. **Read all skills** — `.opencode/skills/*/SKILL.md`
+3. **Read AGENTS.md** — global rules
+4. **Read biome rules** — `packages/linter/src/*.grit`
+5. **Read the conversation** — what went wrong, user corrections
+
+### Phase 2: Root Cause Analysis
+
+Ask: "What systemic issue caused this mistake?"
+
+- Is there a **missing rule** in AGENTS.md?
+- Is there a **contradiction** between agents and skills?
+- Is there a **gap** in a skill's guidance?
+- Is the agent **missing a skill** it should load?
+- Is there a **biome rule** that should catch this?
+
+### Phase 3: Design the Fix
+
+Fix at the highest layer possible:
+
+1. **Biome rule** — catches it automatically (best)
+2. **AGENTS.md** — global philosophy/guideline
+3. **Skill** — specific domain knowledge
+4. **Agent** — workflow adjustment (last resort)
+
+NEVER add a band-aid. Fix the root cause.
+
+### Phase 4: Verify Consistency
+
+After any change, verify:
+
+- [ ] No contradictions between layers
+- [ ] No duplication (merge overlapping guidance)
+- [ ] Examples in skills follow AGENTS.md rules
+- [ ] All affected files still make sense together
 
 ## Biome rule creation
 

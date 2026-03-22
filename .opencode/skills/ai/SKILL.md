@@ -5,7 +5,7 @@ metadata:
   patterns: |
     LanguageModel.generateObject, Tool.make, Toolkit.make,
     Prompt.make, Prompt.concat, Response., McpSchema.,
-    AnthropicStructuredOutput, OpenAiStructuredOutput
+    AnthropicStructuredOutput, OpenAiStructuredOutput, OpenRouterLanguageModel
 ---
 
 ## Source files
@@ -19,6 +19,7 @@ metadata:
 .opencode/resources/effect/packages/effect/src/unstable/ai/McpSchema.ts
 .opencode/resources/effect/packages/effect/src/unstable/ai/AnthropicStructuredOutput.ts
 .opencode/resources/effect/packages/effect/src/unstable/ai/OpenAiStructuredOutput.ts
+.opencode/resources/effect/packages/ai/openrouter/src/OpenRouterLanguageModel.ts
 ```
 
 ## Key patterns
