@@ -15,7 +15,6 @@ function test_type_assertion(value: unknown) {
 	return value as string
 }
 
-// biome-ignore lint/plugin: testing
 function test_array_native(arr: string[]) {
 	// biome-ignore lint/plugin: native methods
 	return arr.map(x => x)
@@ -32,7 +31,6 @@ const valid_fn_untraced = Effect.fnUntraced(function* (name: string) {
 	return name
 })
 
-// biome-ignore lint/plugin: testing
 function test_string_trim(s: string) {
 	// biome-ignore lint/plugin: native methods
 	return s.trim()
@@ -101,7 +99,6 @@ function test_cn_classname(active: boolean) {
 	return <div className={active ? 'active' : 'inactive'}>hi</div>
 }
 
-// biome-ignore lint/plugin: wrapper function
 function test_pipe_method() {
 	// biome-ignore lint/plugin: pipe method
 	return Match.value('active').pipe(Match.orElse(() => 'inactive'))
@@ -137,7 +134,6 @@ const clampUnit2 = function (value: number) {
 	return Math.max(0, Math.min(0.999999, value))
 }
 
-// biome-ignore lint/plugin: testing
 function test_split(str: string) {
 	// biome-ignore lint/plugin: native methods
 	return str.split(':')
@@ -168,12 +164,10 @@ const VALID_ARRAY = [1, 2, 3]
 // biome-ignore lint/plugin: arrow function
 const VALID_FUNCTION = () => 'hello'
 
-// biome-ignore lint/plugin: wrapper function
 function test_wrapper_fn(x: number) {
 	return Math.abs(x)
 }
 
-// biome-ignore lint/plugin: wrapper constructor
 function test_wrapper_ctor(name: string) {
 	return new Error(name)
 }

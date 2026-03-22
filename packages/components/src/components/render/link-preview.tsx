@@ -1,5 +1,6 @@
-import {cn} from '#lib/utils.ts'
 import {Match, Option, pipe, String} from 'effect'
+
+import {cn} from '#lib/utils.ts'
 
 export function Favicon(props: {url: string}) {
 	return (
