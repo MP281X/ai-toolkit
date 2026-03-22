@@ -3,10 +3,12 @@ import {Array, Effect, Match, pipe, Stream, String} from 'effect'
 
 import {makeFileParts, partsStreamReducer} from '@ai-toolkit/ai/utils'
 import {Conversation} from '@ai-toolkit/components/conversation'
-import {ArrowUpIcon, BotIcon, Square} from '@ai-toolkit/components/icons'
+import {ArrowUpIcon, BotIcon, ChevronRight, Search, Square} from '@ai-toolkit/components/icons'
 import {AutocompleteInput} from '@ai-toolkit/components/input'
+import {Favicon, LinkPreview} from '@ai-toolkit/components/render/link-preview'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {Button} from '@ai-toolkit/components/ui/button'
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {createFileRoute} from '@tanstack/react-router'
 import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
@@ -87,18 +89,46 @@ function RouteComponent() {
 							Match.when({type: 'tool-call'}, toolCall =>
 								JSON.stringify({toolName: toolCall.name, input: toolCall.params}, null, 2)
 							),
-							Match.when({type: 'tool-result', name: 'WebSearch'}, toolResult => (
-								<div className="flex flex-col gap-2 p-2">
-									<div>{toolResult.name}</div>
-									{Array.map(toolResult.result, (result, index) => (
-										<div key={index} className="flex flex-col border-2 border-blue-500">
-											<div>
-												{result.title} - {result.url}
-											</div>
-											{Array.map(result.highlights, String.slice(0, 50))}
+							Match.when({type: 'tool-result', name: 'web_fetch', isFailure: false}, toolResult =>
+								Array.map(toolResult.result, (result, resultIndex) => (
+									<Collapsible key={`${index}-${resultIndex}`} className="group">
+										<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 rounded-md border px-3 py-1.5 text-xs">
+											<Favicon url={result.url} />
+											<span className="min-w-0 truncate text-muted-foreground">{result.title ?? result.url}</span>
+											<ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-open:rotate-90" />
+										</CollapsibleTrigger>
+										<CollapsibleContent>
+											<LinkPreview url={new URL(result.url)} className="mt-1 overflow-hidden rounded-md border" />
+										</CollapsibleContent>
+									</Collapsible>
+								))
+							),
+							Match.when({type: 'tool-result', name: 'web_search', isFailure: false}, toolResult => (
+								<Collapsible key={index} className="group">
+									<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 rounded-md border px-3 py-1.5 text-xs">
+										<Search className="size-3.5 shrink-0 text-muted-foreground" />
+										<span className="min-w-0 truncate text-muted-foreground">
+											{Array.length(toolResult.result)} results
+										</span>
+										<ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-open:rotate-90" />
+									</CollapsibleTrigger>
+									<CollapsibleContent>
+										<div className="mt-1 flex flex-col gap-1 rounded-md border p-3">
+											{Array.map(toolResult.result, (result, resultIndex) => (
+												<a
+													key={resultIndex}
+													href={result.url}
+													target="_blank"
+													rel="noreferrer"
+													className="block rounded px-2 py-1.5 transition-colors hover:bg-muted"
+												>
+													<div className="font-medium text-primary text-xs">{result.title ?? result.url}</div>
+													<div className="truncate text-[10px] text-muted-foreground">{result.url}</div>
+												</a>
+											))}
 										</div>
-									))}
-								</div>
+									</CollapsibleContent>
+								</Collapsible>
 							)),
 							Match.orElse(() => JSON.stringify(message, null, 2))
 						)}
