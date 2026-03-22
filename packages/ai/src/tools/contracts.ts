@@ -12,26 +12,18 @@ export const WebSearchToolKit = Toolkit.make(
 				Schema.annotate({description: 'The search query to send to the web search provider.'})
 			),
 			numResults: pipe(
-				Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+				Schema.Int,
 				Schema.optionalKey,
+				Schema.check(Schema.isGreaterThan(0)),
 				Schema.annotate({description: 'Optional maximum number of search results to return.'})
 			)
 		}),
 		success: Schema.Array(
 			Schema.Struct({
-				title: pipe(
-					Schema.NullOr(Schema.NonEmptyString),
-					Schema.annotate({description: 'The page title, when one was available from the search provider.'})
-				),
-				url: pipe(Schema.NonEmptyString, Schema.annotate({description: 'The canonical URL of the search result.'})),
-				text: pipe(
-					Schema.NonEmptyString,
-					Schema.annotate({description: 'The extracted page content snippet returned for the result.'})
-				),
-				highlights: pipe(
-					Schema.Array(Schema.String),
-					Schema.annotate({description: 'Short highlighted excerpts relevant to the query.'})
-				)
+				title: Schema.NullOr(Schema.NonEmptyString),
+				url: Schema.NonEmptyString,
+				text: Schema.NonEmptyString,
+				highlights: Schema.Array(Schema.String)
 			})
 		)
 	}).annotate(Tool.Strict, true)
@@ -55,20 +47,9 @@ export const WebFetchToolKit = Toolkit.make(
 			)
 		}),
 		success: Schema.Struct({
-			title: pipe(
-				Schema.NonEmptyString,
-				Schema.annotate({description: 'A human-readable title for the fetched resource.'})
-			),
-			output: pipe(
-				Schema.String,
-				Schema.annotate({
-					description: 'The fetched content converted to the requested format, or a short attachment status message.'
-				})
-			),
-			attachments: pipe(
-				Schema.Array(Response.FilePart),
-				Schema.annotate({description: 'Binary attachments returned when the fetched resource is not text-based.'})
-			)
+			title: Schema.NonEmptyString,
+			output: Schema.String,
+			attachments: Schema.Array(Response.FilePart)
 		})
 	}).annotate(Tool.Strict, true)
 )

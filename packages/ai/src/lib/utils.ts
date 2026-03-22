@@ -1,7 +1,20 @@
-import {Array, Effect, Encoding, flow, Predicate, pipe, Stream, String} from 'effect'
+import {Array, Effect, Encoding, flow, Predicate, PubSub, pipe, Ref, Stream, String} from 'effect'
 
 import type {Tool} from 'effect/unstable/ai'
 import {Prompt, Response} from 'effect/unstable/ai'
+
+export const makeResumableStream = Effect.fnUntraced(function* <A>() {
+	const history = yield* Ref.make<readonly A[]>([])
+	const pubsub = yield* PubSub.unbounded<A>()
+
+	return {
+		append: Effect.fnUntraced(function* (part: A) {
+			yield* Ref.update(history, parts => [...parts, part])
+			yield* PubSub.publish(pubsub, part)
+		}),
+		stream: Stream.concat(Stream.fromIterableEffect(Ref.get(history)), Stream.fromPubSub(pubsub))
+	}
+})
 
 export function partsStreamSanitizer<A extends Response.StreamPart<Record<string, Tool.Any>>, E, R>(
 	parts: Stream.Stream<A, E, R>

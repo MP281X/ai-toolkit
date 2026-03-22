@@ -5,9 +5,9 @@ import {
 	OpenAiLanguageModel as OpenAiCompatLanguageModel
 } from '@effect/ai-openai-compat'
 import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'
-import {Effect, FiberHandle, Layer, Match, Option, PubSub, pipe, Ref, ServiceMap, Stream} from 'effect'
+import {Effect, Layer, Match, Option, pipe, Queue, ServiceMap, Stream} from 'effect'
 
-import type {LanguageModel, Response} from 'effect/unstable/ai'
+import type {AiError, LanguageModel, Response} from 'effect/unstable/ai'
 import {Chat, Prompt} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
 
@@ -16,22 +16,6 @@ import {AgentToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 import type {ModelId, ProviderId} from './catalog.ts'
 import {providers} from './catalog.ts'
-
-export const makeResumableStream = Effect.gen(function* () {
-	type Part = Prompt.Message | Response.StreamPart<typeof AgentToolKit.tools>
-
-	const history = yield* Ref.make<Part[]>([])
-	const pubsub = yield* PubSub.unbounded<Part>()
-
-	const append = Effect.fnUntraced(function* (part: Part) {
-		yield* Ref.update(history, arr => [...arr, part])
-		yield* PubSub.publish(pubsub, part)
-	})
-
-	const subscribe = Stream.concat(Stream.fromIterableEffect(Ref.get(history)), Stream.fromPubSub(pubsub))
-
-	return {append, subscribe}
-})
 
 export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/service/Agent', {
 	make: Effect.gen(function* () {
@@ -43,24 +27,32 @@ export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/service/A
 		>()
 
 		const chat = yield* Chat.empty
-		const resumableStream = yield* makeResumableStream
-		const handle = yield* FiberHandle.make()
 
 		return {
-			prompt: Effect.fnUntraced(function* (messages: Prompt.Message[]) {
-				yield* Effect.forEach(messages, resumableStream.append)
+			streamText: (messages: Prompt.Message[]) => {
+				return Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>, AiError.AiError>(
+					Effect.fnUntraced(function* (queue) {
+						let prompt = Prompt.fromMessages(messages)
 
-				yield* pipe(
-					chat.streamText({prompt: Prompt.fromMessages(messages), toolkit: AgentToolKit}),
-					partsStreamSanitizer,
-					Stream.tap(resumableStream.append),
-					Stream.runLast,
-					Effect.repeat({while: Option.exists(part => part.type === 'finish' && part.reason === 'tool-calls')}),
-					Effect.provide(services)
+						while (true) {
+							const last = yield* pipe(
+								chat.streamText({prompt, toolkit: AgentToolKit}),
+								partsStreamSanitizer,
+								Stream.tap(part => Queue.offer(queue, part)),
+								Stream.provide(services),
+								Stream.runLast
+							)
+
+							if (Option.isSome(last) && last.value.type === 'finish' && last.value.reason === 'tool-calls') {
+								prompt = Prompt.empty
+								continue
+							}
+
+							return yield* Queue.end(queue)
+						}
+					}, Effect.provide(services))
 				)
-			}, FiberHandle.run(handle)),
-			stop: FiberHandle.clear(handle),
-			events: resumableStream.subscribe
+			}
 		}
 	})
 }) {
