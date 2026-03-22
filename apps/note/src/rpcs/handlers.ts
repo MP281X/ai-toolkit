@@ -64,7 +64,7 @@ const noteRcMap = RcMap.make({
 		yield* Effect.forkScoped(
 			pipe(
 				SubscriptionRef.changes(ref),
-				Stream.debounce(Duration.millis(250)),
+				Stream.debounce(Duration.millis(100)),
 				Stream.runForEach(notes => store.set('notes', notes))
 			)
 		)
@@ -101,21 +101,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 					yield* notesRepo.upsert(note)
 
 					yield* pipe(
-						Effect.gen(function* () {
-							const agent = yield* Agent
-							yield* agent.prompt([noteSystemMessage, payload])
-
-							yield* pipe(
-								agent.events,
-								Stream.takeUntil(part => {
-									if (Prompt.isMessage(part)) return false
-									if (part.type !== 'finish') return false
-									return part.reason !== 'tool-calls'
-								}),
-								partsStreamReducer,
-								Stream.runForEach(parts => notesRepo.upsert(new Note({id: note.id, title: extractTitle(parts), parts})))
-							)
-						}),
+						Agent.useSync(agent => agent.streamText([noteSystemMessage, payload])),
+						Stream.unwrap,
+						partsStreamReducer,
+						Stream.runForEach(parts => notesRepo.upsert(new Note({id: note.id, title: extractTitle(parts), parts}))),
 						Effect.provide(Agent.layer),
 						Effect.provide(Agent.resolveLanguageModel({provider: 'openrouter', model: 'openai/gpt-5.4-nano'})),
 						Effect.forkDetach
