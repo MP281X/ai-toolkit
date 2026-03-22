@@ -1,3 +1,4 @@
+import {cn} from '#lib/utils.ts'
 import {Match, Option, pipe, String} from 'effect'
 
 export function Favicon(props: {url: string}) {
@@ -10,7 +11,7 @@ export function Favicon(props: {url: string}) {
 	)
 }
 
-export function LinkPreview(props: {url: URL}) {
+export function LinkPreview(props: {url: URL; className?: string}) {
 	return pipe(
 		Match.value(pipe(props.url.hostname, String.replace('www.', ''))),
 		Match.when(Match.is('youtube.com', 'youtu.be'), () => {
@@ -31,7 +32,7 @@ export function LinkPreview(props: {url: URL}) {
 					<iframe
 						src={`https://www.youtube.com/embed/${youtubeId}`}
 						title="YouTube video"
-						className="aspect-video w-full border-0"
+						className={cn('aspect-video w-full border-0', props.className)}
 						allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 						allowFullScreen
 					/>
@@ -51,7 +52,7 @@ export function LinkPreview(props: {url: URL}) {
 					<iframe
 						src={`https://platform.twitter.com/embed/Tweet.html?dnt=true&id=${tweetId}`}
 						title="X post"
-						className="h-100 w-full border-0"
+						className={cn('h-100 w-full border-0', props.className)}
 					/>
 				)
 			)
@@ -69,7 +70,7 @@ export function LinkPreview(props: {url: URL}) {
 					<iframe
 						src={`https://www.tiktok.com/embed/v2/${tiktokId}`}
 						title="TikTok video"
-						className="h-175 w-full border-0"
+						className={cn('h-175 w-full border-0', props.className)}
 					/>
 				)
 			)

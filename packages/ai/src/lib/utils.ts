@@ -24,9 +24,11 @@ export function partsStreamSanitizer<A extends Response.StreamPart<Record<string
 		Stream.map(part => {
 			switch (part.type) {
 				case 'text-delta':
-				case 'reasoning-delta':
+				case 'reasoning-delta': {
 					if (String.isEmpty(part.delta)) return
+					if (part.delta === '[REDACTED]') return
 					return part
+				}
 				case 'response-metadata':
 					return Response.makePart('response-metadata', {
 						id: part.id,

@@ -1,10 +1,12 @@
 import {pipe, Schema} from 'effect'
 
-import {Response, Tool, Toolkit} from 'effect/unstable/ai'
-import {HttpClient} from 'effect/unstable/http/HttpClient'
+import {Tool, Toolkit} from 'effect/unstable/ai'
+import {AiError} from 'effect/unstable/ai/AiError'
 
 export const WebSearchToolKit = Toolkit.make(
-	Tool.make('WebSearch', {
+	Tool.make('web_search', {
+		failure: AiError,
+		failureMode: 'return',
 		description: 'Search the web for recent, relevant sources and return concise page content snippets.',
 		parameters: Schema.Struct({
 			query: pipe(
@@ -23,34 +25,32 @@ export const WebSearchToolKit = Toolkit.make(
 				title: Schema.NullOr(Schema.NonEmptyString),
 				url: Schema.NonEmptyString,
 				text: Schema.NonEmptyString,
-				highlights: Schema.Array(Schema.String)
+				highlights: Schema.Array(Schema.NonEmptyString)
 			})
 		)
 	}).annotate(Tool.Strict, true)
 )
 
 export const WebFetchToolKit = Toolkit.make(
-	Tool.make('WebFetch', {
-		dependencies: [HttpClient],
-		description:
-			'Fetch content from a specified URL, convert it to text, markdown, or HTML, and return the normalized result.',
+	Tool.make('web_fetch', {
+		failure: AiError,
+		failureMode: 'return',
+		description: 'Fetch clean text content from specified URLs using Exa.',
 		parameters: Schema.Struct({
-			url: pipe(
-				Schema.URLFromString,
-				Schema.annotate({description: 'The URL to fetch content from. HTTP URLs are automatically upgraded to HTTPS.'})
-			),
-			format: pipe(
-				Schema.Literals(['text', 'markdown', 'html']),
-				Schema.optionalKey,
-				Schema.withDecodingDefaultKey(() => 'markdown' as const),
-				Schema.annotate({description: 'The format to return the fetched content in. Defaults to markdown.'})
+			urls: pipe(
+				Schema.Array(Schema.URLFromString),
+				Schema.check(Schema.isNonEmpty()),
+				Schema.annotate({description: 'Array of URLs to fetch content from.'})
 			)
 		}),
-		success: Schema.Struct({
-			title: Schema.NonEmptyString,
-			output: Schema.String,
-			attachments: Schema.Array(Response.FilePart)
-		})
+		success: Schema.Array(
+			Schema.Struct({
+				title: Schema.NullOr(Schema.NonEmptyString),
+				url: Schema.NonEmptyString,
+				text: Schema.NonEmptyString,
+				highlights: Schema.Array(Schema.NonEmptyString)
+			})
+		)
 	}).annotate(Tool.Strict, true)
 )
 

@@ -200,7 +200,7 @@ function RouteComponent() {
 									Array.filter(part => {
 										if (Prompt.isMessage(part)) return false
 										if (part.type !== 'tool-result') return false
-										return part.name === 'WebFetch' || part.name === 'WebSearch'
+										return part.name === 'web_fetch' || part.name === 'web_search'
 									})
 								)
 
@@ -270,24 +270,25 @@ function RouteComponent() {
 													{Array.map(toolParts, (part, index) => {
 														return pipe(
 															Match.value(part),
-															Match.when({type: 'tool-result', name: 'WebFetch'}, toolResult => {
-																const urlStr = pipe(toolResult.result.title, String.split(' ('), Array.headNonEmpty)
-																return (
-																	<Collapsible key={index} className="group">
+															Match.when({type: 'tool-result', name: 'web_fetch', isFailure: false}, toolResult =>
+																Array.map(toolResult.result, (result, resultIndex) => (
+																	<Collapsible key={`${index}-${resultIndex}`} className="group">
 																		<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 rounded-md border px-3 py-1.5 text-xs">
-																			<Favicon url={urlStr} />
-																			<span className="min-w-0 truncate text-muted-foreground">{urlStr}</span>
+																			<Favicon url={result.url} />
+																			<span className="min-w-0 truncate text-muted-foreground">
+																				{result.title ?? result.url}
+																			</span>
 																			<ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-[open]:rotate-90" />
 																		</CollapsibleTrigger>
 																		<CollapsibleContent>
 																			<div className="mt-1 overflow-hidden rounded-md border">
-																				<LinkPreview url={new URL(urlStr)} />
+																				<LinkPreview url={new URL(result.url)} />
 																			</div>
 																		</CollapsibleContent>
 																	</Collapsible>
-																)
-															}),
-															Match.when({type: 'tool-result', name: 'WebSearch'}, toolResult => (
+																))
+															),
+															Match.when({type: 'tool-result', name: 'web_search', isFailure: false}, toolResult => (
 																<Collapsible key={index} className="group">
 																	<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 rounded-md border px-3 py-1.5 text-xs">
 																		<Search className="size-3.5 shrink-0 text-muted-foreground" />
