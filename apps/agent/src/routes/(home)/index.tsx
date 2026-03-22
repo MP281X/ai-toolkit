@@ -1,7 +1,7 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Array, Effect, Match, pipe, Stream, String} from 'effect'
 
-import {partsStreamReducer} from '@ai-toolkit/ai/schema'
+import {makeFileParts, partsStreamReducer} from '@ai-toolkit/ai/utils'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {ArrowUpIcon, BotIcon, Square} from '@ai-toolkit/components/icons'
 import {AutocompleteInput} from '@ai-toolkit/components/input'
@@ -34,22 +34,11 @@ const sendPromptAtom = AtomRuntime.fn(
 	Effect.fnUntraced(function* (payload: {text: string; attachments: File[]}) {
 		const client = yield* RpcClient
 
-		const files = yield* Effect.forEach(
-			payload.attachments,
-			Effect.fnUntraced(function* (file) {
-				const data = yield* Effect.promise(async () => new Uint8Array(await file.arrayBuffer()))
-				return Prompt.makePart('file', {
-					mediaType: file.type || 'application/octet-stream',
-					fileName: file.name,
-					data
-				})
-			}),
-			{concurrency: 'unbounded'}
-		)
-
 		yield* client(
 			'agent.prompt',
-			Prompt.userMessage({content: [Prompt.makePart('text', {text: payload.text}), ...files]})
+			Prompt.userMessage({
+				content: [Prompt.makePart('text', {text: payload.text}), ...(yield* makeFileParts(payload.attachments))]
+			})
 		)
 	})
 )
@@ -98,7 +87,7 @@ function RouteComponent() {
 							Match.when({type: 'tool-call'}, toolCall =>
 								JSON.stringify({toolName: toolCall.name, input: toolCall.params}, null, 2)
 							),
-							Match.when({type: 'tool-result'}, toolResult => (
+							Match.when({type: 'tool-result', name: 'WebSearch'}, toolResult => (
 								<div className="flex flex-col gap-2 p-2">
 									<div>{toolResult.name}</div>
 									{Array.map(toolResult.result, (result, index) => (

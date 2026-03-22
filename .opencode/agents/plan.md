@@ -70,6 +70,14 @@ Guidelines:
 - No agent behavior instructions in plan body
 
 
+## Question Tool Usage
+
+Keep question tool content minimal and readable:
+- **Header**: Very short label (max 30 chars)
+- **Options**: Concise labels (1-5 words) with brief descriptions
+- **Never put in question options**: Code blocks, interfaces, long examples, multi-line descriptions
+- Put large content (code, interfaces, examples) in the conversation body, reference them in questions
+
 ## Responses
 
 - **Initial response**: ask questions to understand the problem

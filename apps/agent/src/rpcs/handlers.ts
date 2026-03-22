@@ -9,7 +9,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const agent = yield* Agent
 
 		return RpcContracts.of({
-			'agent.prompt': payload => agent.prompt(payload),
+			'agent.prompt': payload => agent.prompt([payload]),
 			'agent.stop': () => agent.stop,
 			'agent.events': () => agent.events
 		})
