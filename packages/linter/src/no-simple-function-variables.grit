@@ -2,14 +2,17 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 or {
+	`const $name = ($params) => { return $expr; }` as $match where {
+		register_diagnostic(span=$match, message="Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.")
+	},
 	`const $name = function ($params) { return $expr; }` as $match where {
-		register_diagnostic(span=$match, message="Inline the expression at the use site. Simple helpers add indirection and weaken inference.")
+		register_diagnostic(span=$match, message="Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.")
 	},
 	`const $name = function $fnName($params) { return $expr; }` as $match where {
-		register_diagnostic(span=$match, message="Inline the expression at the use site. Simple helpers add indirection and weaken inference.")
+		register_diagnostic(span=$match, message="Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.")
 	},
 	`const $name = ($params) => $expr` as $match where {
 		not $expr <: contains `{$_}`,
-		register_diagnostic(span=$match, message="Inline the expression at the use site. Simple helpers add indirection and weaken inference.")
+		register_diagnostic(span=$match, message="Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.")
 	}
 }

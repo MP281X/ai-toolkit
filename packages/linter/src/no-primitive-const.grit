@@ -14,5 +14,9 @@ language js(typescript, jsx)
 			`false`
 		}
 	},
-	register_diagnostic(span=$match, message="Don't extract primitive values into standalone constants or fake config variables. Inline them at the use site; the extra indirection makes the code harder to read and review")
+	not $value <: or {
+		r"['\"].*?(?:border-|bg-|text-|p-|m-).*['\"]",
+		`$tailwind as const` where $tailwind <: r"['\"].*?(?:border-|bg-|text-|p-|m-).*['\"]"
+	},
+	register_diagnostic(span=$match, message="Do not extract primitive literals into standalone constants. Inline the value at the use site so the code stays direct and reviewers do not have to jump through fake config names.")
 }

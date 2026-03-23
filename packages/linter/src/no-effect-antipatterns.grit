@@ -3,12 +3,15 @@ language js(typescript, jsx)
 
 or {
 	`Effect.fail($_)` as $match where {
-		register_diagnostic(span=$match, message="Do not wrap tagged domain errors with `Effect.fail`. Yield them directly with `yield* new DomainError(...)` from `Effect.gen` or `Effect.fnUntraced` instead. Only define a `Schema.TaggedErrorClass` if you do not already have one")
+		register_diagnostic(span=$match, message="Do not wrap domain errors with `Effect.fail(...)` here. In `Effect.gen` or `Effect.fnUntraced`, yield the tagged error directly with `yield* new DomainError(...)` so the error stays in the typed control flow instead of being manually re-wrapped.")
 	},
 	`Effect.succeed($_)` as $match where {
-		register_diagnostic(span=$match, message="Do not use `Effect.succeed` here. If you are already in `Effect.gen` or `Effect.fnUntraced`, return the plain value directly; otherwise rewrite the code around the proper Effect constructor")
+		register_diagnostic(span=$match, message="Do not use `Effect.succeed(...)` here. If you are already inside `Effect.gen` or `Effect.fnUntraced`, return the plain value directly so the success path stays simple and inference-friendly.")
+	},
+	`function $name($args) { return Effect.gen($body); }` as $match where {
+		register_diagnostic(span=$match, message="Do not wrap `Effect.gen(...)` in a named function declaration. Rewrite argument-taking effects as `Effect.fnUntraced(function* (value) { ... })` so the function shape matches the repo pattern and keeps effect code reusable without extra wrappers.")
 	},
 	`($args) => Effect.gen($body)` as $match where {
-		register_diagnostic(span=$match, message="Do not wrap `Effect.gen` in an arrow function. For argument-taking functions use `Effect.fnUntraced(function* (args) { ... })` instead")
+		register_diagnostic(span=$match, message="Do not wrap `Effect.gen(...)` in an arrow function. Rewrite argument-taking effects as `Effect.fnUntraced(function* (value) { ... })` so the function shape matches the repo pattern and keeps effect code reusable without extra wrappers.")
 	}
 }

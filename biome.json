@@ -3,7 +3,6 @@
 
 	"plugins": [
 		"./packages/linter/src/no-type-assertion.grit",
-		"./packages/linter/src/no-renamed-imports.grit",
 		"./packages/linter/src/no-return-undefined-null.grit",
 		"./packages/linter/src/no-native-methods.grit",
 		"./packages/linter/src/no-effect-antipatterns.grit",
@@ -12,7 +11,7 @@
 		"./packages/linter/src/no-access-variables.grit",
 		"./packages/linter/src/no-simple-check-variables.grit",
 		"./packages/linter/src/no-react-type-imports.grit",
-		"./packages/linter/src/no-react-hooks.grit",
+		"./packages/linter/src/no-react-compiler-antipatterns.grit",
 		"./packages/linter/src/cn-classname.grit",
 		"./packages/linter/src/no-arrow-for-named.grit",
 		"./packages/linter/src/no-ternary-in-jsx.grit",

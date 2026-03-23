@@ -21,7 +21,14 @@ function extractTitle(parts: readonly Note['parts'][number][]) {
 	return pipe(
 		text,
 		String.match(/^#\s+(.+)$/m),
-		Option.map(match => pipe(match.at(1) ?? '', String.trim)),
+		Option.map(match =>
+			pipe(
+				match,
+				Array.get(1),
+				Option.getOrElse(() => ''),
+				String.trim
+			)
+		),
 		Option.filter(String.isNonEmpty),
 		Option.getOrElse(() => {
 			const fallback = pipe(text, String.trim, String.slice(0, 50), String.trim)

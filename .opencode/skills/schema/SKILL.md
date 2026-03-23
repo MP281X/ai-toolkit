@@ -11,14 +11,12 @@ metadata:
 
 ## Source files
 
-```
-.opencode/resources/effect/packages/effect/SCHEMA.md
-.opencode/resources/effect/packages/effect/src/Schema.ts
-.opencode/resources/effect/packages/effect/src/SchemaTransformation.ts
-.opencode/resources/effect/packages/effect/src/SchemaGetter.ts
-```
+- `.opencode/resources/effect/packages/effect/SCHEMA.md`
+- `.opencode/resources/effect/packages/effect/src/Schema.ts`
+- `.opencode/resources/effect/packages/effect/src/SchemaTransformation.ts`
+- `.opencode/resources/effect/packages/effect/src/SchemaGetter.ts`
 
-## Key patterns
+## Patterns
 
 - Value transforms → `Schema.ts`, `SchemaTransformation.ts`: `Schema.decodeTo`, `Schema.encodeTo`, `SchemaTransformation.transform`, `SchemaTransformation.transformOrFail`
 - Same-type normalization → `Schema.ts`: `Schema.decode`, `Schema.encode`
@@ -27,7 +25,7 @@ metadata:
 - Reuse and inversion → `Schema.ts`, `SchemaTransformation.ts`: `Schema.flip`, `Transformation.compose`
 - Built-ins → `SchemaTransformation.ts`: `splitKeyValue`, `snakeToCamel`, `fromJsonString`, `dateTimeUtcFromString`
 - Lower-level transforms → `SchemaGetter.ts`: `SchemaGetter.transform`, `SchemaGetter.transformOrFail`
-- Use `Schema.Class` or `Schema.Struct` as the source of truth. Use `new` for trusted internal construction.
+- USE `Schema.Class` or `Schema.Struct` as source of truth. USE `new` for trusted internal construction.
 
 ## Examples
 

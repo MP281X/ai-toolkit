@@ -12,30 +12,28 @@ metadata:
 ## Source files
 
 ### Effect Reactivity
-```
-.opencode/resources/effect/packages/effect/src/unstable/reactivity/Atom.ts
-.opencode/resources/effect/packages/effect/src/unstable/reactivity/AtomRpc.ts
-.opencode/resources/effect/packages/effect/src/unstable/reactivity/Reactivity.ts
-.opencode/resources/effect/packages/effect/src/unstable/reactivity/AsyncResult.ts
-```
+
+- `.opencode/resources/effect/packages/effect/src/unstable/reactivity/Atom.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/reactivity/AtomRpc.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/reactivity/Reactivity.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/reactivity/AsyncResult.ts`
 
 ### TanStack Router
-```
-.opencode/resources/tanstack-router/packages/router-core/src/route.ts
-.opencode/resources/tanstack-router/packages/router-core/src/link.ts
-.opencode/resources/tanstack-router/packages/router-core/src/useSearch.ts
-.opencode/resources/tanstack-router/packages/router-core/src/useNavigate.ts
-.opencode/resources/tanstack-router/packages/router-core/src/useParams.ts
-.opencode/resources/tanstack-router/packages/router-core/src/useLoaderData.ts
-.opencode/resources/tanstack-router/packages/router-core/src/redirect.ts
-.opencode/resources/tanstack-router/packages/react-router/src/route.tsx
-.opencode/resources/tanstack-router/packages/react-router/src/useSearch.tsx
-.opencode/resources/tanstack-router/packages/react-router/src/useNavigate.tsx
-.opencode/resources/tanstack-router/packages/react-router/src/link.tsx
-.opencode/resources/tanstack-router/packages/react-router/src/router.ts
-```
 
-## Key patterns
+- `.opencode/resources/tanstack-router/packages/router-core/src/route.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/link.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/useSearch.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/useNavigate.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/useParams.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/useLoaderData.ts`
+- `.opencode/resources/tanstack-router/packages/router-core/src/redirect.ts`
+- `.opencode/resources/tanstack-router/packages/react-router/src/route.tsx`
+- `.opencode/resources/tanstack-router/packages/react-router/src/useSearch.tsx`
+- `.opencode/resources/tanstack-router/packages/react-router/src/useNavigate.tsx`
+- `.opencode/resources/tanstack-router/packages/react-router/src/link.tsx`
+- `.opencode/resources/tanstack-router/packages/react-router/src/router.ts`
+
+## Patterns
 
 - Route search params → `createFileRoute`, `validateSearch`, `Schema.toStandardSchemaV1`
 - Atoms → `Atom.keepAlive`, `AtomRuntime.atom`, `Atom.family`, `Atom.mapResult`

@@ -9,22 +9,20 @@ metadata:
 
 ## Source files
 
-```
-**/src/**/theme.css
-**/src/components/ui/**
-apps/*/components.json
-```
+- `**/src/**/theme.css`
+- `**/src/components/ui/**`
+- `apps/*/components.json`
 
-## Key patterns
+## Rules
 
 - Reuse existing primitives before composing new ones
-- Add primitives with `bunx --bun shadcn@latest add <name>`
-- Read docs with `bunx --bun shadcn@latest docs <name>`
-- Inspect registry source with `bunx --bun shadcn@latest view <name>`
-- Use `cn()` for conditional classes. `cn-classname` enforces the exact shape.
+- USE `bunx --bun shadcn@latest add <name>` to add primitives
+- USE `bunx --bun shadcn@latest docs <name>` to read docs
+- USE `bunx --bun shadcn@latest view <name>` to inspect registry source
+- USE `cn()` for conditional classes
 - Prefer icons for repeated actions when clarity stays high
 
-## Visual principles
+## Visual Principles
 
 - Squared edges. Avoid rounded pills and soft cards.
 - High contrast. Keep borders visible on containers.

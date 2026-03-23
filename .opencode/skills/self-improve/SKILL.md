@@ -1,105 +1,70 @@
 ---
 name: self-improve
-description: Load when updating agent configuration — biome rules, skills, AGENTS.md, agent workflows.
+description: Load after validation to fix systemic agent behavior problems. Improves skills, agents, AGENTS.md, biome rules based on observed failures.
 metadata:
   patterns: |
-    packages/linter, .grit, register_diagnostic, biome-ignore lint/plugin,
-    SKILL.md, AGENTS.md, .opencode/agents/, .opencode/skills/
+    .opencode/skills/, .opencode/agents/, AGENTS.md, packages/linter/
 ---
 
 ## Source files
 
-```
-packages/linter/src/*.grit
-packages/linter/src/-test.tsx
-.opencode/skills/*/SKILL.md
-.opencode/agents/*.md
-AGENTS.md
-```
+- `packages/linter/src/*.grit`
+- `packages/linter/src/-test.tsx`
+- `.opencode/skills/*/SKILL.md`
+- `.opencode/agents/*.md`
+- `AGENTS.md`
+
+## Trigger
+
+Run after validation step (build and development agents only). Plan agent skips self-improve.
+
+## What to fix
+
+ONLY systemic problems agent can't easily self-correct:
+
+- User contradicts existing rules multiple times (iterations on same issue)
+- Agent fails to self-correct after 2-3 attempts on same error
+- Pattern repeats AND agent struggles to fix it
+
+IGNORE one-off errors agent immediately fixes.
+
+NEVER modify agents unless user explicitly says there's a problem with them.
 
 ## Core principle
 
-The configuration system is NOT append-only. Every self-improve step MUST leave it the same size or smaller.
+NOT append-only. Every change MUST leave system same size or smaller.
 
-- Strengthen an existing line before adding a new one
-- Merge overlapping rules before creating a near-duplicate
+- Strengthen existing rule before adding new one
+- Merge overlapping rules
 - Remove lines now covered elsewhere
-- Simplify wording until the root cause is obvious
+- Fix root cause, not symptoms
 
-## When to use this skill
+## Self-reflection
 
-ONLY for **big, repetitive, systemic problems** — let the agent self-reflect:
+Before any change, analyze deeply:
 
-**STOP and use this skill when:**
-- You notice the **same error pattern** keeps appearing
-- You're in a **retry loop** (fix → error → fix → error)
-- The **user corrects you multiple times** on the same thing
-- You feel "stuck" on an issue that won't resolve
+1. **What failed?** — Exact error pattern, user corrections, retry loops
+2. **Why did it fail?** — Missing rule? Ambiguous wording? Contradiction?
+3. **Root cause** — Is this a syntax error (biome), pattern error (skill), or philosophy gap (AGENTS.md)?
+4. **Optimal fix** — Fix at highest layer that prevents recurrence
 
-**IGNORE and continue when:**
-- Error happens once and you immediately self-correct
-- Minor wording preferences
-- Style nits that don't affect correctness
-- Single typos or obvious mistakes
+NEVER guess. Trace the failure chain to the source.
 
-**Self-reflection prompt:** *"Looking back at this conversation, what patterns caused friction? Would a rule, skill, or biome check have prevented this?"*
+## Fix priority
 
-Only proceed if the answer reveals a **systemic gap** — not a one-off mistake.
+Fix at highest layer possible:
 
-## Priority escalation
+1. **Biome rule** — statically enforced, automatic detection (BEST)
+2. **Skill** — domain-specific pattern guidance when not statically enforceable
+3. **AGENTS.md** — cross-cutting philosophy when not domain-specific
+4. **Agent** — ONLY when user explicitly reports problem with agent workflow
 
-1. Biome rule — the pattern is syntactic
-2. Biome rule Error message — the rule exists but the fix is unclear
-3. Skill — the agent needs the alternative pattern or example
-4. AGENTS.md — the mistake reveals a philosophy gap
+## Biome rules
 
-## Process
-
-### Phase 1: Deep Analysis (REQUIRED)
-
-Before ANY edit, read and understand the complete system:
-
-1. **Read all agents** — `.opencode/agents/*.md`
-2. **Read all skills** — `.opencode/skills/*/SKILL.md`
-3. **Read AGENTS.md** — global rules
-4. **Read biome rules** — `packages/linter/src/*.grit`
-5. **Read the conversation** — what went wrong, user corrections
-
-### Phase 2: Root Cause Analysis
-
-Ask: "What systemic issue caused this mistake?"
-
-- Is there a **missing rule** in AGENTS.md?
-- Is there a **contradiction** between agents and skills?
-- Is there a **gap** in a skill's guidance?
-- Is the agent **missing a skill** it should load?
-- Is there a **biome rule** that should catch this?
-
-### Phase 3: Design the Fix
-
-Fix at the highest layer possible:
-
-1. **Biome rule** — catches it automatically (best)
-2. **AGENTS.md** — global philosophy/guideline
-3. **Skill** — specific domain knowledge
-4. **Agent** — workflow adjustment (last resort)
-
-NEVER add a band-aid. Fix the root cause.
-
-### Phase 4: Verify Consistency
-
-After any change, verify:
-
-- [ ] No contradictions between layers
-- [ ] No duplication (merge overlapping guidance)
-- [ ] Examples in skills follow AGENTS.md rules
-- [ ] All affected files still make sense together
-
-## Biome rule creation
-
-- ALWAYS anonymize tests and examples. Use generic names like `items`, `value`, `result`.
-- ALWAYS check existing rules before creating a new one.
-- ALWAYS merge overlapping rules.
+- Check existing rules before creating new
+- Merge overlapping rules
+- EVERY rule MUST have tests in `-test.tsx`
+- Anonymize skill examples: use `items`, `value`, `result` (no `users`, `customers`, etc.)
 
 ```grit
 engine biome(1.0)
@@ -110,18 +75,22 @@ language js(typescript, jsx)
 }
 ```
 
+### Tests
+
 ```typescript
 // packages/linter/src/-test.tsx
-// biome-ignore lint/plugin: <1-5 word reason>
+// biome-ignore lint/plugin: <reason>
 const bad = codeThatTriggersRule
 const good = correctCode
 ```
 
 Suppression: `// biome-ignore lint/plugin: <1-5 word reason>`
 
-## Cross-layer consistency check
+## Validation
 
-- No duplicated content between AGENTS.md and skills
-- No duplicated content between skills
-- No contradictions between Biome rules and skill guidance
-- Examples follow AGENTS.md rules
+After editing biome rules:
+
+1. Run `bun run fix` then `bun run check`
+2. Fix any failures
+3. Repeat until both pass
+4. Ensure new rules catch intended patterns

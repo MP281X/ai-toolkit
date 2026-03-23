@@ -1,4 +1,4 @@
-import {Array, pipe, String} from 'effect'
+import {Array, Option, pipe, String} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {useState} from 'react'
@@ -48,7 +48,13 @@ export const DevTools = {
 								route !== value && 'text-muted-foreground hover:bg-muted hover:text-foreground'
 							)}
 						>
-							{pipe(route, String.split('/'), Array.filter(String.isNonEmpty)).at(-1) ?? route}
+							{pipe(
+								route,
+								String.split('/'),
+								Array.filter(String.isNonEmpty),
+								Array.last,
+								Option.getOrElse(() => route)
+							)}
 						</Button>
 					))}
 				</div>
