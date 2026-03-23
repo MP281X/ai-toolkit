@@ -10,21 +10,19 @@ metadata:
 
 ## Source files
 
-```
-.opencode/resources/effect/packages/effect/src/Effect.ts
-.opencode/resources/effect/packages/effect/src/Layer.ts
-.opencode/resources/effect/packages/effect/src/ServiceMap.ts
-.opencode/resources/effect/packages/effect/src/Stream.ts
-.opencode/resources/effect/packages/effect/src/Schedule.ts
-```
+- `.opencode/resources/effect/packages/effect/src/Effect.ts`
+- `.opencode/resources/effect/packages/effect/src/Layer.ts`
+- `.opencode/resources/effect/packages/effect/src/ServiceMap.ts`
+- `.opencode/resources/effect/packages/effect/src/Stream.ts`
+- `.opencode/resources/effect/packages/effect/src/Schedule.ts`
 
-## Key patterns
+## Patterns
 
 - Sequential effects → `Effect.ts`: `Effect.gen`, `Effect.fnUntraced`
 - Service access → `Effect.ts`: `Effect.service`, `Effect.serviceOption`, `Effect.provide*`
 - Service construction → `ServiceMap.ts`, `Layer.ts`: `ServiceMap.Service`, `Layer.effect`, `Layer.succeed`, `Layer.merge`
 - Concurrency → `Effect.ts`, `Schedule.ts`: `Effect.forEach` options, `race*`, `timeout*`, `retry*`, `Schedule`
-- Streams → `Stream.ts` when the value is really a stream
+- Streams → `Stream.ts` when value is really a stream
 
 ## Examples
 

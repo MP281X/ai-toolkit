@@ -2,12 +2,22 @@ engine biome(1.0)
 language js(typescript, jsx)
 
 or {
-	`$expr == null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNullish(x)`.") },
-	`$expr != null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNotNullish(x)`.") },
-	`$expr === null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNull(x)`.") },
-	`$expr !== null` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isNotNull(x)`.") },
-	`$expr === undefined` as $match where { register_diagnostic(span=$match, message="Use `Predicate.isUndefined(x)`.") },
+	`$expr == null` as $match where {
+		register_diagnostic(span=$match, message="Do not write manual nullish checks. Replace this with `Predicate.isNullish(value)` so the intent stays explicit and consistent with the rest of the codebase.")
+	},
+	`$expr != null` as $match where {
+		register_diagnostic(span=$match, message="Do not write manual nullish checks. Replace this with `Predicate.isNotNullish(value)` so the intent stays explicit and consistent with the rest of the codebase.")
+	},
+	`$expr === null` as $match where {
+		register_diagnostic(span=$match, message="Do not compare against `null` directly. Replace this with `Predicate.isNull(value)` so the branch reads as a named predicate instead of a raw sentinel check.")
+	},
+	`$expr !== null` as $match where {
+		register_diagnostic(span=$match, message="Do not compare against `null` directly. Replace this with `Predicate.isNotNull(value)` so the branch reads as a named predicate instead of a raw sentinel check.")
+	},
+	`$expr === undefined` as $match where {
+		register_diagnostic(span=$match, message="Do not compare against `undefined` directly. Replace this with `Predicate.isUndefined(value)` so the branch reads as a named predicate instead of a raw sentinel check.")
+	},
 	`$expr !== undefined` as $match where {
-		register_diagnostic(span=$match, message="Use `Predicate.isNotUndefined(x)`.")
+		register_diagnostic(span=$match, message="Do not compare against `undefined` directly. Replace this with `Predicate.isNotUndefined(value)` so the branch reads as a named predicate instead of a raw sentinel check.")
 	}
 }

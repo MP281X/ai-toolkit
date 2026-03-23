@@ -10,25 +10,21 @@ metadata:
 
 ## Source files
 
-```
-.opencode/resources/effect/packages/effect/src/unstable/ai/LanguageModel.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/Tool.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/Toolkit.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/Prompt.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/Response.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/McpSchema.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/AnthropicStructuredOutput.ts
-.opencode/resources/effect/packages/effect/src/unstable/ai/OpenAiStructuredOutput.ts
-.opencode/resources/effect/packages/ai/openrouter/src/OpenRouterLanguageModel.ts
-```
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/LanguageModel.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/Tool.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/Toolkit.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/Prompt.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/Response.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/McpSchema.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/AnthropicStructuredOutput.ts`
+- `.opencode/resources/effect/packages/effect/src/unstable/ai/OpenAiStructuredOutput.ts`
+- `.opencode/resources/effect/packages/ai/openrouter/src/OpenRouterLanguageModel.ts`
 
-## Key patterns
+## Patterns
 
 - Structured output → `LanguageModel.ts`: `LanguageModel.generateObject`
 - Provider limits → `AnthropicStructuredOutput.ts`, `OpenAiStructuredOutput.ts`
 - Tools → `Tool.ts`: `Tool.make`, `Tool.dynamic`
 - Toolkits → `Toolkit.ts`: `Toolkit.make`, `Toolkit.merge`
-- Prompt and response boundaries → `Prompt.ts`, `Response.ts`
+- Prompt/response boundaries → `Prompt.ts`, `Response.ts`
 - MCP schemas → `McpSchema.ts`
-- Schema design is the center of AI integration. Prefer structured outputs over JSON prompting.
-- If a schema works in Effect and fails at the provider, inspect the provider-specific files before changing the schema.

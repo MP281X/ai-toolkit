@@ -11,27 +11,30 @@ metadata:
 
 ## Source files
 
-```
-.opencode/resources/effect/packages/effect/src/Function.ts
-.opencode/resources/effect/packages/effect/src/Predicate.ts
-.opencode/resources/effect/packages/effect/src/Match.ts
-.opencode/resources/effect/packages/effect/src/Array.ts
-.opencode/resources/effect/packages/effect/src/Record.ts
-.opencode/resources/effect/packages/effect/src/String.ts
-.opencode/resources/effect/packages/effect/src/Option.ts
-```
+- `.opencode/resources/effect/packages/effect/src/Function.ts`
+- `.opencode/resources/effect/packages/effect/src/Predicate.ts`
+- `.opencode/resources/effect/packages/effect/src/Match.ts`
+- `.opencode/resources/effect/packages/effect/src/Array.ts`
+- `.opencode/resources/effect/packages/effect/src/Record.ts`
+- `.opencode/resources/effect/packages/effect/src/String.ts`
+- `.opencode/resources/effect/packages/effect/src/Option.ts`
 
-## Key patterns
+## Rules
 
-- Effect modules are the ONLY vocabulary for data transforms in this repo
-- `pipe` when the value is already in hand → `Function.ts`
-- `flow` when building a reusable composed function → `Function.ts`
-- `Match` when branching produces a value → `Match.ts`
-- Composition helpers → `Function.ts`: `dual`, `identity`, `constant`
+- ONLY use: `Array`, `String`, `Record`, `Option`, `Predicate`, `Match`, `pipe`, `flow`
+- NEVER native prototype methods (`.map()`, `.filter()`, `.trim()`)
+- NEVER `typeof` or nullish checks
+- Compose with `pipe` and `flow`, not intermediate variables
+
+## Patterns
+
+- `pipe` — value already in hand → `Function.ts`
+- `flow` — building reusable composed function → `Function.ts`
+- `Match` — branching produces value → `Match.ts`
 - Type guards → `Predicate.ts`
 - Collections → `Array.ts`, `Record.ts`
 - Strings → `String.ts`
-- Optionality → `Option.ts`: `fromNullable`, `map`, `flatMap`
+- Optionality → `Option.ts`
 
 ## Examples
 
