@@ -7,17 +7,9 @@
 - ONLY bullet points and code blocks
 - NEVER paragraphs or prose
 - NEVER repeat the user's request
+- NEVER discuss types in plain text
 - Code: ```typescript with complete signatures
 - ASCII diagrams only when clarifying relationships
-
-## Validation
-
-After every implementation:
-
-1. `bun run fix` — fix auto-correctable issues
-2. `bun run check` — type checks and linting
-3. If either fails: fix errors, repeat 1-2
-4. Only proceed when BOTH pass
 
 ## Code Style
 

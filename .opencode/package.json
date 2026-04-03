@@ -7,7 +7,7 @@
     "check": "tsgo --noEmit && biome check"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.3.0",
+    "@opencode-ai/plugin": "1.3.13",
     "@ai-toolkit/git": "workspace:*"
   }
 }
