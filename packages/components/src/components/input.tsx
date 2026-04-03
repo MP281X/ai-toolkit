@@ -450,7 +450,7 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 								<ContentEditable className="wrap-break-word block min-h-24 w-full whitespace-pre-wrap p-2 text-[13px] leading-relaxed outline-none" />
 							}
 							placeholder={
-								<div className="pointer-events-none absolute inset-x-3 top-2 select-none text-[13px] text-muted-foreground">
+								<div className="pointer-events-none absolute inset-x-2 top-2 select-none text-[13px] text-muted-foreground">
 									{props.placeholder ?? 'Write something...'}
 								</div>
 							}

@@ -1,7 +1,9 @@
 import {AnthropicClient, AnthropicLanguageModel} from '@effect/ai-anthropic'
 import {OpenAiClient, OpenAiLanguageModel} from '@effect/ai-openai'
 import {
+	// biome-ignore lint/plugin: the exports have the same names as @effect/ai-openai
 	OpenAiClient as OpenAiCompatClient,
+	// biome-ignore lint/plugin: the exports have the same names as @effect/ai-openai
 	OpenAiLanguageModel as OpenAiCompatLanguageModel
 } from '@effect/ai-openai-compat'
 import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'

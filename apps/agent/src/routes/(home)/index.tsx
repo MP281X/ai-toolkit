@@ -1,126 +1,476 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Predicate, pipe, Stream, String} from 'effect'
+import {Array, Effect, Predicate, pipe, Schema, Stream, String} from 'effect'
 
 import {makeFileParts, partsStreamReducer} from '@ai-toolkit/ai/utils'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {
 	ArrowUpIcon,
 	BookOpenTextIcon,
-	BotIcon,
 	Brain,
 	ChevronRight,
 	ClockIcon,
+	Ellipsis,
 	ExternalLink,
+	FolderOpen,
+	FolderPlus,
 	HashIcon,
 	InboxIcon,
 	Paperclip,
+	Pencil,
+	Plus,
 	SparklesIcon,
 	Square,
+	SquarePen,
+	Trash2,
 	UserIcon,
-	Wrench
+	Wrench,
+	X
 } from '@ai-toolkit/components/icons'
 import {AutocompleteInput} from '@ai-toolkit/components/input'
 import {Favicon} from '@ai-toolkit/components/render/link-preview'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger
+} from '@ai-toolkit/components/ui/dropdown-menu'
+import {Input} from '@ai-toolkit/components/ui/input'
+import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {cn, formatError, formatNumber, formatTimestamp} from '@ai-toolkit/components/utils'
 import {createFileRoute} from '@tanstack/react-router'
 import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
-import {Fragment, useRef} from 'react'
+import {Fragment, useRef, useState} from 'react'
 
 import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {Session, SessionId} from '#rpcs/contracts.ts'
 
-export const Route = createFileRoute('/(home)/')({
-	component: RouteComponent
-})
-
-const turnsAtom = Atom.keepAlive(
+const workspacesAtom = Atom.keepAlive(
 	AtomRuntime.atom(
 		pipe(
 			RpcClient.asEffect(),
-			Effect.map(client => client('agent.events', void 0)),
-			Effect.map(partsStreamReducer),
-			Effect.map(
-				Stream.map(parts => {
-					const turns = Array.empty<{
-						id: number
-						prompt: Extract<(typeof parts)[number], {role: 'user'}>
-						responses: {
-							id: number
-							metadata: Extract<(typeof parts)[number], {type: 'response-metadata'}>
-							finish: Extract<(typeof parts)[number], {type: 'finish'}> | undefined
-							parts: Exclude<
-								Exclude<(typeof parts)[number], Prompt.Message>,
-								| Extract<(typeof parts)[number], {type: 'response-metadata'}>
-								| Extract<(typeof parts)[number], {type: 'finish'}>
-							>[]
-						}[]
-					}>()
-
-					for (const part of parts) {
-						if (Prompt.isMessage(part)) {
-							if (part.role !== 'user') continue
-
-							turns.push({id: turns.length, prompt: part, responses: []})
-							continue
-						}
-
-						const turn = turns[turns.length - 1]
-						if (!turn) continue
-
-						if (part.type === 'response-metadata') {
-							turn.responses.push({
-								id: turn.responses.length,
-								metadata: part,
-								finish: undefined,
-								parts: []
-							})
-							continue
-						}
-
-						const response = turn.responses[turn.responses.length - 1]
-						if (!response) continue
-
-						if (part.type === 'finish') {
-							response.finish = part
-							continue
-						}
-
-						response.parts.push(part)
-					}
-
-					return turns
-				})
-			),
+			Effect.map(client => client('agent.workspaces', void 0)),
 			Stream.unwrap
 		),
 		{initialValue: []}
 	)
 )
 
+const sessionsAtom = Atom.keepAlive(
+	AtomRuntime.atom(
+		pipe(
+			RpcClient.asEffect(),
+			Effect.map(client => client('agent.sessions', void 0)),
+			Stream.unwrap
+		),
+		{initialValue: []}
+	)
+)
+
+const turnsAtom = Atom.family((sessionId: SessionId) =>
+	Atom.keepAlive(
+		AtomRuntime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.map(client => client('agent.events', {sessionId})),
+				Effect.map(partsStreamReducer),
+				Effect.map(
+					Stream.map(parts => {
+						const turns = Array.empty<{
+							id: number
+							prompt: Extract<(typeof parts)[number], {role: 'user'}>
+							responses: {
+								id: number
+								metadata: Extract<(typeof parts)[number], {type: 'response-metadata'}>
+								finish: Extract<(typeof parts)[number], {type: 'finish'}> | undefined
+								parts: Exclude<
+									Exclude<(typeof parts)[number], Prompt.Message>,
+									| Extract<(typeof parts)[number], {type: 'response-metadata'}>
+									| Extract<(typeof parts)[number], {type: 'finish'}>
+								>[]
+							}[]
+						}>()
+
+						for (const part of parts) {
+							if (Prompt.isMessage(part)) {
+								if (part.role !== 'user') continue
+								turns.push({id: turns.length, prompt: part, responses: []})
+								continue
+							}
+
+							const turn = turns[turns.length - 1]
+							if (!turn) continue
+
+							if (part.type === 'response-metadata') {
+								turn.responses.push({id: turn.responses.length, metadata: part, finish: undefined, parts: []})
+								continue
+							}
+
+							const response = turn.responses[turn.responses.length - 1]
+							if (!response) continue
+
+							if (part.type === 'finish') {
+								response.finish = part
+								continue
+							}
+
+							response.parts.push(part)
+						}
+
+						return turns
+					})
+				),
+				Stream.unwrap
+			),
+			{initialValue: []}
+		)
+	)
+)
+
 const sendPromptAtom = AtomRuntime.fn(
-	Effect.fnUntraced(function* (payload: {text: string; attachments: File[]}) {
+	Effect.fnUntraced(function* (payload: {sessionId: SessionId; text: string; attachments: File[]}) {
 		const client = yield* RpcClient
-		yield* client(
-			'agent.prompt',
-			Prompt.userMessage({
+		yield* client('agent.prompt', {
+			sessionId: payload.sessionId,
+			message: Prompt.userMessage({
 				content: [Prompt.makePart('text', {text: payload.text}), ...(yield* makeFileParts(payload.attachments))]
 			})
-		)
+		})
 	})
 )
 
 const stopAgentAtom = AtomRuntime.fn(
-	Effect.fnUntraced(function* () {
+	Effect.fnUntraced(function* (payload: {sessionId: SessionId}) {
 		const client = yield* RpcClient
-		yield* client('agent.stop', void 0)
+		yield* client('agent.stop', {sessionId: payload.sessionId})
 	})
 )
 
+export const Route = createFileRoute('/(home)/')({
+	validateSearch: Schema.toStandardSchemaV1(
+		Schema.Struct({
+			sessionId: Schema.optional(SessionId)
+		})
+	),
+	component: RouteComponent
+})
+
 function RouteComponent() {
-	const {value: turns} = useAtomSuspense(turnsAtom)
+	const {sessionId: selectedId} = Route.useSearch()
+	const {value: workspaces} = useAtomSuspense(workspacesAtom)
+	const {value: sessions} = useAtomSuspense(sessionsAtom)
+	const navigate = Route.useNavigate()
+	const createWorkspace = useAtomSet(RpcClient.mutation('agent.createWorkspace'))
+	const updateWorkspace = useAtomSet(RpcClient.mutation('agent.updateWorkspace'))
+	const deleteWorkspace = useAtomSet(RpcClient.mutation('agent.deleteWorkspace'))
+	const createSession = useAtomSet(RpcClient.mutation('agent.createSession'))
+	const updateSession = useAtomSet(RpcClient.mutation('agent.updateSession'))
+	const deleteSession = useAtomSet(RpcClient.mutation('agent.deleteSession'))
+	const [creatingWorkspace, setCreatingWorkspace] = useState<{parentId: string | null} | null>(null)
+	const [creatingWorkspaceName, setCreatingWorkspaceName] = useState('')
+	const [editingWorkspace, setEditingWorkspace] = useState<string | null>(null)
+	const [editingWorkspaceName, setEditingWorkspaceName] = useState('')
+	const [editingSession, setEditingSession] = useState<string | null>(null)
+	const [editingSessionTitle, setEditingSessionTitle] = useState('')
+
+	// Build parent → children map for workspaces
+	const childrenMap = new Map<string | null, typeof workspaces>()
+	for (const ws of workspaces) {
+		const existing = childrenMap.get(ws.parentId) ?? []
+		childrenMap.set(ws.parentId, [...existing, ws])
+	}
+
+	// Build workspace → sessions map
+	const sessionMap = new Map<string, typeof sessions>()
+	for (const session of sessions) {
+		const existing = sessionMap.get(session.workspaceId) ?? []
+		sessionMap.set(session.workspaceId, [...existing, session])
+	}
+
+	const renderTree = (parentId: string | null, depth: number) =>
+		pipe(
+			childrenMap.get(parentId) ?? [],
+			Array.map(ws => {
+				const wsItems = sessionMap.get(ws.id) ?? []
+				return (
+					<Collapsible key={ws.id} defaultOpen>
+						<div
+							className="group flex items-center gap-1 py-1 pr-2 hover:bg-muted"
+							style={{paddingLeft: `${depth * 12 + 8}px`}}
+						>
+							{editingWorkspace === ws.id ? (
+								<>
+									<FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+									<Input
+										value={editingWorkspaceName}
+										onChange={e => setEditingWorkspaceName(e.target.value)}
+										autoFocus
+										className="h-5 min-w-0 flex-1 border-none bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
+										onKeyDown={e => {
+											if (e.key === 'Enter') {
+												const name = pipe(editingWorkspaceName, String.trim)
+												if (String.isNonEmpty(name)) {
+													updateWorkspace({payload: {id: ws.id, name}})
+												}
+												setEditingWorkspace(null)
+											}
+											if (e.key === 'Escape') setEditingWorkspace(null)
+										}}
+										onBlur={() => setEditingWorkspace(null)}
+									/>
+								</>
+							) : (
+								<>
+									<CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+										<FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+										<span className="min-w-0 flex-1 truncate text-sm">{ws.name}</span>
+									</CollapsibleTrigger>
+
+									<DropdownMenu>
+										<DropdownMenuTrigger
+											className="shrink-0 rounded-sm p-0.5 opacity-0 hover:bg-accent focus:opacity-100 group-hover:opacity-100"
+											onClick={e => e.stopPropagation()}
+										>
+											<Ellipsis className="size-3.5 text-muted-foreground" />
+										</DropdownMenuTrigger>
+										<DropdownMenuContent side="bottom" align="end" sideOffset={4}>
+											<DropdownMenuItem
+												onClick={() => {
+													const session = new Session({
+														title: 'New chat',
+														workspaceId: ws.id
+													})
+													createSession({
+														payload: {id: session.id, workspaceId: session.workspaceId}
+													})
+													navigate({search: {sessionId: session.id}})
+												}}
+											>
+												<SquarePen className="size-3.5" />
+												New thread
+											</DropdownMenuItem>
+											<DropdownMenuItem onClick={() => setCreatingWorkspace({parentId: ws.id})}>
+												<FolderPlus className="size-3.5" />
+												New workspace
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												onClick={() => {
+													setEditingWorkspace(ws.id)
+													setEditingWorkspaceName(ws.name)
+												}}
+											>
+												<Pencil className="size-3.5" />
+												Edit name
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												variant="destructive"
+												onClick={() => {
+													navigate({search: {sessionId: undefined}})
+													deleteWorkspace({payload: {id: ws.id}})
+												}}
+											>
+												<X className="size-3.5" />
+												Remove
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
+								</>
+							)}
+						</div>
+
+						<CollapsibleContent>
+							{/* Sub-workspace creation input */}
+							{Predicate.isNotNull(creatingWorkspace) && creatingWorkspace.parentId === ws.id && (
+								<div className="flex items-center gap-1.5 py-1 pr-2" style={{paddingLeft: `${(depth + 1) * 12 + 8}px`}}>
+									<FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
+									<Input
+										value={creatingWorkspaceName}
+										onChange={e => setCreatingWorkspaceName(e.target.value)}
+										autoFocus
+										placeholder="Workspace name..."
+										className="h-5 min-w-0 flex-1 border-none bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
+										onKeyDown={e => {
+											if (e.key === 'Enter') {
+												const name = pipe(creatingWorkspaceName, String.trim)
+												if (String.isNonEmpty(name)) {
+													createWorkspace({payload: {name, parentId: ws.id}})
+												}
+												setCreatingWorkspaceName('')
+												setCreatingWorkspace(null)
+											}
+											if (e.key === 'Escape') {
+												setCreatingWorkspaceName('')
+												setCreatingWorkspace(null)
+											}
+										}}
+										onBlur={() => {
+											setCreatingWorkspaceName('')
+											setCreatingWorkspace(null)
+										}}
+									/>
+								</div>
+							)}
+
+							{/* Recursive child workspaces */}
+							{renderTree(ws.id, depth + 1)}
+
+							{/* Sessions */}
+							{Array.map(wsItems, session => (
+								<div
+									key={session.id}
+									className={cn(
+										'group/session flex items-center gap-1 py-1 pr-2',
+										selectedId === session.id
+											? 'bg-primary/15 text-primary'
+											: 'text-muted-foreground hover:bg-muted hover:text-foreground'
+									)}
+									style={{paddingLeft: `${(depth + 1) * 12 + 8}px`}}
+								>
+									{editingSession === session.id ? (
+										<Input
+											value={editingSessionTitle}
+											onChange={e => setEditingSessionTitle(e.target.value)}
+											autoFocus
+											className="h-5 min-w-0 flex-1 border-none bg-transparent px-0 py-0 text-xs shadow-none focus-visible:ring-0"
+											onKeyDown={e => {
+												if (e.key === 'Enter') {
+													const title = pipe(editingSessionTitle, String.trim)
+													if (String.isNonEmpty(title)) {
+														updateSession({payload: {id: session.id, title}})
+													}
+													setEditingSession(null)
+												}
+												if (e.key === 'Escape') setEditingSession(null)
+											}}
+											onBlur={() => setEditingSession(null)}
+										/>
+									) : (
+										<button
+											type="button"
+											onClick={() => navigate({search: {sessionId: session.id}})}
+											className="min-w-0 flex-1 truncate text-left text-xs"
+										>
+											{session.title}
+										</button>
+									)}
+
+									<DropdownMenu>
+										<DropdownMenuTrigger
+											className="shrink-0 rounded-sm p-0.5 opacity-0 hover:bg-accent focus:opacity-100 group-hover/session:opacity-100"
+											onClick={e => e.stopPropagation()}
+										>
+											<Ellipsis className="size-3.5" />
+										</DropdownMenuTrigger>
+										<DropdownMenuContent side="bottom" align="end" sideOffset={4}>
+											<DropdownMenuItem
+												onClick={() => {
+													setEditingSession(session.id)
+													setEditingSessionTitle(session.title)
+												}}
+											>
+												<Pencil className="size-3.5" />
+												Rename thread
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												variant="destructive"
+												onClick={() => {
+													if (selectedId === session.id) navigate({search: {sessionId: undefined}})
+													deleteSession({payload: {id: session.id}})
+												}}
+											>
+												<Trash2 className="size-3.5" />
+												Delete
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
+								</div>
+							))}
+						</CollapsibleContent>
+					</Collapsible>
+				)
+			})
+		)
+
+	return (
+		<div className="flex h-full w-full flex-col overflow-hidden">
+			<ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+				<ResizablePanel
+					defaultSize="25%"
+					minSize="15%"
+					maxSize="40%"
+					className="flex min-h-0 flex-col overflow-hidden border-r"
+				>
+					{/* Workspaces header */}
+					<div className="flex items-center justify-between px-3 pt-3 pb-1">
+						<span className="font-medium text-muted-foreground text-xs">Workspaces</span>
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							className="rounded-none"
+							onClick={() => setCreatingWorkspace({parentId: null})}
+							title="New workspace"
+						>
+							<Plus className="size-3.5" />
+						</Button>
+					</div>
+
+					{/* Root workspace creation input */}
+					{Predicate.isNotNull(creatingWorkspace) && Predicate.isNull(creatingWorkspace.parentId) && (
+						<div className="flex items-center gap-1.5 px-2 py-1">
+							<FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
+							<Input
+								value={creatingWorkspaceName}
+								onChange={e => setCreatingWorkspaceName(e.target.value)}
+								autoFocus
+								placeholder="Workspace name..."
+								className="h-5 min-w-0 flex-1 border-none bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
+								onKeyDown={e => {
+									if (e.key === 'Enter') {
+										const name = pipe(creatingWorkspaceName, String.trim)
+										if (String.isNonEmpty(name)) {
+											createWorkspace({payload: {name, parentId: null}})
+										}
+										setCreatingWorkspaceName('')
+										setCreatingWorkspace(null)
+									}
+									if (e.key === 'Escape') {
+										setCreatingWorkspaceName('')
+										setCreatingWorkspace(null)
+									}
+								}}
+								onBlur={() => {
+									setCreatingWorkspaceName('')
+									setCreatingWorkspace(null)
+								}}
+							/>
+						</div>
+					)}
+
+					{/* Workspace tree */}
+					<div className="flex-1 overflow-y-auto">{renderTree(null, 0)}</div>
+				</ResizablePanel>
+
+				<ResizableHandle />
+
+				<ResizablePanel defaultSize="75%" className="flex min-h-0 flex-col overflow-hidden">
+					{Predicate.isNotUndefined(selectedId) ? (
+						<ConversationPanel key={selectedId} sessionId={selectedId} />
+					) : (
+						<div className="flex flex-1 items-center justify-center text-muted-foreground text-xs">
+							Select or create a chat
+						</div>
+					)}
+				</ResizablePanel>
+			</ResizablePanelGroup>
+		</div>
+	)
+}
+
+function ConversationPanel(props: {sessionId: SessionId}) {
+	const {value: turns} = useAtomSuspense(turnsAtom(props.sessionId))
 	const sendPrompt = useAtomSet(sendPromptAtom)
 	const stopAgent = useAtomSet(stopAgentAtom)
 	const inputRef = useRef<AutocompleteInput.Handle<{id: number; label: string}>>(null)
@@ -214,21 +564,21 @@ function RouteComponent() {
 												<SparklesIcon className="size-3 shrink-0" />
 												<span className="min-w-0 truncate">{response.metadata.modelId ?? 'assistant'}</span>
 												<span className="ml-auto flex shrink-0 items-center gap-3">
-													{Predicate.isNumber(response.finish?.usage.inputTokens.total) &&
+													{Predicate.isNotUndefined(response.finish?.usage.inputTokens.total) &&
 														response.finish.usage.inputTokens.total > 0 && (
 															<span className="inline-flex items-center gap-1 font-mono" title="input">
 																<InboxIcon className="size-3 shrink-0" />
 																{formatNumber(response.finish.usage.inputTokens.total)}
 															</span>
 														)}
-													{Predicate.isNumber(response.finish?.usage.outputTokens.total) &&
+													{Predicate.isNotUndefined(response.finish?.usage.outputTokens.total) &&
 														response.finish.usage.outputTokens.total > 0 && (
 															<span className="inline-flex items-center gap-1 font-mono" title="output">
 																<BookOpenTextIcon className="size-3 shrink-0" />
 																{formatNumber(response.finish.usage.outputTokens.total)}
 															</span>
 														)}
-													{Predicate.isNumber(response.finish?.usage.outputTokens.reasoning) &&
+													{Predicate.isNotUndefined(response.finish?.usage.outputTokens.reasoning) &&
 														response.finish.usage.outputTokens.reasoning > 0 && (
 															<span className="inline-flex items-center gap-1 font-mono" title="reasoning">
 																<HashIcon className="size-3 shrink-0" />
@@ -362,38 +712,35 @@ function RouteComponent() {
 					onSubmit={() => {
 						const text = pipe(inputRef.current?.getText() ?? '', String.trim)
 						if (String.isEmpty(text)) return
-						sendPrompt({text, attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])})
+						sendPrompt({
+							sessionId: props.sessionId,
+							text,
+							attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
+						})
 						inputRef.current?.clear()
 					}}
 					placeholder="Send a message, paste a URL, drop files..."
 					className="w-full"
-					options={{
-						'@': {color: '#60a5fa', values: Array.makeBy(50, i => ({id: i, label: `openrouter/${i}`}))},
-						'#': {color: '#56815f', values: Array.makeBy(50, i => ({id: i, label: `ciao/${i}`}))}
-					}}
-				>
-					{entry => (
-						<Fragment>
-							<BotIcon className="size-4 shrink-0" style={{color: entry.color}} />
-							<span className="truncate text-foreground">{entry.value.label}</span>
-						</Fragment>
-					)}
-				</AutocompleteInput>
+				/>
 				<AutocompleteInput.ToolBar className="border-t-0">
-					<div className="flex items-center gap-3 font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
-						<div>openrouter/free</div>
-						<div>enter send</div>
-						<div>shift+enter newline</div>
-					</div>
-					<div className="flex items-center gap-2">
-						<Button onClick={() => stopAgent()} variant="outline" size="icon-xs" className="rounded-none">
+					<div className="ml-auto flex items-center gap-2">
+						<Button
+							onClick={() => stopAgent({sessionId: props.sessionId})}
+							variant="outline"
+							size="icon-xs"
+							className="rounded-none"
+						>
 							<Square className="size-3.5 fill-current" />
 						</Button>
 						<Button
 							onClick={() => {
 								const text = pipe(inputRef.current?.getText() ?? '', String.trim)
 								if (String.isEmpty(text)) return
-								sendPrompt({text, attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])})
+								sendPrompt({
+									sessionId: props.sessionId,
+									text,
+									attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
+								})
 								inputRef.current?.clear()
 							}}
 							size="icon-xs"
