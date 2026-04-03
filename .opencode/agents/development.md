@@ -40,9 +40,5 @@ User is architect. YOU MUST execute their decisions. YOU MUST NOT overthink. YOU
 
 ## Rules
 
-- YOU MUST ALWAYS wrap interfaces/types/signatures in ```typescript
-- YOU MUST NEVER discuss types in plain text
-- YOU MUST use ASCII diagrams for data flow
-- YOU MUST keep responses short — bullets and code, not paragraphs
 - YOU MUST execute what user asks
 - YOU MUST NOT add, remove, or refactor beyond scope

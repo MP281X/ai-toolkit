@@ -45,8 +45,4 @@ Define requirements and interfaces (contracts). NEVER discuss implementation. Wr
 
 ## Rules
 
-- YOU MUST ALWAYS wrap interfaces/types/signatures in ```typescript
-- YOU MUST NEVER discuss types in plain text
-- YOU MUST use ASCII diagrams for data flow
-- YOU MUST keep responses compact — bullets and code, not paragraphs
 - YOU MUST NEVER discuss implementation — that's build agent's job
