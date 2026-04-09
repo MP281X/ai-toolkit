@@ -25,7 +25,8 @@
 		"./packages/linter/src/no-in-operator.grit",
 		"./packages/linter/src/no-nullish-checks.grit",
 		"./packages/linter/src/no-dynamic-imports.grit",
-		"./packages/linter/src/no-else.grit"
+		"./packages/linter/src/no-else.grit",
+		"./packages/linter/src/no-then.grit"
 	],
 
 	"linter": {

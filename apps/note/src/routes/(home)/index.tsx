@@ -100,12 +100,13 @@ function RouteComponent() {
 	const createNote = useAtomSet(createNoteAtom, {mode: 'promise'})
 	const inputRef = useRef<AutocompleteInput.Handle>(null)
 
-	function submit() {
+	async function submit() {
 		const text = pipe(inputRef.current?.getText() ?? '', String.trim)
 		const files = Array.fromIterable(inputRef.current?.getFiles() ?? [])
 		if (String.isEmpty(text)) return
 		inputRef.current?.clear()
-		createNote({text, files}).then(id => navigate({search: current => ({...current, id})}))
+		const id = await createNote({text, files})
+		await navigate({search: current => ({...current, id})})
 	}
 
 	return (
