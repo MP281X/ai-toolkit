@@ -1,0 +1,6 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+`$promise.then($handler)` as $match where {
+	register_diagnostic(span=$match, message="Do not use `.then()`. Use Effect.flatMap, Effect.map, or Effect.andThen instead")
+}
