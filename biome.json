@@ -154,7 +154,8 @@
 			"**/*.json",
 			"**/*.jsonc",
 			"!**/*.gen.ts",
-			"!**/routeTree.gen.ts"
+			"!**/routeTree.gen.ts",
+			"!.opencode/package.json"
 		]
 	},
 
