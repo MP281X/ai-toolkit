@@ -15,11 +15,11 @@ import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
 import {useRef} from 'react'
 
-import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {RpcClient} from '#lib/atomRuntime.ts'
 import {NoteId} from '#rpcs/contracts.ts'
 
 const allNotesAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('note.list', void 0)),
@@ -68,7 +68,7 @@ const selectedNoteAtom = Atom.family((id?: string) =>
 	)
 )
 
-const createNoteAtom = AtomRuntime.fn(
+const createNoteAtom = RpcClient.runtime.fn(
 	Effect.fnUntraced(function* (payload: {text: string; files: readonly File[]}) {
 		const files = yield* makeFileParts(payload.files)
 		const client = yield* RpcClient.asEffect()
