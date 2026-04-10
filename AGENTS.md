@@ -28,8 +28,8 @@
 ## Scripts
 
 - `bun run fix` — auto-fix linting and formatting errors
-- `bun run lint` — static analysis without modifying code
 - `bun run type-check` — type-check and future tests
+- `bun run lint` — static analysis without modifying code
 
 ## Skills and Research
 
