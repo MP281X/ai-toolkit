@@ -1,45 +1,37 @@
 # AGENTS.md
 
-**CRITICAL**: Follow exactly unless user overrides.
+Follow exactly unless user overrides.
 
 ## Output
 
-- ONLY bullet points and code blocks — NEVER prose
-- Code: ```typescript with complete signatures
-- ASCII diagrams only for relationships
+- Bullet points and code blocks only — no prose
+- Code blocks: ```typescript with complete signatures
+- ASCII diagrams for relationships
 
-## Code Style
+## Scope
 
-- NEVER annotate types or return types — trust inference
-- NEVER use `as` — if inference fails, redesign
-- Prefer inlining over extraction — don't create helpers
+- Implement only what's explicitly asked — nothing extra
+- Replace old implementations — never keep both old and new
+- No backward compatibility — breaking changes are fine
+- No planning ahead for future requirements
+
+## Code
+
+- Inline over extraction — no single-use helpers
 - Happy path only — no guards, no re-validation
 - Biome or TypeScript error = wrong design → rewrite
-
-## MVP Mindset
-
-- Implement ONLY what's explicitly asked for — nothing implied, nothing extra
-- DO NOT add features, utilities, or abstractions beyond what's needed
-- DO NOT plan ahead for future requirements
-- Keep implementation as simple as possible
-- NEVER preserve backward compatibility
-- Treat the project as greenfield — breaking changes are fine
+- Follow existing codebase patterns — never invent new ones
 
 ## Scripts
 
-- `bun run fix` — auto-fix linting and formatting errors
-- `bun run type-check` — type-check and future tests
+- `bun run fix` — auto-fix linting and formatting
+- `bun run type-check` — type-check
 - `bun run lint` — static analysis without modifying code
 
-## Skills and Research
+## Skills
 
-- Read source files skills point to for exact signatures
-- `.opencode/resources/` = source of truth for external packages
-- NEVER rely on training data for external packages
-- NEVER research in `node_modules`
+Load skills when the task matches their description:
 
-## Imports
-
-- Package-local: `#lib/*`
-- Cross-package: `@ai-toolkit/{packageName}/{optionalExportPath}`
-- Read `@ai-toolkit/*` from workspace source, not `.opencode/resources/`
+- Use `skill(name)` tool to load domain-specific patterns
+- Load before starting work on matching tasks
+- Follow skill patterns exactly — never deviate
