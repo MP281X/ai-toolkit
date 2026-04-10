@@ -1,4 +1,4 @@
-import {Option, pipe, Schema} from 'effect'
+import {Effect, pipe, Schema} from 'effect'
 
 import {WebFetchToolKit, WebSearchToolKit} from '@ai-toolkit/ai/tools'
 import {AiError, Prompt, Response, Toolkit} from 'effect/unstable/ai'
@@ -8,7 +8,7 @@ export type SessionId = typeof SessionId.Type
 export const SessionId = pipe(
 	Schema.NonEmptyString,
 	Schema.check(Schema.isUUID()),
-	Schema.withConstructorDefault(() => Option.some(crypto.randomUUID())),
+	Schema.withConstructorDefault(Effect.sync(() => crypto.randomUUID())),
 	Schema.brand('SessionId')
 )
 
@@ -16,7 +16,7 @@ export type WorkspaceId = typeof WorkspaceId.Type
 export const WorkspaceId = pipe(
 	Schema.NonEmptyString,
 	Schema.check(Schema.isUUID()),
-	Schema.withConstructorDefault(() => Option.some(crypto.randomUUID())),
+	Schema.withConstructorDefault(Effect.sync(() => crypto.randomUUID())),
 	Schema.brand('WorkspaceId')
 )
 

@@ -315,11 +315,6 @@ function test_effect_fail() {
 	return Effect.fail(new TestError({cause: undefined}))
 }
 
-function test_effect_succeed() {
-	// biome-ignore lint/plugin: effect antipattern
-	return Effect.succeed('ok')
-}
-
 function test_else(items: string[], result: string[]) {
 	// biome-ignore lint/plugin: else clause
 	if (Array.isArrayNonEmpty(items)) {

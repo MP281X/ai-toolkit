@@ -1,7 +1,7 @@
 ---
 description: Generate commit message from staged changes and plans. Commit, rebase, push.
 model: opencode-go/minimax-m2.7
-agent: general
+agent: build
 ---
 
 ## Inputs

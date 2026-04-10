@@ -12,7 +12,8 @@
 		"shadcn": "cd packages/components && bunx shadcn@latest",
 
 		"fix": "turbo run fix",
-		"check": "turbo run check"
+		"lint": "turbo run lint",
+		"type-check": "turbo run type-check"
 	},
 
 	"dependencies": {

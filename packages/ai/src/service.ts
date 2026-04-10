@@ -7,7 +7,7 @@ import {
 	OpenAiLanguageModel as OpenAiCompatLanguageModel
 } from '@effect/ai-openai-compat'
 import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'
-import {Effect, Layer, Match, Option, pipe, Queue, ServiceMap, Stream} from 'effect'
+import {Context, Effect, Layer, Match, Option, pipe, Queue, Stream} from 'effect'
 
 import type {AiError, LanguageModel, Response} from 'effect/unstable/ai'
 import {Chat, Prompt} from 'effect/unstable/ai'
@@ -19,9 +19,9 @@ import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 import type {ModelId, ProviderId} from './catalog.ts'
 import {providers} from './catalog.ts'
 
-export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/service/Agent', {
+export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agent', {
 	make: Effect.gen(function* () {
-		const services = yield* Effect.services<
+		const services = yield* Effect.context<
 			| LanguageModel.LanguageModel
 			| Layer.Success<typeof WebSearchToolKitLayer>
 			| Layer.Success<typeof WebFetchToolKitLayer>
@@ -41,7 +41,7 @@ export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/service/A
 								chat.streamText({prompt, toolkit: AgentToolKit}),
 								partsStreamSanitizer,
 								Stream.tap(part => Queue.offer(queue, part)),
-								Stream.provide(services),
+								Stream.provideContext(services),
 								Stream.runLast
 							)
 
@@ -52,7 +52,7 @@ export class Agent extends ServiceMap.Service<Agent>()('@ai-toolkit/ai/service/A
 
 							return yield* Queue.end(queue)
 						}
-					}, Effect.provide(services))
+					})
 				)
 			}
 		}
