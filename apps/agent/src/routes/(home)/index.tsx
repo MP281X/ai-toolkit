@@ -45,11 +45,11 @@ import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
 import {Fragment, useRef, useState} from 'react'
 
-import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {RpcClient} from '#lib/atomRuntime.ts'
 import {Session, SessionId} from '#rpcs/contracts.ts'
 
 const workspacesAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('agent.workspaces', void 0)),
@@ -60,7 +60,7 @@ const workspacesAtom = Atom.keepAlive(
 )
 
 const sessionsAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('agent.sessions', void 0)),
@@ -72,7 +72,7 @@ const sessionsAtom = Atom.keepAlive(
 
 const turnsAtom = Atom.family((sessionId: SessionId) =>
 	Atom.keepAlive(
-		AtomRuntime.atom(
+		RpcClient.runtime.atom(
 			pipe(
 				RpcClient.asEffect(),
 				Effect.map(client => client('agent.events', {sessionId})),
@@ -130,7 +130,7 @@ const turnsAtom = Atom.family((sessionId: SessionId) =>
 	)
 )
 
-const sendPromptAtom = AtomRuntime.fn(
+const sendPromptAtom = RpcClient.runtime.fn(
 	Effect.fnUntraced(function* (payload: {sessionId: SessionId; text: string; attachments: File[]}) {
 		const client = yield* RpcClient
 		yield* client('agent.prompt', {
@@ -142,7 +142,7 @@ const sendPromptAtom = AtomRuntime.fn(
 	})
 )
 
-const stopAgentAtom = AtomRuntime.fn(
+const stopAgentAtom = RpcClient.runtime.fn(
 	Effect.fnUntraced(function* (payload: {sessionId: SessionId}) {
 		const client = yield* RpcClient
 		yield* client('agent.stop', {sessionId: payload.sessionId})

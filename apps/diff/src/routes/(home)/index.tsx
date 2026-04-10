@@ -9,14 +9,14 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 
-import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {RpcClient} from '#lib/atomRuntime.ts'
 
 export const Route = createFileRoute('/(home)/')({
 	component: RouteComponent
 })
 
 const stagedDiffsAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('git.stagedDiffs', void 0)),
@@ -26,7 +26,7 @@ const stagedDiffsAtom = Atom.keepAlive(
 )
 
 const unstagedDiffsAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('git.unstagedDiffs', void 0)),

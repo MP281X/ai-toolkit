@@ -9,7 +9,7 @@ import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
-import {AtomRuntime, RpcClient} from '#lib/atomRuntime.ts'
+import {RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
 import {PortfolioState} from '#rpcs/contracts.ts'
 
@@ -129,7 +129,7 @@ function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 }
 
 const portfolioAtom = Atom.keepAlive(
-	AtomRuntime.atom(
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
 			Effect.map(client => client('portfolio.join', {id: identity.id, name: identity.name, color: identity.color})),
