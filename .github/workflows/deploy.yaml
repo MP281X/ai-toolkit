@@ -15,6 +15,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Lint
+        run: bun run lint
+
       - name: Build
         run: bun run build
 
@@ -42,14 +45,6 @@ jobs:
           context: ./apps/agent
           tags: ghcr.io/mp281x/${{ github.event.repository.name }}-agent:latest
 
-      - name: Docker Build and Push Note
-        if: github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v7
-        with:
-          push: true
-          context: ./apps/note
-          tags: ghcr.io/mp281x/${{ github.event.repository.name }}-note:latest
-
       - name: Dokploy Portfolio
         if: github.ref == 'refs/heads/main'
         run: |
@@ -65,11 +60,3 @@ jobs:
             -H "Content-Type: application/json" \
             -H "x-api-key: ${{ secrets.DOKPLOY_AUTH_TOKEN }}" \
             -d '{"applicationId": "iD8YNp8nSkHVIdmp6kmB0"}'
-
-      - name: Dokploy Note
-        if: github.ref == 'refs/heads/main'
-        run: |
-          curl -X POST https://dev.mp281x.xyz/api/application.deploy \
-            -H "Content-Type: application/json" \
-            -H "x-api-key: ${{ secrets.DOKPLOY_AUTH_TOKEN }}" \
-            -d '{"applicationId": "gyplf3IJcedYjFBcy7wR_"}'
