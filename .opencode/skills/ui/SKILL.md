@@ -1,41 +1,30 @@
 ---
 name: ui
-description: Load when building or styling components — Tailwind, theme tokens, shadcn primitives, icons.
-metadata:
-  patterns: |
-    cn(, className=, theme.css, components/ui,
-    shadcn, @ai-toolkit/components, tailwind
+description: Component styling with Tailwind, shadcn primitives, theme tokens, and icons.
 ---
-
-## Source files
-
-- `**/src/**/theme.css`
-- `**/src/components/ui/**`
-- `apps/*/components.json`
 
 ## Rules
 
 - Reuse existing primitives before composing new ones
-- USE `bunx --bun shadcn@latest add <name>` to add primitives
-- USE `bunx --bun shadcn@latest docs <name>` to read docs
-- USE `bunx --bun shadcn@latest view <name>` to inspect registry source
-- USE `cn()` for conditional classes
+- Use `bunx --bun shadcn@latest add <name>` to add primitives
+- Use `bunx --bun shadcn@latest docs <name>` to read docs
+- Use `bunx --bun shadcn@latest view <name>` to inspect registry source
+- Use `cn()` for conditional classes
 - Prefer icons for repeated actions when clarity stays high
 
-## Visual Principles
+## Visual style
 
-- Squared edges. Avoid rounded pills and soft cards.
-- High contrast. Keep borders visible on containers.
-- No effects. No gradients, glass, blur, or shadows.
-- Minimal motion. Only functional animation.
-- Monospace first.
-- Dense layouts. Optimize for information density.
+- Squared edges — no rounded pills or soft cards
+- High contrast — visible borders on containers
+- No effects — no gradients, glass, blur, or shadows
+- Minimal motion — only functional animation
+- Monospace first
+- Dense layouts — optimize for information density
 
 ## Examples
 
 ```bash
-# Bad
-# copy-paste component source manually
+# Bad — copy-paste component source manually
 
 # Good
 bunx --bun shadcn@latest add button
