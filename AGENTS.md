@@ -1,59 +1,45 @@
 # AGENTS.md
 
-**CRITICAL**: Every instruction here is **MISSION CRITICAL**. YOU MUST follow exactly. **ONLY** exception: user explicitly overrides.
+**CRITICAL**: Follow exactly unless user overrides.
 
-## Output Format
+## Output
 
-- ONLY bullet points and code blocks
-- NEVER paragraphs or prose
-- NEVER repeat the user's request
-- NEVER discuss types in plain text
+- ONLY bullet points and code blocks — NEVER prose
 - Code: ```typescript with complete signatures
-- ASCII diagrams only when clarifying relationships
+- ASCII diagrams only for relationships
 
 ## Code Style
 
-### Type Inference
+- NEVER annotate types or return types — trust inference
+- NEVER use `as` — if inference fails, redesign
+- Prefer inlining over extraction — don't create helpers
+- Happy path only — no guards, no re-validation
+- Biome or TypeScript error = wrong design → rewrite
 
-- NEVER annotate variable types or return types
-- NEVER use `as` type assertions
-- If inference fails: design is wrong, redesign
-- NEVER fight the type system
+## MVP Mindset
 
-### Inline Everything
+- Implement ONLY what's explicitly asked for — nothing implied, nothing extra
+- DO NOT add features, utilities, or abstractions beyond what's needed
+- DO NOT plan ahead for future requirements
+- Keep implementation as simple as possible
+- NEVER preserve backward compatibility
+- Treat the project as greenfield — breaking changes are fine
 
-- NEVER create functions/helpers/components/modules unless user EXPLICITLY asks
-- Inline ALL logic at use site
-- Duplicate freely — duplication cheaper than wrong abstraction
-- DON'T extract functions — requires typed arguments, breaks inference
-- DON'T share functions across call sites — get modified, break existing code
+## Scripts
 
-### General
+- `bun run fix` — auto-fix linting and formatting errors
+- `bun run lint` — static analysis without modifying code
+- `bun run type-check` — type-check and future tests
 
-- Read existing implementations for patterns
-- Trust type system — happy path ONLY, no guards, no re-validation
-- Flat control flow, minimal interfaces
-- Biome/TypeScript error = wrong design. Rewrite
+## Skills and Research
 
-## Skills
-
-- Assume skills have enough context to proceed without research
 - Read source files skills point to for exact signatures
-- Use `.opencode/resources/` only as last resort
-
-## Research
-
-Research is lazy and demand-driven — not precondition.
-
-- `.opencode/resources/` is source of truth for external packages
+- `.opencode/resources/` = source of truth for external packages
 - NEVER rely on training data for external packages
 - NEVER research in `node_modules`
-- Prefer small, parallel, targeted questions over broad exploration
-- Read source files deeply enough to confirm signatures before implementing
-- Choose simplest, most idiomatic pattern
 
-## Package Imports
+## Imports
 
-- Use package-local subpath imports: `#lib/*`
-- Use cross-package imports: `@ai-toolkit/{packageName}/{optionalExportPath}`
-- Read `@ai-toolkit/*` packages from workspace source, not `.opencode/resources/`
+- Package-local: `#lib/*`
+- Cross-package: `@ai-toolkit/{packageName}/{optionalExportPath}`
+- Read `@ai-toolkit/*` from workspace source, not `.opencode/resources/`

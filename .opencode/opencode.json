@@ -1,9 +1,9 @@
 {
 	"$schema": "https://opencode.ai/config.json",
 
-	"default_agent": "development",
+	"default_agent": "orchestrator",
+	"agent": { "general": { "disable": true }, "plan": { "disable": true } },
 
-	"tools": { "question": false, "codesearch": false },
-
-	"agent": { "general": { "hidden": true, "mode": "primary" } }
+	"tools": { "codesearch": false },
+	"lsp": { "biome": { "disabled": true } }
 }

@@ -4,10 +4,11 @@
   "name": "@ai-toolkit/.opencode",
   "scripts": {
     "fix": "biome check --write --unsafe",
-    "check": "tsgo --noEmit && biome check"
+    "lint": "biome check",
+    "type-check": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.4.1",
+    "@opencode-ai/plugin": "1.4.2",
     "@ai-toolkit/git": "workspace:*"
   }
 }

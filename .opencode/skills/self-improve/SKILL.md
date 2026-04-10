@@ -3,20 +3,21 @@ name: self-improve
 description: Load after validation to fix systemic agent behavior problems. Improves skills, agents, AGENTS.md, biome rules based on observed failures.
 metadata:
   patterns: |
-    .opencode/skills/, .opencode/agents/, AGENTS.md, packages/linter/
+    .opencode/skills/, .opencode/commands/ .opencode/agents/, AGENTS.md, packages/linter/
 ---
 
 ## Source files
 
 - `packages/linter/src/*.grit`
 - `packages/linter/src/-test.tsx`
+- `.opencode/commands/*.md`
 - `.opencode/skills/*/SKILL.md`
 - `.opencode/agents/*.md`
 - `AGENTS.md`
 
 ## Trigger
 
-Run after validation step (build and development agents only). Plan agent skips self-improve.
+Run after validation in the orchestrator workflow when a failure shows a systemic problem. Skip it for one-off mistakes.
 
 ## What to fix
 
@@ -88,9 +89,9 @@ Suppression: `// biome-ignore lint/plugin: <1-5 word reason>`
 
 ## Validation
 
-After editing biome rules:
+After making a systemic fix:
 
-1. Run `bun run fix` then `bun run check`
+1. Run the project's normal autofix, lint, and type-check workflow
 2. Fix any failures
-3. Repeat until both pass
-4. Ensure new rules catch intended patterns
+3. Repeat until everything passes
+4. Ensure the new rule or prompt change actually prevents recurrence

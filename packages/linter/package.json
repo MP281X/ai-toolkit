@@ -5,6 +5,7 @@
 
 	"scripts": {
 		"fix": "biome check --write --unsafe",
-		"check": "biome check && tsgo --noEmit"
+		"lint": "biome check",
+		"type-check": "tsgo --noEmit"
 	}
 }

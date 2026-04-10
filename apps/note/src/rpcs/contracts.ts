@@ -1,4 +1,4 @@
-import {Option, pipe, Schema} from 'effect'
+import {Effect, pipe, Schema} from 'effect'
 
 import {AgentToolKit} from '@ai-toolkit/ai/tools'
 import {Prompt, Response} from 'effect/unstable/ai'
@@ -13,7 +13,7 @@ export type NoteId = typeof NoteId.Type
 export const NoteId = pipe(
 	Schema.NonEmptyString,
 	Schema.check(Schema.isUUID()),
-	Schema.withConstructorDefault(() => Option.some(crypto.randomUUID())),
+	Schema.withConstructorDefault(Effect.sync(() => crypto.randomUUID())),
 	Schema.brand('NoteId')
 )
 
