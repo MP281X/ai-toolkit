@@ -37,8 +37,16 @@ Body: optional bullets for details
 ## Workflow
 
 1. Draft commit message from diff
-2. `git commit -m "subject" [-m "body"]`
-3. `git push`
+2. Output the commit preview using this exact format:
+   ```markdown
+   <prefix>: <subject line>
+
+   - <bullet 1>
+   - <bullet 2>
+   [additional bullets...]
+   ```
+3. `git commit -m "<prefix>: <subject>" -m "- bullet 1" -m "- bullet 2" ...`
+4. `git push`
 
 ## Constraints
 

@@ -18,6 +18,10 @@ const resources = [
 		url: 'https://github.com/TanStack/hotkeys'
 	},
 	{
+		name: 'tanstack-form',
+		url: 'https://github.com/TanStack/form'
+	},
+	{
 		name: 'pierre-diffs',
 		url: 'https://github.com/pierrecomputer/pierre'
 	},
@@ -32,6 +36,10 @@ const resources = [
 	{
 		name: 'exa-js',
 		url: 'https://github.com/exa-labs/exa-js'
+	},
+	{
+		name: 't3-code',
+		url: 'https://github.com/pingdotgg/t3code'
 	}
 ]
 

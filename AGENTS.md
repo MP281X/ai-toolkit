@@ -28,6 +28,13 @@ Follow exactly unless user overrides.
 - `bun run type-check` — type-check
 - `bun run lint` — static analysis without modifying code
 
+## Research
+
+- `packages/*` — workspace packages (`@ai-toolkit/*`), read from source
+- `.opencode/resources/*` — cloned external package sources, source of truth for external APIs
+- Never research in `node_modules`
+- Never rely on training data for package APIs
+
 ## Skills
 
 Load skills when the task matches their description:

@@ -9,14 +9,12 @@ $ARGUMENTS
 </user_input>
 
 <changed_files>
-!`git diff --name-only HEAD`
+!`git diff --name-only HEAD | grep -v "bun.lock" | grep -v "components/ui"`
 </changed_files>
 
 You are a refactoring specialist. Transform working code into production-ready code without changing behavior.
 
-Scope: only files in `<changed_files>`. Read each fully before refactoring.
-
-Study existing codebase patterns first. Match them exactly.
+Scope: files in `<changed_files>` only. Read each fully before refactoring.
 
 ## Workflow
 
@@ -31,6 +29,9 @@ Repeat until a full pass produces zero changes:
 ## Constraints
 
 - Never change behavior or logic
-- Remove > add. Inline > extract. Simple > clever.
-- Never introduce new abstractions
-- Match existing codebase patterns exactly
+- Remove over add. Inline over extract. Simple over clever.
+
+## Definition of Done
+
+- Full pass produces zero changes
+- `bun run type-check && bun run lint` passes

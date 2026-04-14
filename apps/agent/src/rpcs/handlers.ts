@@ -37,11 +37,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 				const conversation = yield* RcMap.get(rcMap, payload.sessionId)
 				yield* conversation.prompt([payload.message])
 			}),
-			'agent.stop': payload =>
-				pipe(
-					RcMap.get(rcMap, payload.sessionId),
-					Effect.flatMap(c => c.stop)
-				),
+			'agent.stop': Effect.fnUntraced(function* (payload) {
+				const conversation = yield* RcMap.get(rcMap, payload.sessionId)
+				yield* conversation.stop
+			}),
 			'agent.events': payload => Stream.unwrap(Effect.map(RcMap.get(rcMap, payload.sessionId), c => c.stream)),
 			'agent.workspaces': () => SubscriptionRef.changes(workspacesRef),
 			'agent.sessions': () => SubscriptionRef.changes(sessionsRef),
@@ -95,8 +94,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				)
 			}),
-			'agent.deleteSession': (payload: {readonly id: string}) =>
-				SubscriptionRef.update(sessionsRef, current => Array.filter(current, s => s.id !== payload.id))
+			'agent.deleteSession': Effect.fnUntraced(function* (payload) {
+				yield* SubscriptionRef.update(sessionsRef, current => Array.filter(current, s => s.id !== payload.id))
+			})
 		})
 	})
 )

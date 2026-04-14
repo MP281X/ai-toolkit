@@ -12,6 +12,28 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 - Use `cn()` for conditional classes
 - Prefer icons for repeated actions when clarity stays high
 
+## DevTools
+
+Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`
+
+**Use `DevTools.Variants` when exploring multiple UI designs for the same component.**
+
+```tsx
+<DevTools.Variants>
+	<Card variant="compact" />
+	<Card variant="dense" />
+</DevTools.Variants>
+```
+
+**Use `DevTools.Navigation` when testing multiple pages.**
+
+```tsx
+<DevTools.Navigation
+	routes={['list', 'grid', 'board'] as const}
+	onChange={view => navigate({search: {view}})}
+/>
+```
+
 ## Visual style
 
 - Squared edges — no rounded pills or soft cards
@@ -20,14 +42,3 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 - Minimal motion — only functional animation
 - Monospace first
 - Dense layouts — optimize for information density
-
-## Examples
-
-```bash
-# Bad — copy-paste component source manually
-
-# Good
-bunx --bun shadcn@latest add button
-bunx --bun shadcn@latest docs button
-bunx --bun shadcn@latest view button
-```

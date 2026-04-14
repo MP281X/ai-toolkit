@@ -4,6 +4,10 @@ import {Array, Effect, Match, pipe, Schema, String} from 'effect'
 
 // biome-ignore lint/plugin: react types
 import type {ReactNode} from 'react'
+// biome-ignore lint/plugin: react namespace
+import * as React from 'react'
+// biome-ignore lint/plugin: react namespace
+import * as ReactNS from 'react'
 import {forwardRef, memo, useCallback} from 'react'
 
 export class TestError extends Schema.TaggedErrorClass<TestError>()('TestError', {
