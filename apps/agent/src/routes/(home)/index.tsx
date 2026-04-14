@@ -142,13 +142,6 @@ const sendPromptAtom = RpcClient.runtime.fn(
 	})
 )
 
-const stopAgentAtom = RpcClient.runtime.fn(
-	Effect.fnUntraced(function* (payload: {sessionId: SessionId}) {
-		const client = yield* RpcClient
-		yield* client('agent.stop', {sessionId: payload.sessionId})
-	})
-)
-
 export const Route = createFileRoute('/(home)/')({
 	validateSearch: Schema.toStandardSchemaV1(
 		Schema.Struct({
@@ -176,18 +169,14 @@ function RouteComponent() {
 	const [editingSession, setEditingSession] = useState<string | null>(null)
 	const [editingSessionTitle, setEditingSessionTitle] = useState('')
 
-	// Build parent → children map for workspaces
 	const childrenMap = new Map<string | null, typeof workspaces>()
 	for (const ws of workspaces) {
-		const existing = childrenMap.get(ws.parentId) ?? []
-		childrenMap.set(ws.parentId, [...existing, ws])
+		childrenMap.set(ws.parentId, Array.append(childrenMap.get(ws.parentId) ?? [], ws))
 	}
 
-	// Build workspace → sessions map
 	const sessionMap = new Map<string, typeof sessions>()
 	for (const session of sessions) {
-		const existing = sessionMap.get(session.workspaceId) ?? []
-		sessionMap.set(session.workspaceId, [...existing, session])
+		sessionMap.set(session.workspaceId, Array.append(sessionMap.get(session.workspaceId) ?? [], session))
 	}
 
 	const renderTree = (parentId: string | null, depth: number) =>
@@ -282,7 +271,6 @@ function RouteComponent() {
 						</div>
 
 						<CollapsibleContent>
-							{/* Sub-workspace creation input */}
 							{Predicate.isNotNull(creatingWorkspace) && creatingWorkspace.parentId === ws.id && (
 								<div className="flex items-center gap-1.5 py-1 pr-2" style={{paddingLeft: `${(depth + 1) * 12 + 8}px`}}>
 									<FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
@@ -314,10 +302,8 @@ function RouteComponent() {
 								</div>
 							)}
 
-							{/* Recursive child workspaces */}
 							{renderTree(ws.id, depth + 1)}
 
-							{/* Sessions */}
 							{Array.map(wsItems, session => (
 								<div
 									key={session.id}
@@ -403,7 +389,6 @@ function RouteComponent() {
 					maxSize="40%"
 					className="flex min-h-0 flex-col overflow-hidden border-r"
 				>
-					{/* Workspaces header */}
 					<div className="flex items-center justify-between px-3 pt-3 pb-1">
 						<span className="font-medium text-muted-foreground text-xs">Workspaces</span>
 						<Button
@@ -417,7 +402,6 @@ function RouteComponent() {
 						</Button>
 					</div>
 
-					{/* Root workspace creation input */}
 					{Predicate.isNotNull(creatingWorkspace) && Predicate.isNull(creatingWorkspace.parentId) && (
 						<div className="flex items-center gap-1.5 px-2 py-1">
 							<FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
@@ -449,7 +433,6 @@ function RouteComponent() {
 						</div>
 					)}
 
-					{/* Workspace tree */}
 					<div className="flex-1 overflow-y-auto">{renderTree(null, 0)}</div>
 				</ResizablePanel>
 
@@ -472,8 +455,19 @@ function RouteComponent() {
 function ConversationPanel(props: {sessionId: SessionId}) {
 	const {value: turns} = useAtomSuspense(turnsAtom(props.sessionId))
 	const sendPrompt = useAtomSet(sendPromptAtom)
-	const stopAgent = useAtomSet(stopAgentAtom)
+	const stopAgent = useAtomSet(RpcClient.mutation('agent.stop'))
 	const inputRef = useRef<AutocompleteInput.Handle<{id: number; label: string}>>(null)
+
+	function submitPrompt() {
+		const text = pipe(inputRef.current?.getText() ?? '', String.trim)
+		if (String.isEmpty(text)) return
+		sendPrompt({
+			sessionId: props.sessionId,
+			text,
+			attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
+		})
+		inputRef.current?.clear()
+	}
 
 	return (
 		<div className="flex h-full w-full flex-col overflow-hidden">
@@ -709,43 +703,21 @@ function ConversationPanel(props: {sessionId: SessionId}) {
 			<div className="border-t p-3">
 				<AutocompleteInput
 					ref={inputRef}
-					onSubmit={() => {
-						const text = pipe(inputRef.current?.getText() ?? '', String.trim)
-						if (String.isEmpty(text)) return
-						sendPrompt({
-							sessionId: props.sessionId,
-							text,
-							attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
-						})
-						inputRef.current?.clear()
-					}}
+					onSubmit={submitPrompt}
 					placeholder="Send a message, paste a URL, drop files..."
 					className="w-full"
 				/>
 				<AutocompleteInput.ToolBar className="border-t-0">
 					<div className="ml-auto flex items-center gap-2">
 						<Button
-							onClick={() => stopAgent({sessionId: props.sessionId})}
+							onClick={() => stopAgent({payload: {sessionId: props.sessionId}})}
 							variant="outline"
 							size="icon-xs"
 							className="rounded-none"
 						>
 							<Square className="size-3.5 fill-current" />
 						</Button>
-						<Button
-							onClick={() => {
-								const text = pipe(inputRef.current?.getText() ?? '', String.trim)
-								if (String.isEmpty(text)) return
-								sendPrompt({
-									sessionId: props.sessionId,
-									text,
-									attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
-								})
-								inputRef.current?.clear()
-							}}
-							size="icon-xs"
-							className="rounded-none"
-						>
+						<Button onClick={submitPrompt} size="icon-xs" className="rounded-none">
 							<ArrowUpIcon className="size-3.5" />
 						</Button>
 					</div>

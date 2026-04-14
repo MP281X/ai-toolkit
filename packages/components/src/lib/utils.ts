@@ -42,3 +42,14 @@ export function formatNumber(number: number) {
 	const formatter = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1})
 	return formatter.format(number)
 }
+
+export function toSentenceCase(value: string) {
+	return pipe(
+		value,
+		String.replace(/[-_]+/g, ' '),
+		String.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+		String.trim,
+		String.toLowerCase,
+		String.capitalize
+	)
+}

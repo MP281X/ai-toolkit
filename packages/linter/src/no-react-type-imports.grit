@@ -5,7 +5,9 @@ or {
 	`import type { $_ } from 'react'`,
 	`import type { $_ } from "react"`,
 	`import type * as $_ from 'react'`,
-	`import type * as $_ from "react"`
+	`import type * as $_ from "react"`,
+	`import * as $_ from 'react'`,
+	`import * as $_ from "react"`
 } as $match where {
-	register_diagnostic(span=$match, message="Do not import React types from `react` here. They are already globally available, so the import is useless noise; use `React.ReactNode`, `React.FC`, and similar names directly")
+	register_diagnostic(span=$match, message="Do not import React namespace from `react`. Named imports are preferred; use `import {useState} from 'react'` or use global `React.ReactNode`, `React.FC` directly")
 }
