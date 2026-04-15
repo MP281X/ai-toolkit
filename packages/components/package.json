@@ -23,6 +23,7 @@
 
 	"dependencies": {
 		"cmdk": "latest",
+		"sonner": "latest",
 		"@base-ui/react": "^1",
 		"react-resizable-panels": "latest",
 
