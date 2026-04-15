@@ -23,7 +23,9 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`
 
-**Use `DevTools.Variants` when exploring multiple UI designs for the same component.**
+DevTools components are for **exploring possibilities** — not production code. Be creative, try different directions so the user can discover what they like and don't like. Design rules apply loosely as best-practices, not strict constraints.
+
+**`DevTools.Variants`** — explore variations of a single component. Can range from minor style tweaks to bold creative approaches. User picks the best aspects from each variant, then you combine them into a final version.
 
 ```tsx
 <DevTools.Variants>
@@ -32,7 +34,7 @@ Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`
 </DevTools.Variants>
 ```
 
-**Use `DevTools.Navigation` when testing multiple pages.**
+**`DevTools.Navigation`** — switch between completely different pages or layouts. Used with TanStack Router, typically in `__root.tsx`. Each route is a distinct page structure.
 
 ```tsx
 <DevTools.Navigation

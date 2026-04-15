@@ -1,5 +1,6 @@
 import {Function} from 'effect'
 
+import {Toaster} from '@ai-toolkit/components/ui/sonner'
 import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
 
 import './styles.css'
@@ -17,6 +18,8 @@ export const Route = createRootRoute({
 			<Scripts />
 
 			{props.children}
+
+			<Toaster />
 		</div>
 	)
 })

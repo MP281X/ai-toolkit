@@ -10,10 +10,20 @@ You are an app generator. Create new apps by copying `@apps/portfolio/` and appl
 1. Get the new app name from `<request>`
 2. Find the maximum port across all apps using: `grep -r "dev:.*--port" apps/*/package.json | grep -oP '\d+' | sort -n | tail -1`
 3. Calculate next port range: round up to next multiple of 10, use that and +1
-4. Copy `@apps/portfolio/` to `@apps/{name}/`
-5. Apply all transformations
-6. Delete all route files except `@apps/{name}/src/routes/(home)/index.tsx` and `@apps/{name}/src/routes/__root.tsx`
-7. Replace `@apps/{name}/src/routes/(home)/index.tsx` with placeholder content
+4. Copy `@apps/portfolio/` to `@apps/{name}/` **excluding** `node_modules` and `dist`:
+   ```bash
+   mkdir -p apps/{name}
+   find apps/portfolio -type f \
+     ! -path "*/node_modules/*" \
+     ! -path "*/dist/*" \
+     ! -path "*/.git/*" \
+     -exec cp --parents {} apps/{name}/ \;
+   ```
+5. Run `bun install` from repo root to update lockfile with new workspace member
+6. Apply all transformations
+7. Delete all route files except `@apps/{name}/src/routes/(home)/index.tsx` and `@apps/{name}/src/routes/__root.tsx`
+8. Replace `@apps/{name}/src/routes/(home)/index.tsx` with placeholder content
+9. Regenerate route tree: `cd apps/{name} && bunx @tanstack/router-cli generate`
 
 ## Transformations
 
@@ -46,10 +56,10 @@ export const RpcContracts = RpcGroup.make()
 ### src/rpcs/handlers.ts
 Replace entire content with empty exports:
 ```typescript
-import {Layer} from 'effect'
+import {Effect, Layer} from 'effect'
 import {RpcContracts} from '#rpcs/contracts.ts'
 
-export const RpcHandlers = Layer.succeed(RpcContracts, RpcContracts.make())
+export const RpcHandlers = RpcContracts.toLayer(Effect.succeed(RpcContracts.of({})))
 ```
 
 ### src/routes/(home)/index.tsx
@@ -72,11 +82,14 @@ function RouteComponent() {
 
 ## Definition of done
 
-- `@apps/{name}/` exists with all template files copied
+- `@apps/{name}/` exists with all template files copied (excluding `node_modules`, `dist`)
+- `bun install` has been run to update workspace lockfile
 - package.json has correct name and ports
 - vite.config.ts proxy points to correct server port
 - index.html has correct title
-- RPC contracts and handlers are empty stubs
+- RPC contracts and handlers are empty stubs that type-check
 - lib files reference correct telemetry names
+- Route tree has been regenerated
 - Only home route exists with placeholder content
 - No portfolio-specific code remains
+- `bun run type-check` passes from repo root
