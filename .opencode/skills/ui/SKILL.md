@@ -12,6 +12,13 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 - Use `cn()` for conditional classes
 - Prefer icons for repeated actions when clarity stays high
 
+## Design
+
+- Clean and minimal — every element must earn its place on screen
+- No unnecessary grouping — don't add sections, cards, panels, or fieldsets unless they improve UX
+- No redundant controls — one way to do each action, never two
+- Reduce visual clutter — fewer borders, fewer layers, fewer containers
+
 ## DevTools
 
 Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`

@@ -9,10 +9,10 @@ import {Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandL
 import {Field, FieldError, FieldLabel} from '#components/ui/field.tsx'
 import {Input} from '#components/ui/input.tsx'
 import {Popover, PopoverContent, PopoverTrigger} from '#components/ui/popover.tsx'
-import {errorToast} from '#components/ui/sonner.tsx'
+import {toast} from '#components/ui/sonner.tsx'
 import {Spinner} from '#components/ui/spinner.tsx'
 import {Textarea} from '#components/ui/textarea.tsx'
-import {cn, toSentenceCase} from '#lib/utils.ts'
+import {cn, formatError, toSentenceCase} from '#lib/utils.ts'
 
 const {fieldContext, formContext, useFieldContext, useFormContext} = tanstackForm.createFormHookContexts()
 
@@ -314,7 +314,7 @@ export function Form(props: Form.Props) {
 						await props.form.handleSubmit()
 						props.form.reset()
 					} catch (error) {
-						errorToast(error)
+						toast.error(formatError(error))
 					}
 				}}
 			>

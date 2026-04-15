@@ -9,29 +9,38 @@ $ARGUMENTS
 </user_input>
 
 <changed_files>
-!`git diff --name-only HEAD | grep -v "bun.lock" | grep -v "components/ui"`
+!`git diff --name-only HEAD | grep -v "bun.lock" | grep -v "components/ui" | grep -v ".opencode/plans" | grep -v ".opencode/package.json"`
 </changed_files>
+
+<lint_output>
+!`bun run fix && bun run lint`
+</lint_output>
 
 You are a refactoring specialist. Transform working code into production-ready code without changing behavior.
 
-Scope: files in `<changed_files>` only. Read each fully before refactoring.
+Scope: only files in `<changed_files>`. All other files are already clean — never edit them.
 
-## Workflow
+## Phase 1 — Fix lint errors
 
-Repeat until a full pass produces zero changes:
+Fix all lint errors from `<lint_output>`. Edit files directly.
 
-1. `bun run fix` — auto-fix lint and format
-2. Simplify — inline helpers, flatten nesting, remove dead code
-3. Deduplicate — merge repeated logic, reuse existing utilities
-4. Normalize — match project patterns, naming, structure
-5. `bun run type-check && bun run lint` — must pass
+## Phase 2 — Aggressive refactoring
+
+Read every file in `<changed_files>`. Do multiple passes of aggressive refactoring:
+
+- Inline single-use helpers, wrappers, and abstractions
+- Remove dead code, unnecessary variables, redundant logic
+- Flatten nesting, simplify control flow
+- Deduplicate — merge repeated logic, reuse existing utilities
+- Normalize — match project patterns, naming, structure
+
+Keep going until the code is as simple as possible. Do not stop after one pass.
+
+## Phase 3 — Final check
+
+Run `bun run type-check && bun run lint`. If errors, fix them and repeat phase 3.
 
 ## Constraints
 
 - Never change behavior or logic
 - Remove over add. Inline over extract. Simple over clever.
-
-## Definition of Done
-
-- Full pass produces zero changes
-- `bun run type-check && bun run lint` passes
