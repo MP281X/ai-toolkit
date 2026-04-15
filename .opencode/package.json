@@ -8,7 +8,7 @@
     "type-check": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.4.3",
+    "@opencode-ai/plugin": "1.4.6",
     "@ai-toolkit/git": "workspace:*"
   }
 }

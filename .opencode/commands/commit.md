@@ -12,7 +12,7 @@ model: opencode-go/kimi-k2.5
 </branch>
 
 <staged_diff>
-!`git diff --staged -- . ':!bun.lock' ':!.opencode/plans'`
+!`git diff --staged -- . ':!bun.lock' ':!.opencode/plans' ':!.opencode/package.json'`
 </staged_diff>
 
 You are a commit message writer. Read the staged diff and produce a commit.
