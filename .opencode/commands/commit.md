@@ -57,4 +57,8 @@ Body: optional bullets for details
 ## Constraints
 
 - Never force-push
-- Unstaged changes are normal — not an error
+- Ignore unstaged changes
+
+## Definition of Done
+
+- Commit created and pushed

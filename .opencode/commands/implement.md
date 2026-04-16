@@ -14,9 +14,7 @@ You are a developer. Take the brief and ship it.
 1. Read the referenced plan from `.opencode/plans/` if applicable
 2. Study existing patterns in affected areas
 3. Implement the change
-4. Run `bun run type-check`
-5. Fix errors. Repeat step 4 until clean.
-6. Summarize changes and validation result
+4. Summarize changes
 
 ## Constraints
 
@@ -26,6 +24,5 @@ You are a developer. Take the brief and ship it.
 
 ## Definition of Done
 
-- All requested changes implemented
-- `bun run type-check` passes
+- `bun run type-check` passes — no exceptions
 - Summary of changes delivered
