@@ -1,44 +1,41 @@
 # AGENTS.md
 
-Follow exactly unless user overrides.
+## Codebase
 
-## Output
+This is a monorepo. Packages prefixed `@ai-toolkit/*` are local workspace packages under `packages/*`.
 
-- Bullet points and code blocks only — no prose
-- Code blocks: ```typescript with complete signatures
-- ASCII diagrams for relationships
-
-## Scope
-
-- Implement only what's explicitly asked — nothing extra
-- Replace old implementations — never keep both old and new
-- No backward compatibility — breaking changes are fine
-- No planning ahead for future requirements
-
-## Code
-
-- Inline over extraction — no single-use helpers
-- Happy path only — no guards, no re-validation
-- Biome or TypeScript error = wrong design → rewrite
-- Follow existing codebase patterns — never invent new ones
-
-## Scripts
-
-- `bun run fix` — auto-fix linting and formatting
-- `bun run type-check` — type-check
-- `bun run lint` — static analysis without modifying code
-
-## Research
-
-- `packages/*` — workspace packages (`@ai-toolkit/*`), read from source
+- `packages/*` — workspace packages, read from source directly
 - `.opencode/resources/*` — cloned external package sources, source of truth for external APIs
-- Never research in `node_modules`
-- Never rely on training data for package APIs
+- `.opencode/resources/effect/LLMS.md` — Effect patterns (gen/fn, services, error handling)
 
 ## Skills
 
-Load skills when the task matches their description:
+- Check available skills before starting any task — load matching ones with `skill(name)`
+- Follow loaded skill patterns exactly — never deviate
 
-- Use `skill(name)` tool to load domain-specific patterns
-- Load before starting work on matching tasks
-- Follow skill patterns exactly — never deviate
+## Research
+
+- Search with the explore agent — never use manual grep or glob
+- Verify against cloned sources in `.opencode/resources/*` — never answer from memory or training data
+- Never search in `node_modules`
+
+## Clarification
+
+- Verify understanding before acting on ambiguous requests
+- Use the question tool to surface gaps, inconsistencies, or tradeoffs
+- Batch independent questions in a single call
+- Never batch dependent questions — ask follow-up rounds when answers affect subsequent questions
+- Never ask about obvious defaults or decisions answerable by reading the codebase
+
+## Implementation
+
+- Implement only what's explicitly requested — no extra features, no future requirements
+- Replace old implementations — never keep both old and new
+- Breaking changes are fine — no backward compatibility
+
+## Code Style
+
+- Inline single-use logic — no helper functions used once
+- Happy path only — no defensive guards or re-validation
+- Biome or TypeScript error = wrong design → rewrite
+- Match existing codebase patterns — never invent new ones

@@ -1,6 +1,6 @@
 ---
 name: prompting
-description: Rules for writing structured, consistent prompts for agents, commands, skills, and AGENTS.md.
+description: Rules for editing AGENTS.md, .opencode/commands/, .opencode/skills/, and .opencode/agents/ files.
 ---
 
 ## References
@@ -72,7 +72,7 @@ Inline single-use helpers. Match existing naming conventions. Never add new abst
 ## Rules
 - Follow existing codebase patterns
 - Type-check must pass before returning
-- Run `bun run fix` after changes
+- Run `bun run type-check` after changes
 ```
 
 ## OpenCode specifics

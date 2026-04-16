@@ -14,10 +14,10 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 ## Design
 
-- Clean and minimal — every element must earn its place on screen
-- No unnecessary grouping — don't add sections, cards, panels, or fieldsets unless they improve UX
-- No redundant controls — one way to do each action, never two
-- Reduce visual clutter — fewer borders, fewer layers, fewer containers
+- Only add elements that serve a clear purpose
+- No unnecessary grouping — sections, cards, panels, or fieldsets need a UX reason
+- One way to do each action — never duplicate controls
+- Fewer borders, layers, and containers
 
 ## DevTools
 

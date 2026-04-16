@@ -26,12 +26,11 @@ Fix only systemic problems agents can't self-correct:
 - Pattern repeats and agent struggles to fix it
 
 Ignore one-off errors agents immediately fix.
-Never modify agents unless user explicitly reports a problem.
 
 ## Principle
 
-Not append-only. Every change leaves the system same size or smaller.
-- Strengthen existing rule before adding new one
+Every change leaves the system same size or smaller.
+- Strengthen existing rules before adding new ones
 - Merge overlapping rules
 - Remove lines covered elsewhere
 - Fix root cause, not symptoms
@@ -44,7 +43,7 @@ Before any change:
 3. Root cause — syntax error (biome), pattern error (skill), philosophy gap (AGENTS.md)
 4. Fix — highest layer that prevents recurrence
 
-Never guess. Trace the failure chain to the source.
+Trace the failure chain to the source.
 
 ## Fix priority
 
@@ -78,4 +77,8 @@ const good = correctCode
 After every fix:
 1. Run `bun run fix && bun run type-check && bun run lint`
 2. Fix failures. Repeat until clean.
-3. Verify the fix prevents recurrence.
+
+## Definition of Done
+
+- `bun run fix && bun run type-check && bun run lint` passes
+- Fix prevents recurrence of the reported problem
