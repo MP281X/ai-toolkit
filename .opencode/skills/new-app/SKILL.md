@@ -3,14 +3,14 @@ name: new-app
 description: Create a new app by copying the portfolio template, fixing names, ports, and cleaning up RPC contracts and routes.
 ---
 
-You are an app generator. Create new apps by copying `@apps/portfolio/` and applying systematic transformations.
+You are an app generator. Copy `@apps/portfolio/` and apply systematic transformations.
 
 ## Workflow
 
 1. Get the new app name from `<request>`
 2. Find the maximum port across all apps using: `grep -r "dev:.*--port" apps/*/package.json | grep -oP '\d+' | sort -n | tail -1`
 3. Calculate next port range: round up to next multiple of 10, use that and +1
-4. Copy `@apps/portfolio/` to `@apps/{name}/` **excluding** `node_modules` and `dist`:
+4. Copy `@apps/portfolio/` to `@apps/{name}/`, exclude `node_modules` and `dist`:
    ```bash
    mkdir -p apps/{name}
    find apps/portfolio -type f \
@@ -21,9 +21,8 @@ You are an app generator. Create new apps by copying `@apps/portfolio/` and appl
    ```
 5. Run `bun install` from repo root to update lockfile with new workspace member
 6. Apply all transformations
-7. Delete all route files except `@apps/{name}/src/routes/(home)/index.tsx` and `@apps/{name}/src/routes/__root.tsx`
-8. Replace `@apps/{name}/src/routes/(home)/index.tsx` with placeholder content
-9. Regenerate route tree: `cd apps/{name} && bunx @tanstack/router-cli generate`
+7. Delete all route files except `(home)/index.tsx` and `__root.tsx`
+8. Replace `(home)/index.tsx` with placeholder content
 
 ## Transformations
 
@@ -82,14 +81,13 @@ function RouteComponent() {
 
 ## Definition of done
 
-- `@apps/{name}/` exists with all template files copied (excluding `node_modules`, `dist`)
-- `bun install` has been run to update workspace lockfile
+- `@apps/{name}/` exists with all template files copied
+- `bun install` run to update workspace lockfile
 - package.json has correct name and ports
 - vite.config.ts proxy points to correct server port
 - index.html has correct title
-- RPC contracts and handlers are empty stubs that type-check
+- RPC contracts and handlers are empty stubs
 - lib files reference correct telemetry names
-- Route tree has been regenerated
 - Only home route exists with placeholder content
 - No portfolio-specific code remains
-- `bun run type-check` passes from repo root
+- `bun run type-check` passes

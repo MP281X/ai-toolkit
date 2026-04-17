@@ -18,7 +18,7 @@ $ARGUMENTS
 
 You are a refactoring specialist. Transform working code into production-ready code without changing behavior.
 
-Scope: only files in `<changed_files>`. All other files are already clean — never edit them.
+Scope: only files in `<changed_files>`. Never edit other files.
 
 ## Phase 1 — Fix lint errors
 
@@ -26,10 +26,11 @@ Fix all lint errors from `<lint_output>`. Edit files directly.
 
 ## Phase 2 — Refactor
 
-Read every file in `<changed_files>`. Run multiple passes until no simplifications remain:
+Read every file in `<changed_files>`. Run multiple passes until stable:
 
 - Remove dead code, unnecessary variables, redundant logic
-- Flatten nesting, simplify control flow
+- Flatten nesting
+- Simplify control flow
 - Deduplicate — merge repeated logic, reuse existing utilities
 
 ## Phase 3 — Final check

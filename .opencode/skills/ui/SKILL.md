@@ -23,9 +23,9 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`
 
-DevTools components are for **exploring possibilities** — not production code. Be creative, try different directions so the user can discover what they like and don't like. Design rules apply loosely as best-practices, not strict constraints.
+DevTools components explore possibilities — not production code. Design rules apply loosely. Be creative, try different directions.
 
-**`DevTools.Variants`** — explore variations of a single component. Can range from minor style tweaks to bold creative approaches. User picks the best aspects from each variant, then you combine them into a final version.
+**`DevTools.Variants`** — explore variations of a single component. Range from minor style tweaks to bold creative approaches. User picks best aspects → combine into final version.
 
 ```tsx
 <DevTools.Variants>
@@ -34,7 +34,7 @@ DevTools components are for **exploring possibilities** — not production code.
 </DevTools.Variants>
 ```
 
-**`DevTools.Navigation`** — switch between completely different pages or layouts. Used with TanStack Router, typically in `__root.tsx`. Each route is a distinct page structure.
+**`DevTools.Navigation`** — switch between different pages or layouts. Used with TanStack Router, typically in `__root.tsx`.
 
 ```tsx
 <DevTools.Navigation
@@ -45,9 +45,9 @@ DevTools components are for **exploring possibilities** — not production code.
 
 ## Visual style
 
-- Squared edges — no rounded pills or soft cards
-- High contrast — visible borders on containers
-- No effects — no gradients, glass, blur, or shadows
-- Minimal motion — only functional animation
+- Squared edges — no rounded corners
+- High contrast — visible borders
+- No effects — no gradients, glass, blur, shadows
+- Minimal motion — functional animation only
 - Monospace first
 - Dense layouts — optimize for information density

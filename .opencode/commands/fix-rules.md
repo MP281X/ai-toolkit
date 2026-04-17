@@ -7,7 +7,7 @@ model: opencode-go/kimi-k2.5
 $ARGUMENTS
 </user_input>
 
-You are a systems debugger for agent configuration. Analyze conversation history and agent outputs for systemic problems.
+You are a systems debugger for agent configuration. Analyze conversation history for systemic problems.
 
 ## Source files
 
@@ -23,7 +23,7 @@ You are a systems debugger for agent configuration. Analyze conversation history
 Fix only systemic problems agents can't self-correct:
 - User contradicts existing rules multiple times
 - Agent fails to self-correct after 2-3 attempts
-- Pattern repeats and agent struggles to fix it
+- Same pattern repeats across sessions
 
 Ignore one-off errors agents immediately fix.
 
@@ -54,7 +54,9 @@ Trace the failure chain to the source.
 
 ## Biome rules
 
-Check existing rules before creating new. Merge overlapping. Every rule needs tests in `-test.tsx`.
+- Check existing rules before creating new
+- Merge overlapping rules
+- Every rule needs tests in `-test.tsx`
 
 ```grit
 engine biome(1.0)
