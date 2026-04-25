@@ -117,7 +117,13 @@ export function PatchResult(props: {filePath: string; patch: string}) {
 	const content = pipe(
 		fileDiff.hunks,
 		Array.flatMap(hunk => hunk.hunkContent),
-		Array.flatMap(part => (part.type === 'context' ? part.lines : part.additions)),
+		Array.flatMap(part =>
+			pipe(
+				fileDiff.additionLines,
+				Array.drop(part.additionLineIndex),
+				Array.take(part.type === 'context' ? part.lines : part.additions)
+			)
+		),
 		Array.join(''),
 		String.trim
 	)

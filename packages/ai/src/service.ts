@@ -108,8 +108,7 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 					model,
 					config: {
 						strictJsonSchema: true,
-						text: {verbosity: 'low'},
-						reasoning: {effort: 'minimal'}
+						text: {verbosity: 'low'}
 					}
 				}),
 				OpenAiClient.layerConfig(providers[provider])

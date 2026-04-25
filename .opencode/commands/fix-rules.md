@@ -1,6 +1,6 @@
 ---
 description: Fix systemic agent behavior problems in rules, skills, agents, and biome config.
-model: opencode-go/kimi-k2.5
+model: opencode-go/kimi-k2.6
 ---
 
 <user_input optional="true" description="Description of systemic agent behavior problem observed">

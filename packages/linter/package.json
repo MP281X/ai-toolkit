@@ -4,7 +4,7 @@
 	"type": "module",
 
 	"scripts": {
-		"fix": "biome check --write --unsafe",
+		"fix": "biome check --write --unsafe || true",
 		"lint": "biome check",
 		"type-check": "tsgo --noEmit"
 	}
