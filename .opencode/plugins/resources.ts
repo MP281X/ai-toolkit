@@ -22,8 +22,8 @@ const resources = [
 		url: 'https://github.com/TanStack/form'
 	},
 	{
-		name: 'tanstack-virtual',
-		url: 'https://github.com/tanstack/virtual'
+		name: 'legend-list',
+		url: 'https://github.com/LegendApp/legend-list'
 	},
 	{
 		name: 'pierre-diffs',

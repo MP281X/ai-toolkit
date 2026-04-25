@@ -24,11 +24,11 @@
 	"dependencies": {
 		"cmdk": "latest",
 		"sonner": "latest",
-		"@base-ui/react": "^1",
+		"@base-ui/react": "latest",
 		"react-resizable-panels": "latest",
 
+		"@legendapp/list": "^3.0.0-beta",
 		"@tanstack/react-form": "latest",
-		"@tanstack/react-virtual": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
 		"lucide-react": "latest",
