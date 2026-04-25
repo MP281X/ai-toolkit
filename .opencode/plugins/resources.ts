@@ -22,6 +22,10 @@ const resources = [
 		url: 'https://github.com/TanStack/form'
 	},
 	{
+		name: 'tanstack-virtual',
+		url: 'https://github.com/tanstack/virtual'
+	},
+	{
 		name: 'pierre-diffs',
 		url: 'https://github.com/pierrecomputer/pierre'
 	},

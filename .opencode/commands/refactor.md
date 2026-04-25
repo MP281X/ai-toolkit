@@ -1,6 +1,5 @@
 ---
 description: Aggressive refactor of uncommitted changes. Multi-pass until stable.
-model: github-copilot/gpt-5.4
 ---
 
 <user_input optional="true" description="Specific areas to focus refactoring on">
