@@ -1,6 +1,5 @@
 ---
 description: Take a plan or brief and implement it. No questions.
-model: github-copilot/gpt-5.4
 ---
 
 <user_input required="true" description="Plan reference, brief, or feature to implement">

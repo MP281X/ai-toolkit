@@ -27,7 +27,7 @@ import {
 	X
 } from '@ai-toolkit/components/icons'
 import {AutocompleteInput} from '@ai-toolkit/components/input'
-import {Favicon} from '@ai-toolkit/components/render/link-preview'
+import {Favicon} from '@ai-toolkit/components/link-preview'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'

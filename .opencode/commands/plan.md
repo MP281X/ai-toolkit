@@ -1,6 +1,5 @@
 ---
 description: Create or update a plan. Clarifies requirements, writes to .opencode/plans/.
-model: opencode-go/kimi-k2.6
 ---
 
 <user_input required="true" description="Feature request, feedback on existing plan, or reference to a plan">

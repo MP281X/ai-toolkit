@@ -28,6 +28,7 @@
 		"react-resizable-panels": "latest",
 
 		"@tanstack/react-form": "latest",
+		"@tanstack/react-virtual": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
 		"lucide-react": "latest",
