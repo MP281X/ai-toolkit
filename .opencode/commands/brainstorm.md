@@ -1,6 +1,6 @@
 ---
 description: Think through unclear ideas. Challenge assumptions, explore alternatives, find clarity.
-model: github-copilot/claude-opus-4.6
+model: opencode-go/kimi-k2.6
 ---
 
 <user_input required="true" description="Rough idea, objective, or problem to think through">

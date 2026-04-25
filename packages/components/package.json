@@ -16,7 +16,7 @@
 	},
 
 	"scripts": {
-		"fix": "biome check --write --unsafe",
+		"fix": "biome check --write --unsafe || true",
 		"lint": "biome check",
 		"type-check": "tsgo --noEmit"
 	},
@@ -38,7 +38,8 @@
 		"@lexical/utils": "latest",
 
 		"marked": "latest",
-		"@pierre/diffs": "1.0.11",
+		"mermaid": "latest",
+		"@pierre/diffs": "latest",
 
 		"clsx": "latest",
 		"tailwind-merge": "latest",

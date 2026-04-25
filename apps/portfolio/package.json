@@ -16,7 +16,7 @@
 		"build:client": "vite build",
 		"build:server": "bun build ./src/main.server.tsx --target=bun --outfile ./dist/server.js",
 
-		"fix": "biome check --write --unsafe",
+		"fix": "biome check --write --unsafe || true",
 		"lint": "biome check",
 		"type-check": "tsgo --noEmit"
 	},
