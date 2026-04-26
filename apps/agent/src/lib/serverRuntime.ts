@@ -13,7 +13,7 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(RpcHandlers),
 	// application layers
 	Layer.provideMerge(Agent.layer),
-	Layer.provideMerge(Agent.resolveLanguageModel({provider: 'openrouter', model: 'openai/gpt-5.4-nano'})),
+	Layer.provideMerge(Agent.resolveLanguageModel({provider: 'opencode-go', model: 'minimax-m2.5'})),
 	// base layers
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(OtelLayer('agent-server')),
