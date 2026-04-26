@@ -7,7 +7,7 @@ import {
 	OpenAiLanguageModel as OpenAiCompatLanguageModel
 } from '@effect/ai-openai-compat'
 import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'
-import {Context, Effect, Layer, Match, Option, pipe, Queue, Stream} from 'effect'
+import {Context, Effect, Layer, Match, Option, pipe, Queue, Ref, Stream, Struct} from 'effect'
 
 import type {AiError, LanguageModel, Response} from 'effect/unstable/ai'
 import {Chat, Prompt} from 'effect/unstable/ai'
@@ -31,6 +31,7 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 		const chat = yield* Chat.empty
 
 		return {
+			history: pipe(Ref.get(chat.history), Effect.map(Struct.get('content'))),
 			streamText: (messages: Prompt.Message[]) => {
 				return Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>, AiError.AiError>(
 					Effect.fnUntraced(function* (queue) {
@@ -67,7 +68,7 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 	static resolveLanguageModel = pipe(
 		Match.type<{provider: ProviderId; model: ModelId}>(),
 		Match.when({provider: 'openrouter'}, ({model, provider}) =>
-			Layer.provide(
+			Layer.provideMerge(
 				OpenRouterLanguageModel.layer({
 					model,
 					config: {
@@ -80,8 +81,8 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 				OpenRouterClient.layerConfig(providers[provider])
 			)
 		),
-		Match.when({provider: 'opencode_go', model: 'glm-5'}, ({model, provider}) =>
-			Layer.provide(
+		Match.when({provider: 'opencode-go', model: 'glm-5'}, ({model, provider}) =>
+			Layer.provideMerge(
 				OpenAiCompatLanguageModel.layer({
 					model,
 					config: {
@@ -91,8 +92,8 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 				OpenAiCompatClient.layerConfig(providers[provider])
 			)
 		),
-		Match.when({provider: 'opencode_go', model: 'minimax-m2.5'}, ({model, provider}) =>
-			Layer.provide(
+		Match.when({provider: 'opencode-go', model: 'minimax-m2.5'}, ({model, provider}) =>
+			Layer.provideMerge(
 				AnthropicLanguageModel.layer({
 					model,
 					config: {
@@ -102,8 +103,8 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 				AnthropicClient.layerConfig(providers[provider])
 			)
 		),
-		Match.when({provider: 'opencode_zen', model: 'gpt-5-nano'}, ({model, provider}) =>
-			Layer.provide(
+		Match.when({provider: 'opencode', model: 'gpt-5-nano'}, ({model, provider}) =>
+			Layer.provideMerge(
 				OpenAiLanguageModel.layer({
 					model,
 					config: {

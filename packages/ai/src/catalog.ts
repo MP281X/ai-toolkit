@@ -1,26 +1,26 @@
 import {Array, Config, Record, Schema} from 'effect'
 
 export const providers = {
-	opencode_zen: {apiUrl: Config.succeed('https://opencode.ai/zen/v1'), apiKey: Config.redacted('AI_OPENCODE_ZEN')},
-	opencode_go: {apiUrl: Config.succeed('https://opencode.ai/zen/go/v1'), apiKey: Config.redacted('AI_OPENCODE_ZEN')},
+	opencode: {apiUrl: Config.succeed('https://opencode.ai/zen/v1'), apiKey: Config.redacted('AI_OPENCODE')},
+	'opencode-go': {apiUrl: Config.succeed('https://opencode.ai/zen/go/v1'), apiKey: Config.redacted('AI_OPENCODE')},
 	openrouter: {apiUrl: Config.succeed('https://openrouter.ai/api/v1'), apiKey: Config.redacted('AI_OPENROUTER')}
 }
 
 export const models = [
 	{
-		provider: 'opencode_zen',
+		provider: 'opencode',
 		model: 'gpt-5-nano',
 		contextWindow: 128_000,
 		pricing: {input: 0, output: 0}
 	},
 	{
-		provider: 'opencode_go',
+		provider: 'opencode-go',
 		model: 'minimax-m2.5',
 		contextWindow: 204_800,
 		pricing: {input: 0.3, output: 1.2}
 	},
 	{
-		provider: 'opencode_go',
+		provider: 'opencode-go',
 		model: 'glm-5',
 		contextWindow: 204_800,
 		pricing: {input: 1, output: 3.2}

@@ -24,6 +24,8 @@
 	"dependencies": {
 		"exa-js": "latest",
 
+		"@opencode-ai/sdk": "latest",
+
 		"@effect/ai-openai": "^4.0.0-beta",
 		"@effect/ai-anthropic": "^4.0.0-beta",
 		"@effect/ai-openrouter": "^4.0.0-beta",

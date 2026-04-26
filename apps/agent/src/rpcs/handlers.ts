@@ -15,6 +15,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const handle = yield* FiberHandle.make<void, AiError.AiError>()
 		const resumable = yield* makeResumableStream<Prompt.Message | AgentPart>()
 
+		yield* Effect.forEach(yield* agent.history, resumable.append)
+
 		return RpcContracts.of({
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
 				yield* resumable.append(payload.message)
