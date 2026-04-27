@@ -7,63 +7,26 @@ import {
 	OpenAiLanguageModel as OpenAiCompatLanguageModel
 } from '@effect/ai-openai-compat'
 import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'
-import {Context, Effect, Layer, Match, Option, pipe, Queue, Ref, Stream, Struct} from 'effect'
+import type {Effect, Stream} from 'effect'
+import {Context, Layer, Match, pipe} from 'effect'
 
-import type {AiError, LanguageModel, Response} from 'effect/unstable/ai'
-import {Chat, Prompt} from 'effect/unstable/ai'
-import type {HttpClient} from 'effect/unstable/http'
+import type {AiError, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 
-import {partsStreamSanitizer} from '#lib/utils.ts'
-import {AgentToolKit} from '#tools/contracts.ts'
-import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
+import type {AgentToolKit} from '#tools/contracts.ts'
+import {makeLayerEffect} from './agents/effect.ts'
 import type {ModelId, ProviderId} from './catalog.ts'
 import {providers} from './catalog.ts'
 
-export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agent', {
-	make: Effect.gen(function* () {
-		const services = yield* Effect.context<
-			| LanguageModel.LanguageModel
-			| Layer.Success<typeof WebSearchToolKitLayer>
-			| Layer.Success<typeof WebFetchToolKitLayer>
-			| HttpClient.HttpClient
-		>()
-
-		const chat = yield* Chat.empty
-
-		return {
-			history: pipe(Ref.get(chat.history), Effect.map(Struct.get('content'))),
-			streamText: (messages: Prompt.Message[]) => {
-				return Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>, AiError.AiError>(
-					Effect.fnUntraced(function* (queue) {
-						let prompt = Prompt.fromMessages(messages)
-
-						while (true) {
-							const last = yield* pipe(
-								chat.streamText({prompt, toolkit: AgentToolKit}),
-								partsStreamSanitizer,
-								Stream.tap(part => Queue.offer(queue, part)),
-								Stream.provideContext(services),
-								Stream.runLast
-							)
-
-							if (Option.isSome(last) && last.value.type === 'finish' && last.value.reason === 'tool-calls') {
-								prompt = Prompt.empty
-								continue
-							}
-
-							return yield* Queue.end(queue)
-						}
-					})
-				)
-			}
-		}
-	})
-}) {
-	static layer = pipe(
-		Layer.effect(this, this.make),
-		Layer.provideMerge(WebSearchToolKitLayer),
-		Layer.provideMerge(WebFetchToolKitLayer)
-	)
+export class Agent extends Context.Service<
+	Agent,
+	{
+		readonly history: Effect.Effect<readonly Prompt.Message[], never, never>
+		readonly streamText: (
+			messages: Prompt.Message[]
+		) => Stream.Stream<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>, AiError.AiError>
+	}
+>()('@ai-toolkit/ai/service/Agent') {
+	static layerEffect = Layer.effect(this, makeLayerEffect)
 
 	static resolveLanguageModel = pipe(
 		Match.type<{provider: ProviderId; model: ModelId}>(),
@@ -85,9 +48,7 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 			Layer.provideMerge(
 				OpenAiCompatLanguageModel.layer({
 					model,
-					config: {
-						strictJsonSchema: true
-					}
+					config: {strictJsonSchema: true}
 				}),
 				OpenAiCompatClient.layerConfig(providers[provider])
 			)
@@ -96,9 +57,7 @@ export class Agent extends Context.Service<Agent>()('@ai-toolkit/ai/service/Agen
 			Layer.provideMerge(
 				AnthropicLanguageModel.layer({
 					model,
-					config: {
-						strictJsonSchema: true
-					}
+					config: {strictJsonSchema: true}
 				}),
 				AnthropicClient.layerConfig(providers[provider])
 			)

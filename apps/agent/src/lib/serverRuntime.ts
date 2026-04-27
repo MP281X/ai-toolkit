@@ -12,7 +12,7 @@ export const LiveLayers = pipe(
 	// rpc handlers
 	Layer.provideMerge(RpcHandlers),
 	// application layers
-	Layer.provideMerge(Agent.layer),
+	Layer.provideMerge(Agent.layerEffect),
 	Layer.provideMerge(Agent.resolveLanguageModel({provider: 'opencode-go', model: 'minimax-m2.5'})),
 	// base layers
 	Layer.provideMerge(FetchHttpClient.layer),
