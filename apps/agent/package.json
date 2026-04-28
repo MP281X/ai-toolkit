@@ -27,8 +27,8 @@
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 
-		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
+		"@ai-toolkit/git": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},
 

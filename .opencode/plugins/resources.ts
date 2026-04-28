@@ -53,7 +53,9 @@ export const plugin = (async context => {
 			Effect.forEach(
 				resources,
 				Effect.fnUntraced(function* (resource) {
-					yield* Git.use(git => git.clone(resource.url, `.opencode/resources/${resource.name}`))
+					yield* Git.use(git =>
+						git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
+					)
 					yield* Effect.sync(() =>
 						context.client.tui.showToast({body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}})
 					)
