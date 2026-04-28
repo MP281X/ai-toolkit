@@ -1,394 +1,358 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Predicate, pipe, Stream, String} from 'effect'
+import {Array, Effect, pipe, Schema, Stream, String} from 'effect'
 
-import type {AgentToolKit} from '@ai-toolkit/ai/tools'
-import {makeFileParts, partsStreamReducer} from '@ai-toolkit/ai/utils'
-import {Conversation} from '@ai-toolkit/components/conversation'
 import {
-	ArrowUpIcon,
-	BookOpenTextIcon,
-	Brain,
 	ChevronRight,
-	ClockIcon,
-	ExternalLink,
-	HashIcon,
-	InboxIcon,
-	Paperclip,
-	SparklesIcon,
-	Square,
-	UserIcon,
-	Wrench
+	FolderGit2,
+	GitBranch,
+	GitCommitHorizontal,
+	Plus,
+	Trash2,
+	Waypoints
 } from '@ai-toolkit/components/icons'
-import {AutocompleteInput} from '@ai-toolkit/components/input'
-import {Favicon} from '@ai-toolkit/components/link-preview'
-import {Markdown} from '@ai-toolkit/components/render/markdown'
+import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
-import {cn, formatError, formatNumber, formatTimestamp} from '@ai-toolkit/components/utils'
+import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
+import {cn} from '@ai-toolkit/components/utils'
 import {createFileRoute} from '@tanstack/react-router'
-import type {Response} from 'effect/unstable/ai'
-import {Prompt} from 'effect/unstable/ai'
 import {Atom} from 'effect/unstable/reactivity'
-import {Fragment, useRef} from 'react'
+import {startTransition} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
+import type {ProjectEntry} from '#rpcs/contracts.ts'
+import {ProjectsSnapshot} from '#rpcs/contracts.ts'
 
-type StreamPart = Prompt.Message | Response.StreamPart<typeof AgentToolKit.tools>
+const SearchSchema = Schema.Struct({
+	projectRoot: Schema.optional(Schema.String),
+	worktreeRoot: Schema.optional(Schema.String)
+})
 
-type TurnResponsePart = Exclude<
-	Exclude<StreamPart, Prompt.Message>,
-	Extract<StreamPart, {type: 'response-metadata'}> | Extract<StreamPart, {type: 'finish'}>
->
+type Worktree = ProjectEntry['worktrees'][number]
 
-type TurnResponse = {
-	id: number
-	metadata: Extract<StreamPart, {type: 'response-metadata'}>
-	finish: Extract<StreamPart, {type: 'finish'}> | undefined
-	parts: TurnResponsePart[]
-}
-
-type Turn = {
-	id: number
-	prompt: Extract<StreamPart, {role: 'user'}>
-	responses: TurnResponse[]
-}
-
-const turnsAtom = Atom.keepAlive(
+const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient.asEffect(),
-			Effect.map(client => client('agent.events', void 0)),
-			Effect.map(partsStreamReducer),
-			Effect.map(parts =>
-				Stream.map(parts, streamParts => {
-					const turns = Array.empty<Turn>()
-
-					for (const part of streamParts) {
-						if (Prompt.isMessage(part)) {
-							if (part.role !== 'user') continue
-							turns.push({id: turns.length, prompt: part, responses: []})
-							continue
-						}
-
-						const turn = turns[turns.length - 1]
-						if (!turn) continue
-
-						if (part.type === 'response-metadata') {
-							turn.responses.push({id: turn.responses.length, metadata: part, finish: undefined, parts: []})
-							continue
-						}
-
-						const response = turn.responses[turn.responses.length - 1]
-						if (!response) continue
-
-						if (part.type === 'finish') {
-							response.finish = part
-							continue
-						}
-
-						response.parts.push(part)
-					}
-
-					return turns
-				})
-			),
+			Effect.map(client => client('projects.watch', void 0)),
 			Stream.unwrap
 		),
-		{initialValue: []}
+		{initialValue: new ProjectsSnapshot({projects: [], scanRoot: ''})}
 	)
 )
 
-const sendPromptAtom = RpcClient.runtime.fn(
-	Effect.fnUntraced(function* (payload: {text: string; attachments: File[]}) {
-		const client = yield* RpcClient
-		yield* client('agent.prompt', {
-			message: Prompt.userMessage({
-				content: [Prompt.makePart('text', {text: payload.text}), ...(yield* makeFileParts(payload.attachments))]
-			})
-		})
-	})
-)
-
-const stopPromptAtom = RpcClient.runtime.fn(
-	Effect.fnUntraced(function* () {
-		const client = yield* RpcClient
-		yield* client('agent.stop', void 0)
-	})
-)
-
 export const Route = createFileRoute('/(home)/')({
+	validateSearch: Schema.toStandardSchemaV1(SearchSchema),
 	component: RouteComponent
 })
 
-function RouteComponent() {
-	const {value: turns} = useAtomSuspense(turnsAtom)
-	const sendPrompt = useAtomSet(sendPromptAtom)
-	const stopPrompt = useAtomSet(stopPromptAtom)
-	const inputRef = useRef<AutocompleteInput.Handle<{id: number; label: string}>>(null)
+function pathLabel(value: string) {
+	const segments = pipe(value, String.split('/'))
 
-	function submitPrompt() {
-		const text = pipe(inputRef.current?.getText() ?? '', String.trim)
-		if (String.isEmpty(text)) return
-		sendPrompt({
-			text,
-			attachments: Array.fromIterable(inputRef.current?.getFiles() ?? [])
+	for (let index = segments.length - 1; index >= 0; index--) {
+		const segment = segments[index]
+
+		if (segment && segment !== '.') {
+			return segment
+		}
+	}
+
+	return value
+}
+
+function findProject(projects: ProjectsSnapshot['projects'], projectRoot: string | undefined) {
+	for (const project of projects) {
+		if (project['repository']['root'] === projectRoot) {
+			return project
+		}
+	}
+
+	return projects[0]
+}
+
+function findWorktree(project: ProjectEntry | undefined, worktreeRoot: string | undefined) {
+	if (!project) {
+		return
+	}
+
+	for (const worktree of project['worktrees']) {
+		if (worktree['root'] === worktreeRoot) {
+			return worktree
+		}
+	}
+
+	return project['worktrees'][0]
+}
+
+function isMainWorktree(project: ProjectEntry, worktree: Worktree) {
+	return worktree['root'] === project['repository']['root']
+}
+
+function worktreeTitle(project: ProjectEntry, worktree: Worktree) {
+	if (isMainWorktree(project, worktree)) {
+		return 'main'
+	}
+
+	return worktree['branch'] ?? pathLabel(worktree['root'])
+}
+
+function shortCommit(value: string) {
+	return pipe(value, String.slice(0, 8))
+}
+
+function nextWorktreeDirectory(project: ProjectEntry, branch: string) {
+	return `${project['repository']['root']}-worktree-${pipe(branch, String.replaceAll('/', '-'))}`
+}
+
+function Panel(input: {className?: string; children: React.ReactNode}) {
+	return <section className={cn('flex flex-col border', input.className)}>{input.children}</section>
+}
+
+function DataRow(input: {label: string; value: string}) {
+	return (
+		<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 border-t px-3 py-2 font-mono text-xs first:border-t-0">
+			<div className="text-muted-foreground uppercase">{input.label}</div>
+			<div className="min-w-0 break-all text-foreground">{input.value}</div>
+		</div>
+	)
+}
+
+function RouteComponent() {
+	const {value: snapshot} = useAtomSuspense(projectsAtom)
+	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'))
+	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'))
+	const navigate = Route.useNavigate()
+	const search = Route.useSearch()
+	const projects = snapshot['projects']
+	const activeProject = findProject(projects, search.projectRoot)
+	const activeWorktree = findWorktree(activeProject, search.worktreeRoot)
+
+	function selectProject(project: ProjectEntry) {
+		startTransition(() => {
+			navigate({
+				search: current => ({
+					...current,
+					projectRoot: project['repository']['root'],
+					worktreeRoot: project['repository']['root']
+				})
+			})
 		})
-		inputRef.current?.clear()
+	}
+
+	function selectWorktree(project: ProjectEntry, worktree: Worktree) {
+		startTransition(() => {
+			navigate({
+				search: current => ({
+					...current,
+					projectRoot: project['repository']['root'],
+					worktreeRoot: worktree['root']
+				})
+			})
+		})
+	}
+
+	function createProjectWorktree(project: ProjectEntry) {
+		const branch = window.prompt('Branch name')
+		if (!branch) {
+			return
+		}
+
+		createWorktree({
+			payload: {
+				baseBranch: project['worktrees'][0]?.['branch'] ?? 'main',
+				branch,
+				cwd: project['repository']['root'],
+				directory: nextWorktreeDirectory(project, branch)
+			}
+		})
+	}
+
+	function removeWorktree(worktree: Worktree) {
+		if (!window.confirm(`Delete worktree ${worktree['root']}?`)) {
+			return
+		}
+
+		deleteWorktree({payload: {cwd: worktree['root'], force: true}})
 	}
 
 	return (
-		<div className="flex h-full w-full flex-col overflow-hidden">
-			<Conversation items={turns} className="p-3">
-				{turn => (
-					<div className="flex flex-col gap-2">
-						<article className="flex gap-2">
-							<div className="w-0.5 shrink-0 bg-orange-500/50" />
-							<div className="min-w-0 flex-1">
-								<div className="w-full border-2 border-orange-500/20 bg-orange-500/[0.003] px-3">
-									<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
-										<UserIcon className="size-3 shrink-0 text-orange-500" />
-										<span>prompt</span>
-									</div>
-									<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-										{Array.map(turn.prompt.content, (part, index) => {
-											if (part.type === 'text') return <Markdown key={index}>{part.text}</Markdown>
-											if (part.type === 'file') {
-												const label = part.fileName ?? part.mediaType
-												return pipe(part.mediaType, String.startsWith('image/')) ? (
-													<Collapsible key={index} className="group border">
-														<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 px-2 py-1 text-left text-[11px]">
-															<img
-																src={`${part.data}`}
-																alt={part.fileName ?? 'image'}
-																className="size-4 shrink-0 border object-cover"
-															/>
-															<div className="min-w-0 flex-1 truncate text-muted-foreground">{label}</div>
-															<ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-open:rotate-90" />
-														</CollapsibleTrigger>
-														<CollapsibleContent>
-															<div className="border-t p-2">
-																<img
-																	src={`${part.data}`}
-																	alt={part.fileName ?? 'image'}
-																	className="max-h-120 w-full object-contain"
-																/>
-															</div>
-														</CollapsibleContent>
-													</Collapsible>
-												) : (
-													<div
-														key={index}
-														className="flex min-h-8 items-center gap-2 border px-2 py-1 text-[11px] text-muted-foreground"
-													>
-														<Paperclip className="size-3.5 shrink-0" />
-														<div className="min-w-0 flex-1 truncate">{label}</div>
-													</div>
-												)
-											}
+		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
+			<ResizablePanelGroup orientation="horizontal">
+				<ResizablePanel defaultSize="28%" minSize="20%" maxSize="40%">
+					<div className="flex h-full flex-col border-r">
+						<div className="border-b px-3 py-2">
+							<div className="text-[11px] text-muted-foreground uppercase">Projects</div>
+						</div>
 
-											return (
-												<pre key={index} className="overflow-x-auto border p-2 text-[11px] leading-5">
-													{JSON.stringify(part, null, 2)}
-												</pre>
-											)
-										})}
-									</div>
-								</div>
-							</div>
-						</article>
-
-						{Array.map(turn.responses, response => {
-							const reason = response.finish?.reason
-							const finishReason = reason === 'stop' || reason === 'error' ? reason : 'other'
-							const usage = response.finish?.usage
-
-							return (
-								<article key={response.id} className="flex gap-2">
-									<div
-										className={cn(
-											'w-0.5 shrink-0',
-											finishReason === 'other' && 'bg-muted-foreground/15',
-											finishReason === 'stop' && 'bg-blue-500/30',
-											finishReason === 'error' && 'bg-destructive/30'
-										)}
-									/>
-									<div className="min-w-0 flex-1">
-										<div
-											className={cn(
-												'w-full border-2 px-3',
-												finishReason === 'other' && 'border-border/60 bg-foreground/[0.004]',
-												finishReason === 'stop' && 'border-blue-500/12 bg-blue-500/[0.003]',
-												finishReason === 'error' && 'border-destructive/15 bg-destructive/[0.003]'
-											)}
-										>
-											<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
-												<SparklesIcon className="size-3 shrink-0" />
-												<span className="min-w-0 truncate">{response.metadata.modelId ?? 'assistant'}</span>
-												<span className="ml-auto flex shrink-0 items-center gap-3">
-													{Predicate.isNotUndefined(usage?.inputTokens.total) && usage.inputTokens.total > 0 && (
-														<span className="inline-flex items-center gap-1 font-mono" title="input">
-															<InboxIcon className="size-3 shrink-0" />
-															{formatNumber(usage.inputTokens.total)}
-														</span>
-													)}
-													{Predicate.isNotUndefined(usage?.outputTokens.total) && usage.outputTokens.total > 0 && (
-														<span className="inline-flex items-center gap-1 font-mono" title="output">
-															<BookOpenTextIcon className="size-3 shrink-0" />
-															{formatNumber(usage.outputTokens.total)}
-														</span>
-													)}
-													{Predicate.isNotUndefined(usage?.outputTokens.reasoning) &&
-														usage.outputTokens.reasoning > 0 && (
-															<span className="inline-flex items-center gap-1 font-mono" title="reasoning">
-																<HashIcon className="size-3 shrink-0" />
-																{formatNumber(usage.outputTokens.reasoning)}
-															</span>
+						<TreeExplorer className="overflow-y-auto px-0 py-2">
+							<TreeExplorerSection label="Projects">
+								{Array.isReadonlyArrayEmpty(projects) ? (
+									<li className="px-2 py-6 text-center text-muted-foreground text-xs">No projects found.</li>
+								) : (
+									Array.map(projects, project => (
+										<li key={project['repository']['gitDirectory']} className="flex min-w-0 flex-col gap-1">
+											<Collapsible
+												defaultOpen={
+													activeProject?.['repository']['gitDirectory'] === project['repository']['gitDirectory']
+												}
+											>
+												<CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground">
+													<ChevronRight className="size-3 shrink-0 transition-transform group-data-[panel-open]:rotate-90" />
+													<button
+														type="button"
+														onClick={event => {
+															event.stopPropagation()
+															selectProject(project)
+														}}
+														className={cn(
+															'flex min-w-0 flex-1 items-center gap-1.5 text-left',
+															activeProject?.['repository']['gitDirectory'] === project['repository']['gitDirectory'] &&
+																'text-foreground'
 														)}
-													{response.metadata.timestamp && (
-														<span className="inline-flex items-center gap-1 text-muted-foreground/60">
-															<ClockIcon className="size-3 shrink-0" />
-															{formatTimestamp(response.metadata.timestamp)}
-														</span>
-													)}
-												</span>
-											</div>
-											<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
-												{Array.isReadonlyArrayEmpty(response.parts) ? (
-													<div className="flex gap-1 py-0.5">
-														{Array.map([0, 200, 300] as const, delay => (
-															<span
-																key={delay}
-																className="inline-block size-1.5 animate-pulse bg-muted-foreground/60"
-																style={{animationDelay: `${delay}ms`}}
-															/>
+													>
+														<FolderGit2 className="size-3.5 shrink-0" />
+														<span className="min-w-0 truncate">{pathLabel(project['repository']['root'])}</span>
+													</button>
+												</CollapsibleTrigger>
+
+												<CollapsibleContent>
+													<div className="ml-4 flex flex-col border-l pl-1">
+														{Array.map(project['worktrees'], worktree => (
+															<TreeExplorerItem
+																key={worktree['root']}
+																selected={activeWorktree?.['root'] === worktree['root']}
+																onClick={() => selectWorktree(project, worktree)}
+																icon={<div className="size-3.5" />}
+															>
+																{worktreeTitle(project, worktree)}
+															</TreeExplorerItem>
 														))}
 													</div>
-												) : (
-													Array.map(response.parts, (part, index) => {
-														if (part.type === 'text-delta') return <Markdown key={index}>{part.delta}</Markdown>
+												</CollapsibleContent>
+											</Collapsible>
+										</li>
+									))
+								)}
+							</TreeExplorerSection>
+						</TreeExplorer>
+					</div>
+				</ResizablePanel>
 
-														if (part.type === 'reasoning-delta') {
-															return (
-																<Collapsible key={index} className="group border">
-																	<CollapsibleTrigger className="flex min-h-8 w-full items-center gap-2 px-2 py-1 text-[11px] text-muted-foreground">
-																		<Brain className="size-3.5 shrink-0" />
-																		<span>reasoning</span>
-																		<ChevronRight className="ml-auto size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
-																	</CollapsibleTrigger>
-																	<CollapsibleContent>
-																		<div className="border-t px-2 py-1 text-[11px] text-muted-foreground leading-5">
-																			<Markdown>{part.delta}</Markdown>
-																		</div>
-																	</CollapsibleContent>
-																</Collapsible>
-															)
-														}
+				<ResizableHandle />
 
-														if (part.type === 'tool-call') {
-															return (
-																<Collapsible key={part.id} className="group border">
-																	<CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 px-2 py-0.5 text-left text-[11px] text-muted-foreground">
-																		<Wrench className="size-3.5 shrink-0" />
-																		<div className="min-w-0 flex-1 truncate text-foreground">{part.name}</div>
-																		<ChevronRight className="size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
-																	</CollapsibleTrigger>
-																	<CollapsibleContent>
-																		<div className="flex flex-col gap-2 border-t p-2 text-[11px] leading-5">
-																			<pre className="overflow-x-auto border p-2">
-																				{JSON.stringify(part.params, null, 2)}
-																			</pre>
-																		</div>
-																	</CollapsibleContent>
-																</Collapsible>
-															)
-														}
+				<ResizablePanel defaultSize="72%" minSize="40%">
+					<div className="flex h-full flex-col overflow-hidden">
+						<div className="flex items-center gap-3 border-b px-4 py-3">
+							<div className="min-w-0 flex-1">
+								<div className="text-[11px] text-muted-foreground uppercase">Active worktree</div>
+								<div className="truncate text-foreground text-sm">
+									{activeProject ? pathLabel(activeProject['repository']['root']) : 'No project selected'}
+									{activeProject && activeWorktree ? ` / ${worktreeTitle(activeProject, activeWorktree)}` : ''}
+								</div>
+							</div>
+							<div className="flex items-center gap-2">
+								{activeProject && (
+									<Button
+										type="button"
+										variant="outline"
+										size="xs"
+										onClick={() => createProjectWorktree(activeProject)}
+									>
+										<Plus className="size-3.5" />
+										Create worktree
+									</Button>
+								)}
+								{activeProject && activeWorktree && !isMainWorktree(activeProject, activeWorktree) && (
+									<Button type="button" variant="outline" size="xs" onClick={() => removeWorktree(activeWorktree)}>
+										<Trash2 className="size-3.5" />
+										Delete worktree
+									</Button>
+								)}
+							</div>
+						</div>
 
-														if (part.type === 'tool-result' && part.isFailure) {
-															return (
-																<div
-																	key={index}
-																	className="flex min-h-7 items-center gap-2 border-2 px-2 py-0.5 text-[11px] text-destructive"
-																>
-																	<Wrench className="size-3.5 shrink-0" />
-																	<div className="min-w-0 flex-1 truncate">{formatError(part.result)}</div>
-																</div>
-															)
-														}
-
-														if (part.type === 'tool-result' && Array.isReadonlyArrayNonEmpty(part.result)) {
-															return (
-																<Fragment key={index}>
-																	{Array.map(part.result, (item, itemIndex) => (
-																		<Collapsible key={`${index}-${itemIndex}`} className="group border">
-																			<CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 px-2 py-0.5 text-left text-[10px]">
-																				<Favicon url={item.url} />
-																				<div className="min-w-0 flex-1">
-																					<div className="truncate text-foreground">{item.title ?? item.url}</div>
-																					<div className="truncate text-[10px] text-muted-foreground">{item.url}</div>
-																				</div>
-																				<a
-																					href={item.url}
-																					target="_blank"
-																					rel="noreferrer"
-																					className="shrink-0"
-																					onClick={event => event.stopPropagation()}
-																				>
-																					<ExternalLink className="size-3 text-muted-foreground" />
-																				</a>
-																				<ChevronRight className="size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-open:rotate-90" />
-																			</CollapsibleTrigger>
-																			<CollapsibleContent>
-																				<div className="border-t px-3 py-2 text-[11px] leading-5">
-																					<Markdown>{item.text}</Markdown>
-																				</div>
-																			</CollapsibleContent>
-																		</Collapsible>
-																	))}
-																</Fragment>
-															)
-														}
-
-														return (
-															<pre key={index} className="overflow-x-auto border p-2 text-[11px] leading-5">
-																{JSON.stringify(part, null, 2)}
-															</pre>
-														)
-													})
-												)}
+						<div className="min-h-0 flex-1 overflow-y-auto p-4">
+							{!(activeProject && activeWorktree) ? (
+								<div className="flex h-full items-center justify-center border text-muted-foreground text-sm">
+									No project selected.
+								</div>
+							) : (
+								<div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.75fr)]">
+									<div className="flex min-w-0 flex-col gap-4">
+										<Panel>
+											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
+												<FolderGit2 className="size-3.5" />
+												Project
 											</div>
-										</div>
-									</div>
-								</article>
-							)
-						})}
-					</div>
-				)}
-			</Conversation>
+											<DataRow label="name" value={pathLabel(activeProject['repository']['root'])} />
+											<DataRow label="root" value={activeProject['repository']['root']} />
+											<DataRow label="git dir" value={activeProject['repository']['gitDirectory']} />
+											<DataRow label="worktrees" value={`${activeProject['worktrees'].length}`} />
+										</Panel>
 
-			<div className="border-t p-3">
-				<AutocompleteInput
-					ref={inputRef}
-					onSubmit={submitPrompt}
-					placeholder="Send a message, paste a URL, drop files..."
-					className="w-full"
-				/>
-				<AutocompleteInput.ToolBar className="border-t-0">
-					<div className="ml-auto flex items-center gap-2">
-						<Button
-							type="button"
-							onClick={() => stopPrompt(undefined)}
-							variant="outline"
-							size="icon-xs"
-							className="rounded-none"
-						>
-							<Square className="size-3.5 fill-current" />
-						</Button>
-						<Button type="button" onClick={submitPrompt} size="icon-xs" className="rounded-none">
-							<ArrowUpIcon className="size-3.5" />
-						</Button>
+										<Panel>
+											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
+												<Waypoints className="size-3.5" />
+												Worktree
+											</div>
+											<DataRow
+												label="kind"
+												value={isMainWorktree(activeProject, activeWorktree) ? 'main repo worktree' : 'linked worktree'}
+											/>
+											<DataRow label="branch" value={activeWorktree['branch'] ?? 'detached'} />
+											<DataRow label="commit" value={shortCommit(activeWorktree['commit'])} />
+											<DataRow label="root" value={activeWorktree['root']} />
+										</Panel>
+									</div>
+
+									<div className="flex min-w-0 flex-col gap-4">
+										<Panel>
+											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
+												<GitBranch className="size-3.5" />
+												All worktrees
+											</div>
+											<div className="flex flex-col">
+												{Array.map(activeProject['worktrees'], worktree => (
+													<button
+														key={worktree['root']}
+														type="button"
+														onClick={() => selectWorktree(activeProject, worktree)}
+														className={cn(
+															'grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t px-3 py-2 text-left text-xs first:border-t-0 hover:bg-muted',
+															activeWorktree['root'] === worktree['root'] && 'bg-primary/8'
+														)}
+													>
+														<div className="min-w-0">
+															<div className="truncate text-foreground">{worktreeTitle(activeProject, worktree)}</div>
+															<div className="truncate text-[11px] text-muted-foreground">{worktree['root']}</div>
+														</div>
+														<div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase">
+															<span>{worktree['branch'] ?? 'detached'}</span>
+															<span>{shortCommit(worktree['commit'])}</span>
+														</div>
+													</button>
+												))}
+											</div>
+										</Panel>
+
+										<Panel>
+											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
+												<GitCommitHorizontal className="size-3.5" />
+												Focus
+											</div>
+											<div className="flex flex-col gap-2 px-3 py-3 text-muted-foreground text-xs leading-6">
+												<div>Projects are repos.</div>
+												<div>Worktrees are the working unit.</div>
+												<div>Agent panels are removed until the project/worktree shell is in place.</div>
+											</div>
+										</Panel>
+									</div>
+								</div>
+							)}
+						</div>
 					</div>
-				</AutocompleteInput.ToolBar>
-			</div>
+				</ResizablePanel>
+			</ResizablePanelGroup>
 		</div>
 	)
 }
