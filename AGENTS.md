@@ -8,11 +8,6 @@ Monorepo with `@ai-toolkit/*` workspace packages under `packages/*`.
 - `.opencode/resources/*` — cloned external sources, source of truth for external APIs
 - `.opencode/resources/effect/LLMS.md` — Effect patterns (gen/fn, services, error handling)
 
-## Skills
-
-- Check available skills before starting any task — load matching ones with `skill(name)`
-- Follow loaded skill patterns exactly — never deviate
-
 ## Research
 
 - Search with the explore agent — never use manual grep or glob
@@ -50,6 +45,9 @@ Format for 2-second scanning:
 - Implement only what's explicitly requested — no extra features, no future requirements
 - Replace old implementations — never keep both old and new
 - Breaking changes are fine — no backward compatibility
+- After code changes, run `bun run type-check` before returning
+- Never run build commands unless the user explicitly requests a build
+- Never run `bun run lint` unless using `.opencode/commands/refactor.md`
 
 ## Code Style
 

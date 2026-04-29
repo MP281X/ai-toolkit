@@ -8,7 +8,7 @@ import type {ReactNode} from 'react'
 import * as React from 'react'
 // biome-ignore lint/plugin: react namespace
 import * as ReactNS from 'react'
-import {forwardRef, memo, useCallback} from 'react'
+import {forwardRef, memo, useCallback, useState} from 'react'
 
 export class TestError extends Schema.TaggedErrorClass<TestError>()('TestError', {
 	cause: Schema.optional(Schema.Defect)
@@ -104,6 +104,16 @@ function test_return_undefined() {
 function test_react_hooks() {
 	// biome-ignore lint/plugin: react compiler antipattern
 	useCallback(() => {}, [])
+}
+
+// biome-ignore lint/plugin: return type
+declare function createReviewAtom(root: string, mode: string): unknown
+
+function test_react_compiler_state_initializer(input: {activeWorktree: Record<'root', string>}) {
+	// biome-ignore lint/plugin: react compiler antipattern
+	const [changesAtom] = useState(() => createReviewAtom(input.activeWorktree.root, 'staged-to-worktree'))
+
+	return changesAtom
 }
 
 // biome-ignore lint/plugin: react compiler antipattern

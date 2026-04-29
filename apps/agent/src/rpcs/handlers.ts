@@ -1,13 +1,14 @@
-import {Array, Effect, Order, PubSub, pipe, Stream, SubscriptionRef} from 'effect'
+import {Array, Duration, Effect, FileSystem, Order, PubSub, pipe, Stream, SubscriptionRef} from 'effect'
 
 import {GitRepository} from '@ai-toolkit/git/schema'
 import {Git} from '@ai-toolkit/git/service'
 
-import {ProjectEntry, ProjectsSnapshot, RpcContracts} from '#rpcs/contracts.ts'
+import {ProjectEntry, ProjectsSnapshot, ReviewSnapshot, RpcContracts} from '#rpcs/contracts.ts'
 
 export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
 		const git = yield* Git
+		const fs = yield* FileSystem.FileSystem
 		const scanRoot = process.env['HOME'] ?? process.cwd()
 		const snapshots = yield* PubSub.unbounded<ProjectsSnapshot>()
 		const state = yield* SubscriptionRef.make(new ProjectsSnapshot({projects: [], scanRoot}))
@@ -77,14 +78,61 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		yield* refresh()
 
+		yield* Effect.forkScoped(
+			pipe(
+				fs.watch(scanRoot),
+				Stream.debounce(Duration.millis(250)),
+				Stream.tap(() => refresh()),
+				Stream.runDrain
+			)
+		)
+
 		return RpcContracts.of({
 			'projects.watch': () =>
 				Stream.unwrap(
 					Effect.gen(function* () {
-						const snapshot = yield* SubscriptionRef.get(state)
-
-						return pipe(Stream.make(snapshot), Stream.concat(Stream.fromPubSub(snapshots)))
+						return pipe(Stream.make(yield* SubscriptionRef.get(state)), Stream.concat(Stream.fromPubSub(snapshots)))
 					})
+				),
+			'review.watch': payload =>
+				Stream.unwrap(
+					Effect.gen(function* () {
+						const loadReview = pipe(
+							git.reviewDiffs(payload),
+							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
+						)
+						const state = yield* Effect.andThen(loadReview, diffs =>
+							SubscriptionRef.make(new ReviewSnapshot({cwd: payload.cwd, scope: payload.scope, diffs}))
+						)
+
+						yield* Effect.forkScoped(
+							pipe(
+								fs.watch(payload.cwd),
+								Stream.debounce(Duration.millis(50)),
+								Stream.tap(() =>
+									Effect.flatMap(loadReview, diffs =>
+										SubscriptionRef.set(state, new ReviewSnapshot({cwd: payload.cwd, scope: payload.scope, diffs}))
+									)
+								),
+								Stream.runDrain
+							)
+						)
+
+						return pipe(
+							Stream.make(yield* SubscriptionRef.get(state)),
+							Stream.concat(pipe(SubscriptionRef.changes(state), Stream.drop(1)))
+						)
+					})
+				),
+			'review.stageFile': payload =>
+				pipe(
+					git.stageFile(payload),
+					Effect.catchTag('GitError', () => Effect.void)
+				),
+			'review.unstageFile': payload =>
+				pipe(
+					git.unstageFile(payload),
+					Effect.catchTag('GitError', () => Effect.void)
 				),
 			'projects.createWorktree': payload =>
 				pipe(

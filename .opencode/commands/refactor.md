@@ -1,5 +1,6 @@
 ---
 description: Aggressive refactor of uncommitted changes. Multi-pass until stable.
+model: openai/gpt-5.4-mini
 ---
 
 <user_input optional="true" description="Specific areas to focus refactoring on">

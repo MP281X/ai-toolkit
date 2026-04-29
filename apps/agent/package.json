@@ -26,6 +26,7 @@
 		"react-dom": "^19",
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
+		"@tanstack/react-hotkeys": "latest",
 
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/git": "workspace:*",

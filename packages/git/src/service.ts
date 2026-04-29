@@ -5,6 +5,7 @@ import {
 	Effect,
 	FileSystem,
 	Layer,
+	Option,
 	Path,
 	pipe,
 	RcMap,
@@ -16,6 +17,7 @@ import {
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
+import type {GitDiffStatus} from './schema.ts'
 import {GitDiff, GitError, GitRepository, GitWorktree} from './schema.ts'
 
 export class Git extends Context.Service<Git>()('@ai-toolkit/git/service/Git', {
@@ -51,8 +53,19 @@ export class Git extends Context.Service<Git>()('@ai-toolkit/git/service/Git', {
 				execGitLines(cwd, args),
 				Effect.flatMap(
 					Effect.forEach(
-						filePath =>
-							Effect.map(
+						line => {
+							const filePath = pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
+							let status: GitDiffStatus = 'modified'
+
+							if (pipe(line, String.startsWith('A'))) {
+								status = 'added'
+							} else if (pipe(line, String.startsWith('D'))) {
+								status = 'deleted'
+							} else if (pipe(line, String.startsWith('R'))) {
+								status = 'renamed'
+							}
+
+							return Effect.map(
 								execGitString(
 									cwd,
 									pipe(
@@ -61,8 +74,9 @@ export class Git extends Context.Service<Git>()('@ai-toolkit/git/service/Git', {
 										Array.appendAll(['--patch', '--find-renames', '-U999999', '--no-ext-diff', '--', filePath])
 									)
 								),
-								patch => new GitDiff({filePath, patch})
-							),
+								patch => new GitDiff({filePath, patch, status})
+							)
+						},
 						{concurrency: 'unbounded'}
 					)
 				)
@@ -81,8 +95,8 @@ export class Git extends Context.Service<Git>()('@ai-toolkit/git/service/Git', {
 
 		const worktrees = yield* RcMap.make({
 			lookup: Effect.fnUntraced(function* (cwd: string) {
-				const getStagedDiffs = getDiffs(cwd, ['diff', '--cached', '--name-only'])
-				const getUnstagedDiffs = getDiffs(cwd, ['diff', '--name-only'])
+				const getStagedDiffs = getDiffs(cwd, ['diff', '--cached', '--name-status'])
+				const getUnstagedDiffs = getDiffs(cwd, ['diff', '--name-status'])
 				const stagedDiffs = yield* Effect.andThen(getStagedDiffs, SubscriptionRef.make)
 				const unstagedDiffs = yield* Effect.andThen(getUnstagedDiffs, SubscriptionRef.make)
 
@@ -250,6 +264,18 @@ export class Git extends Context.Service<Git>()('@ai-toolkit/git/service/Git', {
 			}),
 			stageFile: Effect.fnUntraced(function* ({cwd, filePath}: {cwd: string; filePath: string}) {
 				yield* pipe(execGitString(cwd, ['add', '--', filePath]), Effect.asVoid)
+			}),
+			reviewDiffs: Effect.fnUntraced(function* ({
+				cwd,
+				scope
+			}: {
+				cwd: string
+				scope: 'staged-to-worktree' | 'head-to-staged'
+			}) {
+				return yield* getDiffs(
+					cwd,
+					scope === 'head-to-staged' ? ['diff', '--cached', '--name-status'] : ['diff', '--name-status']
+				)
 			}),
 			stagedDiffs: Effect.fnUntraced(function* ({cwd}: {cwd: string}) {
 				return yield* pipe(
