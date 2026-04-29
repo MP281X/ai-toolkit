@@ -4,6 +4,10 @@ language js(typescript, jsx)
 or {
 	`$fn($...)` as $match where {
 		$fn <: or {
+			`useState` where {
+				$match <: `useState(() => $value)`,
+				register_diagnostic(span=$fn, message="Do not use lazy `useState` initializers here. React Compiler already handles memoization, so inline the value or create it directly instead of hiding it behind state initialization.")
+			},
 			`useCallback` where {
 				register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization, so remove the wrapper and keep the inline callback unless you are integrating with an external API that truly requires a stable function identity.")
 			},
@@ -20,6 +24,10 @@ or {
 	},
 	`$fn<$_>($...)` as $match where {
 		$fn <: or {
+			`useState` where {
+				$match <: `useState<$_>(() => $value)`,
+				register_diagnostic(span=$fn, message="Do not use lazy `useState` initializers here. React Compiler already handles memoization, so inline the value or create it directly instead of hiding it behind state initialization.")
+			},
 			`useCallback` where {
 				register_diagnostic(span=$fn, message="Do not use `useCallback` here. React Compiler already handles this memoization, so remove the wrapper and keep the inline callback unless you are integrating with an external API that truly requires a stable function identity.")
 			},

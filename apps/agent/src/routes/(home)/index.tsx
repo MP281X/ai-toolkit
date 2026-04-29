@@ -1,33 +1,41 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, pipe, Schema, Stream, String} from 'effect'
+import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {Array, Effect, Option, Predicate, pipe, Schema, Stream, String} from 'effect'
 
+import {FileIcon, Layers, PanelTop, Square} from '@ai-toolkit/components/icons'
+import {PatchReview} from '@ai-toolkit/components/render/diff'
 import {
-	ChevronRight,
-	FolderGit2,
-	GitBranch,
-	GitCommitHorizontal,
-	Plus,
-	Trash2,
-	Waypoints
-} from '@ai-toolkit/components/icons'
-import {TreeExplorer, TreeExplorerItem, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
-import {Button} from '@ai-toolkit/components/ui/button'
-import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
+	TreeExplorer,
+	TreeExplorerBranch,
+	TreeExplorerGroup,
+	TreeExplorerSection
+} from '@ai-toolkit/components/tree-explorer'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
-import {cn} from '@ai-toolkit/components/utils'
+import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {startTransition} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {ProjectEntry} from '#rpcs/contracts.ts'
-import {ProjectsSnapshot} from '#rpcs/contracts.ts'
+import {ProjectsSnapshot, ReviewSnapshot} from '#rpcs/contracts.ts'
 
 const SearchSchema = Schema.Struct({
 	projectRoot: Schema.optional(Schema.String),
-	worktreeRoot: Schema.optional(Schema.String)
+	worktreeRoot: Schema.optional(Schema.String),
+	reviewFile: Schema.optional(Schema.String),
+	reviewScope: Schema.optional(Schema.String)
 })
 
+const projectAccentClassNames = [
+	'[&_svg]:text-[oklch(0.74_0.085_50)] [&_.tree-label]:text-[oklch(0.8_0.085_50)]',
+	'[&_svg]:text-[oklch(0.72_0.075_150)] [&_.tree-label]:text-[oklch(0.78_0.075_150)]',
+	'[&_svg]:text-[oklch(0.72_0.075_220)] [&_.tree-label]:text-[oklch(0.78_0.075_220)]',
+	'[&_svg]:text-[oklch(0.72_0.075_285)] [&_.tree-label]:text-[oklch(0.78_0.075_285)]',
+	'[&_svg]:text-[oklch(0.72_0.075_20)] [&_.tree-label]:text-[oklch(0.78_0.075_20)]',
+	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
+] as const
+
+type ReviewScope = 'staged-to-worktree' | 'head-to-staged'
 type Worktree = ProjectEntry['worktrees'][number]
 
 const projectsAtom = Atom.keepAlive(
@@ -60,177 +68,315 @@ function pathLabel(value: string) {
 	return value
 }
 
-function findProject(projects: ProjectsSnapshot['projects'], projectRoot: string | undefined) {
-	for (const project of projects) {
-		if (project['repository']['root'] === projectRoot) {
-			return project
+function ReviewViewPanel(input: {
+	activeReviewScope: ReviewScope
+	activeWorktree: Worktree
+	reviewFile: string | undefined
+	selectReviewEntry: (scope: ReviewScope, filePath: string) => void
+}) {
+	const changesAtom = Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.map(client => client('review.watch', {cwd: input.activeWorktree['root'], scope: 'staged-to-worktree'})),
+				Stream.unwrap
+			),
+			{
+				initialValue: new ReviewSnapshot({cwd: input.activeWorktree['root'], scope: 'staged-to-worktree', diffs: []})
+			}
+		)
+	)
+	const stagedAtom = Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.map(client => client('review.watch', {cwd: input.activeWorktree['root'], scope: 'head-to-staged'})),
+				Stream.unwrap
+			),
+			{initialValue: new ReviewSnapshot({cwd: input.activeWorktree['root'], scope: 'head-to-staged', diffs: []})}
+		)
+	)
+	const refreshChanges = useAtomRefresh(changesAtom)
+	const refreshStaged = useAtomRefresh(stagedAtom)
+	const stageFile = useAtomSet(RpcClient.mutation('review.stageFile'), {mode: 'promise'})
+	const unstageFile = useAtomSet(RpcClient.mutation('review.unstageFile'), {mode: 'promise'})
+	const changesDiffs = useAtomSuspense(changesAtom).value.diffs
+	const stagedDiffs = useAtomSuspense(stagedAtom).value.diffs
+	const entries = pipe(
+		changesDiffs,
+		Array.map(diff => ({diff, scope: 'staged-to-worktree' as const})),
+		Array.appendAll(
+			pipe(
+				stagedDiffs,
+				Array.map(diff => ({diff, scope: 'head-to-staged' as const}))
+			)
+		)
+	)
+	const selectedEntry =
+		pipe(
+			entries,
+			Array.findFirst(entry => entry.scope === input.activeReviewScope && entry.diff.filePath === input.reviewFile),
+			Option.getOrUndefined
+		) ?? entries[0]
+
+	function moveSelection(offset: number) {
+		const nextIndex = Math.max(
+			0,
+			Math.min(
+				pipe(
+					entries,
+					Array.findFirstIndex(
+						entry => entry.scope === selectedEntry?.scope && entry.diff.filePath === selectedEntry?.diff.filePath
+					),
+					Option.getOrElse(() => 0)
+				) + offset,
+				entries.length - 1
+			)
+		)
+		const nextEntry = entries[nextIndex] ?? selectedEntry ?? entries[0]
+
+		if (Predicate.isUndefined(nextEntry)) {
+			return
 		}
+
+		input.selectReviewEntry(nextEntry.scope, nextEntry.diff.filePath)
 	}
 
-	return projects[0]
-}
-
-function findWorktree(project: ProjectEntry | undefined, worktreeRoot: string | undefined) {
-	if (!project) {
-		return
-	}
-
-	for (const worktree of project['worktrees']) {
-		if (worktree['root'] === worktreeRoot) {
-			return worktree
+	async function toggleStageSelectedFile() {
+		if (Predicate.isUndefined(selectedEntry)) {
+			return
 		}
+
+		if (selectedEntry.scope === 'head-to-staged') {
+			await unstageFile({payload: {cwd: input.activeWorktree['root'], filePath: selectedEntry.diff.filePath}})
+			refreshChanges()
+			refreshStaged()
+			return
+		}
+
+		await stageFile({payload: {cwd: input.activeWorktree['root'], filePath: selectedEntry.diff.filePath}})
+
+		refreshChanges()
+		refreshStaged()
 	}
 
-	return project['worktrees'][0]
-}
+	useHotkey('ArrowDown', () => moveSelection(1), {enabled: !Array.isReadonlyArrayEmpty(entries)})
+	useHotkey('ArrowUp', () => moveSelection(-1), {enabled: !Array.isReadonlyArrayEmpty(entries)})
+	useHotkey('Enter', toggleStageSelectedFile, {enabled: Predicate.isNotUndefined(selectedEntry)})
 
-function isMainWorktree(project: ProjectEntry, worktree: Worktree) {
-	return worktree['root'] === project['repository']['root']
-}
-
-function worktreeTitle(project: ProjectEntry, worktree: Worktree) {
-	if (isMainWorktree(project, worktree)) {
-		return 'main'
-	}
-
-	return worktree['branch'] ?? pathLabel(worktree['root'])
-}
-
-function shortCommit(value: string) {
-	return pipe(value, String.slice(0, 8))
-}
-
-function nextWorktreeDirectory(project: ProjectEntry, branch: string) {
-	return `${project['repository']['root']}-worktree-${pipe(branch, String.replaceAll('/', '-'))}`
-}
-
-function Panel(input: {className?: string; children: React.ReactNode}) {
-	return <section className={cn('flex flex-col border', input.className)}>{input.children}</section>
-}
-
-function DataRow(input: {label: string; value: string}) {
 	return (
-		<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3 border-t px-3 py-2 font-mono text-xs first:border-t-0">
-			<div className="text-muted-foreground uppercase">{input.label}</div>
-			<div className="min-w-0 break-all text-foreground">{input.value}</div>
-		</div>
+		<ResizablePanelGroup orientation="horizontal">
+			<ResizablePanel defaultSize="24%" minSize="18%" maxSize="36%">
+				<div className="flex h-full flex-col border-r">
+					<ResizablePanelGroup orientation="vertical">
+						<ResizablePanel defaultSize="50%" minSize="20%">
+							<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
+								<TreeExplorerSection label="Unstaged changes" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+									{Array.isReadonlyArrayEmpty(changesDiffs) ? (
+										<li className="flex flex-1 items-center justify-center px-2 py-2 text-muted-foreground text-xs">
+											No changes.
+										</li>
+									) : (
+										Array.map(changesDiffs, diff => {
+											let statusClassName = 'text-amber-600 dark:text-amber-400'
+											let statusLabel = 'M'
+
+											if (diff.status === 'added') {
+												statusClassName = 'text-emerald-600 dark:text-emerald-400'
+												statusLabel = 'A'
+											}
+
+											if (diff.status === 'deleted') {
+												statusClassName = 'text-red-600 dark:text-red-400'
+												statusLabel = 'D'
+											}
+
+											if (diff.status === 'renamed') {
+												statusClassName = 'text-sky-600 dark:text-sky-400'
+												statusLabel = 'R'
+											}
+
+											return (
+												<li key={diff.filePath} className="w-full min-w-0">
+													<button
+														type="button"
+														aria-current={
+															input.activeReviewScope === 'staged-to-worktree' &&
+															selectedEntry?.diff.filePath === diff.filePath
+																? 'page'
+																: undefined
+														}
+														onClick={() => input.selectReviewEntry('staged-to-worktree', diff.filePath)}
+														className={`grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground ${input.activeReviewScope === 'staged-to-worktree' && selectedEntry?.diff.filePath === diff.filePath ? 'bg-primary/15 text-primary' : ''}`}
+													>
+														<span className={`text-center font-semibold text-[10px] ${statusClassName}`}>
+															{statusLabel}
+														</span>
+														<FileIcon filePath={diff.filePath} className="size-3" />
+														<span className="min-w-0 truncate">{diff.filePath}</span>
+													</button>
+												</li>
+											)
+										})
+									)}
+								</TreeExplorerSection>
+							</TreeExplorer>
+						</ResizablePanel>
+
+						<ResizableHandle />
+
+						<ResizablePanel defaultSize="50%" minSize="20%">
+							<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
+								<TreeExplorerSection label="Staged changes" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+									{Array.isReadonlyArrayEmpty(stagedDiffs) ? (
+										<li className="flex flex-1 items-center justify-center px-2 py-2 text-muted-foreground text-xs">
+											No staged changes.
+										</li>
+									) : (
+										Array.map(stagedDiffs, diff => {
+											let statusClassName = 'text-amber-600 dark:text-amber-400'
+											let statusLabel = 'M'
+
+											if (diff.status === 'added') {
+												statusClassName = 'text-emerald-600 dark:text-emerald-400'
+												statusLabel = 'A'
+											}
+
+											if (diff.status === 'deleted') {
+												statusClassName = 'text-red-600 dark:text-red-400'
+												statusLabel = 'D'
+											}
+
+											if (diff.status === 'renamed') {
+												statusClassName = 'text-sky-600 dark:text-sky-400'
+												statusLabel = 'R'
+											}
+
+											return (
+												<li key={diff.filePath} className="w-full min-w-0">
+													<button
+														type="button"
+														aria-current={
+															input.activeReviewScope === 'head-to-staged' &&
+															selectedEntry?.diff.filePath === diff.filePath
+																? 'page'
+																: undefined
+														}
+														onClick={() => input.selectReviewEntry('head-to-staged', diff.filePath)}
+														className={`grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground ${input.activeReviewScope === 'head-to-staged' && selectedEntry?.diff.filePath === diff.filePath ? 'bg-primary/15 text-primary' : ''}`}
+													>
+														<span className={`text-center font-semibold text-[10px] ${statusClassName}`}>
+															{statusLabel}
+														</span>
+														<FileIcon filePath={diff.filePath} className="size-3" />
+														<span className="min-w-0 truncate">{diff.filePath}</span>
+													</button>
+												</li>
+											)
+										})
+									)}
+								</TreeExplorerSection>
+							</TreeExplorer>
+						</ResizablePanel>
+					</ResizablePanelGroup>
+				</div>
+			</ResizablePanel>
+
+			<ResizableHandle />
+
+			<ResizablePanel defaultSize="76%" minSize="36%">
+				<div className="flex h-full min-w-0 flex-col overflow-hidden">
+					<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+						{!selectedEntry && (
+							<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+								No changed files.
+							</div>
+						)}
+						{selectedEntry && (
+							<div
+								key={`${selectedEntry.scope}\n${selectedEntry.diff.filePath}`}
+								className="h-full min-h-0"
+								data-review-key={`${selectedEntry.scope}\n${selectedEntry.diff.filePath}`}
+							>
+								<PatchReview filePath={selectedEntry.diff.filePath} patch={selectedEntry.diff.patch} />
+							</div>
+						)}
+					</div>
+				</div>
+			</ResizablePanel>
+		</ResizablePanelGroup>
 	)
 }
 
 function RouteComponent() {
-	const {value: snapshot} = useAtomSuspense(projectsAtom)
-	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'))
-	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'))
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
-	const projects = snapshot['projects']
-	const activeProject = findProject(projects, search.projectRoot)
-	const activeWorktree = findWorktree(activeProject, search.worktreeRoot)
-
-	function selectProject(project: ProjectEntry) {
-		startTransition(() => {
-			navigate({
-				search: current => ({
-					...current,
-					projectRoot: project['repository']['root'],
-					worktreeRoot: project['repository']['root']
-				})
-			})
-		})
-	}
-
-	function selectWorktree(project: ProjectEntry, worktree: Worktree) {
-		startTransition(() => {
-			navigate({
-				search: current => ({
-					...current,
-					projectRoot: project['repository']['root'],
-					worktreeRoot: worktree['root']
-				})
-			})
-		})
-	}
-
-	function createProjectWorktree(project: ProjectEntry) {
-		const branch = window.prompt('Branch name')
-		if (!branch) {
-			return
-		}
-
-		createWorktree({
-			payload: {
-				baseBranch: project['worktrees'][0]?.['branch'] ?? 'main',
-				branch,
-				cwd: project['repository']['root'],
-				directory: nextWorktreeDirectory(project, branch)
-			}
-		})
-	}
-
-	function removeWorktree(worktree: Worktree) {
-		if (!window.confirm(`Delete worktree ${worktree['root']}?`)) {
-			return
-		}
-
-		deleteWorktree({payload: {cwd: worktree['root'], force: true}})
-	}
+	const projects = useAtomSuspense(projectsAtom).value.projects
+	const activeProject =
+		pipe(
+			projects,
+			Array.findFirst(project => project['repository']['root'] === search.projectRoot),
+			Option.getOrUndefined
+		) ?? projects[0]
+	const activeReviewScope = search.reviewScope === 'head-to-staged' ? 'head-to-staged' : 'staged-to-worktree'
+	const activeWorktree =
+		pipe(
+			activeProject?.['worktrees'] ?? [],
+			Array.findFirst(worktree => worktree['root'] === search.worktreeRoot),
+			Option.getOrUndefined
+		) ?? activeProject?.['worktrees'][0]
 
 	return (
 		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
 			<ResizablePanelGroup orientation="horizontal">
-				<ResizablePanel defaultSize="28%" minSize="20%" maxSize="40%">
+				<ResizablePanel defaultSize="14%" minSize="10%" maxSize="22%">
 					<div className="flex h-full flex-col border-r">
-						<div className="border-b px-3 py-2">
-							<div className="text-[11px] text-muted-foreground uppercase">Projects</div>
-						</div>
-
-						<TreeExplorer className="overflow-y-auto px-0 py-2">
-							<TreeExplorerSection label="Projects">
+						<TreeExplorer className="overflow-y-auto px-0 py-1">
+							<TreeExplorerSection label="Repositories">
 								{Array.isReadonlyArrayEmpty(projects) ? (
 									<li className="px-2 py-6 text-center text-muted-foreground text-xs">No projects found.</li>
 								) : (
-									Array.map(projects, project => (
-										<li key={project['repository']['gitDirectory']} className="flex min-w-0 flex-col gap-1">
-											<Collapsible
-												defaultOpen={
-													activeProject?.['repository']['gitDirectory'] === project['repository']['gitDirectory']
-												}
-											>
-												<CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground">
-													<ChevronRight className="size-3 shrink-0 transition-transform group-data-[panel-open]:rotate-90" />
-													<button
-														type="button"
-														onClick={event => {
-															event.stopPropagation()
-															selectProject(project)
-														}}
-														className={cn(
-															'flex min-w-0 flex-1 items-center gap-1.5 text-left',
-															activeProject?.['repository']['gitDirectory'] === project['repository']['gitDirectory'] &&
-																'text-foreground'
-														)}
-													>
-														<FolderGit2 className="size-3.5 shrink-0" />
-														<span className="min-w-0 truncate">{pathLabel(project['repository']['root'])}</span>
-													</button>
-												</CollapsibleTrigger>
-
-												<CollapsibleContent>
-													<div className="ml-4 flex flex-col border-l pl-1">
-														{Array.map(project['worktrees'], worktree => (
-															<TreeExplorerItem
-																key={worktree['root']}
-																selected={activeWorktree?.['root'] === worktree['root']}
-																onClick={() => selectWorktree(project, worktree)}
-																icon={<div className="size-3.5" />}
-															>
-																{worktreeTitle(project, worktree)}
-															</TreeExplorerItem>
-														))}
-													</div>
-												</CollapsibleContent>
-											</Collapsible>
-										</li>
+									Array.map(projects, (project, index) => (
+										<TreeExplorerGroup
+											key={project['repository']['gitDirectory']}
+											className="border-muted-foreground/20"
+											contentClassName={projectAccentClassNames[index % projectAccentClassNames.length]}
+											icon={<Layers className="size-3.5" />}
+											label={<span className="tree-label">{pathLabel(project['repository']['root'])}</span>}
+											meta={project['worktrees'].length}
+										>
+											{Array.map(project['worktrees'], worktree => (
+												<TreeExplorerBranch
+													key={worktree['root']}
+													depth={1}
+													icon={
+														worktree['root'] === project['repository']['root'] ? (
+															<PanelTop className="size-3.5" />
+														) : (
+															<Square className="size-3.5" />
+														)
+													}
+													selected={activeWorktree?.['root'] === worktree['root']}
+													onClick={() =>
+														startTransition(() => {
+															navigate({
+																search: current => ({
+																	...current,
+																	projectRoot: project['repository']['root'],
+																	reviewFile: undefined,
+																	worktreeRoot: worktree['root']
+																})
+															})
+														})
+													}
+													items={null}
+												>
+													{worktree['root'] === project['repository']['root']
+														? 'main'
+														: (worktree['branch'] ?? pathLabel(worktree['root']))}
+												</TreeExplorerBranch>
+											))}
+										</TreeExplorerGroup>
 									))
 								)}
 							</TreeExplorerSection>
@@ -240,117 +386,30 @@ function RouteComponent() {
 
 				<ResizableHandle />
 
-				<ResizablePanel defaultSize="72%" minSize="40%">
-					<div className="flex h-full flex-col overflow-hidden">
-						<div className="flex items-center gap-3 border-b px-4 py-3">
-							<div className="min-w-0 flex-1">
-								<div className="text-[11px] text-muted-foreground uppercase">Active worktree</div>
-								<div className="truncate text-foreground text-sm">
-									{activeProject ? pathLabel(activeProject['repository']['root']) : 'No project selected'}
-									{activeProject && activeWorktree ? ` / ${worktreeTitle(activeProject, activeWorktree)}` : ''}
-								</div>
-							</div>
-							<div className="flex items-center gap-2">
-								{activeProject && (
-									<Button
-										type="button"
-										variant="outline"
-										size="xs"
-										onClick={() => createProjectWorktree(activeProject)}
-									>
-										<Plus className="size-3.5" />
-										Create worktree
-									</Button>
-								)}
-								{activeProject && activeWorktree && !isMainWorktree(activeProject, activeWorktree) && (
-									<Button type="button" variant="outline" size="xs" onClick={() => removeWorktree(activeWorktree)}>
-										<Trash2 className="size-3.5" />
-										Delete worktree
-									</Button>
-								)}
-							</div>
+				<ResizablePanel defaultSize="86%" minSize="60%">
+					{activeProject && activeWorktree ? (
+						<ReviewViewPanel
+							key={activeWorktree['root']}
+							activeReviewScope={activeReviewScope}
+							activeWorktree={activeWorktree}
+							reviewFile={search.reviewFile}
+							selectReviewEntry={(scope, filePath) =>
+								startTransition(() => {
+									navigate({
+										search: current => ({
+											...current,
+											reviewFile: filePath,
+											reviewScope: scope
+										})
+									})
+								})
+							}
+						/>
+					) : (
+						<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+							No project selected.
 						</div>
-
-						<div className="min-h-0 flex-1 overflow-y-auto p-4">
-							{!(activeProject && activeWorktree) ? (
-								<div className="flex h-full items-center justify-center border text-muted-foreground text-sm">
-									No project selected.
-								</div>
-							) : (
-								<div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(320px,0.75fr)]">
-									<div className="flex min-w-0 flex-col gap-4">
-										<Panel>
-											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
-												<FolderGit2 className="size-3.5" />
-												Project
-											</div>
-											<DataRow label="name" value={pathLabel(activeProject['repository']['root'])} />
-											<DataRow label="root" value={activeProject['repository']['root']} />
-											<DataRow label="git dir" value={activeProject['repository']['gitDirectory']} />
-											<DataRow label="worktrees" value={`${activeProject['worktrees'].length}`} />
-										</Panel>
-
-										<Panel>
-											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
-												<Waypoints className="size-3.5" />
-												Worktree
-											</div>
-											<DataRow
-												label="kind"
-												value={isMainWorktree(activeProject, activeWorktree) ? 'main repo worktree' : 'linked worktree'}
-											/>
-											<DataRow label="branch" value={activeWorktree['branch'] ?? 'detached'} />
-											<DataRow label="commit" value={shortCommit(activeWorktree['commit'])} />
-											<DataRow label="root" value={activeWorktree['root']} />
-										</Panel>
-									</div>
-
-									<div className="flex min-w-0 flex-col gap-4">
-										<Panel>
-											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
-												<GitBranch className="size-3.5" />
-												All worktrees
-											</div>
-											<div className="flex flex-col">
-												{Array.map(activeProject['worktrees'], worktree => (
-													<button
-														key={worktree['root']}
-														type="button"
-														onClick={() => selectWorktree(activeProject, worktree)}
-														className={cn(
-															'grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t px-3 py-2 text-left text-xs first:border-t-0 hover:bg-muted',
-															activeWorktree['root'] === worktree['root'] && 'bg-primary/8'
-														)}
-													>
-														<div className="min-w-0">
-															<div className="truncate text-foreground">{worktreeTitle(activeProject, worktree)}</div>
-															<div className="truncate text-[11px] text-muted-foreground">{worktree['root']}</div>
-														</div>
-														<div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase">
-															<span>{worktree['branch'] ?? 'detached'}</span>
-															<span>{shortCommit(worktree['commit'])}</span>
-														</div>
-													</button>
-												))}
-											</div>
-										</Panel>
-
-										<Panel>
-											<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs uppercase">
-												<GitCommitHorizontal className="size-3.5" />
-												Focus
-											</div>
-											<div className="flex flex-col gap-2 px-3 py-3 text-muted-foreground text-xs leading-6">
-												<div>Projects are repos.</div>
-												<div>Worktrees are the working unit.</div>
-												<div>Agent panels are removed until the project/worktree shell is in place.</div>
-											</div>
-										</Panel>
-									</div>
-								</div>
-							)}
-						</div>
-					</div>
+					)}
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>

@@ -2,6 +2,8 @@ import {Array, pipe, String} from 'effect'
 
 import {getSingularPatch} from '@pierre/diffs'
 import * as Pierre from '@pierre/diffs/react'
+import {useHotkey} from '@tanstack/react-hotkeys'
+import {useEffect, useRef, useState} from 'react'
 
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
@@ -92,28 +94,34 @@ const DIFF_CSS = `
 	}
 `
 
-export function PatchDiff(props: {patch: string}) {
-	return (
-		<Pierre.PatchDiff
-			patch={props.patch}
-			options={{
-				overflow: 'scroll',
-				themeType: 'system',
-				unsafeCSS: DIFF_CSS,
-				diffStyle: 'unified',
-				lineDiffType: 'char',
-				diffIndicators: 'bars',
-				disableFileHeader: true,
-				theme: HIGHLIGHT_THEMES,
-				disableLineNumbers: false
-			}}
-		/>
-	)
-}
+const PATCH_DIFF_OPTIONS = {
+	overflow: 'scroll',
+	themeType: 'system',
+	unsafeCSS: DIFF_CSS,
+	diffStyle: 'unified',
+	lineDiffType: 'none',
+	diffIndicators: 'bars',
+	disableFileHeader: true,
+	theme: HIGHLIGHT_THEMES,
+	disableLineNumbers: false
+} as const
 
-export function PatchResult(props: {filePath: string; patch: string}) {
+const FILE_OPTIONS = {
+	overflow: 'scroll',
+	themeType: 'system',
+	unsafeCSS: DIFF_CSS,
+	disableFileHeader: true,
+	theme: HIGHLIGHT_THEMES,
+	disableLineNumbers: false
+} as const
+
+const VIRTUALIZER_CONFIG = {
+	overscrollSize: 600,
+	intersectionObserverMargin: 1200
+} as const
+
+function PatchResultContent(props: {filePath: string; patch: string}) {
 	const fileDiff = getSingularPatch(props.patch)
-
 	const content = pipe(
 		fileDiff.hunks,
 		Array.flatMap(hunk => hunk.hunkContent),
@@ -135,14 +143,99 @@ export function PatchResult(props: {filePath: string; patch: string}) {
 				contents: fileDiff.type === 'deleted' || String.isEmpty(content) ? '' : content,
 				lang: resolveLanguage(props.filePath)
 			}}
-			options={{
-				overflow: 'scroll',
-				themeType: 'system',
-				unsafeCSS: DIFF_CSS,
-				disableFileHeader: true,
-				theme: HIGHLIGHT_THEMES,
-				disableLineNumbers: false
-			}}
+			options={FILE_OPTIONS}
 		/>
+	)
+}
+
+export function PatchReview(props: {filePath: string; patch: string}) {
+	const containerRef = useRef<HTMLButtonElement>(null)
+	const [mode, setMode] = useState<'diff' | 'final'>('diff')
+	const [hovered, setHovered] = useState(false)
+
+	useEffect(() => {
+		containerRef.current?.focus()
+	}, [])
+
+	useHotkey('Tab', event => {
+		if (!(hovered || containerRef.current === document.activeElement)) {
+			return
+		}
+
+		event?.preventDefault()
+		setMode(current => (current === 'diff' ? 'final' : 'diff'))
+	})
+
+	return (
+		<button
+			type="button"
+			ref={containerRef}
+			className="block h-full min-h-0 w-full appearance-none border-0 bg-transparent p-0 text-left outline-none"
+			onMouseEnter={() => setHovered(true)}
+			onMouseLeave={() => setHovered(false)}
+		>
+			<Pierre.WorkerPoolContextProvider
+				poolOptions={{
+					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
+					poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
+					totalASTLRUCacheSize: 240
+				}}
+				highlighterOptions={{
+					theme: HIGHLIGHT_THEMES,
+					lineDiffType: 'none',
+					tokenizeMaxLineLength: 1_000
+				}}
+			>
+				<Pierre.Virtualizer className="h-full min-h-0 overflow-auto" config={VIRTUALIZER_CONFIG}>
+					{mode === 'diff' ? (
+						<Pierre.PatchDiff patch={props.patch} options={PATCH_DIFF_OPTIONS} />
+					) : (
+						<PatchResultContent filePath={props.filePath} patch={props.patch} />
+					)}
+				</Pierre.Virtualizer>
+			</Pierre.WorkerPoolContextProvider>
+		</button>
+	)
+}
+
+export function PatchDiff(props: {patch: string}) {
+	return (
+		<Pierre.WorkerPoolContextProvider
+			poolOptions={{
+				workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
+				poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
+				totalASTLRUCacheSize: 240
+			}}
+			highlighterOptions={{
+				theme: HIGHLIGHT_THEMES,
+				lineDiffType: 'none',
+				tokenizeMaxLineLength: 1_000
+			}}
+		>
+			<Pierre.Virtualizer className="h-full min-h-0 overflow-auto" config={VIRTUALIZER_CONFIG}>
+				<Pierre.PatchDiff patch={props.patch} options={PATCH_DIFF_OPTIONS} />
+			</Pierre.Virtualizer>
+		</Pierre.WorkerPoolContextProvider>
+	)
+}
+
+export function PatchResult(props: {filePath: string; patch: string}) {
+	return (
+		<Pierre.WorkerPoolContextProvider
+			poolOptions={{
+				workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
+				poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
+				totalASTLRUCacheSize: 240
+			}}
+			highlighterOptions={{
+				theme: HIGHLIGHT_THEMES,
+				lineDiffType: 'none',
+				tokenizeMaxLineLength: 1_000
+			}}
+		>
+			<Pierre.Virtualizer className="h-full min-h-0 overflow-auto" config={VIRTUALIZER_CONFIG}>
+				<PatchResultContent filePath={props.filePath} patch={props.patch} />
+			</Pierre.Virtualizer>
+		</Pierre.WorkerPoolContextProvider>
 	)
 }
