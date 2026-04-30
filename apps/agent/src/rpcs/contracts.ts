@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-import {GitDiff, GitDiffScope, GitRepository, GitWorktree} from '@ai-toolkit/git/schema'
+import {GitBranch, GitDiff, GitDiffScope, GitRepository, GitWorktree} from '@ai-toolkit/git/schema'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export class ProjectEntry extends Schema.Class<ProjectEntry>('ProjectEntry')({
@@ -9,8 +9,15 @@ export class ProjectEntry extends Schema.Class<ProjectEntry>('ProjectEntry')({
 }) {}
 
 export class ProjectsSnapshot extends Schema.Class<ProjectsSnapshot>('ProjectsSnapshot')({
+	fetchFailed: Schema.Boolean,
+	fetchedAt: Schema.optional(Schema.Number),
 	projects: Schema.Array(ProjectEntry),
 	scanRoot: Schema.String
+}) {}
+
+export class BranchesSnapshot extends Schema.Class<BranchesSnapshot>('BranchesSnapshot')({
+	branches: Schema.Array(GitBranch),
+	defaultBranch: Schema.String
 }) {}
 
 export class ReviewSnapshot extends Schema.Class<ReviewSnapshot>('ReviewSnapshot')({
@@ -24,6 +31,11 @@ export class RpcContracts extends RpcGroup.make(
 		stream: true,
 		success: ProjectsSnapshot
 	}),
+	Rpc.make('projects.branches', {
+		payload: Schema.Struct({cwd: Schema.String}),
+		success: BranchesSnapshot
+	}),
+	Rpc.make('projects.refresh', {}),
 	Rpc.make('review.watch', {
 		stream: true,
 		payload: Schema.Struct({
@@ -44,12 +56,18 @@ export class RpcContracts extends RpcGroup.make(
 			filePath: Schema.String
 		})
 	}),
+	Rpc.make('review.discardFile', {
+		payload: Schema.Struct({
+			cwd: Schema.String,
+			filePath: Schema.String
+		})
+	}),
 	Rpc.make('projects.createWorktree', {
 		payload: Schema.Struct({
 			baseBranch: Schema.String,
 			branch: Schema.String,
 			cwd: Schema.String,
-			directory: Schema.String
+			mode: Schema.Literals(['existing-local', 'existing-remote', 'new-local'])
 		})
 	}),
 	Rpc.make('projects.deleteWorktree', {

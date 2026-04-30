@@ -22,9 +22,24 @@ export class GitRepository extends Schema.Class<GitRepository>('GitRepository')(
 	root: Schema.String
 }) {}
 
+export class GitBranch extends Schema.Class<GitBranch>('GitBranch')({
+	name: Schema.String,
+	remote: Schema.optional(Schema.String),
+	type: Schema.Literals(['local', 'remote'])
+}) {}
+
+export class GitWorktreeStatus extends Schema.Class<GitWorktreeStatus>('GitWorktreeStatus')({
+	ahead: Schema.Number,
+	behind: Schema.Number,
+	dirtyTracked: Schema.Boolean,
+	unpushedCommits: Schema.Boolean,
+	untracked: Schema.Boolean
+}) {}
+
 export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
 	branch: Schema.optional(Schema.String),
 	commit: Schema.String,
 	gitDirectory: Schema.String,
-	root: Schema.String
+	root: Schema.String,
+	status: Schema.optional(GitWorktreeStatus)
 }) {}

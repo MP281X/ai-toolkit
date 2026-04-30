@@ -1,9 +1,9 @@
-import {Array, Duration, Effect, FileSystem, Order, PubSub, pipe, Stream, SubscriptionRef} from 'effect'
+import {Array, Duration, Effect, FileSystem, Order, Predicate, PubSub, pipe, Stream, SubscriptionRef} from 'effect'
 
 import {GitRepository} from '@ai-toolkit/git/schema'
 import {Git} from '@ai-toolkit/git/service'
 
-import {ProjectEntry, ProjectsSnapshot, ReviewSnapshot, RpcContracts} from '#rpcs/contracts.ts'
+import {BranchesSnapshot, ProjectEntry, ProjectsSnapshot, ReviewSnapshot, RpcContracts} from '#rpcs/contracts.ts'
 
 export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
@@ -11,23 +11,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const fs = yield* FileSystem.FileSystem
 		const scanRoot = process.env['HOME'] ?? process.cwd()
 		const snapshots = yield* PubSub.unbounded<ProjectsSnapshot>()
-		const state = yield* SubscriptionRef.make(new ProjectsSnapshot({projects: [], scanRoot}))
-		const stringOrder = Order.make((left: string, right: string) => {
-			if (left > right) {
-				return 1
-			}
-
-			if (left < right) {
-				return -1
-			}
-
-			return 0
-		})
-
+		const state = yield* SubscriptionRef.make(new ProjectsSnapshot({fetchFailed: false, projects: [], scanRoot}))
+		let fetchedAt: number | undefined
+		let fetchFailed = false
 		const loadSnapshot = Effect.fnUntraced(function* () {
-			const repositories = yield* git.listRepositoriesFrom({cwd: scanRoot})
 			const loadedProjects = yield* Effect.forEach(
-				repositories,
+				yield* git.listRepositoriesFrom({cwd: scanRoot}),
 				repository =>
 					pipe(
 						Effect.gen(function* () {
@@ -37,7 +26,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 								discoveredWorktrees,
 								Array.sortWith(
 									worktree => `${worktree.root === projectRoot ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
-									stringOrder
+									Order.String
 								)
 							)
 
@@ -50,20 +39,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 					),
 				{concurrency: 'unbounded'}
 			)
-			const projects = []
-
-			for (const project of loadedProjects) {
-				if (!project) {
-					continue
-				}
-
-				projects.push(project)
-			}
 
 			return new ProjectsSnapshot({
+				fetchFailed,
+				fetchedAt,
 				projects: pipe(
-					projects,
-					Array.sortWith(project => project['repository']['root'], stringOrder)
+					loadedProjects,
+					Array.filter(Predicate.isNotUndefined),
+					Array.sortWith(project => project['repository']['root'], Order.String)
 				),
 				scanRoot
 			})
@@ -94,6 +77,31 @@ export const RpcHandlers = RpcContracts.toLayer(
 						return pipe(Stream.make(yield* SubscriptionRef.get(state)), Stream.concat(Stream.fromPubSub(snapshots)))
 					})
 				),
+			'projects.branches': payload =>
+				pipe(
+					git.branches(payload),
+					Effect.map(result => new BranchesSnapshot(result)),
+					Effect.catchTag('GitError', () => Effect.succeed(new BranchesSnapshot({branches: [], defaultBranch: 'main'})))
+				),
+			'projects.refresh': Effect.fnUntraced(function* () {
+				const snapshot = yield* SubscriptionRef.get(state)
+				fetchFailed = false
+				yield* Effect.forEach(
+					snapshot.projects,
+					project =>
+						pipe(
+							git.fetch({cwd: project.repository.root}),
+							Effect.catchTag('GitError', () =>
+								Effect.sync(() => {
+									fetchFailed = true
+								})
+							)
+						),
+					{concurrency: 'unbounded'}
+				)
+				fetchedAt = Date.now()
+				yield* refresh()
+			}),
 			'review.watch': payload =>
 				Stream.unwrap(
 					Effect.gen(function* () {
@@ -132,6 +140,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'review.unstageFile': payload =>
 				pipe(
 					git.unstageFile(payload),
+					Effect.catchTag('GitError', () => Effect.void)
+				),
+			'review.discardFile': payload =>
+				pipe(
+					git.discardFile(payload),
 					Effect.catchTag('GitError', () => Effect.void)
 				),
 			'projects.createWorktree': payload =>
