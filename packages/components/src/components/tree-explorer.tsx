@@ -12,7 +12,7 @@ export function TreeExplorer(props: TreeExplorerProps) {
 }
 
 type TreeExplorerSectionProps = {
-	label: string
+	label: React.ReactNode
 	className?: string
 	children: React.ReactNode
 }
@@ -55,32 +55,9 @@ export function TreeExplorerRow(props: TreeExplorerItemProps) {
 		props.selected && 'border-primary bg-muted text-foreground hover:bg-muted hover:text-foreground',
 		props.className
 	)
-
-	if (props.onClick) {
-		return (
-			<button
-				type="button"
-				aria-current={props.selected ? 'page' : undefined}
-				onClick={props.onClick}
-				className={className}
-				style={{paddingLeft: `${6 + (props.depth ?? 0) * 8}px`, paddingRight: 8}}
-			>
-				<span className="flex min-w-0 flex-1 items-center gap-1.5">
-					{props.indicator && (
-						<span className="flex size-3 shrink-0 items-center justify-center text-muted-foreground">
-							{props.indicator}
-						</span>
-					)}
-					{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
-					<span className="min-w-0 flex-1 truncate">{props.children}</span>
-				</span>
-				{props.meta && <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">{props.meta}</span>}
-			</button>
-		)
-	}
-
-	return (
-		<div className={className} style={{paddingLeft: `${6 + (props.depth ?? 0) * 8}px`, paddingRight: 8}}>
+	const style = {paddingLeft: `${6 + (props.depth ?? 0) * 8}px`, paddingRight: 8}
+	const content = (
+		<>
 			<span className="flex min-w-0 flex-1 items-center gap-1.5">
 				{props.indicator && (
 					<span className="flex size-3 shrink-0 items-center justify-center text-muted-foreground">
@@ -91,6 +68,26 @@ export function TreeExplorerRow(props: TreeExplorerItemProps) {
 				<span className="min-w-0 flex-1 truncate">{props.children}</span>
 			</span>
 			{props.meta && <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">{props.meta}</span>}
+		</>
+	)
+
+	if (props.onClick) {
+		return (
+			<button
+				type="button"
+				aria-current={props.selected ? 'page' : undefined}
+				onClick={props.onClick}
+				className={className}
+				style={style}
+			>
+				{content}
+			</button>
+		)
+	}
+
+	return (
+		<div className={className} style={style}>
+			{content}
 		</div>
 	)
 }
