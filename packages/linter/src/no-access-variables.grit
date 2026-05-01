@@ -17,5 +17,8 @@ or {
 			`undefined`
 		},
 		register_diagnostic(span=$match, message="Do not copy a value into a same-level alias. Keep using the original name so the code stays direct and the extra binding does not hide trivial data flow.")
+	},
+	`const $name = { ...$var }` as $match where {
+		register_diagnostic(span=$match, message="Do not clone a value into a same-level alias with object spread. Keep using the original name so the code stays direct and the extra binding does not hide trivial data flow.")
 	}
 }

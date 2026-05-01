@@ -153,12 +153,7 @@ function match<const TTrigger extends string>(text: string, triggers: readonly T
 	}
 }
 
-function EditorPlugin({
-	editorRef,
-	filesRef,
-	menuRef,
-	onSubmit
-}: {
+function EditorPlugin(props: {
 	editorRef: {current: lexical.LexicalEditor | null}
 	filesRef: {current: Map<string, File>}
 	menuRef: {current: boolean}
@@ -167,26 +162,28 @@ function EditorPlugin({
 	const [editor] = useLexicalComposerContext()
 
 	useEffect(() => {
-		editorRef.current = editor
+		// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
+		props.editorRef.current = editor
 
 		return () => {
-			editorRef.current = null
+			// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
+			props.editorRef.current = null
 		}
-	}, [editor, editorRef])
+	}, [editor, props.editorRef])
 
 	useEffect(() => {
 		return editor.registerCommand(
 			lexical.KEY_ENTER_COMMAND,
 			event => {
-				if (event?.shiftKey || menuRef.current || !onSubmit) return false
+				if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
 
 				event?.preventDefault()
-				onSubmit()
+				props.onSubmit()
 				return true
 			},
 			lexical.COMMAND_PRIORITY_LOW
 		)
-	}, [editor, menuRef, onSubmit])
+	}, [editor, props.menuRef, props.onSubmit])
 
 	useEffect(() => {
 		return editor.registerCommand(
@@ -209,7 +206,7 @@ function EditorPlugin({
 
 					for (const file of files) {
 						const id = crypto.randomUUID()
-						filesRef.current.set(id, file)
+						props.filesRef.current.set(id, file)
 
 						selection.insertNodes([
 							lexical
@@ -225,18 +222,12 @@ function EditorPlugin({
 			},
 			lexical.COMMAND_PRIORITY_HIGH
 		)
-	}, [editor, filesRef])
+	}, [editor, props.filesRef])
 
 	return <HistoryPlugin />
 }
 
-function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
-	children,
-	entriesRef,
-	menuBoxRef,
-	menuRef,
-	options
-}: {
+function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 	children?: (entry: AutocompleteInput.Entry<TValue>) => React.ReactNode
 	entriesRef: {current: Map<string, AutocompleteInput.Entry<TValue>>}
 	menuBoxRef: React.RefObject<HTMLDivElement | null>
@@ -246,7 +237,7 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
 	const [search, setSearch] = useState<null | {trigger: string; query: string}>(null)
 
 	const triggers = pipe(
-		options ?? {},
+		props.options ?? {},
 		Record.keys,
 		Array.sortWith(
 			String.length,
@@ -258,16 +249,18 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
 		)
 	)
 
-	const items = getItems(search, options)
+	const items = getItems(search, props.options)
 
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
 			onOpen={() => {
-				menuRef.current = true
+				// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
+				props.menuRef.current = true
 			}}
 			onClose={() => {
-				menuRef.current = false
+				// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
+				props.menuRef.current = false
 			}}
 			triggerFn={text => {
 				const next = match(text, triggers)
@@ -288,7 +281,7 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
 			}}
 			onSelectOption={(option, node, close) => {
 				const id = crypto.randomUUID()
-				entriesRef.current.set(id, option.entry)
+				props.entriesRef.current.set(id, option.entry)
 
 				const token = lexical
 					.$applyNodeReplacement(new TokenNode(`${option.entry.trigger}${option.entry.value.label}`, id, 'entry'))
@@ -313,8 +306,8 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
 			}}
 			options={items}
 			anchorClassName="z-50"
-			menuRenderFn={(anchorRef, props) =>
-				!(anchorRef.current && menuBoxRef.current) || Array.isReadonlyArrayEmpty(props.options)
+			menuRenderFn={(anchorRef, menuProps) =>
+				!(anchorRef.current && props.menuBoxRef.current) || Array.isReadonlyArrayEmpty(menuProps.options)
 					? null
 					: createPortal(
 							<Command
@@ -322,25 +315,25 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>({
 								className="h-auto w-full border-input border-b bg-card text-foreground"
 							>
 								<CommandList className="max-h-48" role="listbox">
-									{Array.map(props.options, (option, index) => (
+									{Array.map(menuProps.options, (option, index) => (
 										<CommandItem
 											key={option.key}
 											id={`typeahead-item-${index}`}
 											ref={option.setRefElement}
 											value={option.key}
 											role="option"
-											aria-selected={props.selectedIndex === index}
-											className={cn('px-3', props.selectedIndex === index && 'bg-muted')}
+											aria-selected={menuProps.selectedIndex === index}
+											className={cn('px-3', menuProps.selectedIndex === index && 'bg-muted')}
 											onMouseDown={event => event.preventDefault()}
-											onMouseEnter={() => props.setHighlightedIndex(index)}
-											onSelect={() => props.selectOptionAndCleanUp(option)}
+											onMouseEnter={() => menuProps.setHighlightedIndex(index)}
+											onSelect={() => menuProps.selectOptionAndCleanUp(option)}
 										>
-											<div className="flex min-w-0 items-center gap-2">{renderEntry(option.entry, children)}</div>
+											<div className="flex min-w-0 items-center gap-2">{renderEntry(option.entry, props.children)}</div>
 										</CommandItem>
 									))}
 								</CommandList>
 							</Command>,
-							menuBoxRef.current
+							props.menuBoxRef.current
 						)
 			}
 		/>

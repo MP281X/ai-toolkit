@@ -30,10 +30,10 @@ export class Agent extends Context.Service<
 
 	static resolveLanguageModel = pipe(
 		Match.type<{provider: ProviderId; model: ModelId}>(),
-		Match.when({provider: 'openrouter'}, ({model, provider}) =>
+		Match.when({provider: 'openrouter'}, input =>
 			Layer.provideMerge(
 				OpenRouterLanguageModel.layer({
-					model,
+					model: input.model,
 					config: {
 						strictJsonSchema: true,
 						parallel_tool_calls: true,
@@ -41,37 +41,37 @@ export class Agent extends Context.Service<
 						reasoning: {effort: 'minimal', summary: 'concise'}
 					}
 				}),
-				OpenRouterClient.layerConfig(providers[provider])
+				OpenRouterClient.layerConfig(providers[input.provider])
 			)
 		),
-		Match.when({provider: 'opencode-go', model: 'glm-5'}, ({model, provider}) =>
+		Match.when({provider: 'opencode-go', model: 'glm-5'}, input =>
 			Layer.provideMerge(
 				OpenAiCompatLanguageModel.layer({
-					model,
+					model: input.model,
 					config: {strictJsonSchema: true}
 				}),
-				OpenAiCompatClient.layerConfig(providers[provider])
+				OpenAiCompatClient.layerConfig(providers[input.provider])
 			)
 		),
-		Match.when({provider: 'opencode-go', model: 'minimax-m2.5'}, ({model, provider}) =>
+		Match.when({provider: 'opencode-go', model: 'minimax-m2.5'}, input =>
 			Layer.provideMerge(
 				AnthropicLanguageModel.layer({
-					model,
+					model: input.model,
 					config: {strictJsonSchema: true}
 				}),
-				AnthropicClient.layerConfig(providers[provider])
+				AnthropicClient.layerConfig(providers[input.provider])
 			)
 		),
-		Match.when({provider: 'opencode', model: 'gpt-5-nano'}, ({model, provider}) =>
+		Match.when({provider: 'opencode', model: 'gpt-5-nano'}, input =>
 			Layer.provideMerge(
 				OpenAiLanguageModel.layer({
-					model,
+					model: input.model,
 					config: {
 						strictJsonSchema: true,
 						text: {verbosity: 'low'}
 					}
 				}),
-				OpenAiClient.layerConfig(providers[provider])
+				OpenAiClient.layerConfig(providers[input.provider])
 			)
 		),
 		Match.orElseAbsurd
