@@ -1,7 +1,12 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Array, Effect, Option, Order, Predicate, pipe, Schema, Stream, String} from 'effect'
 
+import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {models} from '@ai-toolkit/ai/catalog'
 import {
+	ArrowUpIcon,
+	Brain,
+	ChevronRight,
 	Copy,
 	FileIcon,
 	GitBranch,
@@ -10,10 +15,15 @@ import {
 	PanelTop,
 	Plus,
 	RefreshCw,
+	SparklesIcon,
 	Square,
-	Trash2
+	Trash2,
+	UserIcon,
+	Wrench
 } from '@ai-toolkit/components/icons'
+import {AutocompleteInput} from '@ai-toolkit/components/input'
 import {PatchReview} from '@ai-toolkit/components/render/diff'
+import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {
 	TreeExplorer,
 	TreeExplorerGroup,
@@ -21,6 +31,7 @@ import {
 	TreeExplorerSection
 } from '@ai-toolkit/components/tree-explorer'
 import {Button} from '@ai-toolkit/components/ui/button'
+import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList} from '@ai-toolkit/components/ui/combobox'
 import {
 	Dialog,
@@ -39,20 +50,28 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@ai-toolkit/components/ui/select'
 import {useHotkey} from '@tanstack/react-hotkeys'
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useState} from 'react'
+import {startTransition, useEffect, useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {ProjectEntry} from '#rpcs/contracts.ts'
+import type {AgentEvent, AgentStreamPart, ProjectEntry} from '#rpcs/contracts.ts'
 import {BranchesSnapshot, ProjectsSnapshot, ReviewSnapshot} from '#rpcs/contracts.ts'
 
-const SearchSchema = Schema.Struct({
+const HomeSearchSchema = Schema.Struct({
 	projectRoot: Schema.optional(Schema.String),
 	worktreeRoot: Schema.optional(Schema.String),
+	agentModel: Schema.optional(Schema.String),
 	reviewFile: Schema.optional(Schema.String),
 	reviewScope: Schema.optional(Schema.String)
 })
+
+export const Route = createFileRoute('/(home)')({
+	validateSearch: Schema.toStandardSchemaV1(HomeSearchSchema),
+	component: HomeLayout
+})
+
+type HomeSearch = typeof HomeSearchSchema.Type
 
 const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.74_0.085_50)] [&_.tree-label]:text-[oklch(0.8_0.085_50)]',
@@ -64,7 +83,19 @@ const projectAccentClassNames = [
 ] as const
 
 type ReviewScope = 'staged-to-worktree' | 'head-to-staged'
-type Worktree = ProjectEntry['worktrees'][number]
+export type Worktree = ProjectEntry['worktrees'][number]
+type AgentRun = {prompt: string; runId: string; parts: readonly AgentEvent[]}
+
+export const defaultModel = models[2]
+
+export function agentId(projectRoot: string, worktreeRoot: string) {
+	let hash = 0x811c9dc5
+	for (const byte of new TextEncoder().encode(pipe([projectRoot, worktreeRoot], Array.join('\n')))) {
+		hash ^= byte
+		hash = Math.imul(hash, 0x01000193)
+	}
+	return `agent-${pipe((hash >>> 0).toString(36), String.slice(0, 8))}`
+}
 
 const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
@@ -77,10 +108,81 @@ const projectsAtom = Atom.keepAlive(
 	)
 )
 
-export const Route = createFileRoute('/(home)/')({
-	validateSearch: Schema.toStandardSchemaV1(SearchSchema),
-	component: RouteComponent
-})
+function HomeLayout() {
+	const navigate = Route.useNavigate()
+	const search = Route.useSearch()
+	const pathname = useRouterState({select: state => state.location.pathname})
+	const {activeProject, activeWorktree, projects, snapshot} = useHomeSelection(search)
+
+	return (
+		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
+			<ResizablePanelGroup orientation="horizontal">
+				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
+					<WorktreeManager
+						activeProject={activeProject}
+						activeWorktree={activeWorktree}
+						activeAgentId={
+							pathname === '/agent' && activeProject && activeWorktree
+								? agentId(activeProject.repository.root, activeWorktree.root)
+								: undefined
+						}
+						fetchFailed={snapshot.fetchFailed}
+						fetchedAt={snapshot.fetchedAt}
+						projects={projects}
+						selectWorktree={(projectRoot, worktreeRoot) =>
+							startTransition(() => {
+								navigate({
+									to: '/diff',
+									search: {...search, projectRoot, reviewFile: undefined, worktreeRoot}
+								})
+							})
+						}
+						selectAgent={(projectRoot, worktreeRoot) =>
+							startTransition(() => {
+								navigate({
+									to: '/agent',
+									search: {...search, projectRoot, reviewFile: undefined, worktreeRoot}
+								})
+							})
+						}
+					/>
+				</ResizablePanel>
+
+				<ResizableHandle />
+
+				<ResizablePanel defaultSize="86%" minSize="60%">
+					<Outlet />
+				</ResizablePanel>
+			</ResizablePanelGroup>
+		</div>
+	)
+}
+
+const filesAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.flatMap(client => client('files.search', {cwd}))
+			),
+			{initialValue: Array.empty<string>()}
+		)
+	)
+)
+
+const agentEventsAtom = Atom.family((agentId: string) =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.map(client => client('agent.events', {agentId})),
+				Stream.unwrap,
+				Stream.scan(Array.empty<AgentEvent>(), (events, event) => [...events, event])
+			),
+			{initialValue: Array.empty<AgentEvent>()}
+		)
+	)
+)
 
 function pathLabel(value: string) {
 	const segments = pipe(value, String.split('/'))
@@ -96,7 +198,25 @@ function pathLabel(value: string) {
 	return value
 }
 
-function ReviewViewPanel(input: {
+export function useHomeSelection(search: HomeSearch) {
+	const snapshot = useAtomSuspense(projectsAtom).value
+	const activeProject =
+		pipe(
+			snapshot.projects,
+			Array.findFirst(project => project['repository']['root'] === search.projectRoot),
+			Option.getOrUndefined
+		) ?? snapshot.projects[0]
+	const activeWorktree =
+		pipe(
+			activeProject?.['worktrees'] ?? [],
+			Array.findFirst(worktree => worktree['root'] === search.worktreeRoot),
+			Option.getOrUndefined
+		) ?? activeProject?.['worktrees'][0]
+
+	return {activeProject, activeWorktree, projects: snapshot.projects, snapshot}
+}
+
+export function ReviewViewPanel(input: {
 	activeReviewScope: ReviewScope
 	activeWorktree: Worktree
 	reviewFile: string | undefined
@@ -389,10 +509,12 @@ function ReviewViewPanel(input: {
 function WorktreeManager(input: {
 	activeProject: ProjectEntry | undefined
 	activeWorktree: Worktree | undefined
+	activeAgentId: string | undefined
 	projects: readonly ProjectEntry[]
 	fetchFailed: boolean
 	fetchedAt: number | undefined
 	selectWorktree: (projectRoot: string, worktreeRoot: string) => void
+	selectAgent: (projectRoot: string, worktreeRoot: string, agentId: string) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const refresh = useAtomSet(RpcClient.mutation('projects.refresh'), {mode: 'promise'})
@@ -445,20 +567,7 @@ function WorktreeManager(input: {
 			availableBranches,
 			Array.some(candidate => pipe(candidate.name, String.includes(branch)))
 		)
-	const fetchStatusClassName = input.fetchFailed ? 'text-amber-500' : 'text-muted-foreground'
-	let fetchStatusText = 'not fetched'
-	if (input.fetchedAt) {
-		fetchStatusText = `fetched ${new Date(input.fetchedAt).toLocaleTimeString()}`
-	}
-	if (input.fetchFailed) {
-		fetchStatusText = 'fetch failed'
-	}
-	const localSourceBranches = pipe(
-		uniqueBranches,
-		Array.filter(candidate => candidate.name !== branchSnapshot.defaultBranch)
-	)
 	const effectiveSourceBranch = sourceBranch || branchSnapshot.defaultBranch
-	const isNewBranch = branch !== '' && Predicate.isUndefined(selectedBranch)
 
 	useEffect(() => {
 		const id = window.setInterval(() => {
@@ -515,33 +624,19 @@ function WorktreeManager(input: {
 	}
 
 	async function requestDeleteWorktree(worktree: Worktree) {
-		const hasWarnings =
+		if (
 			worktree.status?.dirtyTracked ||
 			worktree.status?.untracked ||
 			worktree.status?.unpushedCommits ||
 			worktree.status?.ahead ||
 			worktree.status?.behind
-
-		if (hasWarnings) {
+		) {
 			setDeleteTarget(worktree)
 			return
 		}
 
 		await deleteWorktree({payload: {cwd: worktree.root, force: true}})
 		refreshProjects()
-	}
-
-	async function copyPath(value: string) {
-		try {
-			await navigator.clipboard.writeText(value)
-		} catch {
-			const input = document.createElement('input')
-			input.value = value
-			document.body.append(input)
-			input.select()
-			document.execCommand('copy')
-			input.remove()
-		}
 	}
 
 	return (
@@ -561,7 +656,13 @@ function WorktreeManager(input: {
 				>
 					<RefreshCw className="size-3.5" />
 				</Button>
-				<span className={fetchStatusClassName}>{fetchStatusText}</span>
+				<span className={(input.fetchFailed && 'text-amber-500') || 'text-muted-foreground'}>
+					{(() => {
+						if (input.fetchFailed) return 'fetch failed'
+						if (input.fetchedAt) return `fetched ${new Date(input.fetchedAt).toLocaleTimeString()}`
+						return 'not fetched'
+					})()}
+				</span>
 			</div>
 
 			<Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -605,7 +706,7 @@ function WorktreeManager(input: {
 								</ComboboxContent>
 							</Combobox>
 						</div>
-						{isNewBranch && (
+						{branch !== '' && Predicate.isUndefined(selectedBranch) && (
 							<div className="grid gap-1.5">
 								<span className="font-medium text-muted-foreground text-xs">Create from</span>
 								<Select value={effectiveSourceBranch} onValueChange={value => setSourceBranch(value ?? '')}>
@@ -617,19 +718,23 @@ function WorktreeManager(input: {
 											<GitBranch className="mr-2 size-3.5" />
 											{branchSnapshot.defaultBranch}
 										</SelectItem>
-										{Array.map(localSourceBranches, candidate => (
-											<SelectItem
-												key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
-												value={candidate.name}
-											>
-												{candidate.type === 'local' ? (
-													<GitBranch className="mr-2 size-3.5" />
-												) : (
-													<Square className="mr-2 size-3.5" />
-												)}
-												{candidate.name}
-											</SelectItem>
-										))}
+										{pipe(
+											uniqueBranches,
+											Array.filter(candidate => candidate.name !== branchSnapshot.defaultBranch),
+											Array.map(candidate => (
+												<SelectItem
+													key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
+													value={candidate.name}
+												>
+													{candidate.type === 'local' ? (
+														<GitBranch className="mr-2 size-3.5" />
+													) : (
+														<Square className="mr-2 size-3.5" />
+													)}
+													{candidate.name}
+												</SelectItem>
+											))
+										)}
 									</SelectContent>
 								</Select>
 							</div>
@@ -655,7 +760,7 @@ function WorktreeManager(input: {
 							contentClassName={projectAccentClassNames[index % projectAccentClassNames.length]}
 							icon={<Layers className="size-3.5" />}
 							label={<span className="tree-label">{pathLabel(project.repository.root)}</span>}
-							meta={
+							actions={
 								<Button
 									type="button"
 									variant="ghost"
@@ -671,68 +776,96 @@ function WorktreeManager(input: {
 								</Button>
 							}
 						>
-							{Array.map(project.worktrees, worktree => {
-								const risky =
-									worktree.status?.dirtyTracked ||
-									worktree.status?.untracked ||
-									worktree.status?.unpushedCommits ||
-									worktree.status?.behind
-								const statusIconClassName = risky ? 'text-amber-500' : 'text-current'
-
-								return (
-									<li
-										key={worktree.root}
-										className={`group grid grid-cols-[minmax(0,1fr)_auto] items-center pr-2 hover:bg-muted/60 ${input.activeWorktree?.root === worktree.root ? 'bg-muted' : ''}`}
-									>
-										<TreeExplorerRow
-											depth={1}
-											icon={
-												worktree.root === project.repository.root ? (
-													<PanelTop className={`size-3.5 ${statusIconClassName}`} />
-												) : (
-													<Square className={`size-3.5 ${statusIconClassName}`} />
-												)
-											}
-											selected={input.activeWorktree?.root === worktree.root}
-											className="bg-transparent hover:bg-transparent"
-											onClick={() => input.selectWorktree(project.repository.root, worktree.root)}
-										>
-											{worktree.branch ?? pathLabel(worktree.root)}
-										</TreeExplorerRow>
-										<DropdownMenu>
-											<DropdownMenuTrigger
-												render={
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon"
-														className="size-6 text-muted-foreground [&_svg]:text-muted-foreground"
-														aria-label="Worktree actions"
-													>
-														<MoreVertical className="size-4" />
-													</Button>
+							{pipe(
+								project.worktrees,
+								Array.map(worktree => {
+									const worktreeAgentId = agentId(project.repository.root, worktree.root)
+									return (
+										<li key={worktree.root} className="w-full min-w-0">
+											<TreeExplorerRow
+												key={worktree.root}
+												icon={
+													worktree.root === project.repository.root ? (
+														<PanelTop
+															className={`size-3.5 ${worktree.status?.dirtyTracked || worktree.status?.untracked || worktree.status?.unpushedCommits || worktree.status?.behind ? 'text-amber-500' : 'text-current'}`}
+														/>
+													) : (
+														<Square
+															className={`size-3.5 ${worktree.status?.dirtyTracked || worktree.status?.untracked || worktree.status?.unpushedCommits || worktree.status?.behind ? 'text-amber-500' : 'text-current'}`}
+														/>
+													)
 												}
-											/>
-											<DropdownMenuContent align="end" className="min-w-40">
-												<DropdownMenuItem onClick={() => copyPath(worktree.root)} className="whitespace-nowrap">
-													<Copy className="mr-2 size-3.5" />
-													Copy path
-												</DropdownMenuItem>
-												{worktree.root !== project.repository.root && (
-													<DropdownMenuItem
-														variant="destructive"
-														onClick={() => requestDeleteWorktree(worktree)}
-														className="whitespace-nowrap"
+												selected={
+													input.activeWorktree?.root === worktree.root && Predicate.isUndefined(input.activeAgentId)
+												}
+												onClick={() => input.selectWorktree(project.repository.root, worktree.root)}
+												actions={
+													<DropdownMenu>
+														<DropdownMenuTrigger
+															render={
+																<Button
+																	type="button"
+																	variant="ghost"
+																	size="icon"
+																	className="size-6 text-muted-foreground [&_svg]:text-muted-foreground"
+																	aria-label="Worktree actions"
+																>
+																	<MoreVertical className="size-4" />
+																</Button>
+															}
+														/>
+														<DropdownMenuContent align="end" className="min-w-40">
+															<DropdownMenuItem
+																onClick={() => {
+																	void (async () => {
+																		try {
+																			await navigator.clipboard.writeText(worktree.root)
+																		} catch {
+																			const input = document.createElement('input')
+																			input.value = worktree.root
+																			document.body.append(input)
+																			input.select()
+																			document.execCommand('copy')
+																			input.remove()
+																		}
+																	})()
+																}}
+																className="whitespace-nowrap"
+															>
+																<Copy className="mr-2 size-3.5" />
+																Copy path
+															</DropdownMenuItem>
+															{worktree.root !== project.repository.root && (
+																<DropdownMenuItem
+																	variant="destructive"
+																	onClick={() => requestDeleteWorktree(worktree)}
+																	className="whitespace-nowrap"
+																>
+																	<Trash2 className="mr-2 size-3.5" />
+																	Delete worktree
+																</DropdownMenuItem>
+															)}
+														</DropdownMenuContent>
+													</DropdownMenu>
+												}
+											>
+												{worktree.branch ?? pathLabel(worktree.root)}
+											</TreeExplorerRow>
+											<ul className="flex flex-col gap-px border-muted-foreground/20 border-l" style={{marginLeft: 15}}>
+												<li className="w-full min-w-0">
+													<TreeExplorerRow
+														icon={<SparklesIcon className="size-3.5" />}
+														selected={input.activeAgentId === worktreeAgentId}
+														onClick={() => input.selectAgent(project.repository.root, worktree.root, worktreeAgentId)}
 													>
-														<Trash2 className="mr-2 size-3.5" />
-														Delete worktree
-													</DropdownMenuItem>
-												)}
-											</DropdownMenuContent>
-										</DropdownMenu>
-									</li>
-								)
-							})}
+														agent
+													</TreeExplorerRow>
+												</li>
+											</ul>
+										</li>
+									)
+								})
+							)}
 						</TreeExplorerGroup>
 					))}
 				</TreeExplorerSection>
@@ -770,73 +903,230 @@ function WorktreeManager(input: {
 	)
 }
 
-function RouteComponent() {
-	const navigate = Route.useNavigate()
-	const search = Route.useSearch()
-	const projects = useAtomSuspense(projectsAtom).value.projects
-	const snapshot = useAtomSuspense(projectsAtom).value
-	const activeProject =
-		pipe(
-			projects,
-			Array.findFirst(project => project['repository']['root'] === search.projectRoot),
-			Option.getOrUndefined
-		) ?? projects[0]
-	const activeReviewScope = search.reviewScope === 'head-to-staged' ? 'head-to-staged' : 'staged-to-worktree'
-	const activeWorktree =
-		pipe(
-			activeProject?.['worktrees'] ?? [],
-			Array.findFirst(worktree => worktree['root'] === search.worktreeRoot),
-			Option.getOrUndefined
-		) ?? activeProject?.['worktrees'][0]
+function AgentResponse(input: {parts: readonly AgentEvent[]}) {
+	const effectiveParts = pipe(
+		input.parts,
+		Array.filter(event => event.type === 'agent-part'),
+		Array.map(event => event.part),
+		Array.reduce(Array.empty<AgentStreamPart>(), (parts, part) => {
+			if (part.type === 'reasoning-start' || part.type === 'reasoning-end') return parts
+			if (part.type === 'text-start' || part.type === 'text-end') return parts
+			if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
+			if (part.type === 'tool-params-delta') return parts
+			if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
+			const [previousParts, lastPart] = Array.unappend(parts)
+			if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
+				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+			}
+			if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
+				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+			}
+			return Array.append(parts, part)
+		})
+	)
+	const reasoningParts = pipe(
+		effectiveParts,
+		Array.filter(part => part.type === 'reasoning-delta')
+	)
+	const responseParts = pipe(
+		effectiveParts,
+		Array.filter(part => part.type !== 'reasoning-delta')
+	)
+	const metadata = pipe(
+		effectiveParts,
+		Array.findFirst(part => part.type === 'response-metadata'),
+		Option.getOrUndefined
+	)
+	const finish = pipe(
+		effectiveParts,
+		Array.findFirst(part => part.type === 'finish'),
+		Option.getOrUndefined
+	)
+	if (Array.isReadonlyArrayEmpty(effectiveParts)) return
 
 	return (
-		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
-			<ResizablePanelGroup orientation="horizontal">
-				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
-					<WorktreeManager
-						activeProject={activeProject}
-						activeWorktree={activeWorktree}
-						fetchFailed={snapshot.fetchFailed}
-						fetchedAt={snapshot.fetchedAt}
-						projects={projects}
-						selectWorktree={(projectRoot, worktreeRoot) =>
-							startTransition(() => {
-								navigate({
-									search: current => ({...current, projectRoot, reviewFile: undefined, worktreeRoot})
-								})
-							})
-						}
-					/>
-				</ResizablePanel>
-
-				<ResizableHandle />
-
-				<ResizablePanel defaultSize="86%" minSize="60%">
-					{activeProject && activeWorktree ? (
-						<ReviewViewPanel
-							key={activeWorktree['root']}
-							activeReviewScope={activeReviewScope}
-							activeWorktree={activeWorktree}
-							reviewFile={search.reviewFile}
-							selectReviewEntry={(scope, filePath) =>
-								startTransition(() => {
-									navigate({
-										search: current => ({
-											...current,
-											reviewFile: filePath,
-											reviewScope: scope
-										})
-									})
-								})
+		<div className="flex flex-col gap-3">
+			{Array.map(reasoningParts, (part, index) => (
+				<article key={index} className="flex gap-2">
+					<div className="w-0.5 shrink-0 bg-muted-foreground/40" />
+					<div className="min-w-0 flex-1 border border-muted-foreground/25 bg-muted/20 px-3 text-muted-foreground text-xs leading-5">
+						<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] leading-none">
+							<Brain className="size-3.5 shrink-0" />
+							<span>reasoning</span>
+							{finish?.type === 'finish' && (
+								<span className="ml-auto">reasoning {finish.usage.outputTokens.reasoning}</span>
+							)}
+						</div>
+						<div className="py-2">
+							<Markdown>{part.delta}</Markdown>
+						</div>
+					</div>
+				</article>
+			))}
+			<article className="flex gap-2">
+				<div className="w-0.5 shrink-0 bg-blue-500/30" />
+				<div className="min-w-0 flex-1 border-2 border-blue-500/12 bg-blue-500/[0.003] px-3">
+					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
+						<SparklesIcon className="size-3 shrink-0" />
+						<span className="min-w-0 truncate">
+							{metadata?.type === 'response-metadata' ? metadata.modelId : 'agent'}
+						</span>
+						{finish?.type === 'finish' && (
+							<span className="ml-auto flex shrink-0 items-center gap-3">
+								<span>in {finish.usage.inputTokens.total}</span>
+								<span>out {finish.usage.outputTokens.total}</span>
+								<span>reasoning {finish.usage.outputTokens.reasoning}</span>
+							</span>
+						)}
+					</div>
+					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
+						{Array.map(responseParts, (part, index) => {
+							if (part.type === 'text-delta') return <Markdown key={index}>{part.delta}</Markdown>
+							if (part.type === 'tool-call' || part.type === 'tool-result') {
+								return (
+									<Collapsible key={`${part.type}-${part.id}`} className="group border">
+										<CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 px-2 py-0.5 text-left text-[11px] text-muted-foreground">
+											<Wrench className="size-3.5 shrink-0" />
+											<span className="text-foreground">{part.type}</span>
+											<span>{part.name}</span>
+											<ChevronRight className="ml-auto size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
+										</CollapsibleTrigger>
+										<CollapsibleContent>
+											<pre className="overflow-x-auto border-t p-2 text-[11px] leading-5">
+												{JSON.stringify(part.type === 'tool-call' ? part.params : part.result, null, 2)}
+											</pre>
+										</CollapsibleContent>
+									</Collapsible>
+								)
 							}
-						/>
-					) : (
-						<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-							No project selected.
+							if (part.type === 'response-metadata' || part.type === 'finish') return
+							return (
+								<pre key={index} className="overflow-x-auto border p-2 text-[11px] leading-5">
+									{JSON.stringify(part, null, 2)}
+								</pre>
+							)
+						})}
+					</div>
+				</div>
+			</article>
+		</div>
+	)
+}
+
+export function AgentPanel(input: {
+	agentId: string
+	activeWorktree: Worktree
+	model: ModelId
+	provider: ProviderId
+	setModel: (model: string) => void
+}) {
+	const inputRef = useRef<AutocompleteInput.Handle<{label: string}>>(null)
+	const files = useAtomSuspense(filesAtom(input.activeWorktree.root)).value
+	const events = useAtomSuspense(agentEventsAtom(input.agentId)).value
+	const runs = pipe(
+		events,
+		Array.reduce(Array.empty<AgentRun>(), (runs, event) => {
+			if (event.type === 'user-message')
+				return Array.append(runs, {parts: [], prompt: event.prompt, runId: event.runId})
+			if (!Array.isArrayNonEmpty(runs)) return runs
+			const [previousRuns, currentRun] = Array.unappend(runs)
+			if (currentRun.runId !== event.runId) return runs
+			return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
+		})
+	)
+	const promptAgent = useAtomSet(RpcClient.mutation('agent.prompt'), {mode: 'promise'})
+
+	function submitPrompt() {
+		const text = inputRef.current?.getText() ?? ''
+		if (String.isEmpty(text)) return
+		void promptAgent({
+			payload: {
+				agentId: input.agentId,
+				cwd: input.activeWorktree.root,
+				model: input.model,
+				prompt: text,
+				provider: input.provider,
+				runId: crypto.randomUUID()
+			}
+		})
+		inputRef.current?.clear()
+	}
+
+	return (
+		<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
+			<div className="min-h-0 flex-1 overflow-y-auto p-4">
+				<div className="mx-auto flex max-w-4xl flex-col gap-3">
+					{Array.isReadonlyArrayEmpty(runs) && (
+						<div className="flex min-h-48 items-center justify-center text-muted-foreground text-sm">
+							Send a message to start the agent.
 						</div>
 					)}
-				</ResizablePanel>
-			</ResizablePanelGroup>
+					{Array.map(runs, run => (
+						<div key={run.runId} className="flex flex-col gap-3">
+							<article className="flex gap-2">
+								<div className="w-0.5 shrink-0 bg-orange-500/50" />
+								<div className="min-w-0 flex-1 border-2 border-orange-500/20 bg-orange-500/[0.003] px-3">
+									<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
+										<UserIcon className="size-3 shrink-0 text-orange-500" />
+										<span>prompt</span>
+									</div>
+									<div className="py-2 text-[13px] leading-relaxed">
+										<Markdown>{run.prompt}</Markdown>
+									</div>
+								</div>
+							</article>
+							<AgentResponse parts={run.parts} />
+						</div>
+					))}
+				</div>
+			</div>
+			<div className="border-t p-3">
+				<div className="mx-auto max-w-4xl">
+					<Select value={input.model} onValueChange={value => input.setModel(value ?? defaultModel.model)}>
+						<SelectTrigger className="mb-2 w-64 rounded-none">
+							<SelectValue placeholder="Model" />
+						</SelectTrigger>
+						<SelectContent>
+							{Array.map(models, model => (
+								<SelectItem key={`${model.provider}:${model.model}`} value={model.model}>
+									{model.provider}/{model.model}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<AutocompleteInput
+						ref={inputRef}
+						onSubmit={submitPrompt}
+						placeholder="Send a message, type @ to attach files..."
+						options={{
+							'@': {
+								color: 'oklch(0.74 0.12 220)',
+								values: pipe(
+									files,
+									Array.map(label => ({label}))
+								)
+							}
+						}}
+					>
+						{entry => (
+							<>
+								<FileIcon filePath={entry.value.label} className="size-3.5" />
+								<span className="min-w-0 truncate">{entry.value.label}</span>
+							</>
+						)}
+					</AutocompleteInput>
+					<AutocompleteInput.ToolBar>
+						<div className="ml-auto flex items-center gap-2">
+							<Button variant="outline" size="icon-xs" className="rounded-none">
+								<Square className="size-3.5 fill-current" />
+							</Button>
+							<Button size="icon-xs" className="rounded-none" onClick={submitPrompt}>
+								<ArrowUpIcon className="size-3.5" />
+							</Button>
+						</div>
+					</AutocompleteInput.ToolBar>
+				</div>
+			</div>
 		</div>
 	)
 }

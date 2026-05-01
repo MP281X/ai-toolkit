@@ -1,7 +1,27 @@
 import {Schema} from 'effect'
 
+import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {AgentToolKit} from '@ai-toolkit/ai/tools'
 import {GitBranch, GitDiff, GitDiffScope, GitRepository, GitWorktree} from '@ai-toolkit/git/schema'
+import {Response} from 'effect/unstable/ai'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
+
+export type AgentStreamPart = typeof AgentStreamPart.Type
+export const AgentStreamPart = Response.StreamPart(AgentToolKit)
+
+export type AgentEvent = typeof AgentEvent.Type
+export const AgentEvent = Schema.Union([
+	Schema.Struct({
+		prompt: Schema.NonEmptyString,
+		runId: Schema.NonEmptyString,
+		type: Schema.Literal('user-message')
+	}),
+	Schema.Struct({
+		part: AgentStreamPart,
+		runId: Schema.NonEmptyString,
+		type: Schema.Literal('agent-part')
+	})
+])
 
 export class ProjectEntry extends Schema.Class<ProjectEntry>('ProjectEntry')({
 	repository: GitRepository,
@@ -61,6 +81,27 @@ export class RpcContracts extends RpcGroup.make(
 			cwd: Schema.String,
 			filePath: Schema.String
 		})
+	}),
+	Rpc.make('files.search', {
+		payload: Schema.Struct({cwd: Schema.String}),
+		success: Schema.Array(Schema.String)
+	}),
+	Rpc.make('agent.prompt', {
+		payload: Schema.Struct({
+			agentId: Schema.NonEmptyString,
+			cwd: Schema.String,
+			model: ModelId,
+			prompt: Schema.NonEmptyString,
+			provider: ProviderId,
+			runId: Schema.NonEmptyString
+		})
+	}),
+	Rpc.make('agent.events', {
+		stream: true,
+		payload: Schema.Struct({
+			agentId: Schema.NonEmptyString
+		}),
+		success: AgentEvent
 	}),
 	Rpc.make('projects.createWorktree', {
 		payload: Schema.Struct({

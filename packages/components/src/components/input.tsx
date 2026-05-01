@@ -104,31 +104,42 @@ function getItems<TValue extends AutocompleteInput.Value>(
 	if (!group) return Array.empty<Item<TValue>>()
 
 	const query = pipe(search.query, String.toLowerCase)
+	const noMatchScore = -1_000_000
+
+	function score(value: TValue) {
+		if (String.isEmpty(query)) return 0
+
+		let total = 0
+		let queryIndex = 0
+		let lastMatchIndex = -1
+		const label = pipe(value.label, String.toLowerCase)
+
+		for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index++) {
+			if (label[index] !== query[queryIndex]) continue
+
+			total += lastMatchIndex === index - 1 ? 8 : 1
+			if (index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_') total += 4
+			lastMatchIndex = index
+			queryIndex++
+		}
+
+		if (queryIndex !== String.length(query)) return noMatchScore
+		return total - String.length(label) / 1000
+	}
 
 	return pipe(
 		group.values,
-		Array.filter(value => String.isEmpty(query) || pipe(value.label, String.toLowerCase, String.includes(query))),
+		Array.map(value => ({score: score(value), value})),
+		Array.filter(candidate => candidate.score > noMatchScore),
+		Array.sortWith(candidate => -candidate.score, Order.Number),
 		Array.take(10),
 		Array.map(
 			(value, index) =>
-				new Item({trigger: search.trigger, value, color: group.color}, `${search.trigger}:${value.label}:${index}`)
+				new Item(
+					{trigger: search.trigger, value: value.value, color: group.color},
+					`${search.trigger}:${value.value.label}:${index}`
+				)
 		)
-	)
-}
-
-function renderEntry<TValue extends AutocompleteInput.Value>(
-	entry: AutocompleteInput.Entry<TValue>,
-	children?: (entry: AutocompleteInput.Entry<TValue>) => React.ReactNode
-) {
-	if (children) return children(entry)
-
-	return (
-		<>
-			<span className="font-medium" style={{color: entry.color}}>
-				{entry.trigger}
-			</span>
-			<span className="text-foreground">{entry.value.label}</span>
-		</>
 	)
 }
 
@@ -328,7 +339,18 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 											onMouseEnter={() => menuProps.setHighlightedIndex(index)}
 											onSelect={() => menuProps.selectOptionAndCleanUp(option)}
 										>
-											<div className="flex min-w-0 items-center gap-2">{renderEntry(option.entry, props.children)}</div>
+											<div className="flex min-w-0 items-center gap-2">
+												{props.children ? (
+													props.children(option.entry)
+												) : (
+													<>
+														<span className="font-medium" style={{color: option.entry.color}}>
+															{option.entry.trigger}
+														</span>
+														<span className="text-foreground">{option.entry.value.label}</span>
+													</>
+												)}
+											</div>
 										</CommandItem>
 									))}
 								</CommandList>
@@ -435,7 +457,7 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 				}}
 			>
 				<div className="relative flex w-full flex-col border border-input bg-input/30">
-					<div ref={menuBoxRef} />
+					<div ref={menuBoxRef} className="absolute inset-x-0 bottom-full z-50" />
 
 					<div className="relative max-h-90 min-h-24 overflow-y-auto">
 						<PlainTextPlugin

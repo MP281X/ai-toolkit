@@ -9,50 +9,93 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as homeIndexRouteImport } from './routes/(home)/index'
+import { Route as homeRouteRouteImport } from './routes/(home)/route'
+import { Route as homeDiffRouteImport } from './routes/(home)/diff'
+import { Route as homeAgentRouteImport } from './routes/(home)/agent'
 
-const homeIndexRoute = homeIndexRouteImport.update({
-  id: '/(home)/',
-  path: '/',
+const homeRouteRoute = homeRouteRouteImport.update({
+  id: '/(home)',
   getParentRoute: () => rootRouteImport,
+} as any)
+const homeDiffRoute = homeDiffRouteImport.update({
+  id: '/diff',
+  path: '/diff',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeAgentRoute = homeAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => homeRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof homeIndexRoute
+  '/agent': typeof homeAgentRoute
+  '/diff': typeof homeDiffRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof homeIndexRoute
+  '/agent': typeof homeAgentRoute
+  '/diff': typeof homeDiffRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/(home)/': typeof homeIndexRoute
+  '/(home)': typeof homeRouteRouteWithChildren
+  '/(home)/agent': typeof homeAgentRoute
+  '/(home)/diff': typeof homeDiffRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/agent' | '/diff'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/(home)/'
+  to: '/agent' | '/diff'
+  id: '__root__' | '/(home)' | '/(home)/agent' | '/(home)/diff'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  homeIndexRoute: typeof homeIndexRoute
+  homeRouteRoute: typeof homeRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/(home)/': {
-      id: '/(home)/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof homeIndexRouteImport
+    '/(home)': {
+      id: '/(home)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof homeRouteRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/(home)/diff': {
+      id: '/(home)/diff'
+      path: '/diff'
+      fullPath: '/diff'
+      preLoaderRoute: typeof homeDiffRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
+    '/(home)/agent': {
+      id: '/(home)/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof homeAgentRouteImport
+      parentRoute: typeof homeRouteRoute
     }
   }
 }
 
+interface homeRouteRouteChildren {
+  homeAgentRoute: typeof homeAgentRoute
+  homeDiffRoute: typeof homeDiffRoute
+}
+
+const homeRouteRouteChildren: homeRouteRouteChildren = {
+  homeAgentRoute: homeAgentRoute,
+  homeDiffRoute: homeDiffRoute,
+}
+
+const homeRouteRouteWithChildren = homeRouteRoute._addFileChildren(
+  homeRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  homeIndexRoute: homeIndexRoute,
+  homeRouteRoute: homeRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

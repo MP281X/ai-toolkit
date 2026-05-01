@@ -2,29 +2,26 @@
 	"type": "module",
 	"sideEffects": false,
 	"name": "@ai-toolkit/ai",
-
 	"imports": {
 		"#lib/*": "./src/lib/*",
 		"#tools/*": "./src/tools/*"
 	},
-
 	"exports": {
 		"./service": "./src/service.ts",
 		"./tools": "./src/tools/contracts.ts",
 		"./utils": "./src/lib/utils.ts",
 		"./catalog": "./src/catalog.ts"
 	},
-
 	"scripts": {
 		"fix": "biome check --write --unsafe || true",
 		"lint": "biome check",
 		"type-check": "tsgo --noEmit"
 	},
-
 	"dependencies": {
 		"exa-js": "latest",
 
 		"@opencode-ai/sdk": "latest",
+		"@openai/codex-sdk": "latest",
 
 		"@effect/ai-openai": "^4.0.0-beta",
 		"@effect/ai-anthropic": "^4.0.0-beta",
