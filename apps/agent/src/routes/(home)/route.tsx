@@ -1,9 +1,11 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Array, Effect, Option, Order, Predicate, pipe, Schema, Stream, String} from 'effect'
 
-import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
 import {
+	AgentIcon,
+	Archive,
 	ArrowUpIcon,
 	Brain,
 	ChevronRight,
@@ -17,13 +19,14 @@ import {
 	RefreshCw,
 	SparklesIcon,
 	Square,
+	Trash,
 	Trash2,
 	UserIcon,
 	Wrench
 } from '@ai-toolkit/components/icons'
-import {AutocompleteInput} from '@ai-toolkit/components/input'
 import {PatchReview} from '@ai-toolkit/components/render/diff'
 import {Markdown} from '@ai-toolkit/components/render/markdown'
+import {RichTextArea} from '@ai-toolkit/components/rich-text-area'
 import {
 	TreeExplorer,
 	TreeExplorerGroup,
@@ -52,15 +55,16 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@ai
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useRef, useState} from 'react'
+import {startTransition, useEffect, useEffectEvent, useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {AgentEvent, AgentStreamPart, ProjectEntry} from '#rpcs/contracts.ts'
+import type {AgentEntry, AgentEvent, AgentStreamPart, ProjectEntry} from '#rpcs/contracts.ts'
 import {BranchesSnapshot, ProjectsSnapshot, ReviewSnapshot} from '#rpcs/contracts.ts'
 
 const HomeSearchSchema = Schema.Struct({
 	projectRoot: Schema.optional(Schema.String),
 	worktreeRoot: Schema.optional(Schema.String),
+	agentId: Schema.optional(Schema.String),
 	agentModel: Schema.optional(Schema.String),
 	reviewFile: Schema.optional(Schema.String),
 	reviewScope: Schema.optional(Schema.String)
@@ -85,17 +89,17 @@ const projectAccentClassNames = [
 type ReviewScope = 'staged-to-worktree' | 'head-to-staged'
 export type Worktree = ProjectEntry['worktrees'][number]
 type AgentRun = {prompt: string; runId: string; parts: readonly AgentEvent[]}
-
-export const defaultModel = models[2]
-
-export function agentId(projectRoot: string, worktreeRoot: string) {
-	let hash = 0x811c9dc5
-	for (const byte of new TextEncoder().encode(pipe([projectRoot, worktreeRoot], Array.join('\n')))) {
-		hash ^= byte
-		hash = Math.imul(hash, 0x01000193)
-	}
-	return `agent-${pipe((hash >>> 0).toString(36), String.slice(0, 8))}`
+type AgentInputValue = {label: string}
+type SavedPrompt = {
+	id: string
+	model: ModelId
+	provider: ProviderId
+	snapshot: RichTextArea.Snapshot<AgentInputValue>
+	text: string
 }
+export const agentLayers = ['effect', 'opencode', 'codex'] as const satisfies readonly AgentId[]
+const agentInputStates = new Map<string, RichTextArea.Snapshot<AgentInputValue>>()
+const agentStashedPrompts = new Map<string, readonly SavedPrompt[]>()
 
 const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
@@ -108,24 +112,33 @@ const projectsAtom = Atom.keepAlive(
 	)
 )
 
+export const agentsAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient.asEffect(),
+			Effect.map(client => client('agents.watch', void 0)),
+			Stream.unwrap
+		),
+		{initialValue: Array.empty<AgentEntry>()}
+	)
+)
+
 function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const pathname = useRouterState({select: state => state.location.pathname})
 	const {activeProject, activeWorktree, projects, snapshot} = useHomeSelection(search)
+	const agents = useAtomSuspense(agentsAtom).value
 
 	return (
 		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
 			<ResizablePanelGroup orientation="horizontal">
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
 					<WorktreeManager
+						agents={agents}
 						activeProject={activeProject}
 						activeWorktree={activeWorktree}
-						activeAgentId={
-							pathname === '/agent' && activeProject && activeWorktree
-								? agentId(activeProject.repository.root, activeWorktree.root)
-								: undefined
-						}
+						activeAgentId={pathname === '/agent' ? search.agentId : undefined}
 						fetchFailed={snapshot.fetchFailed}
 						fetchedAt={snapshot.fetchedAt}
 						projects={projects}
@@ -137,11 +150,11 @@ function HomeLayout() {
 								})
 							})
 						}
-						selectAgent={(projectRoot, worktreeRoot) =>
+						selectAgent={(projectRoot, worktreeRoot, agentId) =>
 							startTransition(() => {
 								navigate({
 									to: '/agent',
-									search: {...search, projectRoot, reviewFile: undefined, worktreeRoot}
+									search: {...search, agentId, projectRoot, reviewFile: undefined, worktreeRoot}
 								})
 							})
 						}
@@ -507,6 +520,7 @@ export function ReviewViewPanel(input: {
 }
 
 function WorktreeManager(input: {
+	agents: readonly AgentEntry[]
 	activeProject: ProjectEntry | undefined
 	activeWorktree: Worktree | undefined
 	activeAgentId: string | undefined
@@ -519,10 +533,13 @@ function WorktreeManager(input: {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const refresh = useAtomSet(RpcClient.mutation('projects.refresh'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
+	const createAgent = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const [branch, setBranch] = useState('')
 	const [sourceBranch, setSourceBranch] = useState('')
 	const [createOpen, setCreateOpen] = useState(false)
+	const [createAgentLayer, setCreateAgentLayer] = useState<AgentId>()
+	const [createAgentTarget, setCreateAgentTarget] = useState<{project: ProjectEntry; worktree: Worktree}>()
 	const [createProject, setCreateProject] = useState<ProjectEntry>()
 	const [branchPickerOpen, setBranchPickerOpen] = useState(false)
 	const [deleteTarget, setDeleteTarget] = useState<Worktree>()
@@ -541,11 +558,6 @@ function WorktreeManager(input: {
 		)
 	)
 	const branchSnapshot = useAtomSuspense(branchesAtom).value
-	const checkedOutBranches = pipe(
-		targetProject?.worktrees ?? [],
-		Array.map(worktree => worktree.branch ?? ''),
-		Array.filter(String.isNonEmpty)
-	)
 	const uniqueBranches = pipe(
 		branchSnapshot.branches,
 		Array.filter(candidate => pipe(candidate.name, String.isNonEmpty)),
@@ -554,7 +566,15 @@ function WorktreeManager(input: {
 	)
 	const availableBranches = pipe(
 		uniqueBranches,
-		Array.filter(candidate => !pipe(checkedOutBranches, Array.contains(candidate.name)))
+		Array.filter(
+			candidate =>
+				!pipe(
+					targetProject?.worktrees ?? [],
+					Array.map(worktree => worktree.branch ?? ''),
+					Array.filter(String.isNonEmpty),
+					Array.contains(candidate.name)
+				)
+		)
 	)
 	const selectedBranch = pipe(
 		availableBranches,
@@ -568,17 +588,23 @@ function WorktreeManager(input: {
 			Array.some(candidate => pipe(candidate.name, String.includes(branch)))
 		)
 	const effectiveSourceBranch = sourceBranch || branchSnapshot.defaultBranch
+	const refreshWorkspace = useEffectEvent(async () => {
+		await refresh({payload: undefined})
+		refreshProjects()
+	})
+
+	async function deleteWorktreeAndRefresh(worktree: Worktree) {
+		await deleteWorktree({payload: {cwd: worktree.root, force: true}})
+		refreshProjects()
+	}
 
 	useEffect(() => {
 		const id = window.setInterval(() => {
-			void (async () => {
-				await refresh({payload: undefined})
-				refreshProjects()
-			})()
+			void refreshWorkspace()
 		}, 60_000)
 
 		return () => window.clearInterval(id)
-	}, [refresh, refreshProjects])
+	}, [])
 
 	useEffect(() => {
 		if (!branchHasMatches) {
@@ -591,12 +617,8 @@ function WorktreeManager(input: {
 			return
 		}
 		let mode: 'existing-local' | 'existing-remote' | 'new-local' = 'new-local'
-		if (selectedBranch?.type === 'local') {
-			mode = 'existing-local'
-		}
-		if (selectedBranch?.type === 'remote') {
-			mode = 'existing-remote'
-		}
+		if (selectedBranch?.type === 'local') mode = 'existing-local'
+		if (selectedBranch?.type === 'remote') mode = 'existing-remote'
 
 		await createWorktree({
 			payload: {
@@ -618,9 +640,8 @@ function WorktreeManager(input: {
 			return
 		}
 
-		await deleteWorktree({payload: {cwd: deleteTarget.root, force: true}})
+		await deleteWorktreeAndRefresh(deleteTarget)
 		setDeleteTarget(undefined)
-		refreshProjects()
 	}
 
 	async function requestDeleteWorktree(worktree: Worktree) {
@@ -635,8 +656,23 @@ function WorktreeManager(input: {
 			return
 		}
 
-		await deleteWorktree({payload: {cwd: worktree.root, force: true}})
-		refreshProjects()
+		await deleteWorktreeAndRefresh(worktree)
+	}
+
+	async function createSelectedAgent() {
+		if (!(createAgentLayer && createAgentTarget)) return
+
+		const agent = await createAgent({
+			payload: {
+				layer: createAgentLayer,
+				projectRoot: createAgentTarget.project.repository.root,
+				worktreeRoot: createAgentTarget.worktree.root
+			}
+		})
+
+		input.selectAgent(createAgentTarget.project.repository.root, createAgentTarget.worktree.root, agent.agentId)
+		setCreateAgentLayer(undefined)
+		setCreateAgentTarget(undefined)
 	}
 
 	return (
@@ -647,10 +683,7 @@ function WorktreeManager(input: {
 					variant="ghost"
 					size="icon"
 					onClick={() => {
-						void (async () => {
-							await refresh({payload: undefined})
-							refreshProjects()
-						})()
+						void refreshWorkspace()
 					}}
 					aria-label="Refresh workspaces"
 				>
@@ -751,6 +784,66 @@ function WorktreeManager(input: {
 				</DialogContent>
 			</Dialog>
 
+			<Dialog
+				open={Predicate.isNotUndefined(createAgentTarget)}
+				onOpenChange={open => {
+					if (open) return
+
+					setCreateAgentLayer(undefined)
+					setCreateAgentTarget(undefined)
+				}}
+			>
+				<DialogContent className="sm:max-w-sm">
+					<DialogHeader>
+						<DialogTitle>Create agent</DialogTitle>
+						<DialogDescription>
+							Select an agent layer for{' '}
+							{createAgentTarget ? pathLabel(createAgentTarget.worktree.root) : 'this worktree'}.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="grid gap-1.5">
+						<span className="font-medium text-muted-foreground text-xs">Agent</span>
+						<Select
+							value={createAgentLayer}
+							onValueChange={value => {
+								const selectedLayer = pipe(
+									agentLayers,
+									Array.findFirst(layer => layer === value)
+								)
+
+								if (Option.isSome(selectedLayer)) setCreateAgentLayer(selectedLayer.value)
+							}}
+						>
+							<SelectTrigger className="w-full rounded-none">
+								<SelectValue placeholder="Select agent" />
+							</SelectTrigger>
+							<SelectContent>
+								{Array.map(agentLayers, layer => (
+									<SelectItem key={layer} value={layer}>
+										{layer}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => {
+								setCreateAgentLayer(undefined)
+								setCreateAgentTarget(undefined)
+							}}
+						>
+							Cancel
+						</Button>
+						<Button type="button" onClick={createSelectedAgent} disabled={Predicate.isUndefined(createAgentLayer)}>
+							Create
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection label="Workspaces">
 					{Array.map(input.projects, (project, index) => (
@@ -779,7 +872,12 @@ function WorktreeManager(input: {
 							{pipe(
 								project.worktrees,
 								Array.map(worktree => {
-									const worktreeAgentId = agentId(project.repository.root, worktree.root)
+									const worktreeAgents = pipe(
+										input.agents,
+										Array.filter(
+											agent => agent.projectRoot === project.repository.root && agent.worktreeRoot === worktree.root
+										)
+									)
 									return (
 										<li key={worktree.root} className="w-full min-w-0">
 											<TreeExplorerRow
@@ -817,6 +915,16 @@ function WorktreeManager(input: {
 														<DropdownMenuContent align="end" className="min-w-40">
 															<DropdownMenuItem
 																onClick={() => {
+																	setCreateAgentLayer(undefined)
+																	setCreateAgentTarget({project, worktree})
+																}}
+																className="whitespace-nowrap"
+															>
+																<SparklesIcon className="mr-2 size-3.5" />
+																Create agent
+															</DropdownMenuItem>
+															<DropdownMenuItem
+																onClick={() => {
 																	void (async () => {
 																		try {
 																			await navigator.clipboard.writeText(worktree.root)
@@ -851,17 +959,24 @@ function WorktreeManager(input: {
 											>
 												{worktree.branch ?? pathLabel(worktree.root)}
 											</TreeExplorerRow>
-											<ul className="flex flex-col gap-px border-muted-foreground/20 border-l" style={{marginLeft: 15}}>
-												<li className="w-full min-w-0">
-													<TreeExplorerRow
-														icon={<SparklesIcon className="size-3.5" />}
-														selected={input.activeAgentId === worktreeAgentId}
-														onClick={() => input.selectAgent(project.repository.root, worktree.root, worktreeAgentId)}
-													>
-														agent
-													</TreeExplorerRow>
-												</li>
-											</ul>
+											{!Array.isReadonlyArrayEmpty(worktreeAgents) && (
+												<ul
+													className="flex flex-col gap-px border-muted-foreground/20 border-l"
+													style={{marginLeft: 15}}
+												>
+													{Array.map(worktreeAgents, agent => (
+														<li key={agent.agentId} className="w-full min-w-0">
+															<TreeExplorerRow
+																icon={<AgentIcon layer={agent.layer} className="size-3.5" />}
+																selected={input.activeAgentId === agent.agentId}
+																onClick={() => input.selectAgent(project.repository.root, worktree.root, agent.agentId)}
+															>
+																agent
+															</TreeExplorerRow>
+														</li>
+													))}
+												</ul>
+											)}
 										</li>
 									)
 								})
@@ -1016,13 +1131,17 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 export function AgentPanel(input: {
 	agentId: string
 	activeWorktree: Worktree
+	layer: AgentId
 	model: ModelId
 	provider: ProviderId
 	setModel: (model: string) => void
 }) {
-	const inputRef = useRef<AutocompleteInput.Handle<{label: string}>>(null)
+	const inputRef = useRef<RichTextArea.Handle<AgentInputValue>>(null)
 	const files = useAtomSuspense(filesAtom(input.activeWorktree.root)).value
 	const events = useAtomSuspense(agentEventsAtom(input.agentId)).value
+	const [stashedPrompts, setStashedPrompts] = useState(
+		agentStashedPrompts.get(input.agentId) ?? Array.empty<SavedPrompt>()
+	)
 	const runs = pipe(
 		events,
 		Array.reduce(Array.empty<AgentRun>(), (runs, event) => {
@@ -1035,22 +1154,58 @@ export function AgentPanel(input: {
 		})
 	)
 	const promptAgent = useAtomSet(RpcClient.mutation('agent.prompt'), {mode: 'promise'})
+	const stopAgent = useAtomSet(RpcClient.mutation('agent.stop'), {mode: 'promise'})
+	function setAgentStash(prompts: readonly SavedPrompt[]) {
+		agentStashedPrompts.set(input.agentId, prompts)
+		setStashedPrompts(prompts)
+	}
 
-	function submitPrompt() {
-		const text = inputRef.current?.getText() ?? ''
-		if (String.isEmpty(text)) return
+	function savePrompt(snapshot = inputRef.current?.getSnapshot()) {
+		if (!snapshot || String.isEmpty(snapshot.text)) return
+
+		return {id: crypto.randomUUID(), model: input.model, provider: input.provider, snapshot, text: snapshot.text}
+	}
+
+	function submitPrompt(snapshot = inputRef.current?.getSnapshot()) {
+		const prompt = savePrompt(snapshot)
+		if (!prompt) return
+
 		void promptAgent({
 			payload: {
 				agentId: input.agentId,
-				cwd: input.activeWorktree.root,
-				model: input.model,
-				prompt: text,
-				provider: input.provider,
+				model: prompt.model,
+				prompt: prompt.text,
+				provider: prompt.provider,
 				runId: crypto.randomUUID()
 			}
 		})
 		inputRef.current?.clear()
 	}
+
+	function stashPrompt() {
+		const prompt = savePrompt()
+		if (!prompt) return
+
+		setAgentStash([...stashedPrompts, prompt])
+		inputRef.current?.clear()
+	}
+
+	function editStashedPrompt(prompt: SavedPrompt) {
+		const currentPrompt = savePrompt()
+		const nextPrompts = Array.filter(stashedPrompts, savedPrompt => savedPrompt.id !== prompt.id)
+
+		setAgentStash(currentPrompt ? [...nextPrompts, currentPrompt] : nextPrompts)
+		agentInputStates.set(input.agentId, prompt.snapshot)
+		inputRef.current?.restore(prompt.snapshot)
+		input.setModel(`${prompt.provider}:${prompt.model}`)
+	}
+
+	useEffect(() => {
+		return () => {
+			const snapshot = inputRef.current?.getSnapshot()
+			if (snapshot && String.isNonEmpty(snapshot.text)) agentInputStates.set(input.agentId, snapshot)
+		}
+	}, [input.agentId])
 
 	return (
 		<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
@@ -1081,21 +1236,50 @@ export function AgentPanel(input: {
 				</div>
 			</div>
 			<div className="border-t p-3">
-				<div className="mx-auto max-w-4xl">
-					<Select value={input.model} onValueChange={value => input.setModel(value ?? defaultModel.model)}>
-						<SelectTrigger className="mb-2 w-64 rounded-none">
-							<SelectValue placeholder="Model" />
-						</SelectTrigger>
-						<SelectContent>
-							{Array.map(models, model => (
-								<SelectItem key={`${model.provider}:${model.model}`} value={model.model}>
-									{model.provider}/{model.model}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<AutocompleteInput
+				<div className="relative mx-auto max-w-4xl">
+					{!Array.isReadonlyArrayEmpty(stashedPrompts) && (
+						<RichTextArea.Actions>
+							<div className="flex items-center gap-2 border-input border-b px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+								<Archive className="size-3.5" />
+								<span>{stashedPrompts.length} stashed</span>
+							</div>
+							<div className="flex max-h-48 flex-col overflow-y-auto">
+								{Array.map(stashedPrompts, prompt => (
+									<div
+										key={prompt.id}
+										className="flex min-w-0 items-center gap-2 border-input border-b px-2 py-1.5 last:border-b-0 hover:bg-muted/70"
+									>
+										<button
+											type="button"
+											className="min-w-0 flex-1 text-left"
+											onMouseDown={event => event.preventDefault()}
+											onClick={() => editStashedPrompt(prompt)}
+										>
+											<div className="truncate text-[12px] text-muted-foreground">{prompt.text}</div>
+											<div className="truncate font-mono text-[10px] text-muted-foreground/70">
+												{prompt.provider}/{prompt.model}
+											</div>
+										</button>
+										<Button
+											variant="ghost"
+											size="icon-xs"
+											className="rounded-none"
+											onMouseDown={event => event.preventDefault()}
+											onClick={event => {
+												event.stopPropagation()
+												setAgentStash(Array.filter(stashedPrompts, savedPrompt => savedPrompt.id !== prompt.id))
+											}}
+										>
+											<Trash className="size-3" />
+										</Button>
+									</div>
+								))}
+							</div>
+						</RichTextArea.Actions>
+					)}
+					<RichTextArea
 						ref={inputRef}
+						initialSnapshot={agentInputStates.get(input.agentId)}
 						onSubmit={submitPrompt}
 						placeholder="Send a message, type @ to attach files..."
 						options={{
@@ -1114,17 +1298,50 @@ export function AgentPanel(input: {
 								<span className="min-w-0 truncate">{entry.value.label}</span>
 							</>
 						)}
-					</AutocompleteInput>
-					<AutocompleteInput.ToolBar>
-						<div className="ml-auto flex items-center gap-2">
-							<Button variant="outline" size="icon-xs" className="rounded-none">
-								<Square className="size-3.5 fill-current" />
-							</Button>
-							<Button size="icon-xs" className="rounded-none" onClick={submitPrompt}>
-								<ArrowUpIcon className="size-3.5" />
-							</Button>
+					</RichTextArea>
+					<RichTextArea.ToolBar>
+						<div className="flex w-full items-center gap-2">
+							<Select
+								value={`${input.provider}:${input.model}`}
+								onValueChange={modelId => {
+									if (Predicate.isString(modelId)) input.setModel(modelId)
+								}}
+							>
+								<SelectTrigger className="h-7 w-64 rounded-none text-xs">
+									<SelectValue placeholder="Model" />
+								</SelectTrigger>
+								<SelectContent>
+									{pipe(
+										models,
+										Array.filter(model => pipe(model.agents, Array.contains(input.layer))),
+										Array.map(model => (
+											<SelectItem key={`${model.provider}:${model.model}`} value={`${model.provider}:${model.model}`}>
+												{model.provider}/{model.model}
+											</SelectItem>
+										))
+									)}
+								</SelectContent>
+							</Select>
+							<div className="ml-auto flex items-center gap-2">
+								<Button variant="outline" size="icon-xs" className="rounded-none" onClick={stashPrompt}>
+									<Archive className="size-3.5" />
+								</Button>
+								<Button
+									variant="outline"
+									size="icon-xs"
+									className="rounded-none"
+									onClick={() => {
+										void stopAgent({payload: {agentId: input.agentId}})
+									}}
+								>
+									<Square className="size-3.5 fill-current" />
+								</Button>
+								<Button size="icon-xs" className="rounded-none" onClick={() => submitPrompt()}>
+									<ArrowUpIcon className="size-3.5" />
+								</Button>
+							</div>
 						</div>
-					</AutocompleteInput.ToolBar>
+					</RichTextArea.ToolBar>
 				</div>
 			</div>
 		</div>

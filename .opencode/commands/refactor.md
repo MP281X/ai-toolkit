@@ -1,6 +1,5 @@
 ---
 description: Aggressive refactor of uncommitted changes. Multi-pass until stable.
-model: openai/gpt-5.4-mini
 ---
 
 <user_input optional="true" description="Specific areas to focus refactoring on">
@@ -8,7 +7,7 @@ $ARGUMENTS
 </user_input>
 
 <changed_files>
-!`git diff --name-only HEAD | grep -v "bun.lock" | grep -v "components/ui" | grep -v ".opencode/plans" | grep -v ".opencode/package.json"`
+!`git diff --name-only HEAD | rg -v "bun.lock|components/ui|.opencode/plans|.opencode/package.json"`
 </changed_files>
 
 <lint_output>
