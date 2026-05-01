@@ -46,8 +46,8 @@ Format for 2-second scanning:
 - Replace old implementations — never keep both old and new
 - Breaking changes are fine — no backward compatibility
 - After code changes, run `bun run type-check` before returning
+- After `bun run type-check` passes, run `bun run lint` inside a `general` agent before returning
 - Never run build commands unless the user explicitly requests a build
-- Never run `bun run lint` unless using `.opencode/commands/refactor.md`
 
 ## Code Style
 

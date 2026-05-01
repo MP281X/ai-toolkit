@@ -42,6 +42,13 @@ const valid_fn_untraced = Effect.fnUntraced(function* (name: string) {
 	return name
 })
 
+const bad_fn_untraced_destructuring = Effect.fnUntraced(
+	// biome-ignore lint/plugin: arg destructuring
+	function* ({cwd}: {cwd: string}) {
+		return cwd
+	}
+)
+
 function test_string_trim(s: string) {
 	// biome-ignore lint/plugin: native methods
 	return s.trim()
@@ -50,6 +57,16 @@ function test_string_trim(s: string) {
 // biome-ignore lint/plugin: arg destructuring
 function test_arg_destructuring({name}: {name: string}) {
 	return name
+}
+
+// biome-ignore lint/plugin: arg destructuring
+function test_multi_arg_destructuring({name, role}: {name: string; role: string}) {
+	return `${name}:${role}`
+}
+
+// biome-ignore lint/plugin: arg destructuring
+function test_many_arg_destructuring({name, role, team}: {name: string; role: string; team: string}) {
+	return `${name}:${role}:${team}`
 }
 
 function test_access(props: {user: {name: string}}) {
@@ -62,6 +79,12 @@ function test_alias(db: unknown) {
 	// biome-ignore lint/plugin: access variable
 	const database = db
 	return database
+}
+
+function test_spread_alias(props: {name: string}) {
+	// biome-ignore lint/plugin: access variable
+	const input = {...props}
+	return input.name
 }
 
 function valid_direct_access(props: {user: {name: string}}) {

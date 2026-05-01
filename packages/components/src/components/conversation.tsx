@@ -11,7 +11,7 @@ export function Conversation<T extends {id: unknown}>(props: {
 		<LegendList<T>
 			data={props.items}
 			keyExtractor={item => `${item.id}`}
-			renderItem={({item, index}) => props.children(item, index)}
+			renderItem={input => props.children(input.item, input.index)}
 			estimatedItemSize={240}
 			initialScrollIndex={props.items.length - 1}
 			alignItemsAtEnd

@@ -41,9 +41,9 @@ function SubmitButton(props: {children: React.ReactNode}) {
 				canSubmit: state.canSubmit
 			})}
 		>
-			{({isSubmitting, canSubmit}) => (
-				<Button type="submit" disabled={isSubmitting || !canSubmit}>
-					{isSubmitting && <Spinner />}
+			{state => (
+				<Button type="submit" disabled={state.isSubmitting || !state.canSubmit}>
+					{state.isSubmitting && <Spinner />}
 					{props.children}
 				</Button>
 			)}

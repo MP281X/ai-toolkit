@@ -148,7 +148,7 @@
 	}
 
 	html {
-		@apply text-base bg-background antialiased font-sans text-foreground select-text;
+		@apply text-base bg-background antialiased font-sans text-foreground select-none;
 	}
 
 	::selection {
