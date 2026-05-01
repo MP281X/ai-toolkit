@@ -10,31 +10,31 @@ export const models = [
 	{
 		provider: 'opencode',
 		model: 'gpt-5-nano',
-		contextWindow: 128_000,
+		contextWindow: 400_000,
 		pricing: {input: 0, output: 0}
 	},
 	{
 		provider: 'opencode-go',
-		model: 'minimax-m2.5',
-		contextWindow: 204_800,
-		pricing: {input: 0.3, output: 1.2}
+		model: 'glm-5',
+		contextWindow: 202_752,
+		pricing: {input: 1, output: 3.2}
 	},
 	{
 		provider: 'opencode-go',
-		model: 'glm-5',
-		contextWindow: 204_800,
-		pricing: {input: 1, output: 3.2}
+		model: 'deepseek-v4-flash',
+		contextWindow: 1_000_000,
+		pricing: {input: 0.14, output: 0.28}
 	},
 	{
 		provider: 'openrouter',
 		model: 'openai/gpt-oss-20b:free',
-		contextWindow: 32_000,
+		contextWindow: 131_072,
 		pricing: {input: 0, output: 0}
 	},
 	{
 		provider: 'openrouter',
 		model: 'openrouter/free',
-		contextWindow: 32_000,
+		contextWindow: 200_000,
 		pricing: {input: 0, output: 0}
 	},
 	{
