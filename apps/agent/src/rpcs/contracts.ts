@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-import {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
+import {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {AgentToolKit} from '@ai-toolkit/ai/tools'
 import {GitBranch, GitDiff, GitDiffScope, GitRepository, GitWorktree} from '@ai-toolkit/git/schema'
 import {Response} from 'effect/unstable/ai'
@@ -8,6 +8,14 @@ import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export type AgentStreamPart = typeof AgentStreamPart.Type
 export const AgentStreamPart = Response.StreamPart(AgentToolKit)
+
+export class AgentEntry extends Schema.Class<AgentEntry>('AgentEntry')({
+	agentId: Schema.NonEmptyString,
+	createdAt: Schema.Number,
+	layer: AgentId,
+	projectRoot: Schema.String,
+	worktreeRoot: Schema.String
+}) {}
 
 export type AgentEvent = typeof AgentEvent.Type
 export const AgentEvent = Schema.Union([
@@ -86,14 +94,30 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({cwd: Schema.String}),
 		success: Schema.Array(Schema.String)
 	}),
+	Rpc.make('agents.watch', {
+		stream: true,
+		success: Schema.Array(AgentEntry)
+	}),
+	Rpc.make('agents.create', {
+		payload: Schema.Struct({
+			layer: AgentId,
+			projectRoot: Schema.String,
+			worktreeRoot: Schema.String
+		}),
+		success: AgentEntry
+	}),
 	Rpc.make('agent.prompt', {
 		payload: Schema.Struct({
 			agentId: Schema.NonEmptyString,
-			cwd: Schema.String,
 			model: ModelId,
 			prompt: Schema.NonEmptyString,
 			provider: ProviderId,
 			runId: Schema.NonEmptyString
+		})
+	}),
+	Rpc.make('agent.stop', {
+		payload: Schema.Struct({
+			agentId: Schema.NonEmptyString
 		})
 	}),
 	Rpc.make('agent.events', {

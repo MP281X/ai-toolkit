@@ -1,4 +1,4 @@
-import {Array, Order, pipe, Record, String} from 'effect'
+import {Array, Number, Option, Order, pipe, Record, String} from 'effect'
 
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
@@ -61,75 +61,94 @@ class TokenNode extends lexical.TextNode {
 	}
 }
 
-class Item<TValue extends AutocompleteInput.Value> extends MenuOption {
-	readonly entry: AutocompleteInput.Entry<TValue>
+class Item<TValue extends RichTextArea.Value> extends MenuOption {
+	readonly entry: RichTextArea.Entry<TValue>
 
-	constructor(entry: AutocompleteInput.Entry<TValue>, key: string) {
+	constructor(entry: RichTextArea.Entry<TValue>, key: string) {
 		super(key)
 		this.entry = entry
 	}
 }
 
-function read<T>(editor: lexical.LexicalEditor | null, kind: TokenKind, map: Map<string, T>) {
-	if (!editor) return Array.empty<T>()
+function snapshot<TValue extends RichTextArea.Value>(
+	editor: lexical.LexicalEditor | null,
+	tokensMap: Map<string, RichTextArea.Token<TValue>>
+) {
+	if (!editor) return emptySnapshot<TValue>()
 
+	const editorState = editor.getEditorState().toJSON()
 	const ids = new Set<string>()
-	const values = Array.empty<T>()
-
-	editor.getEditorState().read(() => {
+	const tokens = Array.empty<RichTextArea.Token<TValue>>()
+	const text = editor.getEditorState().read(() => {
 		for (const node of lexical.$getRoot().getAllTextNodes()) {
-			if (!(node instanceof TokenNode) || node.__kind !== kind) continue
+			if (!(node instanceof TokenNode)) continue
 
 			ids.add(node.__id)
 
-			const value = map.get(node.__id)
-			if (value) values.push(value)
+			const value = tokensMap.get(node.__id)
+			if (value) tokens.push(value)
 		}
+
+		return pipe(lexical.$getRoot().getTextContent(), String.trim)
 	})
 
-	for (const id of map.keys()) {
-		if (!ids.has(id)) map.delete(id)
+	for (const id of tokensMap.keys()) {
+		if (!ids.has(id)) tokensMap.delete(id)
 	}
 
-	return values
+	return {text, editorState, tokens}
 }
 
-function getItems<TValue extends AutocompleteInput.Value>(
+function restore<TValue extends RichTextArea.Value>(
+	editor: lexical.LexicalEditor | null,
+	snapshot: RichTextArea.Snapshot<TValue>,
+	tokensMap: Map<string, RichTextArea.Token<TValue>>
+) {
+	if (!editor) return
+
+	tokensMap.clear()
+
+	for (const token of snapshot.tokens) tokensMap.set(token.id, token)
+
+	editor.setEditorState(editor.parseEditorState(JSON.stringify(snapshot.editorState)))
+}
+
+function getItems<TValue extends RichTextArea.Value>(
 	search: null | {trigger: string; query: string},
-	options: AutocompleteInput.Options<TValue> | undefined
+	options: RichTextArea.Options<TValue> | undefined
 ) {
 	if (!search) return Array.empty<Item<TValue>>()
 
 	const group = options?.[search.trigger]
 	if (!group) return Array.empty<Item<TValue>>()
 
-	const query = pipe(search.query, String.toLowerCase)
 	const noMatchScore = -1_000_000
-
-	function score(value: TValue) {
-		if (String.isEmpty(query)) return 0
-
-		let total = 0
-		let queryIndex = 0
-		let lastMatchIndex = -1
-		const label = pipe(value.label, String.toLowerCase)
-
-		for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index++) {
-			if (label[index] !== query[queryIndex]) continue
-
-			total += lastMatchIndex === index - 1 ? 8 : 1
-			if (index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_') total += 4
-			lastMatchIndex = index
-			queryIndex++
-		}
-
-		if (queryIndex !== String.length(query)) return noMatchScore
-		return total - String.length(label) / 1000
-	}
 
 	return pipe(
 		group.values,
-		Array.map(value => ({score: score(value), value})),
+		Array.map(value => {
+			const query = pipe(search.query, String.toLowerCase)
+			if (String.isEmpty(query)) return {score: 0, value}
+
+			let total = 0
+			let queryIndex = 0
+			let lastMatchIndex = -1
+			const label = pipe(value.label, String.toLowerCase)
+
+			for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index++) {
+				if (label[index] !== query[queryIndex]) continue
+
+				total += lastMatchIndex === index - 1 ? 8 : 1
+				if (index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_') total += 4
+				lastMatchIndex = index
+				queryIndex++
+			}
+
+			return {
+				score: queryIndex === String.length(query) ? total - String.length(label) / 1000 : noMatchScore,
+				value
+			}
+		}),
 		Array.filter(candidate => candidate.score > noMatchScore),
 		Array.sortWith(candidate => -candidate.score, Order.Number),
 		Array.take(10),
@@ -149,8 +168,7 @@ function match<const TTrigger extends string>(text: string, triggers: readonly T
 		const index = text.lastIndexOf(trigger)
 		if (index < 0) continue
 
-		const prev = text[index - 1] ?? ''
-		if (index > 0 && prev !== '(' && !/\s/.test(prev)) continue
+		if (index > 0 && text[index - 1] !== '(' && !/\s/.test(text[index - 1] ?? '')) continue
 
 		const query = pipe(text, String.slice(index + String.length(trigger)))
 		if (String.length(query) > 32 || /\s/.test(query)) continue
@@ -164,13 +182,90 @@ function match<const TTrigger extends string>(text: string, triggers: readonly T
 	}
 }
 
-function EditorPlugin(props: {
+function currentTextNodeSelection() {
+	const selection = lexical.$getSelection()
+	if (!lexical.$isRangeSelection(selection)) return
+	if (!selection.isCollapsed()) return
+
+	const node = selection.anchor.getNode()
+	if (!lexical.$isTextNode(node)) return
+
+	return {node, selection}
+}
+
+function lineBeforeCursor(text: string, offset: number) {
+	const before = pipe(text, String.slice(0, offset))
+	// biome-ignore lint/plugin: native string search is the clearest way to find the current line boundary
+	const index = before.lastIndexOf('\n')
+
+	return {
+		line: pipe(before, String.slice(index + 1)),
+		start: index + 1
+	}
+}
+
+function continueList(event: KeyboardEvent | null) {
+	if (!event?.shiftKey) return false
+
+	const current = currentTextNodeSelection()
+	if (!current) return false
+
+	const text = current.node.getTextContent()
+	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
+	const emptyUnordered = /^(\s*)[-*+]\s*$/.exec(currentLine.line)
+	const emptyOrdered = /^(\s*)\d+\.\s*$/.exec(currentLine.line)
+
+	if (emptyUnordered || emptyOrdered) {
+		event.preventDefault()
+		current.node.spliceText(currentLine.start, currentLine.line.length, '', true)
+		return true
+	}
+
+	const unordered = /^(\s*)([-*+])\s+\S/.exec(currentLine.line)
+	const ordered = /^(\s*)(\d+)\.\s+\S/.exec(currentLine.line)
+	if (!(unordered || ordered)) return false
+
+	event.preventDefault()
+	if (unordered) current.selection.insertRawText(`\n${unordered[1]}${unordered[2]} `)
+	if (ordered) {
+		const indent = ordered[1] ?? ''
+		const number = ordered[2] ?? '0'
+		current.selection.insertRawText(`\n${indent}${pipe(Number.parse(number), Option.getOrThrow) + 1}. `)
+	}
+	return true
+}
+
+function closeXmlTag(event: KeyboardEvent) {
+	if (event.key !== '>' || event.metaKey || event.ctrlKey || event.altKey) return false
+
+	const current = currentTextNodeSelection()
+	if (!current) return false
+
+	const text = current.node.getTextContent()
+	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
+	const tag = /<([A-Za-z][A-Za-z0-9:_-]*)$/.exec(currentLine.line)
+	if (!tag) return false
+
+	event.preventDefault()
+	current.node.spliceText(current.selection.anchor.offset, 0, `></${tag[1]}>`, true)
+	current.selection.setTextNodeRange(
+		current.node,
+		current.selection.anchor.offset - String.length(`</${tag[1]}>`),
+		current.node,
+		current.selection.anchor.offset - String.length(`</${tag[1]}>`)
+	)
+	return true
+}
+
+function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	editorRef: {current: lexical.LexicalEditor | null}
-	filesRef: {current: Map<string, File>}
+	tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
+	initialSnapshot?: RichTextArea.Snapshot<TValue>
 	menuRef: {current: boolean}
-	onSubmit?: () => void
+	onSubmit?: (snapshot: RichTextArea.Snapshot<TValue>) => void
 }) {
 	const [editor] = useLexicalComposerContext()
+	const initializedRef = useRef(false)
 
 	useEffect(() => {
 		// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
@@ -183,25 +278,37 @@ function EditorPlugin(props: {
 	}, [editor, props.editorRef])
 
 	useEffect(() => {
+		if (initializedRef.current) return
+		initializedRef.current = true
+
+		if (props.initialSnapshot) restore(editor, props.initialSnapshot, props.tokensRef.current)
+	}, [editor, props.initialSnapshot, props.tokensRef])
+
+	useEffect(() => {
 		return editor.registerCommand(
 			lexical.KEY_ENTER_COMMAND,
 			event => {
+				if (continueList(event)) return true
 				if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
 
 				event?.preventDefault()
-				props.onSubmit()
+				props.onSubmit(snapshot(editor, props.tokensRef.current))
 				return true
 			},
 			lexical.COMMAND_PRIORITY_LOW
 		)
-	}, [editor, props.menuRef, props.onSubmit])
+	}, [editor, props.menuRef, props.onSubmit, props.tokensRef])
+
+	useEffect(() => {
+		return editor.registerCommand(lexical.KEY_DOWN_COMMAND, closeXmlTag, lexical.COMMAND_PRIORITY_HIGH)
+	}, [editor])
 
 	useEffect(() => {
 		return editor.registerCommand(
 			lexical.PASTE_COMMAND,
 			event => {
-				const data = event instanceof ClipboardEvent ? event.clipboardData : null
-				const files = data ? Array.fromIterable(data.files) : Array.empty<File>()
+				const files =
+					event instanceof ClipboardEvent ? Array.fromIterable(event.clipboardData?.files ?? []) : Array.empty<File>()
 				if (Array.isReadonlyArrayEmpty(files)) return false
 
 				event?.preventDefault()
@@ -217,7 +324,7 @@ function EditorPlugin(props: {
 
 					for (const file of files) {
 						const id = crypto.randomUUID()
-						props.filesRef.current.set(id, file)
+						props.tokensRef.current.set(id, {id, kind: 'file', color: '#f59e0b', file})
 
 						selection.insertNodes([
 							lexical
@@ -233,17 +340,17 @@ function EditorPlugin(props: {
 			},
 			lexical.COMMAND_PRIORITY_HIGH
 		)
-	}, [editor, props.filesRef])
+	}, [editor, props.tokensRef])
 
 	return <HistoryPlugin />
 }
 
-function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
-	children?: (entry: AutocompleteInput.Entry<TValue>) => React.ReactNode
-	entriesRef: {current: Map<string, AutocompleteInput.Entry<TValue>>}
+function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
+	children?: (entry: RichTextArea.Entry<TValue>) => React.ReactNode
 	menuBoxRef: React.RefObject<HTMLDivElement | null>
 	menuRef: {current: boolean}
-	options?: AutocompleteInput.Options<TValue>
+	tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
+	options?: RichTextArea.Options<TValue>
 }) {
 	const [search, setSearch] = useState<null | {trigger: string; query: string}>(null)
 
@@ -259,8 +366,6 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 			})
 		)
 	)
-
-	const items = getItems(search, props.options)
 
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
@@ -292,7 +397,7 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 			}}
 			onSelectOption={(option, node, close) => {
 				const id = crypto.randomUUID()
-				props.entriesRef.current.set(id, option.entry)
+				props.tokensRef.current.set(id, {id, kind: 'entry', ...option.entry})
 
 				const token = lexical
 					.$applyNodeReplacement(new TokenNode(`${option.entry.trigger}${option.entry.value.label}`, id, 'entry'))
@@ -315,7 +420,7 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 				gap.selectEnd()
 				close()
 			}}
-			options={items}
+			options={getItems(search, props.options)}
 			anchorClassName="z-50"
 			menuRenderFn={(anchorRef, menuProps) =>
 				!(anchorRef.current && props.menuBoxRef.current) || Array.isReadonlyArrayEmpty(menuProps.options)
@@ -362,7 +467,7 @@ function TypeaheadPlugin<TValue extends AutocompleteInput.Value>(props: {
 	)
 }
 
-export declare namespace AutocompleteInput {
+export declare namespace RichTextArea {
 	export type Value = {
 		label: string
 	}
@@ -384,11 +489,21 @@ export declare namespace AutocompleteInput {
 
 	export type RenderEntry<TValue extends Value = Value> = Entry<TValue>
 
+	export type Token<TValue extends Value = Value> =
+		| ({id: string; kind: 'entry'} & Entry<TValue>)
+		| {id: string; kind: 'file'; color: string; file: File}
+
 	export type Handle<TValue extends Value = Value> = {
-		getText: () => string
-		getEntries: () => readonly Entry<TValue>[]
-		getFiles: () => readonly File[]
+		getSnapshot: () => Snapshot<TValue>
+		restore: (snapshot: Snapshot<TValue>) => void
 		clear: () => void
+		focus: () => void
+	}
+
+	export type Snapshot<TValue extends Value = Value> = {
+		text: string
+		editorState: lexical.SerializedEditorState<lexical.SerializedLexicalNode>
+		tokens: readonly Token<TValue>[]
 	}
 
 	export type EmptyOptions = Record<never, Option<never>>
@@ -396,49 +511,50 @@ export declare namespace AutocompleteInput {
 	export type Props<TValue extends Value = Value> = {
 		ref?: React.Ref<Handle<TValue>>
 		options?: Options<TValue>
-		onSubmit?: () => void
+		onSubmit?: (snapshot: Snapshot<TValue>) => void
+		initialSnapshot?: Snapshot<TValue>
 		children?: (entry: RenderEntry<TValue>) => React.ReactNode
 		placeholder?: string
 		className?: string
 	}
 }
 
-export function AutocompleteInput<TValue extends AutocompleteInput.Value = AutocompleteInput.Value>(
-	props: AutocompleteInput.Props<TValue>
+function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(): RichTextArea.Snapshot<TValue> {
+	const editorState = JSON.parse(
+		'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
+	)
+
+	return {
+		text: '',
+		editorState,
+		tokens: Array.empty<RichTextArea.Token<TValue>>()
+	}
+}
+
+export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Value>(
+	props: RichTextArea.Props<TValue>
 ) {
 	const editorRef = useRef<lexical.LexicalEditor | null>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
-	const entriesRef = useRef(new Map<string, AutocompleteInput.Entry<TValue>>())
-	const filesRef = useRef(new Map<string, File>())
+	const tokensRef = useRef(new Map<string, RichTextArea.Token<TValue>>())
 
 	useImperativeHandle(
 		props.ref,
 		() => ({
-			getText() {
-				if (!editorRef.current) return ''
-
-				return editorRef.current.getEditorState().read(() => pipe(lexical.$getRoot().getTextContent(), String.trim))
+			getSnapshot() {
+				return snapshot(editorRef.current, tokensRef.current)
 			},
-			getEntries() {
-				return read(editorRef.current, 'entry', entriesRef.current)
-			},
-			getFiles() {
-				return read(editorRef.current, 'file', filesRef.current)
+			restore(nextSnapshot) {
+				restore(editorRef.current, nextSnapshot, tokensRef.current)
 			},
 			clear() {
 				if (!editorRef.current) return
-
-				entriesRef.current.clear()
-				filesRef.current.clear()
 				menuRef.current = false
-
-				editorRef.current.update(() => {
-					const root = lexical.$getRoot()
-					root.clear()
-					root.append(lexical.$createParagraphNode())
-					root.selectEnd()
-				})
+				restore(editorRef.current, emptySnapshot<TValue>(), tokensRef.current)
+			},
+			focus() {
+				editorRef.current?.focus()
 			}
 		}),
 		[]
@@ -448,7 +564,7 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 		<div className={cn('relative', props.className)}>
 			<LexicalComposer
 				initialConfig={{
-					namespace: 'autocomplete-input',
+					namespace: 'rich-text-area',
 					nodes: [TokenNode],
 					theme: {},
 					onError(error) {
@@ -474,20 +590,39 @@ export function AutocompleteInput<TValue extends AutocompleteInput.Value = Autoc
 					</div>
 				</div>
 
-				<EditorPlugin editorRef={editorRef} filesRef={filesRef} menuRef={menuRef} onSubmit={props.onSubmit} />
+				<EditorPlugin
+					editorRef={editorRef}
+					initialSnapshot={props.initialSnapshot}
+					menuRef={menuRef}
+					onSubmit={props.onSubmit}
+					tokensRef={tokensRef}
+				/>
 				<TypeaheadPlugin
 					children={props.children}
-					entriesRef={entriesRef}
 					menuBoxRef={menuBoxRef}
 					menuRef={menuRef}
 					options={props.options}
+					tokensRef={tokensRef}
 				/>
 			</LexicalComposer>
 		</div>
 	)
 }
 
-AutocompleteInput.ToolBar = (props: {children: React.ReactNode; className?: string}) => {
+RichTextArea.Actions = (props: {children: React.ReactNode; className?: string}) => {
+	return (
+		<div
+			className={cn(
+				'absolute inset-x-0 bottom-full z-40 border border-input border-b-0 bg-card shadow-lg',
+				props.className
+			)}
+		>
+			{props.children}
+		</div>
+	)
+}
+
+RichTextArea.ToolBar = (props: {children: React.ReactNode; className?: string}) => {
 	return (
 		<div
 			className={cn(

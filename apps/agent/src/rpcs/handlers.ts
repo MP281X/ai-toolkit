@@ -1,3 +1,4 @@
+import type * as EffectTypes from 'effect'
 import {
 	Array,
 	Cause,
@@ -10,12 +11,12 @@ import {
 	Predicate,
 	PubSub,
 	pipe,
-	RcMap,
 	Stream,
 	String,
 	SubscriptionRef
 } from 'effect'
 
+import {models} from '@ai-toolkit/ai/catalog'
 import {Agent} from '@ai-toolkit/ai/service'
 import {makeResumableStream} from '@ai-toolkit/ai/utils'
 import {GitRepository} from '@ai-toolkit/git/schema'
@@ -23,7 +24,24 @@ import {Git} from '@ai-toolkit/git/service'
 import {Prompt, Response} from 'effect/unstable/ai'
 
 import type {AgentEvent} from '#rpcs/contracts.ts'
-import {BranchesSnapshot, ProjectEntry, ProjectsSnapshot, ReviewSnapshot, RpcContracts} from '#rpcs/contracts.ts'
+import {
+	AgentEntry,
+	BranchesSnapshot,
+	ProjectEntry,
+	ProjectsSnapshot,
+	ReviewSnapshot,
+	RpcContracts
+} from '#rpcs/contracts.ts'
+
+type AgentSession = {
+	agent: Agent['Service'] | undefined
+	entry: AgentEntry
+	handle: FiberHandle.FiberHandle<void, never>
+	stream: {
+		append: (part: AgentEvent) => EffectTypes.Effect.Effect<void>
+		stream: EffectTypes.Stream.Stream<AgentEvent>
+	}
+}
 
 export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
@@ -35,7 +53,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const state = yield* SubscriptionRef.make(new ProjectsSnapshot({fetchFailed: false, projects: [], scanRoot}))
 		let fetchedAt: number | undefined
 		let fetchFailed = false
-		const loadSnapshot = Effect.fnUntraced(function* () {
+		const refresh = Effect.fnUntraced(function* () {
 			const loadedProjects = yield* Effect.forEach(
 				yield* git.listRepositoriesFrom({cwd: scanRoot}),
 				repository =>
@@ -43,25 +61,24 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Effect.gen(function* () {
 							const discoveredWorktrees = yield* git.listWorktrees({cwd: repository['root']})
 							const projectRoot = discoveredWorktrees[0]?.root ?? repository['root']
-							const worktrees = pipe(
-								discoveredWorktrees,
-								Array.sortWith(
-									worktree => `${worktree.root === projectRoot ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
-									Order.String
-								)
-							)
 
 							return new ProjectEntry({
 								repository: new GitRepository({gitDirectory: repository['gitDirectory'], root: projectRoot}),
-								worktrees
+								worktrees: pipe(
+									discoveredWorktrees,
+									Array.sortWith(
+										worktree =>
+											`${worktree.root === projectRoot ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
+										Order.String
+									)
+								)
 							})
 						}),
 						Effect.orElseSucceed(() => undefined)
 					),
 				{concurrency: 'unbounded'}
 			)
-
-			return new ProjectsSnapshot({
+			const nextSnapshot = new ProjectsSnapshot({
 				fetchFailed,
 				fetchedAt,
 				projects: pipe(
@@ -71,63 +88,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 				),
 				scanRoot
 			})
-		})
-
-		const refresh = Effect.fnUntraced(function* () {
-			const nextSnapshot = yield* loadSnapshot()
 
 			yield* SubscriptionRef.set(state, nextSnapshot)
 			yield* PubSub.publish(snapshots, nextSnapshot)
 		})
 		const ignoredFileSearchDirectories = new Set(['.git', 'node_modules', 'dist', '.turbo', '.next', 'coverage'])
-		const searchFiles = Effect.fnUntraced(function* (input: {cwd: string}) {
-			const roots = [input.cwd]
-			const files = Array.empty<string>()
-
-			while (Array.isArrayNonEmpty(roots) && files.length < 1_000) {
-				const currentRoot = roots.pop()
-				if (!currentRoot) continue
-
-				const entries = yield* pipe(
-					fs.readDirectory(currentRoot),
-					Effect.orElseSucceed(() => Array.empty<string>())
-				)
-
-				for (const entry of entries) {
-					if (pipe(entry, String.startsWith('.')) && entry !== '.github') continue
-
-					const entryPath = path.join(currentRoot, entry)
-					const info = yield* pipe(
-						fs.stat(entryPath),
-						Effect.orElseSucceed(() => undefined)
-					)
-
-					if (info?.type === 'Directory') {
-						if (!ignoredFileSearchDirectories.has(entry)) roots.push(entryPath)
-						continue
-					}
-
-					if (info?.type === 'File') files.push(path.relative(input.cwd, entryPath))
-				}
-			}
-
-			return pipe(files, Array.sort(Order.String), Array.take(500))
-		})
-		const agentSessions = yield* RcMap.make({
-			lookup: Effect.fnUntraced(function* () {
-				const agent = yield* pipe(
-					Effect.gen(function* () {
-						return yield* Agent
-					}),
-					Effect.provide(Agent.layerEffect),
-					Effect.orDie
-				)
-				const handle = yield* FiberHandle.make<void>()
-				const stream = yield* makeResumableStream<AgentEvent>()
-
-				return {agent, handle, stream}
-			}),
-			idleTimeToLive: Duration.minutes(15)
+		const agentSessions = new Map<string, AgentSession>()
+		const agentsState = yield* SubscriptionRef.make(Array.empty<AgentEntry>())
+		const getAgentSession = Effect.fnUntraced(function* (agentId: string) {
+			return yield* pipe(Effect.fromNullishOr(agentSessions.get(agentId)), Effect.orDie)
 		})
 
 		yield* refresh()
@@ -218,17 +187,117 @@ export const RpcHandlers = RpcContracts.toLayer(
 					git.discardFile(payload),
 					Effect.catchTag('GitError', () => Effect.void)
 				),
-			'files.search': payload => searchFiles(payload),
-			'agent.prompt': Effect.fnUntraced(function* (payload) {
-				const session = yield* pipe(RcMap.get(agentSessions, payload.agentId), Effect.orDie)
-				const message = Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: payload.prompt})]})
+			'files.search': Effect.fnUntraced(function* (payload) {
+				const roots = [payload.cwd]
+				const files = Array.empty<string>()
 
+				while (Array.isArrayNonEmpty(roots) && files.length < 1_000) {
+					const currentRoot = roots.pop()
+					if (!currentRoot) continue
+
+					for (const entry of yield* pipe(
+						fs.readDirectory(currentRoot),
+						Effect.orElseSucceed(() => Array.empty<string>())
+					)) {
+						if (pipe(entry, String.startsWith('.')) && entry !== '.github') continue
+
+						const entryPath = path.join(currentRoot, entry)
+						const info = yield* pipe(
+							fs.stat(entryPath),
+							Effect.orElseSucceed(() => undefined)
+						)
+
+						if (info?.type === 'Directory') {
+							if (!ignoredFileSearchDirectories.has(entry)) roots.push(entryPath)
+							continue
+						}
+
+						if (info?.type === 'File') files.push(path.relative(payload.cwd, entryPath))
+					}
+				}
+
+				return pipe(files, Array.sort(Order.String), Array.take(500))
+			}),
+			'agents.watch': () =>
+				Stream.unwrap(
+					Effect.gen(function* () {
+						return pipe(
+							Stream.make(yield* SubscriptionRef.get(agentsState)),
+							Stream.concat(pipe(SubscriptionRef.changes(agentsState), Stream.drop(1)))
+						)
+					})
+				),
+			'agents.create': Effect.fnUntraced(function* (payload) {
+				const entry = new AgentEntry({
+					agentId: `agent-${crypto.randomUUID()}`,
+					createdAt: Date.now(),
+					layer: payload.layer,
+					projectRoot: payload.projectRoot,
+					worktreeRoot: payload.worktreeRoot
+				})
+				const handle = yield* FiberHandle.make<void, never>()
+				const stream = yield* makeResumableStream<AgentEvent>()
+
+				agentSessions.set(entry.agentId, {agent: undefined, entry, handle, stream})
+				yield* SubscriptionRef.set(
+					agentsState,
+					pipe(
+						Array.fromIterable(agentSessions.values()),
+						Array.map(session => session.entry),
+						Array.sortWith(agent => `${agent.projectRoot}:${agent.worktreeRoot}:${agent.createdAt}`, Order.String)
+					)
+				)
+
+				return entry
+			}),
+			'agent.prompt': Effect.fnUntraced(function* (payload) {
+				const session = yield* getAgentSession(payload.agentId)
+				const agent =
+					session.agent ??
+					(yield* pipe(
+						Effect.gen(function* () {
+							return yield* Agent
+						}),
+						Effect.provide(
+							{
+								codex: Agent.layerCodex,
+								effect: Agent.layerEffect,
+								opencode: Agent.layerOpencode
+							}[session.entry.layer]
+						),
+						Effect.tap(agent =>
+							Effect.sync(() => {
+								session.agent = agent
+							})
+						),
+						Effect.orDie
+					))
 				yield* session.stream.append({prompt: payload.prompt, runId: payload.runId, type: 'user-message'})
+				if (
+					!pipe(
+						models,
+						Array.some(
+							model =>
+								model.model === payload.model &&
+								model.provider === payload.provider &&
+								pipe(model.agents, Array.contains(session.entry.layer))
+						)
+					)
+				) {
+					yield* session.stream.append({
+						part: Response.makePart('error', {
+							error: `${session.entry.layer} does not support ${payload.provider}/${payload.model}`
+						}),
+						runId: payload.runId,
+						type: 'agent-part'
+					})
+					return
+				}
 				yield* FiberHandle.run(
 					session.handle,
 					pipe(
-						session.agent.streamText({
-							messages: [message],
+						agent.streamText({
+							messages: [Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: payload.prompt})]})],
 							model: payload.model,
 							provider: payload.provider
 						}),
@@ -239,11 +308,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				)
 			}),
+			'agent.stop': Effect.fnUntraced(function* (payload) {
+				const session = yield* getAgentSession(payload.agentId)
+
+				yield* FiberHandle.clear(session.handle)
+			}),
 			'agent.events': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(agentSessions, payload.agentId),
-						Effect.orDie,
+						getAgentSession(payload.agentId),
 						Effect.map(session => session.stream.stream)
 					)
 				),
