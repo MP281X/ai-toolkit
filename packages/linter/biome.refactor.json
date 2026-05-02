@@ -1,0 +1,32 @@
+{
+	"$schema": "../../node_modules/@biomejs/biome/configuration_schema.json",
+	"extends": ["../../biome.json"],
+
+	"plugins": [
+		"./src/no-type-assertion.grit",
+		"./src/no-return-undefined-null.grit",
+		"./src/no-native-methods.grit",
+		"./src/no-effect-antipatterns.grit",
+		"./src/no-pipe-method.grit",
+		"./src/no-arg-destructuring.grit",
+		"./src/no-access-variables.grit",
+		"./src/no-simple-check-variables.grit",
+		"./src/no-react-type-imports.grit",
+		"./src/no-react-compiler-antipatterns.grit",
+		"./src/cn-classname.grit",
+		"./src/no-arrow-for-named.grit",
+		"./src/no-ternary-in-jsx.grit",
+		"./src/no-variable-type-annotation.grit",
+		"./src/no-return-type-annotation.grit",
+		"./src/no-tailwind-class-variables.grit",
+		"./src/no-simple-function-variables.grit",
+		"./src/no-primitive-const.grit",
+		"./src/no-length-check.grit",
+		"./src/no-typeof.grit",
+		"./src/no-in-operator.grit",
+		"./src/no-nullish-checks.grit",
+		"./src/no-dynamic-imports.grit",
+		"./src/no-else.grit",
+		"./src/no-then.grit"
+	]
+}

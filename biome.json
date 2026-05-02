@@ -1,34 +1,6 @@
 {
 	"$schema": "node_modules/@biomejs/biome/configuration_schema.json",
 
-	"plugins": [
-		"./packages/linter/src/no-type-assertion.grit",
-		"./packages/linter/src/no-return-undefined-null.grit",
-		"./packages/linter/src/no-native-methods.grit",
-		"./packages/linter/src/no-effect-antipatterns.grit",
-		"./packages/linter/src/no-pipe-method.grit",
-		"./packages/linter/src/no-arg-destructuring.grit",
-		"./packages/linter/src/no-access-variables.grit",
-		"./packages/linter/src/no-simple-check-variables.grit",
-		"./packages/linter/src/no-react-type-imports.grit",
-		"./packages/linter/src/no-react-compiler-antipatterns.grit",
-		"./packages/linter/src/cn-classname.grit",
-		"./packages/linter/src/no-arrow-for-named.grit",
-		"./packages/linter/src/no-ternary-in-jsx.grit",
-		"./packages/linter/src/no-variable-type-annotation.grit",
-		"./packages/linter/src/no-return-type-annotation.grit",
-		"./packages/linter/src/no-tailwind-class-variables.grit",
-		"./packages/linter/src/no-simple-function-variables.grit",
-		"./packages/linter/src/no-primitive-const.grit",
-		"./packages/linter/src/no-length-check.grit",
-		"./packages/linter/src/no-typeof.grit",
-		"./packages/linter/src/no-in-operator.grit",
-		"./packages/linter/src/no-nullish-checks.grit",
-		"./packages/linter/src/no-dynamic-imports.grit",
-		"./packages/linter/src/no-else.grit",
-		"./packages/linter/src/no-then.grit"
-	],
-
 	"linter": {
 		"domains": { "react": "recommended" },
 		"rules": {

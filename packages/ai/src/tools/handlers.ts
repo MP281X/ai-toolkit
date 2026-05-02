@@ -13,7 +13,6 @@ export const WebSearchToolKitLayer = WebSearchToolKit.toLayer(
 			web_search: params =>
 				Effect.tryPromise({
 					try: async () => {
-						// biome-ignore lint/plugin: exa-js method
 						const response = await exa.search(params.query, {
 							contents: {highlights: true, text: true},
 							numResults: params.numResults

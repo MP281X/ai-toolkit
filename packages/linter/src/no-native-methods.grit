@@ -63,5 +63,5 @@ language js(typescript, jsx)
 		`String`,
 		`SchemaTransformation`
 	},
-	register_diagnostic(span=$match, message="Do not use native prototype methods here. Replace them with the matching Effect module helper such as `Array.*`, `String.*`, or `Record.*` so collection and string logic stays explicit, composable, and consistent. Suppress with `// biome-ignore lint/plugin: not a prototype method` for real external APIs.")
+	register_diagnostic(span=$match, message="Do not use native prototype methods here. Replace them with the matching Effect module helper such as `Array.*`, `String.*`, or `Record.*` so collection and string logic stays explicit, composable, and consistent.")
 }

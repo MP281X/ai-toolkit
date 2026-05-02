@@ -284,9 +284,7 @@ const formHook = tanstackForm.createFormHook({
 	formComponents: {SubmitButton, CancelButton}
 })
 
-// biome-ignore lint/plugin: re-export
 export const useForm = formHook.useAppForm
-// biome-ignore lint/plugin: re-export
 export const revalidateLogic = tanstackForm.revalidateLogic
 
 export {useFieldContext, useFormContext}
