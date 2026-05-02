@@ -38,8 +38,6 @@ export class GitWorktreeStatus extends Schema.Class<GitWorktreeStatus>('GitWorkt
 
 export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
 	branch: Schema.optional(Schema.String),
-	commit: Schema.String,
-	gitDirectory: Schema.String,
 	root: Schema.String,
 	status: Schema.optional(GitWorktreeStatus)
 }) {}
