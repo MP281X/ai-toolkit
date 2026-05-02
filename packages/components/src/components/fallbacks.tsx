@@ -30,7 +30,10 @@ export function Error(props: {error: Error; reset: () => void}) {
 	return (
 		<Button
 			variant="ghost"
-			onClick={props.reset}
+			onClick={() => {
+				navigator.clipboard.writeText(message)
+				props.reset()
+			}}
 			className="flex h-full w-full cursor-pointer select-text items-center justify-center p-4"
 		>
 			<Alert variant="destructive" className="w-full max-w-lg">

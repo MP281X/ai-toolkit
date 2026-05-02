@@ -45,7 +45,7 @@ Format for 2-second scanning:
 - Implement only what's explicitly requested — no extra features, no future requirements
 - Replace old implementations — never keep both old and new
 - Breaking changes are fine — no backward compatibility
-- After code changes, run `bun run check` before returning
+- After code changes, run `bun run fix && bun run check` before returning
 - Never run build commands unless the user explicitly requests a build
 
 ## Code Style

@@ -29,12 +29,14 @@ function AgentRoute() {
 	if (!search.agentId) {
 		return (
 			<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-				Create an agent from a worktree action to start a conversation.
+				Create a thread from a worktree action to start a conversation.
 			</div>
 		)
 	}
 	if (!selectedAgent) {
-		return <div className="flex h-full items-center justify-center text-muted-foreground text-sm">Agent not found.</div>
+		return (
+			<div className="flex h-full items-center justify-center text-muted-foreground text-sm">Thread not found.</div>
+		)
 	}
 	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(selectedAgent.layer)))
 	const selectedModel = pipe(
