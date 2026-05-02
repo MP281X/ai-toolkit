@@ -10,44 +10,58 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as homeRouteRouteImport } from './routes/(home)/route'
-import { Route as homeDiffRouteImport } from './routes/(home)/diff'
-import { Route as homeAgentRouteImport } from './routes/(home)/agent'
+import { Route as homeIndexRouteImport } from './routes/(home)/index'
+import { Route as homeWorktreeThreadRouteImport } from './routes/(home)/$worktree/thread'
+import { Route as homeWorktreeDiffRouteImport } from './routes/(home)/$worktree/diff'
 
 const homeRouteRoute = homeRouteRouteImport.update({
   id: '/(home)',
   getParentRoute: () => rootRouteImport,
 } as any)
-const homeDiffRoute = homeDiffRouteImport.update({
-  id: '/diff',
-  path: '/diff',
+const homeIndexRoute = homeIndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => homeRouteRoute,
 } as any)
-const homeAgentRoute = homeAgentRouteImport.update({
-  id: '/agent',
-  path: '/agent',
+const homeWorktreeThreadRoute = homeWorktreeThreadRouteImport.update({
+  id: '/$worktree/thread',
+  path: '/$worktree/thread',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
+  id: '/$worktree/diff',
+  path: '/$worktree/diff',
   getParentRoute: () => homeRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/agent': typeof homeAgentRoute
-  '/diff': typeof homeDiffRoute
+  '/': typeof homeIndexRoute
+  '/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRoutesByTo {
-  '/agent': typeof homeAgentRoute
-  '/diff': typeof homeDiffRoute
+  '/': typeof homeIndexRoute
+  '/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(home)': typeof homeRouteRouteWithChildren
-  '/(home)/agent': typeof homeAgentRoute
-  '/(home)/diff': typeof homeDiffRoute
+  '/(home)/': typeof homeIndexRoute
+  '/(home)/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/(home)/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/agent' | '/diff'
+  fullPaths: '/' | '/$worktree/diff' | '/$worktree/thread'
   fileRoutesByTo: FileRoutesByTo
-  to: '/agent' | '/diff'
-  id: '__root__' | '/(home)' | '/(home)/agent' | '/(home)/diff'
+  to: '/' | '/$worktree/diff' | '/$worktree/thread'
+  id:
+    | '__root__'
+    | '/(home)'
+    | '/(home)/'
+    | '/(home)/$worktree/diff'
+    | '/(home)/$worktree/thread'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -63,31 +77,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(home)/diff': {
-      id: '/(home)/diff'
-      path: '/diff'
-      fullPath: '/diff'
-      preLoaderRoute: typeof homeDiffRouteImport
+    '/(home)/': {
+      id: '/(home)/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof homeIndexRouteImport
       parentRoute: typeof homeRouteRoute
     }
-    '/(home)/agent': {
-      id: '/(home)/agent'
-      path: '/agent'
-      fullPath: '/agent'
-      preLoaderRoute: typeof homeAgentRouteImport
+    '/(home)/$worktree/thread': {
+      id: '/(home)/$worktree/thread'
+      path: '/$worktree/thread'
+      fullPath: '/$worktree/thread'
+      preLoaderRoute: typeof homeWorktreeThreadRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
+    '/(home)/$worktree/diff': {
+      id: '/(home)/$worktree/diff'
+      path: '/$worktree/diff'
+      fullPath: '/$worktree/diff'
+      preLoaderRoute: typeof homeWorktreeDiffRouteImport
       parentRoute: typeof homeRouteRoute
     }
   }
 }
 
 interface homeRouteRouteChildren {
-  homeAgentRoute: typeof homeAgentRoute
-  homeDiffRoute: typeof homeDiffRoute
+  homeIndexRoute: typeof homeIndexRoute
+  homeWorktreeDiffRoute: typeof homeWorktreeDiffRoute
+  homeWorktreeThreadRoute: typeof homeWorktreeThreadRoute
 }
 
 const homeRouteRouteChildren: homeRouteRouteChildren = {
-  homeAgentRoute: homeAgentRoute,
-  homeDiffRoute: homeDiffRoute,
+  homeIndexRoute: homeIndexRoute,
+  homeWorktreeDiffRoute: homeWorktreeDiffRoute,
+  homeWorktreeThreadRoute: homeWorktreeThreadRoute,
 }
 
 const homeRouteRouteWithChildren = homeRouteRoute._addFileChildren(

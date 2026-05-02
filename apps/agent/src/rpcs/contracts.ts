@@ -11,9 +11,12 @@ export const AgentStreamPart = Response.StreamPart(AgentToolKit)
 
 export class AgentEntry extends Schema.Class<AgentEntry>('AgentEntry')({
 	agentId: Schema.NonEmptyString,
-	createdAt: Schema.Number,
+	archived: Schema.Boolean,
+	firstPromptPreview: Schema.optional(Schema.String),
 	layer: AgentId,
+	lastActivityAt: Schema.Number,
 	projectRoot: Schema.String,
+	title: Schema.optional(Schema.String),
 	worktreeRoot: Schema.String
 }) {}
 
@@ -36,41 +39,27 @@ export class ProjectEntry extends Schema.Class<ProjectEntry>('ProjectEntry')({
 	worktrees: Schema.Array(GitWorktree)
 }) {}
 
-export class ProjectsSnapshot extends Schema.Class<ProjectsSnapshot>('ProjectsSnapshot')({
-	fetchFailed: Schema.Boolean,
-	fetchedAt: Schema.optional(Schema.Number),
-	projects: Schema.Array(ProjectEntry),
-	scanRoot: Schema.String
-}) {}
-
 export class BranchesSnapshot extends Schema.Class<BranchesSnapshot>('BranchesSnapshot')({
 	branches: Schema.Array(GitBranch),
 	defaultBranch: Schema.String
 }) {}
 
-export class ReviewSnapshot extends Schema.Class<ReviewSnapshot>('ReviewSnapshot')({
-	cwd: Schema.String,
-	scope: GitDiffScope,
-	diffs: Schema.Array(GitDiff)
-}) {}
-
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.watch', {
 		stream: true,
-		success: ProjectsSnapshot
+		success: Schema.Array(ProjectEntry)
 	}),
 	Rpc.make('projects.branches', {
 		payload: Schema.Struct({cwd: Schema.String}),
 		success: BranchesSnapshot
 	}),
-	Rpc.make('projects.refresh', {}),
 	Rpc.make('review.watch', {
 		stream: true,
 		payload: Schema.Struct({
 			cwd: Schema.String,
 			scope: GitDiffScope
 		}),
-		success: ReviewSnapshot
+		success: Schema.Array(GitDiff)
 	}),
 	Rpc.make('review.stageFile', {
 		payload: Schema.Struct({
@@ -120,6 +109,11 @@ export class RpcContracts extends RpcGroup.make(
 			agentId: Schema.NonEmptyString
 		})
 	}),
+	Rpc.make('agent.archive', {
+		payload: Schema.Struct({
+			agentId: Schema.NonEmptyString
+		})
+	}),
 	Rpc.make('agent.events', {
 		stream: true,
 		payload: Schema.Struct({
@@ -133,7 +127,8 @@ export class RpcContracts extends RpcGroup.make(
 			branch: Schema.String,
 			cwd: Schema.String,
 			mode: Schema.Literals(['existing-local', 'existing-remote', 'new-local'])
-		})
+		}),
+		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {
 		payload: Schema.Struct({

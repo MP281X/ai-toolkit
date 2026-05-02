@@ -24,14 +24,7 @@ import {Git} from '@ai-toolkit/git/service'
 import {Prompt, Response} from 'effect/unstable/ai'
 
 import type {AgentEvent} from '#rpcs/contracts.ts'
-import {
-	AgentEntry,
-	BranchesSnapshot,
-	ProjectEntry,
-	ProjectsSnapshot,
-	ReviewSnapshot,
-	RpcContracts
-} from '#rpcs/contracts.ts'
+import {AgentEntry, BranchesSnapshot, ProjectEntry, RpcContracts} from '#rpcs/contracts.ts'
 
 type AgentSession = {
 	agent: Agent['Service'] | undefined
@@ -49,10 +42,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 		const scanRoot = process.env['HOME'] ?? process.cwd()
-		const snapshots = yield* PubSub.unbounded<ProjectsSnapshot>()
-		const state = yield* SubscriptionRef.make(new ProjectsSnapshot({fetchFailed: false, projects: [], scanRoot}))
-		let fetchedAt: number | undefined
-		let fetchFailed = false
+		const snapshots = yield* PubSub.unbounded<readonly ProjectEntry[]>()
+		const state = yield* SubscriptionRef.make(Array.empty<ProjectEntry>())
 		const refresh = Effect.fnUntraced(function* () {
 			const loadedProjects = yield* Effect.forEach(
 				yield* git.listRepositoriesFrom({cwd: scanRoot}),
@@ -78,16 +69,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 					),
 				{concurrency: 'unbounded'}
 			)
-			const nextSnapshot = new ProjectsSnapshot({
-				fetchFailed,
-				fetchedAt,
-				projects: pipe(
-					loadedProjects,
-					Array.filter(Predicate.isNotUndefined),
-					Array.sortWith(project => project['repository']['root'], Order.String)
-				),
-				scanRoot
-			})
+			const nextSnapshot = pipe(
+				loadedProjects,
+				Array.filter(Predicate.isNotUndefined),
+				Array.sortWith(project => project['repository']['root'], Order.String)
+			)
 
 			yield* SubscriptionRef.set(state, nextSnapshot)
 			yield* PubSub.publish(snapshots, nextSnapshot)
@@ -95,6 +81,17 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const ignoredFileSearchDirectories = new Set(['.git', 'node_modules', 'dist', '.turbo', '.next', 'coverage'])
 		const agentSessions = new Map<string, AgentSession>()
 		const agentsState = yield* SubscriptionRef.make(Array.empty<AgentEntry>())
+		const publishAgents = Effect.fnUntraced(function* () {
+			yield* SubscriptionRef.set(
+				agentsState,
+				pipe(
+					Array.fromIterable(agentSessions.values()),
+					Array.map(session => session.entry),
+					Array.filter(agent => !agent.archived && Predicate.isNotUndefined(agent.firstPromptPreview)),
+					Array.sortWith(agent => -agent.lastActivityAt, Order.Number)
+				)
+			)
+		})
 		const getAgentSession = Effect.fnUntraced(function* (agentId: string) {
 			return yield* pipe(Effect.fromNullishOr(agentSessions.get(agentId)), Effect.orDie)
 		})
@@ -123,25 +120,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.map(result => new BranchesSnapshot(result)),
 					Effect.catchTag('GitError', () => Effect.succeed(new BranchesSnapshot({branches: [], defaultBranch: 'main'})))
 				),
-			'projects.refresh': Effect.fnUntraced(function* () {
-				const snapshot = yield* SubscriptionRef.get(state)
-				fetchFailed = false
-				yield* Effect.forEach(
-					snapshot.projects,
-					project =>
-						pipe(
-							git.fetch({cwd: project.repository.root}),
-							Effect.catchTag('GitError', () =>
-								Effect.sync(() => {
-									fetchFailed = true
-								})
-							)
-						),
-					{concurrency: 'unbounded'}
-				)
-				fetchedAt = Date.now()
-				yield* refresh()
-			}),
 			'review.watch': payload =>
 				Stream.unwrap(
 					Effect.gen(function* () {
@@ -149,19 +127,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 							git.reviewDiffs(payload),
 							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
 						)
-						const state = yield* Effect.andThen(loadReview, diffs =>
-							SubscriptionRef.make(new ReviewSnapshot({cwd: payload.cwd, scope: payload.scope, diffs}))
-						)
+						const state = yield* Effect.andThen(loadReview, SubscriptionRef.make)
 
 						yield* Effect.forkScoped(
 							pipe(
 								fs.watch(payload.cwd),
 								Stream.debounce(Duration.millis(50)),
-								Stream.tap(() =>
-									Effect.flatMap(loadReview, diffs =>
-										SubscriptionRef.set(state, new ReviewSnapshot({cwd: payload.cwd, scope: payload.scope, diffs}))
-									)
-								),
+								Stream.tap(() => Effect.flatMap(loadReview, diffs => SubscriptionRef.set(state, diffs))),
 								Stream.runDrain
 							)
 						)
@@ -228,10 +200,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 					})
 				),
 			'agents.create': Effect.fnUntraced(function* (payload) {
+				const now = Date.now()
 				const entry = new AgentEntry({
 					agentId: `agent-${crypto.randomUUID()}`,
-					createdAt: Date.now(),
+					archived: false,
 					layer: payload.layer,
+					lastActivityAt: now,
 					projectRoot: payload.projectRoot,
 					worktreeRoot: payload.worktreeRoot
 				})
@@ -239,19 +213,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 				const stream = yield* makeResumableStream<AgentEvent>()
 
 				agentSessions.set(entry.agentId, {agent: undefined, entry, handle, stream})
-				yield* SubscriptionRef.set(
-					agentsState,
-					pipe(
-						Array.fromIterable(agentSessions.values()),
-						Array.map(session => session.entry),
-						Array.sortWith(agent => `${agent.projectRoot}:${agent.worktreeRoot}:${agent.createdAt}`, Order.String)
-					)
-				)
 
 				return entry
 			}),
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
 				const session = yield* getAgentSession(payload.agentId)
+				const now = Date.now()
+				session.entry = new AgentEntry({
+					...session.entry,
+					firstPromptPreview: session.entry.firstPromptPreview ?? pipe(payload.prompt, String.slice(0, 120)),
+					lastActivityAt: now,
+					title: session.entry.title ?? pipe(payload.prompt, String.slice(0, 60))
+				})
+				yield* publishAgents()
 				const agent =
 					session.agent ??
 					(yield* pipe(
@@ -291,6 +265,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 						runId: payload.runId,
 						type: 'agent-part'
 					})
+					session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
+					yield* publishAgents()
 					return
 				}
 				yield* FiberHandle.run(
@@ -304,7 +280,24 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
 						Stream.map(part => ({part, runId: payload.runId, type: 'agent-part'}) satisfies AgentEvent),
 						Stream.tap(session.stream.append),
-						Stream.runDrain
+						Stream.runDrain,
+						Effect.tap(
+							Effect.fnUntraced(function* () {
+								session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
+								yield* publishAgents()
+							})
+						),
+						Effect.catchCause(cause =>
+							Effect.gen(function* () {
+								session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
+								yield* session.stream.append({
+									part: Response.makePart('error', {error: Cause.pretty(cause)}),
+									runId: payload.runId,
+									type: 'agent-part'
+								})
+								yield* publishAgents()
+							})
+						)
 					)
 				)
 			}),
@@ -312,6 +305,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 				const session = yield* getAgentSession(payload.agentId)
 
 				yield* FiberHandle.clear(session.handle)
+				session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
+				yield* publishAgents()
+			}),
+			'agent.archive': Effect.fnUntraced(function* (payload) {
+				const session = yield* getAgentSession(payload.agentId)
+				session.entry = new AgentEntry({...session.entry, archived: true})
+				yield* publishAgents()
 			}),
 			'agent.events': payload =>
 				Stream.unwrap(
@@ -323,10 +323,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'projects.createWorktree': payload =>
 				pipe(
 					Effect.gen(function* () {
-						yield* git.createWorktree(payload)
+						const worktreeRoot = yield* git.createWorktree(payload)
 						yield* refresh()
+						return worktreeRoot
 					}),
-					Effect.catchTag('GitError', () => Effect.void)
+					Effect.catchTag('GitError', () => Effect.succeed(payload.cwd))
 				),
 			'projects.deleteWorktree': payload =>
 				pipe(
