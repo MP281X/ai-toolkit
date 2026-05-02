@@ -164,7 +164,6 @@ function getItems<TValue extends RichTextArea.Value>(
 
 function match<const TTrigger extends string>(text: string, triggers: readonly TTrigger[]) {
 	for (const trigger of triggers) {
-		// biome-ignore lint/plugin: small local parser for Lexical multi-trigger matching
 		const index = text.lastIndexOf(trigger)
 		if (index < 0) continue
 
@@ -195,7 +194,6 @@ function currentTextNodeSelection() {
 
 function lineBeforeCursor(text: string, offset: number) {
 	const before = pipe(text, String.slice(0, offset))
-	// biome-ignore lint/plugin: native string search is the clearest way to find the current line boundary
 	const index = before.lastIndexOf('\n')
 
 	return {
@@ -405,7 +403,6 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 					.setStyle(`color: ${option.entry.color}`)
 
 				if (node) {
-					// biome-ignore lint/plugin: Lexical node API uses imperative replacement here
 					node.replace(token)
 				}
 

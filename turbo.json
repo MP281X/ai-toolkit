@@ -9,11 +9,10 @@
 		"dev:client": { "cache": false, "persistent": true },
 		"dev:server": { "cache": false, "persistent": true },
 
-		"build:client": { "dependsOn": ["^type-check"], "outputs": ["dist/**"] },
-		"build:server": { "dependsOn": ["^type-check"], "outputs": ["dist/**"] },
+		"build:client": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
+		"build:server": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
 
 		"fix": { "dependsOn": ["^fix"] },
-		"lint": { "dependsOn": ["^lint"] },
-		"type-check": { "dependsOn": ["^type-check"] }
+		"check": { "dependsOn": ["^check"] }
 	}
 }

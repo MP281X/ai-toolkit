@@ -9,11 +9,10 @@
 		"dev": "turbo run dev:server dev:client",
 		"build": "NODE_ENV=production turbo run build:server build:client",
 
-		"shadcn": "cd packages/components && bunx shadcn@latest",
-
 		"fix": "turbo run fix",
-		"lint": "turbo run lint",
-		"type-check": "turbo run type-check"
+		"check": "turbo run check",
+
+		"shadcn": "cd packages/components && bunx shadcn@latest"
 	},
 
 	"dependencies": {

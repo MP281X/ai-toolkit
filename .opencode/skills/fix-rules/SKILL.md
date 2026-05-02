@@ -64,17 +64,11 @@ language js(typescript, jsx)
 }
 ```
 
-```typescript
-// biome-ignore lint/plugin: <reason>
-const bad = codeThatTriggersRule
-const good = correctCode
-```
-
 ## Validation
 
 - Run the smallest validation that proves the fix
 - For prompt or agent config changes, validate by re-reading the edited files for overlap and contradiction
-- For linter changes, run `bun run fix && bun run type-check && bun run lint`
+- For linter changes, run `bun run check`
 
 ## Definition of Done
 
