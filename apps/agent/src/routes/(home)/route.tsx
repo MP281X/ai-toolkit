@@ -1,5 +1,5 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Option, Order, Predicate, pipe, Schema, Stream, String} from 'effect'
+import {Array, Effect, Option, Predicate, pipe, Schema, Stream, String} from 'effect'
 
 import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
@@ -9,18 +9,14 @@ import {
 	ArrowUpIcon,
 	Brain,
 	ChevronRight,
-	Copy,
 	FileIcon,
 	GitBranch,
 	Layers,
-	MoreVertical,
 	PanelTop,
 	Plus,
-	RefreshCw,
 	SparklesIcon,
 	Square,
 	Trash,
-	Trash2,
 	UserIcon,
 	Wrench
 } from '@ai-toolkit/components/icons'
@@ -35,27 +31,23 @@ import {
 } from '@ai-toolkit/components/tree-explorer'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
-import {Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList} from '@ai-toolkit/components/ui/combobox'
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle
-} from '@ai-toolkit/components/ui/dialog'
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger
-} from '@ai-toolkit/components/ui/dropdown-menu'
+	Command,
+	CommandDialog,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+	CommandShortcut
+} from '@ai-toolkit/components/ui/command'
+import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@ai-toolkit/components/ui/select'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useEffectEvent, useRef, useState} from 'react'
+import {startTransition, useEffect, useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {AgentEntry, AgentEvent, AgentStreamPart, ProjectEntry} from '#rpcs/contracts.ts'
@@ -87,9 +79,10 @@ const projectAccentClassNames = [
 ] as const
 
 type ReviewScope = 'staged-to-worktree' | 'head-to-staged'
-export type Worktree = ProjectEntry['worktrees'][number]
+type Worktree = ProjectEntry['worktrees'][number]
 type AgentRun = {prompt: string; runId: string; parts: readonly AgentEvent[]}
 type AgentInputValue = {label: string}
+type ActionPaletteMode = 'actions' | 'create-thread' | 'create-worktree'
 type SavedPrompt = {
 	id: string
 	model: ModelId
@@ -97,7 +90,7 @@ type SavedPrompt = {
 	snapshot: RichTextArea.Snapshot<AgentInputValue>
 	text: string
 }
-export const agentLayers = ['effect', 'opencode', 'codex'] as const satisfies readonly AgentId[]
+const agentLayers = ['effect', 'opencode', 'codex'] as const satisfies readonly AgentId[]
 const agentInputStates = new Map<string, RichTextArea.Snapshot<AgentInputValue>>()
 const agentStashedPrompts = new Map<string, readonly SavedPrompt[]>()
 
@@ -127,8 +120,26 @@ function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const pathname = useRouterState({select: state => state.location.pathname})
-	const {activeProject, activeWorktree, projects, snapshot} = useHomeSelection(search)
+	const {activeProject, activeWorktree, projects} = useHomeSelection(search)
 	const agents = useAtomSuspense(agentsAtom).value
+
+	useEffect(() => {
+		if (!(activeProject && activeWorktree)) return
+		if (search.projectRoot === activeProject.repository.root && search.worktreeRoot === activeWorktree.root) return
+
+		startTransition(() => {
+			navigate({
+				replace: true,
+				to: '/diff',
+				search: {
+					...search,
+					projectRoot: activeProject.repository.root,
+					reviewFile: undefined,
+					worktreeRoot: activeWorktree.root
+				}
+			})
+		})
+	}, [activeProject, activeWorktree, navigate, search])
 
 	return (
 		<div className="min-h-0 flex-1 overflow-hidden bg-background font-mono">
@@ -139,8 +150,6 @@ function HomeLayout() {
 						activeProject={activeProject}
 						activeWorktree={activeWorktree}
 						activeAgentId={pathname === '/agent' ? search.agentId : undefined}
-						fetchFailed={snapshot.fetchFailed}
-						fetchedAt={snapshot.fetchedAt}
 						projects={projects}
 						selectWorktree={(projectRoot, worktreeRoot) =>
 							startTransition(() => {
@@ -211,6 +220,24 @@ function pathLabel(value: string) {
 	return value
 }
 
+function agentCommandValue(agentId: string) {
+	return `agent:${agentId}`
+}
+
+function shortPath(value: string) {
+	const homeSegments = pipe(value, String.startsWith('/home/'))
+		? pipe(value, String.split('/'), Array.take(3), Array.join('/'))
+		: undefined
+	if (homeSegments && pipe(value, String.startsWith(`${homeSegments}/`))) {
+		return `~/${pipe(value, String.slice(String.length(homeSegments) + 1))}`
+	}
+	return pathLabel(value)
+}
+
+function commandBarHasFocus() {
+	return Predicate.isNotNull(document.activeElement?.closest('[data-slot="command"]'))
+}
+
 export function useHomeSelection(search: HomeSearch) {
 	const snapshot = useAtomSuspense(projectsAtom).value
 	const activeProject =
@@ -224,7 +251,13 @@ export function useHomeSelection(search: HomeSearch) {
 			activeProject?.['worktrees'] ?? [],
 			Array.findFirst(worktree => worktree['root'] === search.worktreeRoot),
 			Option.getOrUndefined
-		) ?? activeProject?.['worktrees'][0]
+		) ??
+		pipe(
+			activeProject?.['worktrees'] ?? [],
+			Array.findFirst(worktree => worktree['root'] === activeProject?.['repository']['root']),
+			Option.getOrUndefined
+		) ??
+		activeProject?.['worktrees'][0]
 
 	return {activeProject, activeWorktree, projects: snapshot.projects, snapshot}
 }
@@ -283,6 +316,8 @@ export function ReviewViewPanel(input: {
 		) ?? entries[0]
 
 	function moveSelection(offset: number) {
+		if (commandBarHasFocus()) return
+
 		const nextIndex = Math.max(
 			0,
 			Math.min(
@@ -306,6 +341,8 @@ export function ReviewViewPanel(input: {
 	}
 
 	async function toggleStageSelectedFile() {
+		if (commandBarHasFocus()) return
+
 		if (Predicate.isUndefined(selectedEntry)) {
 			return
 		}
@@ -326,6 +363,8 @@ export function ReviewViewPanel(input: {
 	}
 
 	async function discardSelectedFile() {
+		if (commandBarHasFocus()) return
+
 		if (Predicate.isUndefined(selectedEntry)) {
 			return
 		}
@@ -525,32 +564,27 @@ function WorktreeManager(input: {
 	activeWorktree: Worktree | undefined
 	activeAgentId: string | undefined
 	projects: readonly ProjectEntry[]
-	fetchFailed: boolean
-	fetchedAt: number | undefined
 	selectWorktree: (projectRoot: string, worktreeRoot: string) => void
 	selectAgent: (projectRoot: string, worktreeRoot: string, agentId: string) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
-	const refresh = useAtomSet(RpcClient.mutation('projects.refresh'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const createAgent = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
-	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const [branch, setBranch] = useState('')
-	const [sourceBranch, setSourceBranch] = useState('')
-	const [createOpen, setCreateOpen] = useState(false)
-	const [createAgentLayer, setCreateAgentLayer] = useState<AgentId>()
-	const [createAgentTarget, setCreateAgentTarget] = useState<{project: ProjectEntry; worktree: Worktree}>()
-	const [createProject, setCreateProject] = useState<ProjectEntry>()
-	const [branchPickerOpen, setBranchPickerOpen] = useState(false)
-	const [deleteTarget, setDeleteTarget] = useState<Worktree>()
-	const targetProject = createProject ?? input.activeProject
+	const [switcherValue, setSwitcherValue] = useState('')
+	const [switcherOpen, setSwitcherOpen] = useState(false)
+	const [actionsOpen, setActionsOpen] = useState(false)
+	const [actionPaletteMode, setActionPaletteMode] = useState<ActionPaletteMode>('actions')
+	const [modifierPressed, setModifierPressed] = useState(false)
+	const switcherInputRef = useRef<HTMLInputElement>(null)
+	const actionInputRef = useRef<HTMLInputElement>(null)
 	const branchesAtom = Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient.asEffect(),
 				Effect.flatMap(client =>
-					targetProject
-						? client('projects.branches', {cwd: targetProject.repository.root})
+					input.activeProject
+						? client('projects.branches', {cwd: input.activeProject.repository.root})
 						: Effect.succeed(new BranchesSnapshot({branches: [], defaultBranch: 'main'}))
 				)
 			),
@@ -558,18 +592,14 @@ function WorktreeManager(input: {
 		)
 	)
 	const branchSnapshot = useAtomSuspense(branchesAtom).value
-	const uniqueBranches = pipe(
+	const availableBranches = pipe(
 		branchSnapshot.branches,
 		Array.filter(candidate => pipe(candidate.name, String.isNonEmpty)),
-		Array.sortWith(candidate => `${candidate.name}:${candidate.type === 'local' ? '0' : '1'}`, Order.String),
-		Array.dedupeWith((left, right) => left.name === right.name)
-	)
-	const availableBranches = pipe(
-		uniqueBranches,
+		Array.dedupeWith((left, right) => left.name === right.name),
 		Array.filter(
 			candidate =>
 				!pipe(
-					targetProject?.worktrees ?? [],
+					input.activeProject?.worktrees ?? [],
 					Array.map(worktree => worktree.branch ?? ''),
 					Array.filter(String.isNonEmpty),
 					Array.contains(candidate.name)
@@ -581,268 +611,331 @@ function WorktreeManager(input: {
 		Array.findFirst(candidate => candidate.name === branch),
 		Option.getOrUndefined
 	)
-	const branchHasMatches =
-		branch === '' ||
-		pipe(
+	useEffect(() => {
+		function openCommandPalette(event: KeyboardEvent) {
+			if (event.key === 'Control' || event.key === 'Meta') setModifierPressed(true)
+			if (!(event.ctrlKey || event.metaKey)) return
+			const projectIndex = pipe(
+				'123456789',
+				String.indexOf(event.key),
+				Option.getOrElse(() => -1)
+			)
+			const project = input.projects[projectIndex]
+
+			if (projectIndex >= 0 && projectIndex < 9 && project) {
+				event.preventDefault()
+				const worktree =
+					pipe(
+						project.worktrees,
+						Array.findFirst(candidate => candidate.root === project.repository.root),
+						Option.getOrUndefined
+					) ?? project.worktrees[0]
+
+				if (worktree) input.selectWorktree(project.repository.root, worktree.root)
+				return
+			}
+
+			if (pipe(event.key, String.toLowerCase) === 'p' && event.shiftKey) {
+				event.preventDefault()
+				setActionPaletteMode('actions')
+				setActionsOpen(open => !open)
+				return
+			}
+
+			if (pipe(event.key, String.toLowerCase) === 'p') {
+				event.preventDefault()
+				setSwitcherOpen(open => !open)
+			}
+		}
+		function hideProjectHints(event: KeyboardEvent) {
+			if (event.key === 'Control' || event.key === 'Meta') setModifierPressed(false)
+		}
+		function hideProjectHintsOnBlur() {
+			setModifierPressed(false)
+		}
+
+		window.addEventListener('keydown', openCommandPalette)
+		window.addEventListener('keyup', hideProjectHints)
+		window.addEventListener('blur', hideProjectHintsOnBlur)
+
+		return () => {
+			window.removeEventListener('keydown', openCommandPalette)
+			window.removeEventListener('keyup', hideProjectHints)
+			window.removeEventListener('blur', hideProjectHintsOnBlur)
+		}
+	}, [input.projects, input.selectWorktree])
+
+	useEffect(() => {
+		if (!switcherOpen) return
+		setSwitcherValue('')
+
+		window.requestAnimationFrame(() => switcherInputRef.current?.focus())
+	}, [switcherOpen])
+
+	useEffect(() => {
+		if (!actionsOpen) return
+
+		window.requestAnimationFrame(() => actionInputRef.current?.focus())
+	}, [actionsOpen])
+
+	async function createFastWorktree(nextBranch = branch) {
+		if (!input.activeProject || nextBranch === '') return
+		const nextSelectedBranch = pipe(
 			availableBranches,
-			Array.some(candidate => pipe(candidate.name, String.includes(branch)))
+			Array.findFirst(candidate => candidate.name === nextBranch),
+			Option.getOrUndefined
 		)
-	const effectiveSourceBranch = sourceBranch || branchSnapshot.defaultBranch
-	const refreshWorkspace = useEffectEvent(async () => {
-		await refresh({payload: undefined})
-		refreshProjects()
-	})
-
-	async function deleteWorktreeAndRefresh(worktree: Worktree) {
-		await deleteWorktree({payload: {cwd: worktree.root, force: true}})
-		refreshProjects()
-	}
-
-	useEffect(() => {
-		const id = window.setInterval(() => {
-			void refreshWorkspace()
-		}, 60_000)
-
-		return () => window.clearInterval(id)
-	}, [])
-
-	useEffect(() => {
-		if (!branchHasMatches) {
-			setBranchPickerOpen(false)
-		}
-	}, [branchHasMatches])
-
-	async function createSelectedWorktree() {
-		if (!targetProject || branch === '') {
-			return
-		}
 		let mode: 'existing-local' | 'existing-remote' | 'new-local' = 'new-local'
-		if (selectedBranch?.type === 'local') mode = 'existing-local'
-		if (selectedBranch?.type === 'remote') mode = 'existing-remote'
+		if (nextSelectedBranch?.type === 'local') mode = 'existing-local'
+		if (nextSelectedBranch?.type === 'remote') mode = 'existing-remote'
 
 		await createWorktree({
 			payload: {
 				baseBranch:
-					selectedBranch?.type === 'remote' ? `${selectedBranch.remote}/${selectedBranch.name}` : effectiveSourceBranch,
-				branch,
-				cwd: targetProject.repository.root,
+					nextSelectedBranch?.type === 'remote'
+						? `${nextSelectedBranch.remote}/${nextSelectedBranch.name}`
+						: `origin/${branchSnapshot.defaultBranch}`,
+				branch: nextBranch,
+				cwd: input.activeProject.repository.root,
 				mode
 			}
 		})
+		setActionPaletteMode('actions')
+		setActionsOpen(false)
 		setBranch('')
-		setCreateProject(undefined)
-		setCreateOpen(false)
 		refreshProjects()
 	}
 
-	async function deleteSelectedWorktree() {
-		if (!deleteTarget || deleteTarget.root === input.activeProject?.repository.root) {
-			return
-		}
-
-		await deleteWorktreeAndRefresh(deleteTarget)
-		setDeleteTarget(undefined)
-	}
-
-	async function requestDeleteWorktree(worktree: Worktree) {
-		if (
-			worktree.status?.dirtyTracked ||
-			worktree.status?.untracked ||
-			worktree.status?.unpushedCommits ||
-			worktree.status?.ahead ||
-			worktree.status?.behind
-		) {
-			setDeleteTarget(worktree)
-			return
-		}
-
-		await deleteWorktreeAndRefresh(worktree)
-	}
-
-	async function createSelectedAgent() {
-		if (!(createAgentLayer && createAgentTarget)) return
+	async function createFastAgent(layer: AgentId) {
+		if (!(input.activeProject && input.activeWorktree)) return
 
 		const agent = await createAgent({
 			payload: {
-				layer: createAgentLayer,
-				projectRoot: createAgentTarget.project.repository.root,
-				worktreeRoot: createAgentTarget.worktree.root
+				layer,
+				projectRoot: input.activeProject.repository.root,
+				worktreeRoot: input.activeWorktree.root
 			}
 		})
 
-		input.selectAgent(createAgentTarget.project.repository.root, createAgentTarget.worktree.root, agent.agentId)
-		setCreateAgentLayer(undefined)
-		setCreateAgentTarget(undefined)
+		setActionPaletteMode('actions')
+		setActionsOpen(false)
+		input.selectAgent(input.activeProject.repository.root, input.activeWorktree.root, agent.agentId)
 	}
 
 	return (
 		<div className="flex h-full flex-col border-r text-xs">
-			<div className="flex h-9 items-center gap-2 border-b px-2">
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					onClick={() => {
-						void refreshWorkspace()
-					}}
-					aria-label="Refresh workspaces"
-				>
-					<RefreshCw className="size-3.5" />
-				</Button>
-				<span className={(input.fetchFailed && 'text-amber-500') || 'text-muted-foreground'}>
-					{(() => {
-						if (input.fetchFailed) return 'fetch failed'
-						if (input.fetchedAt) return `fetched ${new Date(input.fetchedAt).toLocaleTimeString()}`
-						return 'not fetched'
-					})()}
-				</span>
-			</div>
-
-			<Dialog open={createOpen} onOpenChange={setCreateOpen}>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>
-							Create worktree in {targetProject ? pathLabel(targetProject.repository.root) : 'workspace'}
-						</DialogTitle>
-					</DialogHeader>
-					<div className="grid gap-3">
-						<div className="grid gap-1.5">
-							<span className="font-medium text-muted-foreground text-xs">Branch</span>
-							<Combobox
-								value={branch}
-								onValueChange={value => setBranch(value ?? '')}
-								open={branchPickerOpen}
-								onOpenChange={open => setBranchPickerOpen(open && branchHasMatches)}
-							>
-								<ComboboxInput
-									value={branch}
-									onChange={event => setBranch(event.currentTarget.value)}
-									placeholder="Branch"
-									className="w-full"
-								/>
-								<ComboboxContent className="w-(--anchor-width) min-w-(--anchor-width) max-w-none">
-									<ComboboxList>
-										{Array.map(availableBranches, candidate => (
-											<ComboboxItem
-												key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
-												value={candidate.name}
-											>
-												{candidate.type === 'local' ? (
-													<GitBranch className="size-3.5" />
-												) : (
-													<Square className="size-3.5" />
-												)}
-												<span className="min-w-0 truncate">{candidate.name}</span>
-											</ComboboxItem>
-										))}
-									</ComboboxList>
-								</ComboboxContent>
-							</Combobox>
-						</div>
-						{branch !== '' && Predicate.isUndefined(selectedBranch) && (
-							<div className="grid gap-1.5">
-								<span className="font-medium text-muted-foreground text-xs">Create from</span>
-								<Select value={effectiveSourceBranch} onValueChange={value => setSourceBranch(value ?? '')}>
-									<SelectTrigger className="w-full">
-										<SelectValue placeholder="Source branch" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={branchSnapshot.defaultBranch}>
-											<GitBranch className="mr-2 size-3.5" />
-											{branchSnapshot.defaultBranch}
-										</SelectItem>
-										{pipe(
-											uniqueBranches,
-											Array.filter(candidate => candidate.name !== branchSnapshot.defaultBranch),
-											Array.map(candidate => (
-												<SelectItem
-													key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
-													value={candidate.name}
-												>
-													{candidate.type === 'local' ? (
-														<GitBranch className="mr-2 size-3.5" />
-													) : (
-														<Square className="mr-2 size-3.5" />
-													)}
-													{candidate.name}
-												</SelectItem>
-											))
-										)}
-									</SelectContent>
-								</Select>
-							</div>
-						)}
-					</div>
-					<DialogFooter>
-						<Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-							Cancel
-						</Button>
-						<Button type="button" onClick={createSelectedWorktree} disabled={branch === ''}>
-							Create
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-
-			<Dialog
-				open={Predicate.isNotUndefined(createAgentTarget)}
-				onOpenChange={open => {
-					if (open) return
-
-					setCreateAgentLayer(undefined)
-					setCreateAgentTarget(undefined)
+			<button
+				type="button"
+				className="flex h-8 min-w-0 items-center border-b px-2 text-left text-muted-foreground hover:text-foreground"
+				onClick={() => {
+					if (input.activeWorktree) void navigator.clipboard.writeText(input.activeWorktree.root)
 				}}
 			>
-				<DialogContent className="sm:max-w-sm">
-					<DialogHeader>
-						<DialogTitle>Create agent</DialogTitle>
-						<DialogDescription>
-							Select an agent layer for{' '}
-							{createAgentTarget ? pathLabel(createAgentTarget.worktree.root) : 'this worktree'}.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-1.5">
-						<span className="font-medium text-muted-foreground text-xs">Agent</span>
-						<Select
-							value={createAgentLayer}
-							onValueChange={value => {
-								const selectedLayer = pipe(
-									agentLayers,
-									Array.findFirst(layer => layer === value)
-								)
+				<span className="min-w-0 truncate">
+					{input.activeWorktree ? shortPath(input.activeWorktree.root) : 'No worktree selected'}
+				</span>
+			</button>
 
-								if (Option.isSome(selectedLayer)) setCreateAgentLayer(selectedLayer.value)
-							}}
-						>
-							<SelectTrigger className="w-full rounded-none">
-								<SelectValue placeholder="Select agent" />
-							</SelectTrigger>
-							<SelectContent>
-								{Array.map(agentLayers, layer => (
-									<SelectItem key={layer} value={layer}>
-										{layer}
-									</SelectItem>
+			<CommandDialog
+				open={switcherOpen}
+				onOpenChange={setSwitcherOpen}
+				title="Go to thread"
+				description="Switch threads in the current project."
+				className="sm:max-w-2xl"
+			>
+				<Command
+					onKeyDown={event => {
+						event.stopPropagation()
+						if (event.key === 'Escape') setSwitcherOpen(false)
+					}}
+					value={switcherValue}
+					onValueChange={setSwitcherValue}
+				>
+					<CommandInput ref={switcherInputRef} placeholder="Go to thread..." />
+					<CommandList>
+						<CommandEmpty>No thread found.</CommandEmpty>
+						{input.activeAgentId && (
+							<CommandGroup heading="Current">
+								{pipe(
+									input.agents,
+									Array.findFirst(agent => agent.agentId === input.activeAgentId),
+									Option.match({
+										onNone: () => null,
+										onSome: agent => {
+											const worktree = pipe(
+												input.activeProject?.worktrees ?? [],
+												Array.findFirst(candidate => candidate.root === agent.worktreeRoot),
+												Option.getOrUndefined
+											)
+											const worktreeLabel = worktree?.branch ?? pathLabel(agent.worktreeRoot)
+
+											return (
+												<CommandItem
+													value={agentCommandValue(agent.agentId)}
+													keywords={[worktreeLabel, agent.layer, agent.agentId]}
+													onSelect={() => {
+														setSwitcherOpen(false)
+														input.selectAgent(agent.projectRoot, agent.worktreeRoot, agent.agentId)
+													}}
+												>
+													<AgentIcon layer={agent.layer} className="size-3.5" />
+													<span className="min-w-0 truncate">{worktreeLabel}</span>
+													<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
+														{shortPath(agent.worktreeRoot)}
+													</CommandShortcut>
+												</CommandItem>
+											)
+										}
+									})
+								)}
+							</CommandGroup>
+						)}
+						<CommandGroup heading={input.activeProject ? pathLabel(input.activeProject.repository.root) : 'Threads'}>
+							{pipe(
+								input.agents,
+								Array.filter(
+									agent =>
+										agent.projectRoot === input.activeProject?.repository.root && agent.agentId !== input.activeAgentId
+								),
+								Array.map(agent => {
+									const worktree = pipe(
+										input.activeProject?.worktrees ?? [],
+										Array.findFirst(candidate => candidate.root === agent.worktreeRoot),
+										Option.getOrUndefined
+									)
+									const worktreeLabel = worktree?.branch ?? pathLabel(agent.worktreeRoot)
+
+									return (
+										<CommandItem
+											key={agent.agentId}
+											value={agentCommandValue(agent.agentId)}
+											keywords={[worktreeLabel, agent.layer, agent.agentId]}
+											onSelect={() => {
+												setSwitcherOpen(false)
+												input.selectAgent(agent.projectRoot, agent.worktreeRoot, agent.agentId)
+											}}
+										>
+											<AgentIcon layer={agent.layer} className="size-3.5" />
+											<span className="min-w-0 truncate">{worktreeLabel}</span>
+											<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
+												{shortPath(agent.worktreeRoot)}
+											</CommandShortcut>
+										</CommandItem>
+									)
+								})
+							)}
+						</CommandGroup>
+					</CommandList>
+				</Command>
+			</CommandDialog>
+
+			<CommandDialog
+				open={actionsOpen}
+				onOpenChange={open => {
+					setActionsOpen(open)
+					if (!open) setActionPaletteMode('actions')
+				}}
+				title="Run command"
+				description="Create worktrees and threads."
+				className="sm:max-w-2xl"
+			>
+				<Command
+					onKeyDown={event => {
+						event.stopPropagation()
+						if (event.key === 'Escape') setActionsOpen(false)
+					}}
+				>
+					<CommandInput
+						ref={actionInputRef}
+						placeholder={(() => {
+							if (actionPaletteMode === 'create-worktree') return 'New branch/worktree name...'
+							if (actionPaletteMode === 'create-thread') return 'Pick thread runtime...'
+							return 'Run workspace command...'
+						})()}
+						value={actionPaletteMode === 'create-worktree' ? branch : undefined}
+						onValueChange={value => {
+							if (actionPaletteMode === 'create-worktree') setBranch(value)
+						}}
+						onKeyDown={event => {
+							if (event.key === 'Escape' && actionPaletteMode !== 'actions') {
+								event.preventDefault()
+								setActionPaletteMode('actions')
+								return
+							}
+
+							if (event.key === 'Enter' && actionPaletteMode === 'create-worktree' && branch !== '') {
+								event.preventDefault()
+								void createFastWorktree()
+							}
+						}}
+					/>
+					<CommandList>
+						<CommandEmpty>No command found.</CommandEmpty>
+						{actionPaletteMode === 'actions' && (
+							<CommandGroup heading="Current context">
+								<CommandItem
+									value="create worktree new branch"
+									disabled={Predicate.isUndefined(input.activeProject)}
+									onSelect={() => {
+										setBranch('')
+										setActionPaletteMode('create-worktree')
+									}}
+								>
+									<Plus className="size-3.5" />
+									Create worktree
+								</CommandItem>
+								<CommandItem
+									value="create thread"
+									disabled={Predicate.isUndefined(input.activeProject) || Predicate.isUndefined(input.activeWorktree)}
+									onSelect={() => setActionPaletteMode('create-thread')}
+								>
+									<SparklesIcon className="size-3.5" />
+									Create thread
+								</CommandItem>
+							</CommandGroup>
+						)}
+						{actionPaletteMode === 'create-worktree' && (
+							<CommandGroup
+								heading={`Create in ${input.activeProject ? pathLabel(input.activeProject.repository.root) : 'project'}`}
+							>
+								{Array.map(availableBranches, candidate => (
+									<CommandItem
+										key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
+										value={candidate.name}
+										onSelect={() => {
+											setBranch(candidate.name)
+											void createFastWorktree(candidate.name)
+										}}
+									>
+										{candidate.type === 'local' ? <GitBranch className="size-3.5" /> : <Square className="size-3.5" />}
+										<span className="min-w-0 truncate">{candidate.name}</span>
+										<CommandShortcut>{candidate.type}</CommandShortcut>
+									</CommandItem>
 								))}
-							</SelectContent>
-						</Select>
-					</div>
-					<DialogFooter>
-						<Button
-							type="button"
-							variant="outline"
-							onClick={() => {
-								setCreateAgentLayer(undefined)
-								setCreateAgentTarget(undefined)
-							}}
-						>
-							Cancel
-						</Button>
-						<Button type="button" onClick={createSelectedAgent} disabled={Predicate.isUndefined(createAgentLayer)}>
-							Create
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+								{branch !== '' && Predicate.isUndefined(selectedBranch) && (
+									<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
+										<Plus className="size-3.5" />
+										Create {branch}
+										<CommandShortcut>origin/{branchSnapshot.defaultBranch}</CommandShortcut>
+									</CommandItem>
+								)}
+							</CommandGroup>
+						)}
+						{actionPaletteMode === 'create-thread' && (
+							<CommandGroup
+								heading={`Create thread in ${input.activeWorktree ? (input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)) : 'worktree'}`}
+							>
+								{Array.map(agentLayers, layer => (
+									<CommandItem key={layer} value={`${layer} thread`} onSelect={() => void createFastAgent(layer)}>
+										<AgentIcon layer={layer} className="size-3.5" />
+										{layer}
+									</CommandItem>
+								))}
+							</CommandGroup>
+						)}
+					</CommandList>
+				</Command>
+			</CommandDialog>
 
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection label="Workspaces">
@@ -852,21 +945,11 @@ function WorktreeManager(input: {
 							className="border-muted-foreground/20"
 							contentClassName={projectAccentClassNames[index % projectAccentClassNames.length]}
 							icon={<Layers className="size-3.5" />}
-							label={<span className="tree-label">{pathLabel(project.repository.root)}</span>}
-							actions={
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									className="size-6 text-muted-foreground [&_svg]:text-muted-foreground"
-									onClick={() => {
-										setCreateProject(project)
-										setCreateOpen(true)
-									}}
-									aria-label="New worktree"
-								>
-									<Plus className="size-4" />
-								</Button>
+							label={
+								<span className="tree-label flex min-w-0 items-center gap-1.5">
+									{modifierPressed && index < 9 && <span className="border px-1 text-[10px]">{index + 1}</span>}
+									<span className="min-w-0 truncate">{pathLabel(project.repository.root)}</span>
+								</span>
 							}
 						>
 							{pipe(
@@ -897,65 +980,6 @@ function WorktreeManager(input: {
 													input.activeWorktree?.root === worktree.root && Predicate.isUndefined(input.activeAgentId)
 												}
 												onClick={() => input.selectWorktree(project.repository.root, worktree.root)}
-												actions={
-													<DropdownMenu>
-														<DropdownMenuTrigger
-															render={
-																<Button
-																	type="button"
-																	variant="ghost"
-																	size="icon"
-																	className="size-6 text-muted-foreground [&_svg]:text-muted-foreground"
-																	aria-label="Worktree actions"
-																>
-																	<MoreVertical className="size-4" />
-																</Button>
-															}
-														/>
-														<DropdownMenuContent align="end" className="min-w-40">
-															<DropdownMenuItem
-																onClick={() => {
-																	setCreateAgentLayer(undefined)
-																	setCreateAgentTarget({project, worktree})
-																}}
-																className="whitespace-nowrap"
-															>
-																<SparklesIcon className="mr-2 size-3.5" />
-																Create agent
-															</DropdownMenuItem>
-															<DropdownMenuItem
-																onClick={() => {
-																	void (async () => {
-																		try {
-																			await navigator.clipboard.writeText(worktree.root)
-																		} catch {
-																			const input = document.createElement('input')
-																			input.value = worktree.root
-																			document.body.append(input)
-																			input.select()
-																			document.execCommand('copy')
-																			input.remove()
-																		}
-																	})()
-																}}
-																className="whitespace-nowrap"
-															>
-																<Copy className="mr-2 size-3.5" />
-																Copy path
-															</DropdownMenuItem>
-															{worktree.root !== project.repository.root && (
-																<DropdownMenuItem
-																	variant="destructive"
-																	onClick={() => requestDeleteWorktree(worktree)}
-																	className="whitespace-nowrap"
-																>
-																	<Trash2 className="mr-2 size-3.5" />
-																	Delete worktree
-																</DropdownMenuItem>
-															)}
-														</DropdownMenuContent>
-													</DropdownMenu>
-												}
 											>
 												{worktree.branch ?? pathLabel(worktree.root)}
 											</TreeExplorerRow>
@@ -971,7 +995,7 @@ function WorktreeManager(input: {
 																selected={input.activeAgentId === agent.agentId}
 																onClick={() => input.selectAgent(project.repository.root, worktree.root, agent.agentId)}
 															>
-																agent
+																thread
 															</TreeExplorerRow>
 														</li>
 													))}
@@ -985,35 +1009,6 @@ function WorktreeManager(input: {
 					))}
 				</TreeExplorerSection>
 			</TreeExplorer>
-
-			<Dialog open={Predicate.isNotUndefined(deleteTarget)} onOpenChange={open => !open && setDeleteTarget(undefined)}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Delete {deleteTarget?.branch}?</DialogTitle>
-						<DialogDescription>
-							Removes the worktree directory and local branch. The remote branch is kept.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-1 text-amber-500 text-xs">
-						{deleteTarget?.status?.dirtyTracked && <div>dirty tracked files</div>}
-						{deleteTarget?.status?.untracked && <div>untracked files</div>}
-						{deleteTarget?.status?.unpushedCommits && <div>local commits not reachable remotely</div>}
-						{(deleteTarget?.status?.ahead || deleteTarget?.status?.behind) && (
-							<div>
-								ahead {deleteTarget?.status?.ahead} / behind {deleteTarget?.status?.behind}
-							</div>
-						)}
-					</div>
-					<DialogFooter>
-						<Button type="button" variant="outline" onClick={() => setDeleteTarget(undefined)}>
-							Cancel
-						</Button>
-						<Button type="button" variant="destructive" onClick={deleteSelectedWorktree}>
-							Delete anyway
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	)
 }
@@ -1084,7 +1079,7 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
 						<SparklesIcon className="size-3 shrink-0" />
 						<span className="min-w-0 truncate">
-							{metadata?.type === 'response-metadata' ? metadata.modelId : 'agent'}
+							{metadata?.type === 'response-metadata' ? metadata.modelId : 'thread'}
 						</span>
 						{finish?.type === 'finish' && (
 							<span className="ml-auto flex shrink-0 items-center gap-3">
@@ -1213,7 +1208,7 @@ export function AgentPanel(input: {
 				<div className="mx-auto flex max-w-4xl flex-col gap-3">
 					{Array.isReadonlyArrayEmpty(runs) && (
 						<div className="flex min-h-48 items-center justify-center text-muted-foreground text-sm">
-							Send a message to start the agent.
+							Send a message to start the thread.
 						</div>
 					)}
 					{Array.map(runs, run => (
