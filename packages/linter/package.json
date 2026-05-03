@@ -4,7 +4,7 @@
 	"type": "module",
 
 	"scripts": {
-		"fix": "biome check --write --unsafe || true",
+		"fix": "biome check --write --unsafe --vcs-root=../.. --config-path=biome.refactor.json || true",
 		"check": "tsgo --noEmit && biome check --vcs-root=../.. --config-path=biome.refactor.json"
 	}
 }

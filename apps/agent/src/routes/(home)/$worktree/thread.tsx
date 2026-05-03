@@ -3,6 +3,7 @@ import {Array, Effect, Option, Predicate, pipe, Stream, String} from 'effect'
 
 import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
+import {compactAiParts} from '@ai-toolkit/ai/utils'
 import {
 	Archive,
 	ArrowUpIcon,
@@ -20,13 +21,13 @@ import {RichTextArea} from '@ai-toolkit/components/rich-text-area'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@ai-toolkit/components/ui/select'
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, Navigate} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {useEffect, useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom, selectedAgentAtom} from '#lib/state.ts'
-import type {AgentEvent, AgentStreamPart} from '#rpcs/contracts.ts'
+import type {AgentEntry, AgentEvent} from '#rpcs/contracts.ts'
 
 export const Route = createFileRoute('/(home)/$worktree/thread')({
 	component: ThreadPage
@@ -70,17 +71,21 @@ const agentEventsAtom = Atom.family((agentId: string) =>
 	)
 )
 
-export function ThreadPage() {
+function ThreadPage() {
 	const search = Route.useSearch()
+	const params = Route.useParams()
+	if (!search.threadId) return <Navigate to="/$worktree/diff" params={params} replace />
+	return <ThreadView threadId={search.threadId} />
+}
+
+function ThreadView(props: {threadId: string}) {
 	const params = Route.useParams()
 	const activeWorktree = pipe(
 		Option.fromNullishOr(useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree),
 		Option.getOrThrow
 	)
 	const selectedAgent = pipe(
-		Option.fromNullishOr(
-			useAtomSuspense(selectedAgentAtom(pipe(Option.fromNullishOr(search.threadId), Option.getOrThrow))).value
-		),
+		Option.fromNullishOr(useAtomSuspense(selectedAgentAtom(props.threadId)).value),
 		Option.getOrThrow
 	)
 	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(selectedAgent.layer)))
@@ -101,6 +106,7 @@ export function ThreadPage() {
 			model={selectedModel.model}
 			provider={selectedModel.provider}
 			setModel={setAgentModel}
+			status={selectedAgent.status}
 		/>
 	)
 }
@@ -110,21 +116,7 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 		input.parts,
 		Array.filter(event => event.type === 'agent-part'),
 		Array.map(event => event.part),
-		Array.reduce(Array.empty<AgentStreamPart>(), (parts, part) => {
-			if (part.type === 'reasoning-start' || part.type === 'reasoning-end') return parts
-			if (part.type === 'text-start' || part.type === 'text-end') return parts
-			if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
-			if (part.type === 'tool-params-delta') return parts
-			if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
-			const [previousParts, lastPart] = Array.unappend(parts)
-			if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
-				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
-			}
-			if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
-				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
-			}
-			return Array.append(parts, part)
-		})
+		compactAiParts
 	)
 	const reasoningParts = pipe(
 		effectiveParts,
@@ -222,6 +214,7 @@ function AgentPanel(input: {
 	model: ModelId
 	provider: ProviderId
 	setModel: (model: string) => void
+	status: AgentEntry['status']
 }) {
 	const inputRef = useRef<RichTextArea.Handle<{label: string}>>(null)
 	const files = useAtomSuspense(filesAtom(input.cwd)).value
@@ -423,6 +416,9 @@ function AgentPanel(input: {
 								</SelectContent>
 							</Select>
 							<div className="ml-auto flex items-center gap-2">
+								<span className="border px-2 py-1 font-mono text-[10px] text-muted-foreground leading-none">
+									{input.status.state}
+								</span>
 								<Button variant="outline" size="icon-xs" className="rounded-none" onClick={stashPrompt}>
 									<Archive className="size-3.5" />
 								</Button>
@@ -430,6 +426,7 @@ function AgentPanel(input: {
 									variant="outline"
 									size="icon-xs"
 									className="rounded-none"
+									disabled={input.status.state === 'idle'}
 									onClick={() => {
 										void stopAgent({payload: {agentId: input.agentId}})
 									}}

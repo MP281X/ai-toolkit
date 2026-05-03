@@ -1,6 +1,6 @@
-import {Effect, Predicate, PubSub, pipe, Ref, Stream, String} from 'effect'
+import {Array, Effect, Predicate, PubSub, pipe, Ref, Stream, String} from 'effect'
 
-import type {Tool} from 'effect/unstable/ai'
+import type {Prompt, Tool} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
 export const makeResumableStream = Effect.fnUntraced(function* <A>() {
@@ -58,4 +58,134 @@ export function partsStreamSanitizer<A extends Response.StreamPart<Record<string
 		}),
 		Stream.filter(Predicate.isNotUndefined)
 	)
+}
+
+export function compactAiParts<T extends Record<string, Tool.Any>>(input: readonly Response.StreamPart<T>[]) {
+	return pipe(
+		input,
+		Array.reduce(Array.empty<Response.StreamPart<T>>(), (parts, part) => {
+			if (part.type === 'reasoning-start' || part.type === 'reasoning-end') return parts
+			if (part.type === 'text-start' || part.type === 'text-end') return parts
+			if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
+			if (part.type === 'tool-params-delta') return parts
+			if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
+
+			const [previousParts, lastPart] = Array.unappend(parts)
+
+			if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
+				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+			}
+
+			if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
+				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+			}
+
+			return Array.append(parts, part)
+		})
+	)
+}
+
+export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
+	input: readonly (Prompt.Message | Response.StreamPart<T>)[]
+) {
+	let files = Array.empty<File>()
+	const markdown = pipe(
+		input,
+		Array.map(item => {
+			let markdown = ''
+
+			if (Predicate.hasProperty('type')(item)) {
+				switch (item.type) {
+					case 'text-delta':
+					case 'reasoning-delta':
+						markdown = item.delta
+						break
+					case 'tool-call':
+						markdown = `Tool call: ${item.name}\n\n\`\`\`json\n${JSON.stringify(item.params, undefined, 2)}\n\`\`\``
+						break
+					case 'tool-result':
+						markdown = `Tool result: ${item.name}${item.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(item.result, undefined, 2)}\n\`\`\``
+						break
+					case 'tool-approval-request':
+						markdown = `Tool approval request: ${item.approvalId}\n\nTool call: ${item.toolCallId}`
+						break
+					case 'file':
+						if (item.data instanceof URL) {
+							markdown = `File URL: ${item.data.href} (${item.mediaType})`
+							break
+						}
+
+						files = [
+							...files,
+							new File(
+								[Predicate.isString(item.data) ? new TextEncoder().encode(item.data) : Uint8Array.from(item.data)],
+								`attachment.${pipe(item.mediaType, String.split('/'))[1] ?? 'bin'}`,
+								{type: item.mediaType}
+							)
+						]
+
+						markdown = `File: ${files[files.length - 1]?.name ?? 'attachment'} (${item.mediaType})`
+						break
+					case 'source':
+						markdown =
+							item.sourceType === 'url'
+								? `Source: [${item.title}](${item.url})`
+								: `Source: ${item.title} (${item.mediaType})`
+						break
+					case 'error':
+						markdown = `Error: ${item.error}`
+						break
+				}
+
+				return pipe(markdown, String.trim)
+			}
+
+			if (item.role === 'system') return pipe(`## system\n\n${item.content}`, String.trim)
+
+			return pipe(
+				item.content,
+				Array.map(part => {
+					switch (part.type) {
+						case 'text':
+							return part.text
+						case 'reasoning':
+							return `> Reasoning\n>\n${pipe(
+								part.text,
+								String.split('\n'),
+								Array.map(line => `> ${line}`),
+								Array.join('\n')
+							)}`
+						case 'file':
+							if (part.data instanceof URL) return `File URL: ${part.data.href} (${part.mediaType})`
+
+							files = [
+								...files,
+								new File(
+									[Predicate.isString(part.data) ? new TextEncoder().encode(part.data) : Uint8Array.from(part.data)],
+									part.fileName ?? `attachment.${pipe(part.mediaType, String.split('/'))[1] ?? 'bin'}`,
+									{type: part.mediaType}
+								)
+							]
+
+							return `File: ${part.fileName ?? 'attachment'} (${part.mediaType})`
+						case 'tool-call':
+							return `Tool call: ${part.name}\n\n\`\`\`json\n${JSON.stringify(part.params, undefined, 2)}\n\`\`\``
+						case 'tool-result':
+							return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(part.result, undefined, 2)}\n\`\`\``
+						case 'tool-approval-request':
+							return `Tool approval request: ${part.approvalId}\n\nTool call: ${part.toolCallId}`
+						case 'tool-approval-response':
+							return `Tool approval response: ${part.approvalId}\n\nApproved: ${part.approved}${part.reason ? `\n\nReason: ${part.reason}` : ''}`
+					}
+				}),
+				Array.join('\n\n'),
+				content => `## ${item.role}\n\n${content}`,
+				String.trim
+			)
+		}),
+		Array.join('\n\n---\n\n'),
+		String.trim
+	)
+
+	return {files, markdown}
 }

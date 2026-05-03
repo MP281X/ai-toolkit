@@ -27,7 +27,7 @@ import type {AgentEvent} from '#rpcs/contracts.ts'
 import {AgentEntry, BranchesSnapshot, ProjectEntry, RpcContracts} from '#rpcs/contracts.ts'
 
 type AgentSession = {
-	agent: Agent['Service'] | undefined
+	agent: Agent['Service']
 	entry: AgentEntry
 	handle: FiberHandle.FiberHandle<void, never>
 	stream: {
@@ -87,14 +87,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					Array.fromIterable(agentSessions.values()),
 					Array.map(session => session.entry),
-					Array.filter(agent => !agent.archived && Predicate.isNotUndefined(agent.firstPromptPreview)),
-					Array.sortWith(agent => -agent.lastActivityAt, Order.Number)
+					Array.filter(agent => !agent.archived && Predicate.isNotUndefined(agent.firstPromptPreview))
 				)
 			)
 		})
-		const getAgentSession = Effect.fnUntraced(function* (agentId: string) {
-			return yield* pipe(Effect.fromNullishOr(agentSessions.get(agentId)), Effect.orDie)
-		})
+		const systemPrompt = Prompt.makeMessage('system', {content: 'You are a coding agent running inside AI Toolkit.'})
 
 		yield* refresh()
 
@@ -200,52 +197,53 @@ export const RpcHandlers = RpcContracts.toLayer(
 					})
 				),
 			'agents.create': Effect.fnUntraced(function* (payload) {
-				const now = Date.now()
+				const agent = yield* pipe(
+					Effect.gen(function* () {
+						return yield* Agent
+					}),
+					Effect.provide(
+						{
+							codex: Agent.layerCodex({systemPrompt}),
+							effect: Agent.layerEffect({systemPrompt}),
+							opencode: Agent.layerOpencode({systemPrompt})
+						}[payload.layer]
+					),
+					Effect.orDie
+				)
 				const entry = new AgentEntry({
 					agentId: `agent-${crypto.randomUUID()}`,
 					archived: false,
 					layer: payload.layer,
-					lastActivityAt: now,
 					projectRoot: payload.projectRoot,
+					status: yield* SubscriptionRef.get(agent.status),
 					worktreeRoot: payload.worktreeRoot
 				})
 				const handle = yield* FiberHandle.make<void, never>()
 				const stream = yield* makeResumableStream<AgentEvent>()
+				const session = {agent, entry, handle, stream}
 
-				agentSessions.set(entry.agentId, {agent: undefined, entry, handle, stream})
+				agentSessions.set(entry.agentId, session)
+
+				yield* Effect.forkScoped(
+					pipe(
+						SubscriptionRef.changes(agent.status),
+						Stream.tap(status => {
+							session.entry = new AgentEntry({...session.entry, status})
+							return publishAgents()
+						}),
+						Stream.runDrain
+					)
+				)
 
 				return entry
 			}),
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
-				const session = yield* getAgentSession(payload.agentId)
-				const now = Date.now()
+				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
 				session.entry = new AgentEntry({
 					...session.entry,
-					firstPromptPreview: session.entry.firstPromptPreview ?? pipe(payload.prompt, String.slice(0, 120)),
-					lastActivityAt: now,
-					title: session.entry.title ?? pipe(payload.prompt, String.slice(0, 60))
+					firstPromptPreview: session.entry.firstPromptPreview ?? pipe(payload.prompt, String.slice(0, 120))
 				})
 				yield* publishAgents()
-				const agent =
-					session.agent ??
-					(yield* pipe(
-						Effect.gen(function* () {
-							return yield* Agent
-						}),
-						Effect.provide(
-							{
-								codex: Agent.layerCodex,
-								effect: Agent.layerEffect,
-								opencode: Agent.layerOpencode
-							}[session.entry.layer]
-						),
-						Effect.tap(agent =>
-							Effect.sync(() => {
-								session.agent = agent
-							})
-						),
-						Effect.orDie
-					))
 				yield* session.stream.append({prompt: payload.prompt, runId: payload.runId, type: 'user-message'})
 				if (
 					!pipe(
@@ -265,14 +263,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 						runId: payload.runId,
 						type: 'agent-part'
 					})
-					session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
 					yield* publishAgents()
 					return
 				}
 				yield* FiberHandle.run(
 					session.handle,
 					pipe(
-						agent.streamText({
+						session.agent.streamText({
 							messages: [Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: payload.prompt})]})],
 							model: payload.model,
 							provider: payload.provider
@@ -281,15 +278,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Stream.map(part => ({part, runId: payload.runId, type: 'agent-part'}) satisfies AgentEvent),
 						Stream.tap(session.stream.append),
 						Stream.runDrain,
-						Effect.tap(
-							Effect.fnUntraced(function* () {
-								session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
-								yield* publishAgents()
-							})
-						),
 						Effect.catchCause(cause =>
 							Effect.gen(function* () {
-								session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
 								yield* session.stream.append({
 									part: Response.makePart('error', {error: Cause.pretty(cause)}),
 									runId: payload.runId,
@@ -302,21 +292,20 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			}),
 			'agent.stop': Effect.fnUntraced(function* (payload) {
-				const session = yield* getAgentSession(payload.agentId)
+				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
 
 				yield* FiberHandle.clear(session.handle)
-				session.entry = new AgentEntry({...session.entry, lastActivityAt: Date.now()})
-				yield* publishAgents()
 			}),
 			'agent.archive': Effect.fnUntraced(function* (payload) {
-				const session = yield* getAgentSession(payload.agentId)
+				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
 				session.entry = new AgentEntry({...session.entry, archived: true})
 				yield* publishAgents()
 			}),
 			'agent.events': payload =>
 				Stream.unwrap(
 					pipe(
-						getAgentSession(payload.agentId),
+						Effect.fromNullishOr(agentSessions.get(payload.agentId)),
+						Effect.orDie,
 						Effect.map(session => session.stream.stream)
 					)
 				),

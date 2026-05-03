@@ -30,15 +30,27 @@ export function TreeExplorerRow(props: {
 			'bg-muted text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))] hover:bg-muted hover:text-foreground'
 	)
 	const style = {paddingLeft: 12, paddingRight: 8}
-	const content = (
-		<>
-			<span className="flex min-w-0 flex-1 items-center gap-1.5">
-				{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
-				<span className="min-w-0 flex-1 truncate">{props.children}</span>
-			</span>
-			{props.actions}
-		</>
+	const label = (
+		<span className="flex min-w-0 flex-1 items-center gap-1.5">
+			{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
+			<span className="min-w-0 flex-1 truncate">{props.children}</span>
+		</span>
 	)
+
+	if (props.onClick && props.actions) {
+		return (
+			<div aria-current={props.selected ? 'page' : undefined} className={className} style={style}>
+				<button
+					type="button"
+					onClick={props.onClick}
+					className="flex h-full min-w-0 items-center border-0 bg-transparent p-0 text-left text-inherit"
+				>
+					{label}
+				</button>
+				{props.actions}
+			</div>
+		)
+	}
 
 	if (props.onClick) {
 		return (
@@ -49,14 +61,16 @@ export function TreeExplorerRow(props: {
 				className={className}
 				style={style}
 			>
-				{content}
+				{label}
+				{props.actions}
 			</button>
 		)
 	}
 
 	return (
 		<div className={className} style={style}>
-			{content}
+			{label}
+			{props.actions}
 		</div>
 	)
 }
