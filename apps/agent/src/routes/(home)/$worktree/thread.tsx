@@ -10,6 +10,7 @@ import {
 	Brain,
 	ChevronRight,
 	FileIcon,
+	ProviderIcon,
 	SparklesIcon,
 	Square,
 	Trash,
@@ -20,7 +21,8 @@ import {Markdown} from '@ai-toolkit/components/render/markdown'
 import {RichTextArea} from '@ai-toolkit/components/rich-text-area'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@ai-toolkit/components/ui/select'
+import {Select, SelectContent, SelectItem, SelectTrigger} from '@ai-toolkit/components/ui/select'
+import {formatError, formatNumber} from '@ai-toolkit/components/utils'
 import {createFileRoute, Navigate} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {useEffect, useRef, useState} from 'react'
@@ -80,15 +82,14 @@ function ThreadPage() {
 
 function ThreadView(props: {threadId: string}) {
 	const params = Route.useParams()
-	const activeWorktree = pipe(
-		Option.fromNullishOr(useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree),
-		Option.getOrThrow
-	)
-	const selectedAgent = pipe(
-		Option.fromNullishOr(useAtomSuspense(selectedAgentAtom(props.threadId)).value),
-		Option.getOrThrow
-	)
-	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(selectedAgent.layer)))
+	const activeWorktree = useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree
+	const selectedAgent = useAtomSuspense(selectedAgentAtom(props.threadId)).value
+	if (!(activeWorktree && selectedAgent)) return <Navigate to="/$worktree/diff" params={params} replace />
+	return <ThreadAgentPanel cwd={activeWorktree.root} selectedAgent={selectedAgent} />
+}
+
+function ThreadAgentPanel(input: {cwd: string; selectedAgent: AgentEntry}) {
+	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(input.selectedAgent.layer)))
 	const [agentModel, setAgentModel] = useState(`${availableModels[0]?.provider}:${availableModels[0]?.model}`)
 	const selectedModel = pipe(
 		availableModels,
@@ -99,14 +100,14 @@ function ThreadView(props: {threadId: string}) {
 
 	return (
 		<AgentPanel
-			key={selectedAgent.agentId}
-			agentId={selectedAgent.agentId}
-			cwd={activeWorktree.root}
-			layer={selectedAgent.layer}
+			key={input.selectedAgent.agentId}
+			agentId={input.selectedAgent.agentId}
+			cwd={input.cwd}
+			layer={input.selectedAgent.layer}
 			model={selectedModel.model}
 			provider={selectedModel.provider}
 			setModel={setAgentModel}
-			status={selectedAgent.status}
+			status={input.selectedAgent.status}
 		/>
 	)
 }
@@ -148,7 +149,7 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 							<Brain className="size-3.5 shrink-0" />
 							<span>reasoning</span>
 							{finish?.type === 'finish' && (
-								<span className="ml-auto">reasoning {finish.usage.outputTokens.reasoning}</span>
+								<span className="ml-auto">reasoning {formatNumber(finish.usage.outputTokens.reasoning ?? 0)}</span>
 							)}
 						</div>
 						<div className="py-2">
@@ -167,31 +168,51 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 						</span>
 						{finish?.type === 'finish' && (
 							<span className="ml-auto flex shrink-0 items-center gap-3">
-								<span>in {finish.usage.inputTokens.total}</span>
-								<span>out {finish.usage.outputTokens.total}</span>
-								<span>reasoning {finish.usage.outputTokens.reasoning}</span>
+								<span>in {formatNumber(finish.usage.inputTokens.total ?? 0)}</span>
+								<span>out {formatNumber(finish.usage.outputTokens.total ?? 0)}</span>
+								<span>reasoning {formatNumber(finish.usage.outputTokens.reasoning ?? 0)}</span>
 							</span>
 						)}
 					</div>
 					<div className="flex flex-col gap-2 py-2 text-[13px] leading-relaxed">
 						{Array.map(responseParts, (part, index) => {
 							if (part.type === 'text-delta') return <Markdown key={index}>{part.delta}</Markdown>
-							if (part.type === 'tool-call' || part.type === 'tool-result') {
-								return (
-									<Collapsible key={`${part.type}-${part.id}`} className="group border">
-										<CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 px-2 py-0.5 text-left text-[11px] text-muted-foreground">
-											<Wrench className="size-3.5 shrink-0" />
-											<span className="text-foreground">{part.type}</span>
-											<span>{part.name}</span>
-											<ChevronRight className="ml-auto size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
-										</CollapsibleTrigger>
-										<CollapsibleContent>
-											<pre className="overflow-x-auto border-t p-2 text-[11px] leading-5">
-												{JSON.stringify(part.type === 'tool-call' ? part.params : part.result, null, 2)}
-											</pre>
-										</CollapsibleContent>
-									</Collapsible>
+							if (part.type === 'tool-call') {
+								const hasLaterToolPart = pipe(
+									responseParts,
+									Array.drop(index + 1),
+									Array.some(
+										candidate =>
+											(candidate.type === 'tool-call' || candidate.type === 'tool-result') &&
+											candidate.id === part.id &&
+											candidate.name === part.name
+									)
 								)
+								if (hasLaterToolPart) return
+								return <ToolPart key={`${index}-${part.id}`} callPart={part} />
+							}
+							if (part.type === 'tool-result') {
+								const hasLaterResult = pipe(
+									responseParts,
+									Array.drop(index + 1),
+									Array.some(
+										candidate =>
+											candidate.type === 'tool-result' && candidate.id === part.id && candidate.name === part.name
+									)
+								)
+								if (hasLaterResult) return
+								const callPart = pipe(
+									responseParts,
+									Array.take(index),
+									Array.findFirst(
+										candidate =>
+											candidate.type === 'tool-call' && candidate.id === part.id && candidate.name === part.name
+									),
+									Option.getOrUndefined
+								)
+								if (callPart?.type === 'tool-call')
+									return <ToolPart key={`${index}-${part.id}`} callPart={callPart} resultPart={part} />
+								return <ToolPart key={`${index}-${part.id}`} resultPart={part} />
 							}
 							if (part.type === 'response-metadata' || part.type === 'finish') return
 							return (
@@ -205,6 +226,182 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 			</article>
 		</div>
 	)
+}
+
+function ToolPart(input: {
+	callPart?: Extract<ReturnType<typeof compactAiParts>[number], {type: 'tool-call'}>
+	resultPart?: Extract<ReturnType<typeof compactAiParts>[number], {type: 'tool-result'}>
+}) {
+	const part = input.resultPart ?? input.callPart
+	if (!part) return
+	const payload = input.resultPart?.result ?? input.callPart?.params
+	const inputPayload = input.callPart?.params
+	const summary = summarizeToolPayload(part.name, payload, inputPayload)
+	let state = 'running'
+	if (input.resultPart) state = input.resultPart.isFailure ? 'failed' : 'done'
+
+	return (
+		<Collapsible className="group border bg-muted/10">
+			<CollapsibleTrigger className="flex min-h-6 w-full items-center gap-1.5 px-1.5 py-0.5 text-left font-mono text-[10px] text-muted-foreground">
+				<Wrench className="size-3 shrink-0" />
+				<span className="border px-1 text-foreground leading-none">{part.name}</span>
+				<span>{state}</span>
+				{input.resultPart?.preliminary && <span>preliminary</span>}
+				<span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
+				<ChevronRight className="size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
+			</CollapsibleTrigger>
+			<CollapsibleContent>
+				<div className="grid gap-1 border-t p-1.5 font-mono text-[11px] leading-5">
+					{renderToolPayload(part.name, payload, inputPayload)}
+				</div>
+			</CollapsibleContent>
+		</Collapsible>
+	)
+}
+
+function getField(value: unknown, key: string) {
+	if (!Predicate.hasProperty(key)(value)) return
+	return value[key]
+}
+
+function getStringField(value: unknown, key: string) {
+	const field = getField(value, key)
+	return Predicate.isString(field) ? field : undefined
+}
+
+function getArrayField(value: unknown, key: string) {
+	const field = getField(value, key)
+	return Array.isArray(field) ? field : []
+}
+
+function getBooleanField(value: unknown, key: string) {
+	const field = getField(value, key)
+	return Predicate.isBoolean(field) ? field : undefined
+}
+
+function getStringToolField(payload: unknown, inputPayload: unknown, key: string) {
+	return getStringField(payload, key) ?? getStringField(inputPayload, key)
+}
+
+function getArrayToolField(payload: unknown, inputPayload: unknown, key: string) {
+	const field = getArrayField(payload, key)
+	return Array.isReadonlyArrayEmpty(field) ? getArrayField(inputPayload, key) : field
+}
+
+function summarizeToolPayload(name: string, payload: unknown, inputPayload: unknown) {
+	if (name === 'command_execution') return getStringToolField(payload, inputPayload, 'command') ?? ''
+	if (name === 'web_search')
+		return (
+			getStringToolField(payload, inputPayload, 'query') ??
+			`${formatNumber(getArrayToolField(payload, inputPayload, 'results').length)} results`
+		)
+	if (name === 'web_fetch') return `${formatNumber(getArrayToolField(payload, inputPayload, 'urls').length)} urls`
+	if (name === 'file_change') return `${formatNumber(getArrayToolField(payload, inputPayload, 'changes').length)} files`
+	if (name === 'mcp_tool_call')
+		return `${getStringToolField(payload, inputPayload, 'server') ?? 'mcp'} / ${getStringToolField(payload, inputPayload, 'tool') ?? 'tool'}`
+	if (name === 'todo_list') return `${formatNumber(getArrayToolField(payload, inputPayload, 'items').length)} items`
+	return ''
+}
+
+function getErrorText(value: unknown) {
+	return formatError(
+		getStringField(value, 'description') ?? getStringField(value, 'message') ?? getStringField(value, '_tag') ?? value
+	)
+}
+
+function ToolField(input: {label: string; value: unknown}) {
+	if (Predicate.isUndefined(input.value) || Predicate.isNull(input.value)) return
+	if (Predicate.isString(input.value) && String.isEmpty(input.value)) return
+
+	return (
+		<div className="grid grid-cols-[4rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
+			<div className="text-muted-foreground">{input.label}</div>
+			<div className="min-w-0 truncate text-foreground">{String.String(input.value)}</div>
+		</div>
+	)
+}
+
+function renderToolPayload(name: string, payload: unknown, inputPayload: unknown) {
+	if (name === 'command_execution') {
+		return (
+			<>
+				<ToolField label="error" value={getErrorText(payload)} />
+				{getStringToolField(payload, inputPayload, 'output') && (
+					<pre className="max-h-48 overflow-auto border bg-background p-1.5 text-foreground">
+						{getStringField(payload, 'output')}
+					</pre>
+				)}
+			</>
+		)
+	}
+
+	if (name === 'web_search' || name === 'web_fetch') {
+		return (
+			<>
+				<ToolField label="query" value={getStringToolField(payload, inputPayload, 'query')} />
+				<ToolField label="urls" value={getArrayToolField(payload, inputPayload, 'urls').join(', ')} />
+				<ToolField label="results" value={formatNumber(getArrayToolField(payload, inputPayload, 'results').length)} />
+				<div className="grid gap-1">
+					{Array.map(getArrayToolField(payload, inputPayload, 'results'), (result, index) => (
+						<div key={index} className="border px-1.5 py-1">
+							<div className="truncate text-foreground">
+								{getStringField(result, 'title') ?? getStringField(result, 'url')}
+							</div>
+							<div className="truncate text-muted-foreground">{getStringField(result, 'url')}</div>
+							{Array.map(getArrayField(result, 'highlights'), (highlight, index) => (
+								<div key={index} className="line-clamp-2 whitespace-pre-wrap text-foreground">
+									{String.String(highlight)}
+								</div>
+							))}
+							<div className="line-clamp-2 whitespace-pre-wrap text-muted-foreground">
+								{getStringField(result, 'text')}
+							</div>
+						</div>
+					))}
+				</div>
+			</>
+		)
+	}
+
+	if (name === 'file_change') {
+		return (
+			<>
+				<ToolField label="error" value={getErrorText(payload)} />
+				<div className="grid gap-1">
+					{Array.map(getArrayToolField(payload, inputPayload, 'changes'), (change, index) => (
+						<div key={index} className="grid grid-cols-[4rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
+							<span className="text-muted-foreground">{getStringField(change, 'kind')}</span>
+							<span className="truncate text-foreground">{getStringField(change, 'path')}</span>
+						</div>
+					))}
+				</div>
+			</>
+		)
+	}
+
+	if (name === 'mcp_tool_call') {
+		return (
+			<>
+				<ToolField label="server" value={getStringToolField(payload, inputPayload, 'server')} />
+				<ToolField label="tool" value={getStringToolField(payload, inputPayload, 'tool')} />
+				<ToolField label="text" value={getStringField(payload, 'text')} />
+				<ToolField label="error" value={getErrorText(payload)} />
+			</>
+		)
+	}
+
+	if (name === 'todo_list') {
+		return (
+			<div className="grid gap-1">
+				{Array.map(getArrayToolField(payload, inputPayload, 'items'), (item, index) => (
+					<div key={index} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
+						<span className="text-muted-foreground">{getBooleanField(item, 'completed') ? 'x' : ''}</span>
+						<span className="truncate text-foreground">{getStringField(item, 'text')}</span>
+					</div>
+				))}
+			</div>
+		)
+	}
 }
 
 function AgentPanel(input: {
@@ -326,7 +523,7 @@ function AgentPanel(input: {
 						<RichTextArea.Actions>
 							<div className="flex items-center gap-2 border-input border-b px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
 								<Archive className="size-3.5" />
-								<span>{stashedPrompts.length} stashed</span>
+								<span>{formatNumber(stashedPrompts.length)} stashed</span>
 							</div>
 							<div className="flex max-h-48 flex-col overflow-y-auto">
 								{Array.map(stashedPrompts, prompt => (
@@ -401,7 +598,10 @@ function AgentPanel(input: {
 								}}
 							>
 								<SelectTrigger className="h-7 w-64 rounded-none text-xs">
-									<SelectValue placeholder="Model" />
+									<span className="flex min-w-0 items-center gap-2">
+										<ProviderIcon provider={input.provider} className="size-3" />
+										<span className="min-w-0 truncate">{input.model}</span>
+									</span>
 								</SelectTrigger>
 								<SelectContent>
 									{pipe(
@@ -409,16 +609,14 @@ function AgentPanel(input: {
 										Array.filter(model => pipe(model.agents, Array.contains(input.layer))),
 										Array.map(model => (
 											<SelectItem key={`${model.provider}:${model.model}`} value={`${model.provider}:${model.model}`}>
-												{model.provider}/{model.model}
+												<ProviderIcon provider={model.provider} className="size-3" />
+												{model.model}
 											</SelectItem>
 										))
 									)}
 								</SelectContent>
 							</Select>
 							<div className="ml-auto flex items-center gap-2">
-								<span className="border px-2 py-1 font-mono text-[10px] text-muted-foreground leading-none">
-									{input.status.state}
-								</span>
 								<Button variant="outline" size="icon-xs" className="rounded-none" onClick={stashPrompt}>
 									<Archive className="size-3.5" />
 								</Button>

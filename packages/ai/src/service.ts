@@ -9,7 +9,6 @@ import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 import type {AgentToolKit} from '#tools/contracts.ts'
 import {makeLayerCodex} from './agents/codex.ts'
 import {makeLayerEffect} from './agents/effect.ts'
-import {makeLayerOpencode} from './agents/opencode.ts'
 import type {ModelId, ProviderId} from './catalog.ts'
 
 export class Agent extends Context.Service<
@@ -27,7 +26,6 @@ export class Agent extends Context.Service<
 	}
 >()('@ai-toolkit/ai/service/Agent') {
 	static layerEffect = flow(makeLayerEffect, Layer.effect(this))
-	static layerOpencode = flow(makeLayerOpencode, Layer.effect(this))
 	static layerCodex = flow(makeLayerCodex, Layer.effect(this))
 }
 

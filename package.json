@@ -9,6 +9,7 @@
 		"dev": "turbo run dev:server dev:client",
 		"build": "NODE_ENV=production turbo run build:server build:client",
 
+		"test": "turbo run test",
 		"fix": "turbo run fix",
 		"check": "turbo run check",
 

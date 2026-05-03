@@ -42,6 +42,10 @@ const resources = [
 		url: 'https://github.com/exa-labs/exa-js'
 	},
 	{
+		name: 'codex',
+		url: 'https://github.com/openai/codex'
+	},
+	{
 		name: 't3-code',
 		url: 'https://github.com/pingdotgg/t3code'
 	}

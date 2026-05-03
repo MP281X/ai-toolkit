@@ -11,6 +11,7 @@ import {
 	Predicate,
 	PubSub,
 	pipe,
+	RcMap,
 	Stream,
 	String,
 	SubscriptionRef
@@ -34,6 +35,12 @@ type AgentSession = {
 		append: (part: AgentEvent) => EffectTypes.Effect.Effect<void>
 		stream: EffectTypes.Stream.Stream<AgentEvent>
 	}
+}
+
+type AgentSessionConfig = {
+	layer: AgentEntry['layer']
+	projectRoot: string
+	worktreeRoot: string
 }
 
 export const RpcHandlers = RpcContracts.toLayer(
@@ -79,6 +86,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			yield* PubSub.publish(snapshots, nextSnapshot)
 		})
 		const ignoredFileSearchDirectories = new Set(['.git', 'node_modules', 'dist', '.turbo', '.next', 'coverage'])
+		const agentSessionConfigs = new Map<string, AgentSessionConfig>()
 		const agentSessions = new Map<string, AgentSession>()
 		const agentsState = yield* SubscriptionRef.make(Array.empty<AgentEntry>())
 		const publishAgents = Effect.fnUntraced(function* () {
@@ -92,6 +100,60 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 		})
 		const systemPrompt = Prompt.makeMessage('system', {content: 'You are a coding agent running inside AI Toolkit.'})
+		const agentSessionMap = yield* RcMap.make({
+			idleTimeToLive: Duration.minutes(10),
+			lookup: (agentId: string) =>
+				Effect.acquireRelease(
+					Effect.gen(function* () {
+						const config = yield* pipe(Effect.fromNullishOr(agentSessionConfigs.get(agentId)), Effect.orDie)
+						const agent = yield* pipe(
+							Effect.gen(function* () {
+								return yield* Agent
+							}),
+							Effect.provide(
+								{
+									codex: Agent.layerCodex({systemPrompt}),
+									effect: Agent.layerEffect({systemPrompt})
+								}[config.layer]
+							),
+							Effect.orDie
+						)
+						const entry = new AgentEntry({
+							agentId,
+							archived: false,
+							layer: config.layer,
+							projectRoot: config.projectRoot,
+							status: yield* SubscriptionRef.get(agent.status),
+							worktreeRoot: config.worktreeRoot
+						})
+						const handle = yield* FiberHandle.make<void, never>()
+						const stream = yield* makeResumableStream<AgentEvent>()
+						const session = {agent, entry, handle, stream}
+
+						agentSessions.set(agentId, session)
+						yield* publishAgents()
+
+						yield* Effect.forkScoped(
+							pipe(
+								SubscriptionRef.changes(agent.status),
+								Stream.tap(status => {
+									session.entry = new AgentEntry({...session.entry, status})
+									return publishAgents()
+								}),
+								Stream.runDrain
+							)
+						)
+
+						return session
+					}),
+					session =>
+						Effect.gen(function* () {
+							agentSessions.delete(session.entry.agentId)
+							agentSessionConfigs.delete(session.entry.agentId)
+							yield* publishAgents()
+						})
+				)
+		})
 
 		yield* refresh()
 
@@ -197,48 +259,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 					})
 				),
 			'agents.create': Effect.fnUntraced(function* (payload) {
-				const agent = yield* pipe(
-					Effect.gen(function* () {
-						return yield* Agent
-					}),
-					Effect.provide(
-						{
-							codex: Agent.layerCodex({systemPrompt}),
-							effect: Agent.layerEffect({systemPrompt}),
-							opencode: Agent.layerOpencode({systemPrompt})
-						}[payload.layer]
-					),
-					Effect.orDie
-				)
-				const entry = new AgentEntry({
-					agentId: `agent-${crypto.randomUUID()}`,
-					archived: false,
+				const agentId = `agent-${crypto.randomUUID()}`
+				agentSessionConfigs.set(agentId, {
 					layer: payload.layer,
 					projectRoot: payload.projectRoot,
-					status: yield* SubscriptionRef.get(agent.status),
 					worktreeRoot: payload.worktreeRoot
 				})
-				const handle = yield* FiberHandle.make<void, never>()
-				const stream = yield* makeResumableStream<AgentEvent>()
-				const session = {agent, entry, handle, stream}
+				const session = yield* RcMap.get(agentSessionMap, agentId)
 
-				agentSessions.set(entry.agentId, session)
-
-				yield* Effect.forkScoped(
-					pipe(
-						SubscriptionRef.changes(agent.status),
-						Stream.tap(status => {
-							session.entry = new AgentEntry({...session.entry, status})
-							return publishAgents()
-						}),
-						Stream.runDrain
-					)
-				)
-
-				return entry
+				return session.entry
 			}),
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
-				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
+				const session = yield* RcMap.get(agentSessionMap, payload.agentId)
 				session.entry = new AgentEntry({
 					...session.entry,
 					firstPromptPreview: session.entry.firstPromptPreview ?? pipe(payload.prompt, String.slice(0, 120))
@@ -292,20 +324,20 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			}),
 			'agent.stop': Effect.fnUntraced(function* (payload) {
-				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
+				const session = yield* RcMap.get(agentSessionMap, payload.agentId)
 
 				yield* FiberHandle.clear(session.handle)
 			}),
 			'agent.archive': Effect.fnUntraced(function* (payload) {
-				const session = yield* pipe(Effect.fromNullishOr(agentSessions.get(payload.agentId)), Effect.orDie)
+				const session = yield* RcMap.get(agentSessionMap, payload.agentId)
 				session.entry = new AgentEntry({...session.entry, archived: true})
 				yield* publishAgents()
+				yield* RcMap.invalidate(agentSessionMap, payload.agentId)
 			}),
 			'agent.events': payload =>
 				Stream.unwrap(
 					pipe(
-						Effect.fromNullishOr(agentSessions.get(payload.agentId)),
-						Effect.orDie,
+						RcMap.get(agentSessionMap, payload.agentId),
 						Effect.map(session => session.stream.stream)
 					)
 				),
