@@ -48,6 +48,14 @@ const resources = [
 	{
 		name: 't3-code',
 		url: 'https://github.com/pingdotgg/t3code'
+	},
+	{
+		name: 'react-doctor',
+		url: 'https://github.com/millionco/react-doctor.git'
+	},
+	{
+		name: 'effect-lsp',
+		url: 'https://github.com/Effect-TS/language-service'
 	}
 ]
 

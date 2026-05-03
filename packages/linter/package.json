@@ -3,8 +3,21 @@
 	"sideEffects": false,
 	"name": "@ai-toolkit/linter",
 
+	"bin": {
+		"strict-lint": "./src/index.ts"
+	},
+
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+
+	"exports": {
+		".": "./src/index.ts"
+	},
+
 	"scripts": {
-		"fix": "biome check --write --unsafe --vcs-root=../.. --config-path=biome.refactor.json || true",
-		"check": "tsgo --noEmit && biome check --vcs-root=../.. --config-path=biome.refactor.json"
+		"test": "bun test",
+		"fix": "biome check --write --unsafe || true",
+		"check": "tsgo --noEmit && biome check"
 	}
 }

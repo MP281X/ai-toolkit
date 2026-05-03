@@ -1,6 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-`import($path)` as $match where {
-	register_diagnostic(span=$match, message="Do not use dynamic imports here. Rewrite this as a static `import` so the module graph stays visible and tooling can reason about dependencies up front.")
-}
