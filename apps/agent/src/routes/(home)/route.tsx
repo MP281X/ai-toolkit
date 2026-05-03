@@ -1,7 +1,8 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Hash, Option, Order, Predicate, pipe, Schema, String} from 'effect'
+import {Array, Effect, Hash, Option, Predicate, pipe, Schema, String} from 'effect'
 
 import type {AgentId} from '@ai-toolkit/ai/catalog'
+import {AgentId as AgentIdSchema} from '@ai-toolkit/ai/catalog'
 import {
 	AgentIcon,
 	Archive,
@@ -54,7 +55,6 @@ const projectAccentClassNames = [
 ] as const
 
 type ActionPaletteMode = 'create-thread' | 'create-worktree'
-const agentLayers = ['effect', 'opencode', 'codex'] as const satisfies readonly AgentId[]
 
 const branchesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -325,7 +325,6 @@ function WorktreeManager(input: {
 						<CommandGroup>
 							{pipe(
 								input.agents,
-								Array.sortWith(agent => -agent.lastActivityAt, Order.Number),
 								Array.map(agent => {
 									const project = pipe(
 										input.projects,
@@ -348,7 +347,6 @@ function WorktreeManager(input: {
 												agent.layer,
 												agent.agentId,
 												pathLabel(agent.projectRoot),
-												agent.title ?? '',
 												agent.firstPromptPreview ?? ''
 											]}
 											onSelect={() => {
@@ -357,7 +355,7 @@ function WorktreeManager(input: {
 											}}
 										>
 											<AgentIcon layer={agent.layer} className="size-3.5" />
-											<span className="min-w-0 truncate">{agent.title ?? agent.firstPromptPreview ?? 'thread'}</span>
+											<span className="min-w-0 truncate">{agent.firstPromptPreview ?? 'thread'}</span>
 											<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
 												{worktreeLabel}
 											</CommandShortcut>
@@ -438,7 +436,7 @@ function WorktreeManager(input: {
 						)}
 						{actionPaletteMode === 'create-thread' && input.activeProject && input.activeWorktree && (
 							<CommandGroup>
-								{Array.map(agentLayers, layer => (
+								{Array.map(AgentIdSchema.literals, layer => (
 									<CommandItem key={layer} value={`${layer} thread`} onSelect={() => void createFastAgent(layer)}>
 										<AgentIcon layer={layer} className="size-3.5" />
 										{layer}
@@ -564,7 +562,6 @@ function WorktreeManager(input: {
 																						const nextAgent = pipe(
 																							input.agents,
 																							Array.filter(candidate => candidate.agentId !== agent.agentId),
-																							Array.sortWith(candidate => -candidate.lastActivityAt, Order.Number),
 																							Array.head,
 																							Option.getOrUndefined
 																						)
@@ -579,8 +576,13 @@ function WorktreeManager(input: {
 																		onClick={() => input.selectAgent(worktree.root, agent.agentId)}
 																	>
 																		<span className="min-w-0 flex-1 truncate">
-																			{agent.title ?? agent.firstPromptPreview ?? 'thread'}
+																			{agent.firstPromptPreview ?? 'thread'}
 																		</span>
+																		{agent.status.state !== 'idle' && (
+																			<span className="shrink-0 border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground leading-none">
+																				{agent.status.state}
+																			</span>
+																		)}
 																	</TreeExplorerRow>
 																</li>
 															))}

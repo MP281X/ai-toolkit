@@ -1,106 +1,67 @@
-import {OpenAiClient, OpenAiLanguageModel} from '@effect/ai-openai'
-import {
-	OpenAiClient as OpenAiCompatClient,
-	OpenAiLanguageModel as OpenAiCompatLanguageModel
-} from '@effect/ai-openai-compat'
-import {OpenRouterClient, OpenRouterLanguageModel} from '@effect/ai-openrouter'
-import {Cause, Effect, Layer, Match, Option, pipe, Queue, Ref, Stream, Struct} from 'effect'
+import type {Layer} from 'effect'
+import {Cause, DateTime, Effect, Option, pipe, Queue, Stream, SubscriptionRef} from 'effect'
 
 import {Chat, Prompt, Response} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
 
+import {resolveLanguageModel} from '#lib/language-model.ts'
 import {partsStreamSanitizer} from '#lib/utils.ts'
 import {AgentToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
-import type {ModelId, ProviderId} from '../catalog.ts'
-import {providers} from '../catalog.ts'
 import {Agent} from '../service.ts'
 
-const resolveLanguageModel = pipe(
-	Match.type<{provider: ProviderId; model: ModelId}>(),
-	Match.when({provider: 'openrouter'}, input =>
-		Layer.provideMerge(
-			OpenRouterLanguageModel.layer({
-				model: input.model,
-				config: {
-					strictJsonSchema: true,
-					parallel_tool_calls: true,
-					provider: {sort: 'latency'},
-					reasoning: {effort: 'minimal', summary: 'concise'}
-				}
-			}),
-			OpenRouterClient.layerConfig(providers[input.provider])
-		)
-	),
-	Match.when({provider: 'opencode-go', model: 'glm-5'}, input =>
-		Layer.provideMerge(
-			OpenAiCompatLanguageModel.layer({
-				model: input.model,
-				config: {strictJsonSchema: true}
-			}),
-			OpenAiCompatClient.layerConfig(providers[input.provider])
-		)
-	),
-	Match.when({provider: 'opencode-go', model: 'deepseek-v4-flash'}, input =>
-		Layer.provideMerge(
-			OpenAiCompatLanguageModel.layer({model: input.model, config: {}}),
-			OpenAiCompatClient.layerConfig(providers[input.provider])
-		)
-	),
-	Match.when({provider: 'opencode', model: 'gpt-5-nano'}, input =>
-		Layer.provideMerge(
-			OpenAiLanguageModel.layer({
-				model: input.model,
-				config: {text: {verbosity: 'low'}}
-			}),
-			OpenAiClient.layerConfig(providers[input.provider])
-		)
-	),
-	Match.when({provider: 'openai'}, input =>
-		Layer.provideMerge(
-			OpenAiLanguageModel.layer({model: input.model, config: {text: {verbosity: 'low'}}}),
-			OpenAiClient.layerConfig(providers[input.provider])
-		)
-	),
-	Match.orElseAbsurd
-)
+export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMessage}) {
+	return pipe(
+		Effect.gen(function* () {
+			const services = yield* Effect.context<
+				Layer.Success<typeof WebSearchToolKitLayer> | Layer.Success<typeof WebFetchToolKitLayer> | HttpClient.HttpClient
+			>()
+			const chat = yield* Chat.empty
+			const status = yield* SubscriptionRef.make<{
+				readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
+				readonly updatedAt: DateTime.Utc
+			}>({state: 'idle', updatedAt: yield* DateTime.now})
 
-export const makeLayerEffect = pipe(
-	Effect.gen(function* () {
-		const services = yield* Effect.context<
-			Layer.Success<typeof WebSearchToolKitLayer> | Layer.Success<typeof WebFetchToolKitLayer> | HttpClient.HttpClient
-		>()
-		const chat = yield* Chat.empty
-
-		return Agent.of({
-			history: pipe(Ref.get(chat.history), Effect.map(Struct.get('content'))),
-			streamText: input =>
-				Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>>(
-					Effect.fnUntraced(function* (queue) {
-						let prompt = Prompt.fromMessages(input.messages)
-
-						while (true) {
-							const last = yield* pipe(
-								chat.streamText({prompt, toolkit: AgentToolKit}),
-								partsStreamSanitizer,
-								Stream.tap(part => Queue.offer(queue, part)),
-								Stream.provide(resolveLanguageModel({provider: input.provider, model: input.model})),
-								Stream.provideContext(services),
-								Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
-								Stream.runLast
+			return Agent.of({
+				status,
+				streamText: input =>
+					Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>>(
+						Effect.fnUntraced(function* (queue) {
+							yield* pipe(
+								DateTime.now,
+								Effect.flatMap(updatedAt => SubscriptionRef.set(status, {state: 'running', updatedAt} as const))
+							)
+							let prompt = pipe(Prompt.fromMessages(input.messages), current =>
+								Prompt.prependSystem(current, config.systemPrompt.content)
 							)
 
-							if (Option.isSome(last) && last.value.type === 'finish' && last.value.reason === 'tool-calls') {
-								prompt = Prompt.empty
-								continue
-							}
+							while (true) {
+								const last = yield* pipe(
+									chat.streamText({prompt, toolkit: AgentToolKit}),
+									partsStreamSanitizer,
+									Stream.tap(part => Queue.offer(queue, part)),
+									Stream.provide(resolveLanguageModel({provider: input.provider, model: input.model})),
+									Stream.provideContext(services),
+									Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
+									Stream.runLast
+								)
 
-							return yield* Queue.end(queue)
-						}
-					})
-				)
-		})
-	}),
-	Effect.provide(WebSearchToolKitLayer),
-	Effect.provide(WebFetchToolKitLayer)
-)
+								if (Option.isSome(last) && last.value.type === 'finish' && last.value.reason === 'tool-calls') {
+									prompt = Prompt.empty
+									continue
+								}
+
+								yield* pipe(
+									DateTime.now,
+									Effect.flatMap(updatedAt => SubscriptionRef.set(status, {state: 'idle', updatedAt} as const))
+								)
+								return yield* Queue.end(queue)
+							}
+						})
+					)
+			})
+		}),
+		Effect.provide(WebSearchToolKitLayer),
+		Effect.provide(WebFetchToolKitLayer)
+	)
+}

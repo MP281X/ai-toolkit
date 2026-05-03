@@ -6,17 +6,18 @@ import {GitBranch, GitDiff, GitDiffScope, GitRepository, GitWorktree} from '@ai-
 import {Response} from 'effect/unstable/ai'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-export type AgentStreamPart = typeof AgentStreamPart.Type
-export const AgentStreamPart = Response.StreamPart(AgentToolKit)
+const AgentStatus = Schema.Struct({
+	state: Schema.Literals(['idle', 'running', 'retrying', 'stopping', 'awaiting_input', 'error']),
+	updatedAt: Schema.DateTimeUtc
+})
 
 export class AgentEntry extends Schema.Class<AgentEntry>('AgentEntry')({
 	agentId: Schema.NonEmptyString,
 	archived: Schema.Boolean,
 	firstPromptPreview: Schema.optional(Schema.String),
 	layer: AgentId,
-	lastActivityAt: Schema.Number,
 	projectRoot: Schema.String,
-	title: Schema.optional(Schema.String),
+	status: AgentStatus,
 	worktreeRoot: Schema.String
 }) {}
 
@@ -28,7 +29,7 @@ export const AgentEvent = Schema.Union([
 		type: Schema.Literal('user-message')
 	}),
 	Schema.Struct({
-		part: AgentStreamPart,
+		part: Response.StreamPart(AgentToolKit),
 		runId: Schema.NonEmptyString,
 		type: Schema.Literal('agent-part')
 	})

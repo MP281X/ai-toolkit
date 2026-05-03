@@ -146,7 +146,7 @@ const discardReviewEntryAtom = Atom.fn(
 	})
 )
 
-export function DiffPage() {
+function DiffPage() {
 	const params = Route.useParams()
 	const activeWorktree = pipe(
 		Option.fromNullishOr(useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree),
