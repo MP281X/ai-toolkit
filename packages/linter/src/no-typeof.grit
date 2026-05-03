@@ -1,6 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-`typeof $expr` as $match where {
-	register_diagnostic(span=$match, message="Do not use `typeof` directly. Replace it with the matching `Predicate` helper such as `Predicate.isString(value)`, `Predicate.isNumber(value)`, or `Predicate.isObject(value)` so narrowing stays consistent with the rest of the codebase.")
-}

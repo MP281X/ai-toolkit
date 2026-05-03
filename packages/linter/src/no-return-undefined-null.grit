@@ -1,9 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-or {
-	`return undefined`,
-	`return null`
-} as $match where {
-	register_diagnostic(span=$match, message="Do not return `undefined` or `null` explicitly for an empty branch. Use bare `return` instead so the control flow says 'stop here' without redundant sentinel values.")
-}

@@ -11,7 +11,7 @@ $ARGUMENTS
 </changed_files>
 
 <lint_output>
-!`bunx biome lint --staged --config-path=packages/linter/biome.refactor.json`
+!`bun packages/linter/src/index.ts staged`
 </lint_output>
 
 You are a refactoring specialist. Reduce code to its minimal correct form without changing behavior.
@@ -33,7 +33,7 @@ Read every file in `<changed_files>`. Before making any changes:
 
 ## Phase 3 — Refactor (minimum 5 passes)
 
-Each pass: re-read every changed file and every connected file edited during refactoring, apply simplifications, run `bunx biome lint --staged --config-path=packages/linter/biome.refactor.json`. Fix custom lint errors when behavior is preserved. If a custom lint error targets required external API usage or a framework API with no equivalent rewrite, leave it unchanged and add it to the skipped custom lint list.
+Each pass: re-read every changed file and every connected file edited during refactoring, apply simplifications, run `bun packages/linter/src/index.ts staged`. Assume strict lint diagnostics are correct. Resolve every diagnostic through the structural refactor implied by the rule message. If no behavior-preserving rewrite exists, continue resolving all other diagnostics, then fail with a blocker report that explains the exact external API requirement and why each attempted rewrite changes behavior.
 
 A pass with zero changes still counts — do all 5. Code that "looks fine" after pass 2 often reveals inlining opportunities after pass 3 removed its dependencies.
 
@@ -69,7 +69,7 @@ A pass with zero changes still counts — do all 5. Code that "looks fine" after
 - If one argument can be inferred from another, remove the redundant argument and derive it at the use site
 - If a component passes props through without adding behavior, inline the component or remove the pass-through props
 - After changing a signature, update all connected callers immediately; never keep overloads, compatibility wrappers, or old argument shapes
-- If external library or framework APIs require a shape, keep only the required fields and document skipped cleanup in the final response
+- If external library or framework APIs require a shape, keep only the required fields and report a blocker if strict lint still rejects the required shape
 
 ### Migration cleanup
 
@@ -101,7 +101,7 @@ Run `bun run check`. If errors remain, fix and repeat.
 - Changed files are entrypoints, not a hard boundary. Edit connected files when required to complete simplification.
 - Never add backward compatibility, adapters, overloads, migration shims, or dual old/new paths for internal code.
 - Never leave a prop, parameter, field, wrapper, alias, export, or type unless a current usage proves it is necessary.
-- Never add `biome-ignore lint/plugin` suppressions. If a custom lint error is truly unfixable without changing behavior, leave the code unchanged and note the skipped error.
+- Never add strict lint suppressions. If a diagnostic is truly unfixable without changing behavior, leave the code unchanged, resolve all other diagnostics, then fail with a blocker report.
 - Never stop because the code "looks good enough" — complete all 5 passes
 
 ## Definition of Done
@@ -109,4 +109,4 @@ Run `bun run check`. If errors remain, fix and repeat.
 - `bun run check` passes
 - All 5 passes completed
 - All changed and connected files contain no single-use helpers, no single-use variables, no redundant guards, no unnecessary props, no unnecessary interface fields, no redundant parameters, no compatibility wrappers, and no mixed old/new internal migration paths
-- Skipped custom lint errors include the file path, rule message, and reason the rewrite would change behavior
+- No strict lint diagnostics remain, or blockers fail the command with file path, rule message, exact external API requirement, and why each attempted rewrite changes behavior

@@ -1,9 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-or {
-	`'$prop' in $expr`,
-	`"$prop" in $expr`
-} as $match where {
-	register_diagnostic(span=$match, message="Do not use the `in` operator. Replace it with `Predicate.hasProperty(property, object)` or `Predicate.hasProperty(property)(object)` so property checks stay explicit and composable.")
-}
