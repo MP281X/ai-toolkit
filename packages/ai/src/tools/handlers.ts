@@ -18,7 +18,15 @@ export const WebSearchToolKitLayer = WebSearchToolKit.toLayer(
 							numResults: params.numResults
 						})
 
-						return response.results
+						return {
+							query: params.query,
+							results: Array.map(response.results, result => ({
+								highlights: result.highlights ?? [],
+								text: result.text ?? '',
+								title: result.title ?? null,
+								url: result.url
+							}))
+						}
 					},
 					catch: cause => new AiError.UnknownError({description: `web search failed: ${String.String(cause)}`})
 				})
@@ -34,12 +42,18 @@ export const WebFetchToolKitLayer = WebFetchToolKit.toLayer(
 			web_fetch: params =>
 				Effect.tryPromise({
 					try: async () => {
-						const response = await exa.getContents(
-							Array.map(params.urls, url => url.toString()),
-							{text: true, highlights: true}
-						)
+						const urls = Array.map(params.urls, url => url.toString())
+						const response = await exa.getContents(urls, {text: true, highlights: true})
 
-						return response.results
+						return {
+							results: Array.map(response.results, result => ({
+								highlights: result.highlights ?? [],
+								text: result.text ?? '',
+								title: result.title ?? null,
+								url: result.url
+							})),
+							urls
+						}
 					},
 					catch: cause => new AiError.UnknownError({description: `web fetch failed: ${String.String(cause)}`})
 				})

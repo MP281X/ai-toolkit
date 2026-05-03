@@ -1,8 +1,7 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Array, Effect, Hash, Option, Predicate, pipe, Schema, String} from 'effect'
 
-import type {AgentId} from '@ai-toolkit/ai/catalog'
-import {AgentId as AgentIdSchema} from '@ai-toolkit/ai/catalog'
+import {AgentId} from '@ai-toolkit/ai/catalog'
 import {
 	AgentIcon,
 	Archive,
@@ -12,6 +11,7 @@ import {
 	PanelTop,
 	SparklesIcon,
 	Square,
+	StatusIcon,
 	Trash
 } from '@ai-toolkit/components/icons'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
@@ -251,7 +251,7 @@ function WorktreeManager(input: {
 		input.selectWorktree(worktreeRoot)
 	}
 
-	async function createFastAgent(layer: AgentId) {
+	async function createFastAgent(layer: typeof AgentId.Type) {
 		const selectedProjectRoot = pipe(Option.fromNullishOr(input.activeProject?.repository.root), Option.getOrThrow)
 		const selectedWorktreeRoot = pipe(Option.fromNullishOr(input.activeWorktree?.root), Option.getOrThrow)
 		const agent = await createAgent({
@@ -436,7 +436,7 @@ function WorktreeManager(input: {
 						)}
 						{actionPaletteMode === 'create-thread' && input.activeProject && input.activeWorktree && (
 							<CommandGroup>
-								{Array.map(AgentIdSchema.literals, layer => (
+								{Array.map(AgentId.literals, layer => (
 									<CommandItem key={layer} value={`${layer} thread`} onSelect={() => void createFastAgent(layer)}>
 										<AgentIcon layer={layer} className="size-3.5" />
 										{layer}
@@ -551,26 +551,30 @@ function WorktreeManager(input: {
 																	<TreeExplorerRow
 																		icon={<AgentIcon layer={agent.layer} className="size-3.5" />}
 																		actions={
-																			<Button
-																				variant="ghost"
-																				size="icon-xs"
-																				className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
-																				onClick={event => {
-																					event.stopPropagation()
-																					void (async () => {
-																						await archiveAgent({payload: {agentId: agent.agentId}})
-																						const nextAgent = pipe(
-																							input.agents,
-																							Array.filter(candidate => candidate.agentId !== agent.agentId),
-																							Array.head,
-																							Option.getOrUndefined
-																						)
-																						if (nextAgent) input.selectAgent(nextAgent.worktreeRoot, nextAgent.agentId)
-																					})()
-																				}}
-																			>
-																				<Archive className="size-3" />
-																			</Button>
+																			<div className="flex items-center gap-1">
+																				<StatusIcon state={agent.status.state} className="shrink-0" />
+																				<Button
+																					variant="ghost"
+																					size="icon-xs"
+																					className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
+																					onClick={event => {
+																						event.stopPropagation()
+																						void (async () => {
+																							await archiveAgent({payload: {agentId: agent.agentId}})
+																							const nextAgent = pipe(
+																								input.agents,
+																								Array.filter(candidate => candidate.agentId !== agent.agentId),
+																								Array.head,
+																								Option.getOrUndefined
+																							)
+																							if (nextAgent)
+																								input.selectAgent(nextAgent.worktreeRoot, nextAgent.agentId)
+																						})()
+																					}}
+																				>
+																					<Archive className="size-3" />
+																				</Button>
+																			</div>
 																		}
 																		selected={input.activeAgentId === agent.agentId}
 																		onClick={() => input.selectAgent(worktree.root, agent.agentId)}
@@ -578,11 +582,6 @@ function WorktreeManager(input: {
 																		<span className="min-w-0 flex-1 truncate">
 																			{agent.firstPromptPreview ?? 'thread'}
 																		</span>
-																		{agent.status.state !== 'idle' && (
-																			<span className="shrink-0 border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground leading-none">
-																				{agent.status.state}
-																			</span>
-																		)}
 																	</TreeExplorerRow>
 																</li>
 															))}

@@ -1,12 +1,12 @@
 import type {Layer} from 'effect'
 import {Cause, DateTime, Effect, Option, pipe, Queue, Stream, SubscriptionRef} from 'effect'
 
-import {Chat, Prompt, Response} from 'effect/unstable/ai'
+import {Chat, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
 
 import {resolveLanguageModel} from '#lib/language-model.ts'
 import {partsStreamSanitizer} from '#lib/utils.ts'
-import {AgentToolKit} from '#tools/contracts.ts'
+import {WebFetchToolKit, WebSearchToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 import {Agent} from '../service.ts'
 
@@ -17,6 +17,7 @@ export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMes
 				Layer.Success<typeof WebSearchToolKitLayer> | Layer.Success<typeof WebFetchToolKitLayer> | HttpClient.HttpClient
 			>()
 			const chat = yield* Chat.empty
+			const toolkit = Toolkit.merge(WebSearchToolKit, WebFetchToolKit)
 			const status = yield* SubscriptionRef.make<{
 				readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
 				readonly updatedAt: DateTime.Utc
@@ -25,7 +26,7 @@ export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMes
 			return Agent.of({
 				status,
 				streamText: input =>
-					Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>>(
+					Stream.callback(
 						Effect.fnUntraced(function* (queue) {
 							yield* pipe(
 								DateTime.now,
@@ -37,7 +38,7 @@ export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMes
 
 							while (true) {
 								const last = yield* pipe(
-									chat.streamText({prompt, toolkit: AgentToolKit}),
+									chat.streamText({prompt, toolkit}),
 									partsStreamSanitizer,
 									Stream.tap(part => Queue.offer(queue, part)),
 									Stream.provide(resolveLanguageModel({provider: input.provider, model: input.model})),

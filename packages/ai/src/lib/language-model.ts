@@ -37,15 +37,6 @@ export const resolveLanguageModel = pipe(
 			OpenAiCompat.OpenAiClient.layerConfig(providers[input.provider])
 		)
 	),
-	Match.when({provider: 'opencode', model: 'gpt-5-nano'}, input =>
-		Layer.provideMerge(
-			OpenAiLanguageModel.layer({
-				model: input.model,
-				config: {text: {verbosity: 'low'}}
-			}),
-			OpenAiClient.layerConfig(providers[input.provider])
-		)
-	),
 	Match.when({provider: 'openai'}, input =>
 		Layer.provideMerge(
 			OpenAiLanguageModel.layer({model: input.model, config: {text: {verbosity: 'low'}}}),
