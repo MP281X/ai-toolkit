@@ -11,24 +11,106 @@ import {functionalEffectRules} from './rules/functional-effect.ts'
 import {reactUiRules} from './rules/react-ui.ts'
 import {typeIndirectionRules} from './rules/type-indirection.ts'
 
-const ruleRegistry = [
-	...antiIndirectionRules,
-	...typeIndirectionRules,
-	...functionalEffectRules,
-	...controlFlowRules,
-	...reactUiRules
-]
+export const runEffect = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
+	const files = yield* collectFiles(options)
+	const program = ts.createProgram(
+		pipe(
+			files,
+			Array.map(filePath => `${options.cwd}/${filePath}`)
+		),
+		readCompilerOptions(options.cwd)
+	)
+	const checker = program.getTypeChecker()
+	const diagnostics = yield* pipe(
+		files,
+		Array.map(filePath =>
+			Effect.sync(() => {
+				const sourceFile = program.getSourceFile(`${options.cwd}/${filePath}`)
 
-export namespace StrictLinter {
-	export type Mode = string
+				return sourceFile ? analyzeSourceFile(filePath, sourceFile, checker) : []
+			})
+		),
+		Effect.all,
+		Effect.map(Array.flatten),
+		Effect.map(diagnostics =>
+			pipe(
+				diagnostics,
+				Array.sort((left: {filePath: string; line: number; column: number}, right) => {
+					const fileOrder = String.Order(left.filePath, right.filePath)
 
-	export type RunOptions = {
-		mode: Mode
-		cwd: string
-		paths?: string[]
-	}
+					if (fileOrder !== 0) return fileOrder
 
-	export type Diagnostic = {
+					const lineOrder = Order.Number(left.line, right.line)
+
+					return lineOrder === 0 ? Order.Number(left.column, right.column) : lineOrder
+				})
+			)
+		)
+	)
+
+	return {diagnostics, files}
+})
+
+export function analyzeText(filePath: string, sourceText: string) {
+	const sourceFile = ts.createSourceFile(
+		filePath,
+		sourceText,
+		ts.ScriptTarget.Latest,
+		true,
+		pipe(filePath, String.endsWith('x')) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+	)
+
+	return pipe(
+		analyzeSourceFile(filePath, sourceFile),
+		Array.sort((left: {filePath: string; line: number; column: number}, right) => {
+			const fileOrder = String.Order(left.filePath, right.filePath)
+
+			if (fileOrder !== 0) return fileOrder
+
+			const lineOrder = Order.Number(left.line, right.line)
+
+			return lineOrder === 0 ? Order.Number(left.column, right.column) : lineOrder
+		})
+	)
+}
+
+export function analyzeTypedText(filePath: string, sourceText: string) {
+	const sourceFile = ts.createSourceFile(
+		filePath,
+		sourceText,
+		ts.ScriptTarget.Latest,
+		true,
+		pipe(filePath, String.endsWith('x')) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+	)
+	const compilerOptions = readCompilerOptions(process.cwd())
+	const defaultHost = ts.createCompilerHost(compilerOptions)
+
+	const program = ts.createProgram([filePath], compilerOptions, {
+		...defaultHost,
+		getSourceFile(requestedFilePath, languageVersion, onError, shouldCreateNewSourceFile) {
+			return pipe(requestedFilePath, String.replaceAll('\\', '/'), String.replace(/^\.\//, '')) ===
+				pipe(filePath, String.replaceAll('\\', '/'), String.replace(/^\.\//, ''))
+				? sourceFile
+				: defaultHost.getSourceFile(requestedFilePath, languageVersion, onError, shouldCreateNewSourceFile)
+		}
+	})
+
+	return pipe(
+		analyzeSourceFile(filePath, sourceFile, program.getTypeChecker()),
+		Array.sort((left: {filePath: string; line: number; column: number}, right) => {
+			const fileOrder = String.Order(left.filePath, right.filePath)
+
+			if (fileOrder !== 0) return fileOrder
+
+			const lineOrder = Order.Number(left.line, right.line)
+
+			return lineOrder === 0 ? Order.Number(left.column, right.column) : lineOrder
+		})
+	)
+}
+
+export function renderText(
+	diagnostics: {
 		rule: string
 		severity: 'error'
 		message: string
@@ -38,72 +120,48 @@ export namespace StrictLinter {
 		column: number
 		symbol: string
 		text: string
-	}
+	}[]
+) {
+	return Array.isReadonlyArrayEmpty(diagnostics)
+		? ''
+		: `${color('strict-lint v1', 'bold')}\n${diagnostics.length} issues\n\n${pipe(
+				groupDiagnosticsByFile(diagnostics),
+				Array.map(
+					fileDiagnostics =>
+						`${color(fileDiagnostics.filePath, 'file')} ${color(`${fileDiagnostics.diagnostics.length}`, 'dim')}\n${pipe(
+							fileDiagnostics.diagnostics,
+							Array.map(
+								diagnostic =>
+									`- ${color(`L${diagnostic.line}`, 'line')} ${color(`@${diagnostic.symbol}`, 'symbol')} ${color('"', 'quote')}${diagnostic.text}${color('"', 'quote')} ${color(diagnostic.rule, 'rule')} ${color(`-> ${diagnostic.fix}`, 'dim')}`
+							),
+							Array.join('\n')
+						)}`
+				),
+				Array.join('\n\n')
+			)}\n`
+}
 
-	export type Result = {
-		diagnostics: Diagnostic[]
-		files: string[]
-	}
-
-	export function runEffect(options: RunOptions) {
-		return Effect.gen(function* () {
-			const files = yield* collectFiles(options)
-			const program = createProgram(options.cwd, files)
-			const checker = program.getTypeChecker()
-			const diagnostics = yield* pipe(
-				files,
-				Array.map(filePath => analyzeProgramFile(options.cwd, filePath, program, checker)),
-				Effect.all,
-				Effect.map(Array.flatten),
-				Effect.map(sortDiagnostics)
-			)
-
-			return {diagnostics, files}
-		})
-	}
-
-	export function run(options: RunOptions) {
-		return Effect.runPromise(runEffect(options))
-	}
-
-	export function analyzeText(filePath: string, sourceText: string) {
-		return pipe(
-			createSourceFile(filePath, sourceText),
-			sourceFile => analyzeSourceFile(filePath, sourceFile),
-			sortDiagnostics
-		)
-	}
-
-	export function renderText(diagnostics: Diagnostic[]) {
-		return Array.isReadonlyArrayEmpty(diagnostics)
-			? ''
-			: `${color('strict-lint v1', 'bold')}\n${diagnostics.length} issues\n\n${pipe(
-					groupDiagnosticsByFile(diagnostics),
-					Array.map(
-						fileDiagnostics =>
-							`${color(fileDiagnostics.filePath, 'file')} ${color(`${fileDiagnostics.diagnostics.length}`, 'dim')}\n${pipe(
-								fileDiagnostics.diagnostics,
-								Array.map(
-									diagnostic =>
-										`- ${color(`L${diagnostic.line}`, 'line')} ${color(`@${diagnostic.symbol}`, 'symbol')} ${color('"', 'quote')}${diagnostic.text}${color('"', 'quote')} ${color(diagnostic.rule, 'rule')} ${color(`-> ${diagnostic.fix}`, 'dim')}`
-								),
-								Array.join('\n')
-							)}`
-					),
-					Array.join('\n\n')
-				)}\n`
-	}
+export const StrictLinter = {
+	analyzeText,
+	analyzeTypedText,
+	renderText,
+	run: (options: {mode: string; cwd: string; paths?: string[]}) => Effect.runPromise(runEffect(options)),
+	runEffect
 }
 
 const sourceFileExtensions = new Set(['.js', '.jsx', '.ts', '.tsx'])
 const exclusionParts = new Set(['node_modules', 'dist', 'build', 'coverage', '.turbo', '.next', '.output'])
-const gitModes = new Set<StrictLinter.Mode>(['staged', 'unstaged', 'changed', 'full'])
+const gitModes = new Set(['staged', 'unstaged', 'changed', 'full'])
 const fixHints = new Map([
 	['no-access-variable', 'inline access'],
 	['no-accumulator-loop', 'use collection transform'],
+	['no-avoidable-use-effect', 'derive during render or use callback ref'],
+	['cn-classname', 'use cn'],
 	['no-configurable-helper', 'inline policy at boundary'],
 	['no-derived-simple-variable', 'inline derived value'],
 	['no-else', 'return early'],
+	['no-effect-antipatterns', 'use Effect.fnUntraced'],
+	['no-export-namespace', 'export plain values'],
 	['no-imperative-array-transform', 'use collection transform'],
 	['no-interface-for-object-shape', 'use inferred object shape'],
 	['no-length-check', 'use collection predicate'],
@@ -114,6 +172,8 @@ const fixHints = new Map([
 	['no-namespace-props-type', 'infer props'],
 	['no-native-prototype-method', 'use Effect helper'],
 	['no-null-literal', 'use non-null state'],
+	['no-option-from-conversion', 'use direct nullability'],
+	['no-redundant-type-check', 'remove redundant runtime check'],
 	['no-primitive-const', 'inline primitive'],
 	['no-render-prop-element', 'render element directly'],
 	['no-return-type-annotation', 'infer return type'],
@@ -121,6 +181,7 @@ const fixHints = new Map([
 	['no-schema-type-order', 'move type before schema'],
 	['no-single-use-interface', 'inline interface'],
 	['no-single-use-type', 'inline type'],
+	['no-single-use-top-level-variable', 'inline module variable'],
 	['no-single-use-variable', 'inline variable'],
 	['no-tailwind-class-variables', 'inline className'],
 	['no-top-level-mutable-singleton', 'move state into scope'],
@@ -142,8 +203,33 @@ function color(value: string, role: keyof typeof colors) {
 	return process.env['NO_COLOR'] ? value : `${colors[role][0]}${value}${colors[role][1]}`
 }
 
-function groupDiagnosticsByFile(diagnostics: StrictLinter.Diagnostic[]) {
-	const files = new Map<string, StrictLinter.Diagnostic[]>()
+function groupDiagnosticsByFile(
+	diagnostics: {
+		rule: string
+		severity: 'error'
+		message: string
+		fix: string
+		filePath: string
+		line: number
+		column: number
+		symbol: string
+		text: string
+	}[]
+) {
+	const files = new Map<
+		string,
+		{
+			rule: string
+			severity: 'error'
+			message: string
+			fix: string
+			filePath: string
+			line: number
+			column: number
+			symbol: string
+			text: string
+		}[]
+	>()
 
 	pipe(
 		diagnostics,
@@ -158,24 +244,20 @@ function groupDiagnosticsByFile(diagnostics: StrictLinter.Diagnostic[]) {
 		Array.sort(
 			pipe(
 				Order.Number,
-				Order.mapInput(
-					(fileDiagnostics: {diagnostics: StrictLinter.Diagnostic[]}) => -fileDiagnostics.diagnostics.length
-				)
+				Order.mapInput((fileDiagnostics: {diagnostics: readonly unknown[]}) => -fileDiagnostics.diagnostics.length)
 			)
 		)
 	)
 }
 
-function collectFiles(options: StrictLinter.RunOptions) {
-	return Effect.gen(function* () {
-		const selectedPaths = yield* collectSelectedPaths(options)
-		const files = yield* expandPaths(options.cwd, selectedPaths)
+const collectFiles = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
+	const selectedPaths = yield* collectSelectedPaths(options)
+	const files = yield* expandPaths(options.cwd, selectedPaths)
 
-		return pipe(files, Array.map(normalizePath), Array.dedupe, Array.filter(shouldLintFile))
-	})
-}
+	return pipe(files, Array.map(normalizePath), Array.dedupe, Array.filter(shouldLintFile))
+})
 
-function collectSelectedPaths(options: StrictLinter.RunOptions) {
+function collectSelectedPaths(options: {mode: string; cwd: string; paths?: string[]}) {
 	if (options.mode === 'paths') {
 		return Effect.succeed(options.paths ?? [])
 	}
@@ -187,100 +269,94 @@ function collectSelectedPaths(options: StrictLinter.RunOptions) {
 	return runGitDiff(options.cwd, options.mode)
 }
 
-function runGitDiff(cwd: string, mode: StrictLinter.Mode) {
-	return Effect.gen(function* () {
-		const process = Bun.spawn(
-			mode === 'staged'
-				? ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR']
-				: ['git', 'diff', '--name-only', '--diff-filter=ACMR', ...(mode === 'changed' ? ['HEAD'] : [])],
-			{cwd, stdout: 'pipe', stderr: 'pipe'}
-		)
-		const output = yield* Effect.promise(() => new Response(process.stdout).text())
-		const exitCode = yield* Effect.promise(() => process.exited)
+const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
+	const process = Bun.spawn(
+		mode === 'staged'
+			? ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR']
+			: ['git', 'diff', '--name-only', '--diff-filter=ACMR', ...(mode === 'changed' ? ['HEAD'] : [])],
+		{cwd, stdout: 'pipe', stderr: 'pipe'}
+	)
+	const output = yield* Effect.promise(() => new Response(process.stdout).text())
+	const exitCode = yield* Effect.promise(() => process.exited)
 
-		if (exitCode !== 0) {
-			return yield* Effect.fail(
-				new Error(pipe(yield* Effect.promise(() => new Response(process.stderr).text()), String.trim))
+	if (exitCode !== 0) {
+		return yield* Effect.fail(
+			new Error(pipe(yield* Effect.promise(() => new Response(process.stderr).text()), String.trim))
+		)
+	}
+
+	return pipe(output, String.split('\n'), Array.filter(String.isNonEmpty))
+})
+
+const expandPaths = Effect.fnUntraced(function* (cwd: string, selectedPaths: string[]) {
+	const allFiles = yield* collectDirectoryFiles(cwd, selectedPaths)
+
+	return pipe(
+		selectedPaths,
+		Array.map(normalizePath),
+		Array.filter(path => !isExcluded(path)),
+		Array.flatMap(path => {
+			if (path === '.') {
+				return allFiles
+			}
+
+			if (sourceFileExtensions.has(extensionName(path))) {
+				return [path]
+			}
+
+			return pipe(
+				allFiles,
+				Array.filter(filePath => pipe(filePath, String.startsWith(`${path}/`)))
 			)
-		}
+		})
+	)
+})
 
-		return pipe(output, String.split('\n'), Array.filter(String.isNonEmpty))
-	})
-}
+const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selectedPaths: string[]) {
+	const output = yield* runGitString(cwd, [
+		'ls-files',
+		'-co',
+		'--exclude-standard',
+		'--',
+		...(Array.isReadonlyArrayEmpty(selectedPaths) ? ['.'] : pipe(selectedPaths, Array.map(normalizePath)))
+	])
 
-function expandPaths(cwd: string, selectedPaths: string[]) {
-	return Effect.gen(function* () {
-		const allFiles = yield* collectDirectoryFiles(cwd, selectedPaths)
+	return pipe(
+		output,
+		String.split('\n'),
+		Array.filter(String.isNonEmpty),
+		Array.map(normalizePath),
+		Array.filter(path => !isExcluded(path))
+	)
+})
 
-		return pipe(
-			selectedPaths,
-			Array.map(normalizePath),
-			Array.filter(path => !isExcluded(path)),
-			Array.flatMap(path => {
-				if (path === '.') {
-					return allFiles
-				}
+const runGitString = Effect.fnUntraced(function* (cwd: string, args: string[]) {
+	const process = Bun.spawn(['git', ...args], {cwd, stdout: 'pipe', stderr: 'pipe'})
+	const output = yield* Effect.promise(() => new Response(process.stdout).text())
+	const exitCode = yield* Effect.promise(() => process.exited)
 
-				if (sourceFileExtensions.has(extensionName(path))) {
-					return [path]
-				}
-
-				return pipe(
-					allFiles,
-					Array.filter(filePath => pipe(filePath, String.startsWith(`${path}/`)))
-				)
-			})
+	if (exitCode !== 0) {
+		return yield* Effect.fail(
+			new Error(pipe(yield* Effect.promise(() => new Response(process.stderr).text()), String.trim))
 		)
-	})
-}
+	}
 
-function collectDirectoryFiles(cwd: string, selectedPaths: string[]) {
-	return Effect.gen(function* () {
-		const output = yield* runGitString(cwd, [
-			'ls-files',
-			'-co',
-			'--exclude-standard',
-			'--',
-			...(Array.isReadonlyArrayEmpty(selectedPaths) ? ['.'] : pipe(selectedPaths, Array.map(normalizePath)))
-		])
-
-		return pipe(
-			output,
-			String.split('\n'),
-			Array.filter(String.isNonEmpty),
-			Array.map(normalizePath),
-			Array.filter(path => !isExcluded(path))
-		)
-	})
-}
-
-function runGitString(cwd: string, args: string[]) {
-	return Effect.gen(function* () {
-		const process = Bun.spawn(['git', ...args], {cwd, stdout: 'pipe', stderr: 'pipe'})
-		const output = yield* Effect.promise(() => new Response(process.stdout).text())
-		const exitCode = yield* Effect.promise(() => process.exited)
-
-		if (exitCode !== 0) {
-			return yield* Effect.fail(
-				new Error(pipe(yield* Effect.promise(() => new Response(process.stderr).text()), String.trim))
-			)
-		}
-
-		return output
-	})
-}
-
-function analyzeProgramFile(cwd: string, filePath: string, program: ts.Program, checker: ts.TypeChecker) {
-	return Effect.sync(() => {
-		const sourceFile = program.getSourceFile(`${cwd}/${filePath}`)
-
-		return sourceFile ? analyzeSourceFile(filePath, sourceFile, checker) : []
-	})
-}
+	return output
+})
 
 function analyzeSourceFile(filePath: string, sourceFile: ts.SourceFile, checker?: ts.TypeChecker) {
 	const references = collectReferences(sourceFile)
-	const diagnostics = Array.empty<StrictLinter.Diagnostic>()
+	const diagnostics = Array.empty<{
+		rule: string
+		severity: 'error'
+		message: string
+		fix: string
+		filePath: string
+		line: number
+		column: number
+		symbol: string
+		text: string
+	}>()
 	function report(node: ts.Node, rule: string, message: string) {
 		const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
 
@@ -298,7 +374,13 @@ function analyzeSourceFile(filePath: string, sourceFile: ts.SourceFile, checker?
 	}
 	function visit(node: ts.Node) {
 		pipe(
-			ruleRegistry,
+			[
+				...antiIndirectionRules,
+				...typeIndirectionRules,
+				...functionalEffectRules,
+				...controlFlowRules,
+				...reactUiRules
+			],
 			Array.forEach(rule => rule.apply(node, references, report, checker))
 		)
 
@@ -310,22 +392,25 @@ function analyzeSourceFile(filePath: string, sourceFile: ts.SourceFile, checker?
 	return diagnostics
 }
 
-function createProgram(cwd: string, files: string[]) {
-	return ts.createProgram(
+function readCompilerOptions(cwd: string) {
+	const configPath = ts.findConfigFile(cwd, ts.sys.fileExists, 'tsconfig.json')
+
+	if (!configPath) return {}
+
+	const config = ts.readConfigFile(configPath, ts.sys.readFile)
+
+	return ts.parseJsonConfigFileContent(
+		config.config,
+		ts.sys,
 		pipe(
-			files,
-			Array.map(filePath => `${cwd}/${filePath}`)
-		),
-		{
-			allowJs: true,
-			jsx: ts.JsxEmit.ReactJSX,
-			module: ts.ModuleKind.NodeNext,
-			moduleResolution: ts.ModuleResolutionKind.NodeNext,
-			noEmit: true,
-			skipLibCheck: true,
-			target: ts.ScriptTarget.Latest
-		}
-	)
+			configPath,
+			String.lastIndexOf('/'),
+			Option.match({
+				onNone: () => '.',
+				onSome: index => pipe(configPath, String.slice(0, index))
+			})
+		)
+	).options
 }
 
 function nearestSymbol(node: ts.Node) {
@@ -441,38 +526,6 @@ function isExcluded(filePath: string) {
 	)
 }
 
-function sortDiagnostics(diagnostics: StrictLinter.Diagnostic[]) {
-	return pipe(
-		diagnostics,
-		Array.sort(
-			Order.combineAll([
-				pipe(
-					String.Order,
-					Order.mapInput((diagnostic: StrictLinter.Diagnostic) => diagnostic.filePath)
-				),
-				pipe(
-					Order.Number,
-					Order.mapInput((diagnostic: StrictLinter.Diagnostic) => diagnostic.line)
-				),
-				pipe(
-					Order.Number,
-					Order.mapInput((diagnostic: StrictLinter.Diagnostic) => diagnostic.column)
-				)
-			])
-		)
-	)
-}
-
-function createSourceFile(filePath: string, sourceText: string) {
-	return ts.createSourceFile(
-		filePath,
-		sourceText,
-		ts.ScriptTarget.Latest,
-		true,
-		pipe(filePath, String.endsWith('x')) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-	)
-}
-
 function normalizePath(filePath: string) {
 	return pipe(filePath, String.replaceAll('\\', '/'), String.replace(/^\.\//, ''))
 }
@@ -499,14 +552,14 @@ function parseRunOptions(args: string[]) {
 	)
 }
 
-const cli = Effect.gen(function* () {
-	const result = yield* StrictLinter.runEffect(parseRunOptions(pipe(Bun.argv, Array.drop(2))))
+const cli = Effect.fnUntraced(function* () {
+	const result = yield* runEffect(parseRunOptions(pipe(Bun.argv, Array.drop(2))))
 
-	yield* Effect.sync(() => process.stdout.write(StrictLinter.renderText(result.diagnostics)))
+	yield* Effect.sync(() => process.stdout.write(renderText(result.diagnostics)))
 
 	return yield* Effect.sync(() => process.exit(Array.isReadonlyArrayEmpty(result.diagnostics) ? 0 : 1))
 })
 
 if (import.meta.main) {
-	BunRuntime.runMain(pipe(cli, Effect.provide(BunServices.layer)))
+	BunRuntime.runMain(pipe(cli(), Effect.provide(BunServices.layer)))
 }

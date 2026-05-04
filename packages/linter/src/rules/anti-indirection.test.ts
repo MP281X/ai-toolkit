@@ -15,6 +15,10 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('const name = user.profile.name')).toContain('no-access-variable')
 	})
 
+	test('no-access-variable for non-null aliases', () => {
+		expect(rulesFor('const currentEntry = selectedEntry!')).toContain('no-access-variable')
+	})
+
 	test('no-simple-condition-variable', () => {
 		expect(rulesFor("const active = status === 'active'")).toContain('no-simple-condition-variable')
 	})
@@ -51,6 +55,36 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('const saveName = (name: string) => save(name)')).toContain('no-pass-through-function')
 	})
 
+	test('no-signature-wrapper for declarations', () => {
+		expect(rulesFor('function run(options: Options) { return Effect.runPromise(runEffect(options)) }')).toContain(
+			'no-signature-wrapper'
+		)
+	})
+
+	test('allows named predicate wrappers around collection checks', () => {
+		expect(
+			rulesFor('function isAlwaysTruthy(type: Type) { return typeParts(type).every(part => isTruthy(part)) }')
+		).not.toContain('no-signature-wrapper')
+	})
+
+	test('allows named helpers around pipe transforms', () => {
+		expect(rulesFor('function diagnosticText(node: Node) { return pipe(node.text, String.trim) }')).not.toContain(
+			'no-signature-wrapper'
+		)
+	})
+
+	test('allows single-use hook variables in components', () => {
+		expect(rulesFor('function Screen() { const params = Route.useParams(); return params.id }')).not.toContain(
+			'no-single-use-variable'
+		)
+	})
+
+	test('still flags single-use non-hook call variables in components', () => {
+		expect(rulesFor('function Screen() { const params = Route.getParams(); return params.id }')).toContain(
+			'no-single-use-variable'
+		)
+	})
+
 	test('no-call-shape-adapter', () => {
 		expect(rulesFor('const saveName = (name: string) => save({name})')).toContain('no-call-shape-adapter')
 	})
@@ -81,6 +115,12 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('const limit = 3')).toContain('no-primitive-const')
 	})
 
+	test('allows css constants with Tailwind-like tokens', () => {
+		expect(rulesFor('const DIFF_CSS = `:host { --gap-token: flex; border: 1px solid red; }`')).not.toContain(
+			'no-tailwind-class-variables'
+		)
+	})
+
 	test('no-arg-destructuring', () => {
 		expect(rulesFor('function save({name}: {name: string}) { return name }')).toContain('no-arg-destructuring')
 	})
@@ -95,5 +135,33 @@ describe('anti-indirection rules', () => {
 
 	test('no-arrow-for-named', () => {
 		expect(rulesFor('const submit = () => save()')).toContain('no-arrow-for-named')
+	})
+
+	test('no-effect-antipatterns for named function Effect.gen wrappers', () => {
+		expect(rulesFor('function runEffect() { return Effect.gen(function* () { return yield* work }) }')).toContain(
+			'no-effect-antipatterns'
+		)
+	})
+
+	test('no-effect-antipatterns for direct Effect.gen constants', () => {
+		expect(rulesFor('const cli = Effect.gen(function* () { return yield* work })')).toContain('no-effect-antipatterns')
+	})
+
+	test('allows top-level variables used more than once', () => {
+		expect(
+			rulesFor('const compilerOptions = {strict: true}; ts.createProgram(files, compilerOptions); use(compilerOptions)')
+		).not.toContain('no-single-use-top-level-variable')
+	})
+
+	test('allows top-level arrays that are not compositions', () => {
+		expect(rulesFor('const sourceFileExtensions = [".ts", ".tsx"]; use(sourceFileExtensions)')).not.toContain(
+			'no-single-use-top-level-variable'
+		)
+	})
+
+	test('no-single-use-top-level-variable', () => {
+		expect(rulesFor('const ruleRegistry = [...a, ...b, ...c]; run(ruleRegistry)')).toContain(
+			'no-single-use-top-level-variable'
+		)
 	})
 })

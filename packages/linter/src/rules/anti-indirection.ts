@@ -1,4 +1,4 @@
-import {Array, pipe} from 'effect'
+import {Array, pipe, String} from 'effect'
 
 import ts from 'typescript'
 
@@ -133,7 +133,11 @@ function analyzeVariableDeclaration(
 	}
 
 	if (
-		!(isSpecificVariableIndirection(node.initializer) || isTopLevelVariableDeclaration(node)) &&
+		!(
+			isSpecificVariableIndirection(node.initializer) ||
+			isTopLevelVariableDeclaration(node) ||
+			isHookCallVariable(node)
+		) &&
 		references.get(node.name.text) === 1
 	) {
 		report(
@@ -156,6 +160,33 @@ function analyzeVariableDeclaration(
 			node.name,
 			'no-access-variable',
 			'Do not copy a value into a same-level alias. Keep using the original name so the code stays direct.'
+		)
+	}
+
+	if (
+		ts.isNonNullExpression(node.initializer) &&
+		(ts.isIdentifier(node.initializer.expression) || isAccessExpression(node.initializer.expression))
+	) {
+		report(
+			node.name,
+			'no-access-variable',
+			'Do not copy a value into a non-null alias. Keep using the original expression so the assertion stays visible at the use site.'
+		)
+	}
+
+	if (ts.isCallExpression(node.initializer) && isEffectGenCall(node.initializer)) {
+		report(
+			node.name,
+			'no-effect-antipatterns',
+			'Do not assign `Effect.gen(...)` directly. Rewrite it as `Effect.fnUntraced(function* (...) { ... })` so the effect boundary is explicit.'
+		)
+	}
+
+	if (isTopLevelSingleUseArrayComposition(node, references)) {
+		report(
+			node.name,
+			'no-single-use-top-level-variable',
+			'This top-level variable is used once. Inline it at the usage site so module scope only holds shared values.'
 		)
 	}
 
@@ -204,6 +235,51 @@ function isTopLevelVariableDeclaration(node: ts.VariableDeclaration) {
 		ts.isVariableStatement(node.parent.parent) &&
 		ts.isSourceFile(node.parent.parent.parent)
 	)
+}
+
+function isTopLevelSingleUseArrayComposition(node: ts.VariableDeclaration, references: Map<string, number>) {
+	return (
+		isTopLevelVariableDeclaration(node) &&
+		ts.isIdentifier(node.name) &&
+		references.get(node.name.text) === 1 &&
+		!!node.initializer &&
+		ts.isArrayLiteralExpression(node.initializer) &&
+		node.initializer.elements.some(ts.isSpreadElement)
+	)
+}
+
+function isHookCallVariable(node: ts.VariableDeclaration) {
+	return (
+		!!node.initializer &&
+		ts.isCallExpression(node.initializer) &&
+		isHookCall(node.initializer) &&
+		isInsideHookScope(node)
+	)
+}
+
+function isHookCall(node: ts.CallExpression) {
+	return (
+		(ts.isIdentifier(node.expression) && pipe(node.expression.text, String.startsWith('use'))) ||
+		(ts.isPropertyAccessExpression(node.expression) && pipe(node.expression.name.text, String.startsWith('use')))
+	)
+}
+
+function isInsideHookScope(node: ts.Node) {
+	return !!ts.findAncestor(node, ancestor => isComponentOrHookFunction(ancestor))
+}
+
+function isComponentOrHookFunction(node: ts.Node) {
+	return (
+		(ts.isFunctionDeclaration(node) && !!node.name && isComponentOrHookName(node.name.text)) ||
+		((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+			ts.isVariableDeclaration(node.parent) &&
+			ts.isIdentifier(node.parent.name) &&
+			isComponentOrHookName(node.parent.name.text))
+	)
+}
+
+function isComponentOrHookName(name: string) {
+	return pipe(name, String.startsWith('use')) || /^[A-Z]/.test(name)
 }
 
 function analyzeFunctionLike(
@@ -286,13 +362,17 @@ function analyzeFunctionLike(
 		return
 	}
 
-	if (isNamedArrowOrFunctionExpression(node) && ts.isCallExpression(expression)) {
+	if (ts.isCallExpression(expression) && isEffectGenCall(expression)) {
+		report(
+			name,
+			'no-effect-antipatterns',
+			'Do not wrap `Effect.gen(...)` in a function. Rewrite argument-taking effects as `Effect.fnUntraced(function* (value) { ... })`.'
+		)
+	}
+
+	if ((isNamedArrowOrFunctionExpression(node) || ts.isFunctionDeclaration(node)) && ts.isCallExpression(expression)) {
 		if (isEffectGenCall(expression)) {
-			report(
-				name,
-				'no-effect-antipatterns',
-				'Do not wrap `Effect.gen(...)` in a function. Rewrite argument-taking effects as `Effect.fnUntraced(function* (value) { ... })`.'
-			)
+			return
 		}
 
 		if (isPassThroughCall(node, expression)) {
@@ -311,11 +391,14 @@ function analyzeFunctionLike(
 			)
 		}
 
-		report(
-			name,
-			'no-signature-wrapper',
-			'This wrapper only forwards into another call. Call the target directly with the final shape.'
-		)
+		if (isLowValueSignatureWrapper(node, expression)) {
+			report(
+				name,
+				'no-signature-wrapper',
+				'This wrapper only forwards into another call. Call the target directly with the final shape.'
+			)
+		}
+
 		return
 	}
 
@@ -335,6 +418,41 @@ function analyzeFunctionLike(
 			'Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.'
 		)
 	}
+}
+
+function isLowValueSignatureWrapper(node: ts.FunctionLikeDeclaration, expression: ts.CallExpression) {
+	return (
+		!isPipeCall(expression) &&
+		Array.isReadonlyArrayNonEmpty(expression.arguments) &&
+		pipe(
+			expression.arguments,
+			Array.every(argument => !containsFunctionOrObjectLiteral(argument) && containsParameterReference(argument, node))
+		)
+	)
+}
+
+function isPipeCall(expression: ts.CallExpression) {
+	return ts.isIdentifier(expression.expression) && expression.expression.text === 'pipe'
+}
+
+function containsFunctionOrObjectLiteral(node: ts.Node): boolean {
+	return (
+		ts.isArrowFunction(node) ||
+		ts.isFunctionExpression(node) ||
+		ts.isObjectLiteralExpression(node) ||
+		!!ts.forEachChild(node, child => (containsFunctionOrObjectLiteral(child) ? true : undefined))
+	)
+}
+
+function containsParameterReference(node: ts.Node, parent: ts.FunctionLikeDeclaration): boolean {
+	return (
+		(ts.isIdentifier(node) &&
+			pipe(
+				parent.parameters,
+				Array.some(parameter => ts.isIdentifier(parameter.name) && parameter.name.text === node.text)
+			)) ||
+		!!ts.forEachChild(node, child => (containsParameterReference(child, parent) ? true : undefined))
+	)
 }
 
 export function isSimpleCondition(node: ts.Expression) {

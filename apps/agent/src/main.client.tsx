@@ -1,4 +1,4 @@
-import * as Fallbacks from '@ai-toolkit/components/fallbacks'
+import {Error, Loading, NotFound} from '@ai-toolkit/components/fallbacks'
 import {createRouter, RouterProvider} from '@tanstack/react-router'
 import {StrictMode} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -9,9 +9,9 @@ const router = createRouter({
 	routeTree,
 	defaultPreload: 'intent',
 	scrollRestoration: true,
-	defaultErrorComponent: Fallbacks.Error,
-	defaultPendingComponent: Fallbacks.Loading,
-	defaultNotFoundComponent: Fallbacks.NotFound
+	defaultErrorComponent: Error,
+	defaultPendingComponent: Loading,
+	defaultNotFoundComponent: NotFound
 })
 
 declare module '@tanstack/react-router' {
@@ -21,7 +21,6 @@ declare module '@tanstack/react-router' {
 	}
 }
 
-// biome-ignore lint/style/noNonNullAssertion: dom root
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

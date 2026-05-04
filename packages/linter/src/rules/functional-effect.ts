@@ -30,6 +30,18 @@ function analyzeCallExpression(
 ) {
 	if (ts.isPropertyAccessExpression(node.expression)) {
 		if (
+			ts.isIdentifier(node.expression.expression) &&
+			node.expression.expression.text === 'Option' &&
+			node.expression.name.text.startsWith('from')
+		) {
+			report(
+				node.expression.name,
+				'no-option-from-conversion',
+				'Do not wrap ordinary nullable values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
+			)
+		}
+
+		if (
 			mutationPrototypeMethods.has(node.expression.name.text) &&
 			!(ts.isIdentifier(node.expression.expression) && effectModuleNames.has(node.expression.expression.text)) &&
 			isNativePrototypeTarget(node.expression.expression, checker)

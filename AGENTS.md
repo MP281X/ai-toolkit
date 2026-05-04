@@ -10,7 +10,7 @@ Monorepo with `@ai-toolkit/*` workspace packages under `packages/*`.
 
 ## Research
 
-- Search with the explore agent — never use manual grep or glob
+- Prefer searching with the explore agent
 - Verify against cloned sources in `.opencode/resources/*` — never answer from memory or training data
 - Never search in `node_modules`
 

@@ -1,11 +1,12 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Match, Option, Predicate, pipe, Stream} from 'effect'
+import {Array, Effect, Match, Option, Predicate, pipe, Stream, String} from 'effect'
 
 import {FileIcon} from '@ai-toolkit/components/icons'
 import {PatchReview} from '@ai-toolkit/components/render/diff'
 import {TreeExplorer, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
+import {cn} from '@ai-toolkit/components/utils'
 import type {GitDiff} from '@ai-toolkit/git/schema'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -84,34 +85,34 @@ const reviewPanelAtom = Atom.family((cwd: string) =>
 const moveReviewSelectionAtom = Atom.fn(
 	Effect.fnUntraced(function* (input: {cwd: string; offset: number}, get: Atom.FnContext) {
 		const {entries, selectedEntry} = yield* get.result(reviewPanelAtom(input.cwd))
-		const currentEntry = pipe(Option.fromNullishOr(selectedEntry), Option.getOrThrow)
 		const nextIndex = Math.max(
 			0,
 			Math.min(
 				pipe(
 					entries,
 					Array.findFirstIndex(
-						entry => entry.scope === currentEntry.scope && entry.diff.filePath === currentEntry.diff.filePath
+						entry => entry.scope === selectedEntry!.scope && entry.diff.filePath === selectedEntry!.diff.filePath
 					),
 					Option.getOrElse(() => 0)
 				) + input.offset,
 				entries.length - 1
 			)
 		)
-		const nextEntry = pipe(Option.fromNullishOr(entries[nextIndex]), Option.getOrThrow)
 
-		get.set(reviewSelectionAtom(input.cwd), {filePath: nextEntry.diff.filePath, scope: nextEntry.scope})
+		get.set(reviewSelectionAtom(input.cwd), {
+			filePath: entries[nextIndex]!.diff.filePath,
+			scope: entries[nextIndex]!.scope
+		})
 	})
 )
 
 const toggleStageReviewEntryAtom = Atom.fn(
 	Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
 		const {selectedEntry} = yield* get.result(reviewPanelAtom(cwd))
-		const currentEntry = pipe(Option.fromNullishOr(selectedEntry), Option.getOrThrow)
 
-		if (currentEntry.scope === 'head-to-staged') {
+		if (selectedEntry!.scope === 'head-to-staged') {
 			yield* get.setResult(RpcClient.mutation('review.unstageFile'), {
-				payload: {cwd, filePath: currentEntry.diff.filePath}
+				payload: {cwd, filePath: selectedEntry!.diff.filePath}
 			})
 			get.refresh(changesAtom(cwd))
 			get.refresh(stagedAtom(cwd))
@@ -119,7 +120,7 @@ const toggleStageReviewEntryAtom = Atom.fn(
 		}
 
 		yield* get.setResult(RpcClient.mutation('review.stageFile'), {
-			payload: {cwd, filePath: currentEntry.diff.filePath}
+			payload: {cwd, filePath: selectedEntry!.diff.filePath}
 		})
 
 		get.refresh(changesAtom(cwd))
@@ -130,15 +131,14 @@ const toggleStageReviewEntryAtom = Atom.fn(
 const discardReviewEntryAtom = Atom.fn(
 	Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
 		const {selectedEntry} = yield* get.result(reviewPanelAtom(cwd))
-		const currentEntry = pipe(Option.fromNullishOr(selectedEntry), Option.getOrThrow)
 
-		if (currentEntry.scope === 'head-to-staged') {
+		if (selectedEntry!.scope === 'head-to-staged') {
 			yield* get.setResult(RpcClient.mutation('review.unstageFile'), {
-				payload: {cwd, filePath: currentEntry.diff.filePath}
+				payload: {cwd, filePath: selectedEntry!.diff.filePath}
 			})
 		}
 		yield* get.setResult(RpcClient.mutation('review.discardFile'), {
-			payload: {cwd, filePath: currentEntry.diff.filePath}
+			payload: {cwd, filePath: selectedEntry!.diff.filePath}
 		})
 
 		get.refresh(changesAtom(cwd))
@@ -148,15 +148,15 @@ const discardReviewEntryAtom = Atom.fn(
 
 function DiffPage() {
 	const params = Route.useParams()
-	const activeWorktree = pipe(
-		Option.fromNullishOr(useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree),
-		Option.getOrThrow
-	)
+	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
 
-	return <ReviewViewPanel key={activeWorktree.root} cwd={activeWorktree.root} />
+	return <ReviewViewPanel key={activeHome.value.activeWorktree!.root} cwd={activeHome.value.activeWorktree!.root} />
 }
 
 function ReviewViewPanel(input: {cwd: string}) {
+	const [comments, setComments] = useState<
+		readonly (NonNullable<Parameters<typeof PatchReview>[0]['comments']>[number] & {scope: string})[]
+	>(Array.empty())
 	const [shortcutsOpen, setShortcutsOpen] = useState(false)
 	const {changesDiffs, entries, selectedEntry, stagedDiffs} = useAtomSuspense(reviewPanelAtom(input.cwd)).value
 	const setReviewSelection = useAtomSet(reviewSelectionAtom(input.cwd))
@@ -234,19 +234,85 @@ function ReviewViewPanel(input: {cwd: string}) {
 				</ResizablePanel>
 				<ResizableHandle />
 				<ResizablePanel defaultSize="76%" minSize="36%">
-					<div className="flex h-full min-w-0 flex-col overflow-hidden">
-						<div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+					<div className="grid h-full min-w-0 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
+						<div className="relative min-h-0 min-w-0 overflow-hidden bg-background">
 							{!selectedEntry && (
 								<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
 									No changed files.
 								</div>
 							)}
 							{selectedEntry && (
-								<div key={`${selectedEntry.scope}\n${selectedEntry.diff.filePath}`} className="h-full min-h-0">
-									<PatchReview filePath={selectedEntry.diff.filePath} patch={selectedEntry.diff.patch} />
+								<div key={`${selectedEntry.scope}\n${selectedEntry.diff.filePath}`} className="h-full min-h-0 min-w-0">
+									<PatchReview
+										filePath={selectedEntry.diff.filePath}
+										patch={selectedEntry.diff.patch}
+										comments={pipe(
+											comments,
+											Array.filter(
+												comment =>
+													comment.scope === selectedEntry.scope && comment.filePath === selectedEntry.diff.filePath
+											)
+										)}
+										onCreateComment={comment =>
+											setComments(current =>
+												Array.append(current, {
+													...comment,
+													id: crypto.randomUUID(),
+													scope: selectedEntry.scope,
+													body: ''
+												})
+											)
+										}
+										onSaveComment={(comment, body) => {
+											const nextBody = pipe(body, String.trim)
+											setComments(current =>
+												String.isEmpty(nextBody)
+													? pipe(
+															current,
+															Array.filter(currentComment => currentComment.id !== comment.id)
+														)
+													: pipe(
+															current,
+															Array.map(currentComment =>
+																currentComment.id === comment.id ? {...currentComment, body: nextBody} : currentComment
+															)
+														)
+											)
+										}}
+										onDeleteComment={comment =>
+											setComments(current =>
+												pipe(
+													current,
+													Array.filter(currentComment => currentComment.id !== comment.id)
+												)
+											)
+										}
+									/>
 								</div>
 							)}
 						</div>
+						<aside className="flex min-h-0 flex-col border-l bg-card/40">
+							<div className="border-b px-3 py-2 font-medium text-xs">Comment queue</div>
+							{Array.isReadonlyArrayEmpty(comments) ? (
+								<div className="flex flex-1 items-center justify-center px-3 text-center text-muted-foreground text-xs">
+									No comments yet.
+								</div>
+							) : (
+								<div className="grid content-start gap-2 overflow-y-auto p-2">
+									{Array.map(comments, comment => (
+										<div key={comment.id} className="grid gap-1 border bg-background p-2 text-xs">
+											<div className="min-w-0 truncate font-medium">{comment.filePath}</div>
+											<div className="text-muted-foreground">
+												{comment.side ? `${comment.side}:${comment.lineNumber}` : `file:${comment.lineNumber}`}
+											</div>
+											<div className="whitespace-pre-wrap text-foreground">
+												{String.isEmpty(comment.body) ? 'Draft comment' : comment.body}
+											</div>
+										</div>
+									))}
+								</div>
+							)}
+						</aside>
 					</div>
 				</ResizablePanel>
 			</ResizablePanelGroup>
@@ -271,18 +337,25 @@ function DiffList(input: {
 					</li>
 				) : (
 					Array.map(input.diffs, diff => {
-						const selected =
-							Predicate.isNotUndefined(input.selectedEntry) &&
-							input.selectedEntry.scope === input.scope &&
-							input.selectedEntry.diff.filePath === diff.filePath
-
 						return (
 							<li key={diff.filePath} className="w-full min-w-0">
 								<button
 									type="button"
-									aria-current={selected ? 'page' : undefined}
+									aria-current={
+										Predicate.isNotUndefined(input.selectedEntry) &&
+										input.selectedEntry.scope === input.scope &&
+										input.selectedEntry.diff.filePath === diff.filePath
+											? 'page'
+											: undefined
+									}
 									onClick={() => input.selectReviewEntry({filePath: diff.filePath, scope: input.scope})}
-									className={`grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground ${selected ? 'bg-primary/15 text-primary' : ''}`}
+									className={cn(
+										'grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground',
+										Predicate.isNotUndefined(input.selectedEntry) &&
+											input.selectedEntry.scope === input.scope &&
+											input.selectedEntry.diff.filePath === diff.filePath &&
+											'bg-primary/15 text-primary'
+									)}
 								>
 									{pipe(
 										Match.value(diff.status),
