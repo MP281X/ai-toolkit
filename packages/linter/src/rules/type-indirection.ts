@@ -11,7 +11,15 @@ export const typeIndirectionRules = [
 			report: (node: ts.Node, rule: string, message: string) => void,
 			checker?: ts.TypeChecker
 		) {
-			if (isInsideStrictLinterNamespace(node) || isInsideDeclareModule(node)) {
+			if (ts.isModuleDeclaration(node) && hasExportModifier(node) && !hasDeclareModifier(node)) {
+				report(
+					node.name,
+					'no-export-namespace',
+					'Do not use `export namespace`. Export plain values and types instead; only `export declare namespace` is allowed for external declarations.'
+				)
+			}
+
+			if (isInsideDeclareModule(node)) {
 				return
 			}
 
@@ -88,13 +96,6 @@ function isDerivedComponentPropsType(node: ts.TypeReferenceNode) {
 		(ts.isQualifiedName(node.typeName) &&
 			ts.isIdentifier(node.typeName.right) &&
 			node.typeName.right.text === 'ComponentProps')
-	)
-}
-
-function isInsideStrictLinterNamespace(node: ts.Node) {
-	return !!ts.findAncestor(
-		node,
-		element => ts.isModuleDeclaration(element) && ts.isIdentifier(element.name) && element.name.text === 'StrictLinter'
 	)
 }
 
@@ -307,6 +308,13 @@ function hasDeclareModifier(node: ts.ModuleDeclaration) {
 	return pipe(
 		node.modifiers ?? [],
 		Array.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)
+	)
+}
+
+function hasExportModifier(node: ts.ModuleDeclaration) {
+	return pipe(
+		node.modifiers ?? [],
+		Array.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
 	)
 }
 

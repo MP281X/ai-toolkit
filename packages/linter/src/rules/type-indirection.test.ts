@@ -81,6 +81,22 @@ describe('type-indirection rules', () => {
 		)
 	})
 
+	test('no-export-namespace', () => {
+		expect(rulesFor('export namespace StrictLinter { export type Mode = string }')).toContain('no-export-namespace')
+	})
+
+	test('allows export declare namespace', () => {
+		expect(rulesFor('export declare namespace External { export type Value = string }')).not.toContain(
+			'no-export-namespace'
+		)
+	})
+
+	test('lints types inside export declare namespace', () => {
+		expect(rulesFor('export declare namespace StrictLinter { export type Mode = string }')).toContain(
+			'no-single-use-type'
+		)
+	})
+
 	test('no-derived-component-props-type', () => {
 		expect(rulesFor('type ButtonProps = Pick<ComponentProps<typeof Button>, "id">')).toContain(
 			'no-derived-component-props-type'

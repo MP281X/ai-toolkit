@@ -33,6 +33,16 @@ describe('functional-effect rules', () => {
 		expect(rulesFor('promise.then(value => save(value))')).toContain('no-then')
 	})
 
+	test('no-option-from-conversion', () => {
+		expect(rulesFor('const value = Option.fromNullishOr(input)')).toContain('no-option-from-conversion')
+	})
+
+	test('allows Option usage from Effect module results', () => {
+		expect(rulesFor('const value = pipe(items, Array.head, Option.getOrThrow)')).not.toContain(
+			'no-option-from-conversion'
+		)
+	})
+
 	test('no-mutation', () => {
 		expect(rulesFor('value += 1')).toContain('no-mutation')
 	})

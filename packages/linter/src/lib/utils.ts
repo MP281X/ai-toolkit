@@ -141,10 +141,7 @@ export function isUppercaseIdentifier(node: ts.Node) {
 	return (
 		ts.isIdentifier(node) &&
 		pipe(node.text, String.length) > 0 &&
-		pipe(
-			Option.fromUndefinedOr(node.text[0]),
-			Option.exists(character => character === pipe(character, String.toUpperCase))
-		)
+		pipe(node.text, String.slice(0, 1)) === pipe(node.text, String.slice(0, 1), String.toUpperCase)
 	)
 }
 
@@ -178,15 +175,13 @@ export function isPassThroughCall(node: ts.FunctionLikeDeclaration, expression: 
 		node.parameters.length === expression.arguments.length &&
 		pipe(
 			expression.arguments,
-			Array.every((argument, index) =>
-				pipe(
-					Option.fromUndefinedOr(node.parameters[index]),
-					Option.exists(
-						parameter =>
-							ts.isIdentifier(argument) && ts.isIdentifier(parameter.name) && argument.text === parameter.name.text
-					)
-				)
-			)
+			Array.every((argument, index) => {
+				return node.parameters[index]
+					? ts.isIdentifier(argument) &&
+							ts.isIdentifier(node.parameters[index].name) &&
+							argument.text === node.parameters[index].name.text
+					: false
+			})
 		)
 	)
 }
