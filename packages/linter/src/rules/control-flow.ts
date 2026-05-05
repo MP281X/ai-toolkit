@@ -61,11 +61,11 @@ export const controlFlowRules = [
 				)
 			}
 
-			if (ts.isClassDeclaration(node) && !isAllowedEffectClass(node)) {
+			if (ts.isClassDeclaration(node) && !node.heritageClauses) {
 				report(
 					node.name ?? node,
 					'no-class',
-					'Do not use classes outside Effect service and Schema declarations. Prefer values, functions, and inferred data.'
+					'Do not create standalone classes. Classes are only allowed when extending an external class contract.'
 				)
 			}
 
@@ -347,31 +347,6 @@ function isAsyncFunctionLike(node: ts.Node) {
 
 function isTopLevelAwait(node: ts.Node) {
 	return ts.isAwaitExpression(node) && !ts.findAncestor(node, isAsyncFunctionLike)
-}
-
-function isAllowedEffectClass(node: ts.ClassDeclaration) {
-	return (
-		!!node.heritageClauses &&
-		Array.some(node.heritageClauses, heritage =>
-			Array.some(heritage.types, type => isEffectClassHeritageExpression(type.expression))
-		)
-	)
-}
-
-function isEffectClassHeritageExpression(node: ts.Expression): boolean {
-	if (ts.isCallExpression(node)) return isEffectClassHeritageExpression(node.expression)
-
-	if (ts.isPropertyAccessExpression(node)) {
-		return (
-			['Class', 'Service', 'TaggedClass', 'TaggedErrorClass'].includes(node.name.text) ||
-			(node.name.text === 'make' &&
-				ts.isIdentifier(node.expression) &&
-				String.endsWith('Group')(node.expression.text)) ||
-			isEffectClassHeritageExpression(node.expression)
-		)
-	}
-
-	return false
 }
 
 const restrictedGlobalMessages = new Map([

@@ -44,18 +44,16 @@ describe('control-flow rules', () => {
 		expect(rulesFor('test("run", async () => { await work() })', 'sample.test.ts')).not.toContain('no-async-await')
 	})
 
-	test('no-class outside Effect service and Schema declarations', () => {
+	test('no-class for standalone classes', () => {
 		expect(rulesFor('class User { constructor(readonly name: string) {} }')).toContain('no-class')
 	})
 
-	test('allows Effect service classes', () => {
+	test('allows classes that extend external contracts', () => {
 		expect(rulesFor("class Git extends Context.Service<Git>()('Git', {}) {}")).not.toContain('no-class')
-	})
-
-	test('allows Schema classes', () => {
 		expect(rulesFor("class User extends Schema.Class<User>('User')({name: Schema.String}) {}")).not.toContain(
 			'no-class'
 		)
+		expect(rulesFor('class TokenNode extends TextNode {}')).not.toContain('no-class')
 	})
 
 	test('no-restricted-global', () => {

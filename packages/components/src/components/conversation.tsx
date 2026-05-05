@@ -1,3 +1,5 @@
+import {Array} from 'effect'
+
 import {LegendList} from '@legendapp/list/react'
 
 import {cn} from '#lib/utils.ts'
@@ -13,7 +15,7 @@ export function Conversation<T extends {id: unknown}>(props: {
 			keyExtractor={item => `${item.id}`}
 			renderItem={input => props.children(input.item, input.index)}
 			estimatedItemSize={240}
-			initialScrollIndex={props.items.length - 1}
+			initialScrollIndex={Array.length(props.items) - 1}
 			alignItemsAtEnd
 			maintainScrollAtEnd
 			maintainVisibleContentPosition

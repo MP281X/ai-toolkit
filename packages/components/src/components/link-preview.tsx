@@ -1,4 +1,4 @@
-import {Match, Option, pipe, String} from 'effect'
+import {Array, Match, Option, pipe, String} from 'effect'
 
 import {cn} from '#lib/utils.ts'
 
@@ -14,24 +14,32 @@ export function Favicon(props: {url: string}) {
 
 export function LinkPreview(props: {url: URL; className?: string}) {
 	return pipe(
-		Match.value(pipe(props.url.hostname, String.replace('www.', ''))),
+		Match.value(String.replace('www.', '')(props.url.hostname)),
 		Match.when(Match.is('youtube.com', 'youtu.be'), () => {
-			const youtubeId = pipe(
-				Option.fromNullishOr(props.url.searchParams.get('v')),
-				Option.getOrElse(() =>
-					pipe(
-						props.url.pathname,
-						String.match(/\/shorts\/([^/?]+)/),
-						Option.flatMap(match => Option.fromNullishOr(match[1])),
-						Option.getOrUndefined
-					)
+			const youtubeId = props.url.searchParams.get('v')
+			if (youtubeId) {
+				return (
+					<iframe
+						src={`https://www.youtube.com/embed/${youtubeId}`}
+						title="YouTube video"
+						className={cn('aspect-video w-full border-0', props.className)}
+						allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+						allowFullScreen
+					/>
 				)
+			}
+
+			const shortsId = pipe(
+				props.url.pathname,
+				String.match(RegExp('/shorts/([^/?]+)')),
+				Option.flatMap(Array.get(1)),
+				Option.getOrUndefined
 			)
 
 			return (
-				youtubeId && (
+				shortsId && (
 					<iframe
-						src={`https://www.youtube.com/embed/${youtubeId}`}
+						src={`https://www.youtube.com/embed/${shortsId}`}
 						title="YouTube video"
 						className={cn('aspect-video w-full border-0', props.className)}
 						allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -43,8 +51,8 @@ export function LinkPreview(props: {url: URL; className?: string}) {
 		Match.when(Match.is('x.com', 'twitter.com'), () => {
 			const tweetId = pipe(
 				props.url.pathname,
-				String.match(/\/status\/(\d+)/),
-				Option.flatMap(match => Option.fromNullishOr(match[1])),
+				String.match(RegExp('/status/(\\d+)')),
+				Option.flatMap(Array.get(1)),
 				Option.getOrUndefined
 			)
 
@@ -61,8 +69,8 @@ export function LinkPreview(props: {url: URL; className?: string}) {
 		Match.when('tiktok.com', () => {
 			const tiktokId = pipe(
 				props.url.pathname,
-				String.match(/\/video\/(\d+)/),
-				Option.flatMap(match => Option.fromNullishOr(match[1])),
+				String.match(RegExp('/video/(\\d+)')),
+				Option.flatMap(Array.get(1)),
 				Option.getOrUndefined
 			)
 

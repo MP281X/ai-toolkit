@@ -29,7 +29,6 @@ export function TreeExplorerRow(props: {
 		props.selected &&
 			'bg-muted text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))] hover:bg-muted hover:text-foreground'
 	)
-	const style = {paddingLeft: 12, paddingRight: 8}
 	const label = (
 		<span className="flex min-w-0 flex-1 items-center gap-1.5">
 			{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
@@ -39,7 +38,11 @@ export function TreeExplorerRow(props: {
 
 	if (props.onClick && props.actions) {
 		return (
-			<div aria-current={props.selected ? 'page' : undefined} className={className} style={style}>
+			<div
+				aria-current={props.selected ? 'page' : undefined}
+				className={className}
+				style={{paddingLeft: 12, paddingRight: 8}}
+			>
 				<button
 					type="button"
 					onClick={props.onClick}
@@ -59,7 +62,7 @@ export function TreeExplorerRow(props: {
 				aria-current={props.selected ? 'page' : undefined}
 				onClick={props.onClick}
 				className={className}
-				style={style}
+				style={{paddingLeft: 12, paddingRight: 8}}
 			>
 				{label}
 				{props.actions}
@@ -68,7 +71,7 @@ export function TreeExplorerRow(props: {
 	}
 
 	return (
-		<div className={className} style={style}>
+		<div className={className} style={{paddingLeft: 12, paddingRight: 8}}>
 			{label}
 			{props.actions}
 		</div>

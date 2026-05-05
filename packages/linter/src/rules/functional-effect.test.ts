@@ -47,6 +47,9 @@ describe('functional-effect rules', () => {
 	test('no-option-from-conversion', () => {
 		expect(rulesFor('const value = Option.fromNullishOr(input)')).toContain('no-option-from-conversion')
 		expect(rulesFor('const value = pipe(input, Option.fromUndefinedOr)')).toContain('no-option-from-conversion')
+		expect(rulesFor('const value = pipe(items, Array.head, Option.getOrThrow)')).not.toContain(
+			'no-option-from-conversion'
+		)
 	})
 
 	test('allows Option usage from Effect module results', () => {
@@ -79,6 +82,7 @@ describe('functional-effect rules', () => {
 
 	test('no-useless-pipe', () => {
 		expect(rulesFor('const names = pipe(files, Array.map(file => file.name))')).toContain('no-useless-pipe')
+		expect(rulesFor('const text = pipe(value, String.trim)')).toContain('no-useless-pipe')
 		expect(rulesFor('const tsx = pipe(filePath, String.endsWith("x"))')).toContain('no-useless-pipe')
 		expect(
 			rulesFor('const names = pipe(files, Array.filter(file => file.enabled), Array.map(file => file.name))')

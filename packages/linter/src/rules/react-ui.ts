@@ -140,7 +140,11 @@ function moduleNamespaceName(moduleSpecifier: string) {
 		String.split('/'),
 		Array.last,
 		Option.getOrElse(() => moduleSpecifier),
-		String.replace(RegExp('[^A-Za-z0-9_$]', 'g'), '')
+		basename => (String.startsWith('@effect/ai-')(moduleSpecifier) ? String.replace('ai-', '')(basename) : basename),
+		String.split(RegExp('[^A-Za-z0-9_$]+')),
+		Array.filter(String.isNonEmpty),
+		Array.map(segment => (segment === 'openai' ? 'OpenAi' : String.capitalize(segment))),
+		Array.join('')
 	)
 }
 

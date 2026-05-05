@@ -19,7 +19,7 @@ export const DevTools = {
 		}
 
 		function move(delta: number) {
-			select((value + delta + props.routes.length) % props.routes.length)
+			select((value + delta + Array.length(props.routes)) % Array.length(props.routes))
 		}
 
 		useHotkey('ArrowLeft', () => move(-1))
@@ -60,7 +60,7 @@ export const DevTools = {
 		const [value, setValue] = useState(0)
 
 		function move(delta: number) {
-			setValue(prev => (prev + delta + children.length) % children.length)
+			setValue(prev => (prev + delta + Array.length(children)) % Array.length(children))
 		}
 
 		useHotkey('ArrowLeft', () => move(-1))
