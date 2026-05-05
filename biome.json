@@ -6,6 +6,7 @@
 		"rules": {
 			"complexity": {
 				"useLiteralKeys": "off",
+				"useRegexLiterals": "off",
 				"useArrowFunction": "off",
 				"noUselessUndefined": "error",
 				"noUselessStringConcat": "error",

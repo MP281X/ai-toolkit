@@ -72,9 +72,9 @@ export const mutationPrototypeMethods = new Set([
 	'splice',
 	'unshift'
 ])
-export const reactCompilerFunctions = new Set(['forwardRef', 'memo', 'useCallback', 'useMemo'])
-export const tailwindTokenPattern =
-	/(?:^|\s)(?:flex|grid|block|inline|hidden|items-|justify-|gap-|p[trblxy]?-|m[trblxy]?-|text-|bg-|border|rounded|size-|h-|w-|min-|max-|font-|leading-|tracking-|shadow|opacity-|z-|absolute|relative|fixed|sticky)(?:\s|$)/
+export const tailwindTokenPattern = RegExp(
+	'(?:^|\\s)(?:flex|grid|block|inline|hidden|items-|justify-|gap-|p[trblxy]?-|m[trblxy]?-|text-|bg-|border|rounded|size-|h-|w-|min-|max-|font-|leading-|tracking-|shadow|opacity-|z-|absolute|relative|fixed|sticky)(?:\\s|$)'
+)
 
 export const assignmentOperators = new Set([
 	ts.SyntaxKind.FirstAssignment,
@@ -122,7 +122,15 @@ export function isPrimitiveLiteral(node: ts.Expression) {
 }
 
 export function isTailwindStringLiteral(node: ts.Expression) {
-	return ts.isStringLiteralLike(node) && tailwindTokenPattern.test(node.text)
+	return ts.isStringLiteralLike(node) && !isCssLiteralText(node.text) && tailwindTokenPattern.test(node.text)
+}
+
+export function isCssStringLiteral(node: ts.Expression) {
+	return ts.isStringLiteralLike(node) && isCssLiteralText(node.text)
+}
+
+function isCssLiteralText(text: string) {
+	return String.includes('{')(text) || String.includes('}')(text) || String.includes(';')(text)
 }
 
 export function isNullishExpression(node: ts.Expression) {
@@ -140,25 +148,19 @@ export function isJsxLike(node: ts.Expression) {
 export function isUppercaseIdentifier(node: ts.Node) {
 	return (
 		ts.isIdentifier(node) &&
-		pipe(node.text, String.length) > 0 &&
-		pipe(node.text, String.slice(0, 1)) === pipe(node.text, String.slice(0, 1), String.toUpperCase)
+		String.length(node.text) > 0 &&
+		String.slice(0, 1)(node.text) === pipe(node.text, String.slice(0, 1), String.toUpperCase)
 	)
 }
 
 export function getSingleReturnedExpression(node: ts.FunctionLikeDeclaration) {
-	if (node.body && ts.isExpression(node.body)) {
-		return node.body
-	}
+	if (node.body && ts.isExpression(node.body)) return node.body
 
-	if (!(node.body && ts.isBlock(node.body) && Array.isReadonlyArrayNonEmpty(node.body.statements))) {
-		return
-	}
+	if (!(node.body && ts.isBlock(node.body) && Array.isReadonlyArrayNonEmpty(node.body.statements))) return
 
 	const [statement] = node.body.statements
 
-	if (ts.isReturnStatement(statement) && statement.expression) {
-		return statement.expression
-	}
+	if (ts.isReturnStatement(statement) && statement.expression) return statement.expression
 }
 
 export function isEffectGenCall(node: ts.CallExpression) {
@@ -172,31 +174,41 @@ export function isEffectGenCall(node: ts.CallExpression) {
 
 export function isPassThroughCall(node: ts.FunctionLikeDeclaration, expression: ts.CallExpression) {
 	return (
-		node.parameters.length === expression.arguments.length &&
-		pipe(
-			expression.arguments,
-			Array.every((argument, index) => {
-				return node.parameters[index]
-					? ts.isIdentifier(argument) &&
-							ts.isIdentifier(node.parameters[index].name) &&
-							argument.text === node.parameters[index].name.text
-					: false
-			})
+		Array.length(node.parameters) === Array.length(expression.arguments) &&
+		Array.every(expression.arguments, (argument, index) =>
+			pipe(
+				node.parameters,
+				Array.get(index),
+				Option.match({
+					onNone: () => false,
+					onSome: parameter =>
+						ts.isIdentifier(argument) && ts.isIdentifier(parameter.name) && argument.text === parameter.name.text
+				})
+			)
 		)
 	)
 }
 
 export function isCallShapeAdapter(expression: ts.CallExpression) {
-	return pipe(
+	if (isEffectMatchCall(expression)) return false
+
+	return Array.some(
 		expression.arguments,
-		Array.some(
-			argument =>
-				ts.isObjectLiteralExpression(argument) &&
-				pipe(
-					argument.properties,
-					Array.some(property => ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property))
-				)
-		)
+		argument =>
+			ts.isObjectLiteralExpression(argument) &&
+			Array.some(
+				argument.properties,
+				property => ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)
+			)
+	)
+}
+
+function isEffectMatchCall(expression: ts.CallExpression) {
+	return (
+		ts.isPropertyAccessExpression(expression.expression) &&
+		ts.isIdentifier(expression.expression.expression) &&
+		effectModuleNames.has(expression.expression.expression.text) &&
+		expression.expression.name.text === 'match'
 	)
 }
 
@@ -209,10 +221,7 @@ function hasBranch(node: ts.Node): boolean {
 }
 
 export function hasDefaultParameter(node: ts.FunctionLikeDeclaration) {
-	return pipe(
-		node.parameters,
-		Array.some(parameter => !!parameter.initializer)
-	)
+	return Array.some(node.parameters, parameter => !!parameter.initializer)
 }
 
 export function isNamedArrowOrFunctionExpression(node: ts.FunctionLikeDeclaration) {
@@ -239,19 +248,23 @@ export function isLengthCheck(node: ts.BinaryExpression) {
 
 export function isNullishBinaryCheck(node: ts.BinaryExpression) {
 	return (
-		pipe(
+		Array.contains(
 			[
 				ts.SyntaxKind.EqualsEqualsEqualsToken,
 				ts.SyntaxKind.EqualsEqualsToken,
 				ts.SyntaxKind.ExclamationEqualsEqualsToken,
 				ts.SyntaxKind.ExclamationEqualsToken
 			],
-			Array.contains(node.operatorToken.kind)
+			node.operatorToken.kind
 		) &&
 		(isNullishExpression(node.left) || isNullishExpression(node.right))
 	)
 }
 
 export function functionReturnsJsx(node: ts.FunctionLikeDeclaration) {
-	return pipe(getSingleReturnedExpression(node), Option.fromUndefinedOr, Option.exists(isJsxLike))
+	const expression = getSingleReturnedExpression(node)
+
+	if (!expression) return false
+
+	return isJsxLike(expression)
 }

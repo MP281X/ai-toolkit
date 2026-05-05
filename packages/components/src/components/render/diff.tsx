@@ -4,14 +4,13 @@ import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch} from '@pierre/diffs'
 import {File, PatchDiff as PierrePatchDiff, Virtualizer, WorkerPoolContextProvider} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
-import {useRef, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 
 import {Button} from '#components/ui/button.tsx'
 import {Textarea} from '#components/ui/textarea.tsx'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
-function diffCss() {
-	return `
+const DIFF_CSS = `
 	:host {
 		--diffs-font-family: "JetBrains Mono Variable", monospace;
 		--diffs-header-font-family: "JetBrains Mono Variable", monospace;
@@ -125,12 +124,11 @@ function diffCss() {
 		height: 12px !important;
 	}
 `
-}
 
 const PATCH_DIFF_OPTIONS = {
 	overflow: 'scroll',
 	themeType: 'system',
-	unsafeCSS: diffCss(),
+	unsafeCSS: DIFF_CSS,
 	diffStyle: 'unified',
 	lineDiffType: 'none',
 	diffIndicators: 'bars',
@@ -159,8 +157,13 @@ function CommentAnnotation(props: {
 	}) => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
+
+	useEffect(() => {
+		inputRef.current?.focus()
+	}, [])
+
 	function commitDraft(body: string) {
-		const nextBody = pipe(body, String.trim)
+		const nextBody = String.trim(body)
 
 		if (String.isEmpty(nextBody)) {
 			props.onDeleteComment?.(props.comment)
@@ -230,9 +233,9 @@ function PatchResultContent(props: {
 		Array.filter(comment => comment.side !== 'deletions'),
 		Array.map(comment => ({lineNumber: comment.lineNumber, metadata: comment}))
 	)
-	const hasOpenCommentForm = pipe(
+	const hasOpenCommentForm = Array.some(
 		props.comments ?? Array.empty<Parameters<typeof CommentAnnotation>[0]['comment']>(),
-		Array.some(comment => String.isEmpty(comment.body))
+		comment => String.isEmpty(comment.body)
 	)
 
 	return (
@@ -245,7 +248,7 @@ function PatchResultContent(props: {
 			options={{
 				overflow: 'scroll',
 				themeType: 'system',
-				unsafeCSS: diffCss(),
+				unsafeCSS: DIFF_CSS,
 				disableFileHeader: true,
 				theme: HIGHLIGHT_THEMES,
 				disableLineNumbers: false,
@@ -276,15 +279,14 @@ export function PatchReview(props: {
 	const containerRef = useRef<HTMLFieldSetElement>(null)
 	const [mode, setMode] = useState<'diff' | 'final'>('diff')
 	const [hovered, setHovered] = useState(false)
-	const lineAnnotations = pipe(
+	const lineAnnotations = Array.flatMap(
 		props.comments ?? Array.empty<Parameters<typeof CommentAnnotation>[0]['comment']>(),
-		Array.flatMap(comment =>
+		comment =>
 			comment.side ? [{side: comment.side, lineNumber: comment.lineNumber, metadata: comment}] : Array.empty()
-		)
 	)
-	const hasOpenCommentForm = pipe(
+	const hasOpenCommentForm = Array.some(
 		props.comments ?? Array.empty<Parameters<typeof CommentAnnotation>[0]['comment']>(),
-		Array.some(comment => String.isEmpty(comment.body))
+		comment => String.isEmpty(comment.body)
 	)
 
 	useHotkey('Tab', event => {

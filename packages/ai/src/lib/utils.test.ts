@@ -8,15 +8,15 @@ import {compactAiParts, makeResumableStream, partsStreamSanitizer, serializeAiPa
 
 describe('serializeAiPartToMarkdown', () => {
 	test('serializes runtime prompt messages into markdown', () => {
-		const input = [
-			Prompt.makeMessage('system', {content: 'Use concise answers.'}),
-			Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: 'Hello'})]}),
-			Prompt.makeMessage('assistant', {
-				content: [Prompt.makePart('reasoning', {text: 'Think first'}), Prompt.makePart('text', {text: 'Hi there'})]
-			})
-		]
-
-		expect(serializeAiPartToMarkdown(input).markdown).toBe(
+		expect(
+			serializeAiPartToMarkdown([
+				Prompt.makeMessage('system', {content: 'Use concise answers.'}),
+				Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: 'Hello'})]}),
+				Prompt.makeMessage('assistant', {
+					content: [Prompt.makePart('reasoning', {text: 'Think first'}), Prompt.makePart('text', {text: 'Hi there'})]
+				})
+			]).markdown
+		).toBe(
 			'## system\n\nUse concise answers.\n\n---\n\n## user\n\nHello\n\n---\n\n## assistant\n\n> Reasoning\n>\n> Think first\n\nHi there'
 		)
 	})
@@ -45,13 +45,13 @@ describe('serializeAiPartToMarkdown', () => {
 describe('partsStreamSanitizer', () => {
 	test('preserves command execution tool results accepted by the agent toolkit', () => {
 		const part = Response.makePart('tool-result', {
-			encodedResult: 'ok',
+			encodedResult: {output: 'ok'},
 			id: 'command',
 			isFailure: false,
 			name: 'command_execution',
 			preliminary: false,
 			providerExecuted: false,
-			result: 'ok'
+			result: {output: 'ok'}
 		})
 
 		expect(Schema.decodeUnknownSync(Response.StreamPart(AgentToolKit))(part)).toEqual(part)

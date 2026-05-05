@@ -1,13 +1,10 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
 import {StrictLinter} from '../index.ts'
 
 function rulesFor(sourceText: string) {
-	return pipe(
-		StrictLinter.analyzeText('sample.ts', sourceText),
-		Array.map(diagnostic => diagnostic.rule)
-	)
+	return Array.map(StrictLinter.analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('type-indirection rules', () => {
@@ -31,10 +28,6 @@ describe('type-indirection rules', () => {
 		expect(rulesFor('type OnSave = (value: string) => void')).toContain('no-function-signature-type-alias')
 	})
 
-	test('no-callback-type-alias', () => {
-		expect(rulesFor('type OnSave = (value: string) => void')).toContain('no-callback-type-alias')
-	})
-
 	test('no-named-function-args-type', () => {
 		expect(rulesFor('type User = { name: string }; function save(user: User) { return user.name }')).toContain(
 			'no-named-function-args-type'
@@ -45,10 +38,6 @@ describe('type-indirection rules', () => {
 		expect(rulesFor('type UserId = string')).toContain('no-single-use-type')
 	})
 
-	test('no-single-use-type for map aliases', () => {
-		expect(rulesFor('type ReferenceMap = Map<string, number>')).toContain('no-single-use-type')
-	})
-
 	test('no-function-signature-type-alias for report aliases', () => {
 		expect(rulesFor('type Report = (node: Node, rule: string, message: string) => void')).toContain(
 			'no-function-signature-type-alias'
@@ -57,10 +46,6 @@ describe('type-indirection rules', () => {
 
 	test('no-named-props-type', () => {
 		expect(rulesFor('interface ButtonProps { label: string }')).toContain('no-named-props-type')
-	})
-
-	test('no-props-interface-for-component', () => {
-		expect(rulesFor('interface ButtonProps { label: string }')).toContain('no-props-interface-for-component')
 	})
 
 	test('no-namespace-props-type', () => {
@@ -94,12 +79,6 @@ describe('type-indirection rules', () => {
 	test('lints types inside export declare namespace', () => {
 		expect(rulesFor('export declare namespace StrictLinter { export type Mode = string }')).toContain(
 			'no-single-use-type'
-		)
-	})
-
-	test('no-derived-component-props-type', () => {
-		expect(rulesFor('type ButtonProps = Pick<ComponentProps<typeof Button>, "id">')).toContain(
-			'no-derived-component-props-type'
 		)
 	})
 

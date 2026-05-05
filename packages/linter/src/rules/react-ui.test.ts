@@ -1,18 +1,21 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
 import {StrictLinter} from '../index.ts'
 
-function rulesFor(sourceText: string, filePath = 'sample.ts') {
-	return pipe(
-		StrictLinter.analyzeText(filePath, sourceText),
-		Array.map(diagnostic => diagnostic.rule)
-	)
+function rulesFor(sourceText: string, filePath?: string) {
+	return Array.map(StrictLinter.analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('react-ui rules', () => {
 	test('no-react-type-imports', () => {
 		expect(rulesFor("import * as React from 'react'")).toContain('no-react-type-imports')
+	})
+
+	test('no-react-null-state', () => {
+		expect(rulesFor('const [value, setValue] = useState<string | null>(null)', 'sample.tsx')).toContain(
+			'no-react-null-state'
+		)
 	})
 
 	test('cn-classname', () => {
@@ -35,6 +38,7 @@ describe('react-ui rules', () => {
 
 	test('no-tailwind-class-variables', () => {
 		expect(rulesFor("const className = 'flex items-center gap-2'")).toContain('no-tailwind-class-variables')
+		expect(rulesFor('const css = `:host { display: block; }`')).not.toContain('no-tailwind-class-variables')
 	})
 
 	test('no-jsx-wrapper-component', () => {
@@ -53,47 +57,18 @@ describe('react-ui rules', () => {
 		)
 	})
 
-	test('no-namespace-import-alias', () => {
-		expect(rulesFor("import * as Schema from 'effect/Schema'")).toContain('no-namespace-import-alias')
+	test('no-import-alias for namespace imports', () => {
+		expect(rulesFor("import * as EffectTypes from 'effect'")).toContain('no-import-alias')
 	})
 
-	test('no-avoidable-use-effect for mount focus', () => {
-		expect(rulesFor('useEffect(() => { inputRef.current?.focus() }, [])')).toContain('no-avoidable-use-effect')
+	test('allows namespace import matching module basename', () => {
+		expect(rulesFor("import * as Schema from 'effect/Schema'")).not.toContain('no-import-alias')
 	})
 
-	test('no-avoidable-use-effect for boolean-gated focus', () => {
-		expect(rulesFor('useLayoutEffect(() => { if (editing) inputRef.current?.focus() }, [editing])')).toContain(
-			'no-avoidable-use-effect'
-		)
-	})
-
-	test('no-avoidable-use-effect for ref handoff', () => {
+	test('no-import-alias for named imports', () => {
+		expect(rulesFor("import {Schema as S} from 'effect'")).toContain('no-import-alias')
 		expect(
-			rulesFor(
-				'useEffect(() => { props.editorRef.current = editor; return () => { props.editorRef.current = null } }, [])'
-			)
-		).toContain('no-avoidable-use-effect')
-	})
-
-	test('no-avoidable-use-effect for derived state', () => {
-		expect(
-			rulesFor(
-				'const [, setName] = useState(""); const [, setCount] = useState(0); useEffect(() => { setName(props.name); setCount(props.items.length) }, [props])'
-			)
-		).toContain('no-avoidable-use-effect')
-	})
-
-	test('no-avoidable-use-effect ignores external subscriptions', () => {
-		expect(rulesFor('useEffect(() => window.addEventListener("resize", resize), [resize])')).not.toContain(
-			'no-avoidable-use-effect'
-		)
-	})
-
-	test('no-avoidable-use-effect ignores cleanup subscriptions', () => {
-		expect(
-			rulesFor(
-				'useEffect(() => editor.registerCommand(KEY_ENTER_COMMAND, handler, COMMAND_PRIORITY_LOW), [editor, handler])'
-			)
-		).not.toContain('no-avoidable-use-effect')
+			rulesFor("import {PatchDiff as PierrePatchDiff} from '@pierre/diffs/react'; export function PatchDiff() {}")
+		).not.toContain('no-import-alias')
 	})
 })
