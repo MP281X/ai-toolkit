@@ -7,24 +7,22 @@ import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary'
 import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin'
 import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {LexicalTypeaheadMenuPlugin, MenuOption} from '@lexical/react/LexicalTypeaheadMenuPlugin'
-import * as lexical from 'lexical'
+import * as Lexical from 'lexical'
 import {useEffect, useImperativeHandle, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
 
 import {Command, CommandItem, CommandList} from '#components/ui/command.tsx'
 import {cn} from '#lib/utils.ts'
 
-type TokenKind = 'entry' | 'file'
-
-type SerializedTokenNode = lexical.SerializedTextNode & {
+type SerializedTokenNode = Lexical.SerializedTextNode & {
 	id: string
-	kind: TokenKind
+	kind: 'entry' | 'file'
 	type: 'input-token'
 }
 
-class TokenNode extends lexical.TextNode {
+class TokenNode extends Lexical.TextNode {
 	__id: string
-	__kind: TokenKind
+	__kind: 'entry' | 'file'
 
 	static override getType() {
 		return 'input-token'
@@ -42,7 +40,7 @@ class TokenNode extends lexical.TextNode {
 		return {...super.exportJSON(), type: 'input-token', id: this.__id, kind: this.__kind}
 	}
 
-	constructor(text: string, id: string, kind: TokenKind, key?: lexical.NodeKey) {
+	constructor(text: string, id: string, kind: 'entry' | 'file', key?: Lexical.NodeKey) {
 		super(text, key)
 		this.__id = id
 		this.__kind = kind
@@ -71,7 +69,7 @@ class Item<TValue extends RichTextArea.Value> extends MenuOption {
 }
 
 function snapshot<TValue extends RichTextArea.Value>(
-	editor: lexical.LexicalEditor | null,
+	editor: Lexical.LexicalEditor | null,
 	tokensMap: Map<string, RichTextArea.Token<TValue>>
 ) {
 	if (!editor) return emptySnapshot<TValue>()
@@ -80,7 +78,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 	const ids = new Set<string>()
 	const tokens = Array.empty<RichTextArea.Token<TValue>>()
 	const text = editor.getEditorState().read(() => {
-		for (const node of lexical.$getRoot().getAllTextNodes()) {
+		for (const node of Lexical.$getRoot().getAllTextNodes()) {
 			if (!(node instanceof TokenNode)) continue
 
 			ids.add(node.__id)
@@ -89,7 +87,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 			if (value) tokens.push(value)
 		}
 
-		return pipe(lexical.$getRoot().getTextContent(), String.trim)
+		return String.trim(Lexical.$getRoot().getTextContent())
 	})
 
 	for (const id of tokensMap.keys()) {
@@ -100,7 +98,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 }
 
 function restore<TValue extends RichTextArea.Value>(
-	editor: lexical.LexicalEditor | null,
+	editor: Lexical.LexicalEditor | null,
 	snapshot: RichTextArea.Snapshot<TValue>,
 	tokensMap: Map<string, RichTextArea.Token<TValue>>
 ) {
@@ -127,13 +125,13 @@ function getItems<TValue extends RichTextArea.Value>(
 	return pipe(
 		group.values,
 		Array.map(value => {
-			const query = pipe(search.query, String.toLowerCase)
+			const query = String.toLowerCase(search.query)
 			if (String.isEmpty(query)) return {score: 0, value}
 
 			let total = 0
 			let queryIndex = 0
 			let lastMatchIndex = -1
-			const label = pipe(value.label, String.toLowerCase)
+			const label = String.toLowerCase(value.label)
 
 			for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index++) {
 				if (label[index] !== query[queryIndex]) continue
@@ -167,37 +165,37 @@ function match<const TTrigger extends string>(text: string, triggers: readonly T
 		const index = text.lastIndexOf(trigger)
 		if (index < 0) continue
 
-		if (index > 0 && text[index - 1] !== '(' && !/\s/.test(text[index - 1] ?? '')) continue
+		if (index > 0 && text[index - 1] !== '(' && !RegExp('\\s').test(text[index - 1] ?? '')) continue
 
-		const query = pipe(text, String.slice(index + String.length(trigger)))
-		if (String.length(query) > 32 || /\s/.test(query)) continue
+		const query = String.slice(index + String.length(trigger))(text)
+		if (String.length(query) > 32 || RegExp('\\s').test(query)) continue
 
 		return {
 			trigger,
 			query,
 			leadOffset: index,
-			replaceableString: pipe(text, String.slice(index))
+			replaceableString: String.slice(index)(text)
 		}
 	}
 }
 
 function currentTextNodeSelection() {
-	const selection = lexical.$getSelection()
-	if (!lexical.$isRangeSelection(selection)) return
+	const selection = Lexical.$getSelection()
+	if (!Lexical.$isRangeSelection(selection)) return
 	if (!selection.isCollapsed()) return
 
 	const node = selection.anchor.getNode()
-	if (!lexical.$isTextNode(node)) return
+	if (!Lexical.$isTextNode(node)) return
 
 	return {node, selection}
 }
 
 function lineBeforeCursor(text: string, offset: number) {
-	const before = pipe(text, String.slice(0, offset))
+	const before = String.slice(0, offset)(text)
 	const index = before.lastIndexOf('\n')
 
 	return {
-		line: pipe(before, String.slice(index + 1)),
+		line: String.slice(index + 1)(before),
 		start: index + 1
 	}
 }
@@ -210,25 +208,20 @@ function continueList(event: KeyboardEvent | null) {
 
 	const text = current.node.getTextContent()
 	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
-	const emptyUnordered = /^(\s*)[-*+]\s*$/.exec(currentLine.line)
-	const emptyOrdered = /^(\s*)\d+\.\s*$/.exec(currentLine.line)
-
-	if (emptyUnordered || emptyOrdered) {
+	if (RegExp('^(\\s*)[-*+]\\s*$').exec(currentLine.line) || RegExp('^(\\s*)\\d+\\.\\s*$').exec(currentLine.line)) {
 		event.preventDefault()
-		current.node.spliceText(currentLine.start, currentLine.line.length, '', true)
+		current.node.spliceText(currentLine.start, String.length(currentLine.line), '', true)
 		return true
 	}
 
-	const unordered = /^(\s*)([-*+])\s+\S/.exec(currentLine.line)
-	const ordered = /^(\s*)(\d+)\.\s+\S/.exec(currentLine.line)
+	const unordered = RegExp('^(\\s*)([-*+])\\s+\\S').exec(currentLine.line)
+	const ordered = RegExp('^(\\s*)(\\d+)\\.\\s+\\S').exec(currentLine.line)
 	if (!(unordered || ordered)) return false
 
 	event.preventDefault()
 	if (unordered) current.selection.insertRawText(`\n${unordered[1]}${unordered[2]} `)
 	if (ordered) {
-		const indent = ordered[1] ?? ''
-		const number = ordered[2] ?? '0'
-		current.selection.insertRawText(`\n${indent}${pipe(Number.parse(number), Option.getOrThrow) + 1}. `)
+		current.selection.insertRawText(`\n${ordered[1] ?? ''}${Option.getOrThrow(Number.parse(ordered[2] ?? '0')) + 1}. `)
 	}
 	return true
 }
@@ -241,7 +234,7 @@ function closeXmlTag(event: KeyboardEvent) {
 
 	const text = current.node.getTextContent()
 	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
-	const tag = /<([A-Za-z][A-Za-z0-9:_-]*)$/.exec(currentLine.line)
+	const tag = RegExp('<([A-Za-z][A-Za-z0-9:_-]*)$').exec(currentLine.line)
 	if (!tag) return false
 
 	event.preventDefault()
@@ -256,7 +249,7 @@ function closeXmlTag(event: KeyboardEvent) {
 }
 
 function EditorPlugin<TValue extends RichTextArea.Value>(props: {
-	editorRef: {current: lexical.LexicalEditor | null}
+	editorRef: {current: Lexical.LexicalEditor | null}
 	tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
 	initialSnapshot?: RichTextArea.Snapshot<TValue>
 	menuRef: {current: boolean}
@@ -284,7 +277,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 
 	useEffect(() => {
 		return editor.registerCommand(
-			lexical.KEY_ENTER_COMMAND,
+			Lexical.KEY_ENTER_COMMAND,
 			event => {
 				if (continueList(event)) return true
 				if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
@@ -293,31 +286,31 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 				props.onSubmit(snapshot(editor, props.tokensRef.current))
 				return true
 			},
-			lexical.COMMAND_PRIORITY_LOW
+			Lexical.COMMAND_PRIORITY_LOW
 		)
 	}, [editor, props.menuRef, props.onSubmit, props.tokensRef])
 
 	useEffect(() => {
-		return editor.registerCommand(lexical.KEY_DOWN_COMMAND, closeXmlTag, lexical.COMMAND_PRIORITY_HIGH)
+		return editor.registerCommand(Lexical.KEY_DOWN_COMMAND, closeXmlTag, Lexical.COMMAND_PRIORITY_HIGH)
 	}, [editor])
 
 	useEffect(() => {
 		return editor.registerCommand(
-			lexical.PASTE_COMMAND,
+			Lexical.PASTE_COMMAND,
 			event => {
 				const files =
 					event instanceof ClipboardEvent ? Array.fromIterable(event.clipboardData?.files ?? []) : Array.empty<File>()
 				if (Array.isReadonlyArrayEmpty(files)) return false
 
-				event?.preventDefault()
+				event.preventDefault()
 
 				editor.update(() => {
-					let selection = lexical.$getSelection()
+					let selection = Lexical.$getSelection()
 
-					if (!lexical.$isRangeSelection(selection)) {
-						lexical.$getRoot().selectEnd()
-						selection = lexical.$getSelection()
-						if (!lexical.$isRangeSelection(selection)) return
+					if (!Lexical.$isRangeSelection(selection)) {
+						Lexical.$getRoot().selectEnd()
+						selection = Lexical.$getSelection()
+						if (!Lexical.$isRangeSelection(selection)) return
 					}
 
 					for (const file of files) {
@@ -325,18 +318,17 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 						props.tokensRef.current.set(id, {id, kind: 'file', color: '#f59e0b', file})
 
 						selection.insertNodes([
-							lexical
-								.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
+							Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
 								.setMode('token')
 								.setStyle('color: #f59e0b'),
-							lexical.$createTextNode(' ')
+							Lexical.$createTextNode(' ')
 						])
 					}
 				})
 
 				return true
 			},
-			lexical.COMMAND_PRIORITY_HIGH
+			Lexical.COMMAND_PRIORITY_HIGH
 		)
 	}, [editor, props.tokensRef])
 
@@ -397,8 +389,9 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				const id = crypto.randomUUID()
 				props.tokensRef.current.set(id, {id, kind: 'entry', ...option.entry})
 
-				const token = lexical
-					.$applyNodeReplacement(new TokenNode(`${option.entry.trigger}${option.entry.value.label}`, id, 'entry'))
+				const token = Lexical.$applyNodeReplacement(
+					new TokenNode(`${option.entry.trigger}${option.entry.value.label}`, id, 'entry')
+				)
 					.setMode('token')
 					.setStyle(`color: ${option.entry.color}`)
 
@@ -407,12 +400,12 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				}
 
 				if (!node) {
-					const selection = lexical.$getSelection()
-					if (!lexical.$isRangeSelection(selection)) return
+					const selection = Lexical.$getSelection()
+					if (!Lexical.$isRangeSelection(selection)) return
 					selection.insertNodes([token])
 				}
 
-				const gap = lexical.$createTextNode(' ')
+				const gap = Lexical.$createTextNode(' ')
 				token.insertAfter(gap)
 				gap.selectEnd()
 				close()
@@ -499,7 +492,7 @@ export declare namespace RichTextArea {
 
 	export type Snapshot<TValue extends Value = Value> = {
 		text: string
-		editorState: lexical.SerializedEditorState<lexical.SerializedLexicalNode>
+		editorState: Lexical.SerializedEditorState<Lexical.SerializedLexicalNode>
 		tokens: readonly Token<TValue>[]
 	}
 
@@ -531,7 +524,7 @@ function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>()
 export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Value>(
 	props: RichTextArea.Props<TValue>
 ) {
-	const editorRef = useRef<lexical.LexicalEditor | null>(null)
+	const editorRef = useRef<Lexical.LexicalEditor | null>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
 	const tokensRef = useRef(new Map<string, RichTextArea.Token<TValue>>())

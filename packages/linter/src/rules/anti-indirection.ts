@@ -427,7 +427,7 @@ function analyzeFunctionLike(
 
 	if ((isNamedArrowOrFunctionExpression(node) || ts.isFunctionDeclaration(node)) && ts.isCallExpression(expression)) {
 		if (!isEffectGenCall(expression)) {
-			if (isPassThroughCall(node, expression)) {
+			if (!isExportedPolicyWrapper(node, expression) && isPassThroughCall(node, expression)) {
 				report(
 					name,
 					'no-pass-through-function',
@@ -435,7 +435,7 @@ function analyzeFunctionLike(
 				)
 			}
 
-			if (isCallShapeAdapter(expression)) {
+			if (!isExportedPolicyWrapper(node, expression) && isCallShapeAdapter(expression)) {
 				report(
 					name,
 					'no-call-shape-adapter',
@@ -443,7 +443,7 @@ function analyzeFunctionLike(
 				)
 			}
 
-			if (isLowValueSignatureWrapper(node, expression)) {
+			if (!isExportedPolicyWrapper(node, expression) && isLowValueSignatureWrapper(node, expression)) {
 				report(
 					name,
 					'no-signature-wrapper',
@@ -562,6 +562,40 @@ function isLowValueSignatureWrapper(node: ts.FunctionLikeDeclaration, expression
 			argument => !containsFunctionOrObjectLiteral(argument) && containsParameterReference(argument, node)
 		)
 	)
+}
+
+function isExportedPolicyWrapper(node: ts.FunctionLikeDeclaration, expression: ts.CallExpression) {
+	return (
+		isExportedFunctionLike(node) && (containsPolicyLiteral(expression) || isVariadicCallComposition(node, expression))
+	)
+}
+
+function isExportedFunctionLike(node: ts.FunctionLikeDeclaration) {
+	if (ts.isFunctionDeclaration(node)) {
+		return Array.some(ts.getModifiers(node) ?? [], modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
+	}
+
+	return (
+		(ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+		ts.isVariableDeclaration(node.parent) &&
+		isExportedVariableDeclaration(node.parent)
+	)
+}
+
+function containsPolicyLiteral(node: ts.Node): boolean {
+	return (
+		ts.isObjectLiteralExpression(node) ||
+		ts.isArrayLiteralExpression(node) ||
+		!!ts.forEachChild(node, child => (containsPolicyLiteral(child) ? true : undefined))
+	)
+}
+
+function isVariadicCallComposition(node: ts.FunctionLikeDeclaration, expression: ts.CallExpression) {
+	return Array.some(node.parameters, parameter => !!parameter.dotDotDotToken) && containsNestedCall(expression)
+}
+
+function containsNestedCall(node: ts.Node): boolean {
+	return ts.isCallExpression(node) && !!ts.forEachChild(node, child => (ts.isCallExpression(child) ? true : undefined))
 }
 
 function isPipeCall(expression: ts.CallExpression) {

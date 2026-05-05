@@ -9,10 +9,7 @@ export const WebSearchToolKit = Toolkit.make(
 		failureMode: 'return',
 		description: 'Search the web for recent, relevant sources and return concise page content snippets.',
 		parameters: Schema.Struct({
-			query: pipe(
-				Schema.NonEmptyString,
-				Schema.annotate({description: 'The search query to send to the web search provider.'})
-			),
+			query: Schema.NonEmptyString.annotate({description: 'The search query to send to the web search provider.'}),
 			numResults: pipe(
 				Schema.Int,
 				Schema.optionalKey,

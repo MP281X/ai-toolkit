@@ -61,28 +61,25 @@ export function partsStreamSanitizer<A extends Response.StreamPart<Record<string
 }
 
 export function compactAiParts<T extends Record<string, Tool.Any>>(input: readonly Response.StreamPart<T>[]) {
-	return pipe(
-		input,
-		Array.reduce(Array.empty<Response.StreamPart<T>>(), (parts, part) => {
-			if (part.type === 'reasoning-start' || part.type === 'reasoning-end') return parts
-			if (part.type === 'text-start' || part.type === 'text-end') return parts
-			if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
-			if (part.type === 'tool-params-delta') return parts
-			if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
+	return Array.reduce(input, Array.empty<Response.StreamPart<T>>(), (parts, part) => {
+		if (part.type === 'reasoning-start' || part.type === 'reasoning-end') return parts
+		if (part.type === 'text-start' || part.type === 'text-end') return parts
+		if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
+		if (part.type === 'tool-params-delta') return parts
+		if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
 
-			const [previousParts, lastPart] = Array.unappend(parts)
+		const [previousParts, lastPart] = Array.unappend(parts)
 
-			if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
-				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
-			}
+		if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
+			return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+		}
 
-			if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
-				return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
-			}
+		if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
+			return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
+		}
 
-			return Array.append(parts, part)
-		})
-	)
+		return Array.append(parts, part)
+	})
 }
 
 export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
@@ -137,10 +134,10 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 						break
 				}
 
-				return pipe(markdown, String.trim)
+				return String.trim(markdown)
 			}
 
-			if (item.role === 'system') return pipe(`## system\n\n${item.content}`, String.trim)
+			if (item.role === 'system') return String.trim(`## system\n\n${item.content}`)
 
 			return pipe(
 				item.content,

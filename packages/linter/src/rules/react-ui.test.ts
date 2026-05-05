@@ -63,6 +63,7 @@ describe('react-ui rules', () => {
 
 	test('allows namespace import matching module basename', () => {
 		expect(rulesFor("import * as Schema from 'effect/Schema'")).not.toContain('no-import-alias')
+		expect(rulesFor("import * as OpenAiCompat from '@effect/ai-openai-compat'")).not.toContain('no-import-alias')
 	})
 
 	test('no-import-alias for named imports', () => {

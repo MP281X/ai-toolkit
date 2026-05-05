@@ -58,6 +58,23 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('const saveName = (name: string) => save(name)')).toContain('no-pass-through-function')
 	})
 
+	test('allows exported policy wrappers', () => {
+		expect(
+			rulesFor(
+				'export function formatNumber(number: number) { return new Intl.NumberFormat(undefined, {notation: "compact"}).format(number) }'
+			)
+		).not.toContain('no-signature-wrapper')
+		expect(rulesFor('export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }')).not.toContain(
+			'no-signature-wrapper'
+		)
+	})
+
+	test('keeps flagging exported low-value wrappers', () => {
+		expect(rulesFor('export function getUser(id: string) { return api.user.get(id) }')).toContain(
+			'no-signature-wrapper'
+		)
+	})
+
 	test('no-signature-wrapper for declarations', () => {
 		expect(rulesFor('function run(options: Options) { return Effect.runPromise(runEffect(options)) }')).toContain(
 			'no-signature-wrapper'

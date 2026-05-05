@@ -176,7 +176,7 @@ const fixHints = [
 	['no-type-alias-for-object-shape', 'use inferred object shape'],
 	['no-type-assertion', 'redesign inference'],
 	['no-unbraced-multiline-guard', 'add braces'],
-	['no-useless-pipe', 'call helper directly'],
+	['no-useless-pipe', 'remove two-arg pipe'],
 	['no-variable-type-annotation', 'infer variable type'],
 	['no-yield-in-pipe', 'compose the Effect']
 ] as const

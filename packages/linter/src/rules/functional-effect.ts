@@ -134,7 +134,7 @@ function analyzeCallExpression(
 				report(
 					node.expression,
 					'no-useless-pipe',
-					'Do not use pipe for a single Effect module transform. Call the helper directly or use its curried form.'
+					'Do not use pipe with only a value and one helper. Remove the pipe and call the helper directly, e.g. `String.trim(value)` or `String.replace(search, replacement)(value)`.'
 				)
 			}
 
@@ -181,6 +181,14 @@ function analyzeCallExpression(
 			node.expression,
 			'no-dynamic-imports',
 			'Remove this dynamic import. Keep module dependencies static and visible.'
+		)
+	}
+
+	if (ts.isPropertyAccessExpression(node.expression) && isOptionFromConversion(node.expression)) {
+		report(
+			node.expression.name,
+			'no-option-from-conversion',
+			'Do not wrap non-Option values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
 		)
 	}
 }
@@ -235,17 +243,21 @@ function analyzePropertyAccessExpression(
 	node: ts.PropertyAccessExpression,
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
-	if (
-		ts.isIdentifier(node.expression) &&
-		node.expression.text === 'Option' &&
-		String.startsWith('from')(node.name.text)
-	) {
+	if (ts.isCallExpression(node.parent) && node.parent.expression === node) return
+
+	if (isOptionFromConversion(node)) {
 		report(
 			node.name,
 			'no-option-from-conversion',
-			'Do not wrap ordinary nullable values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
+			'Do not wrap non-Option values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
 		)
 	}
+}
+
+function isOptionFromConversion(node: ts.PropertyAccessExpression) {
+	return (
+		ts.isIdentifier(node.expression) && node.expression.text === 'Option' && String.startsWith('from')(node.name.text)
+	)
 }
 
 function analyzeExpressionStatement(
