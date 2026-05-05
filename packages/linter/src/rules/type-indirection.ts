@@ -19,29 +19,14 @@ export const typeIndirectionRules = [
 				)
 			}
 
-			if (isInsideDeclareModule(node)) {
-				return
-			}
-
-			if (ts.isTypeReferenceNode(node) && isDerivedComponentPropsType(node)) {
-				report(
-					node,
-					'no-derived-component-props-type',
-					'Do not derive component props from other components with Pick, Omit, or ComponentProps. Inline the exact prop shape at the boundary.'
-				)
-			}
+			if (isInsideDeclareModule(node)) return
 
 			if (ts.isInterfaceDeclaration(node)) {
-				if (pipe(node.name.text, String.endsWith('Props'))) {
+				if (String.endsWith('Props')(node.name.text)) {
 					report(
 						node.name,
 						'no-named-props-type',
 						'Component props must be inline. Replace this named props type with an inline object at the component boundary.'
-					)
-					report(
-						node.name,
-						'no-props-interface-for-component',
-						'This props interface hides component inputs. Inline props in the component parameter.'
 					)
 				}
 
@@ -54,17 +39,14 @@ export const typeIndirectionRules = [
 
 			if (ts.isTypeAliasDeclaration(node)) {
 				if (isSchemaCompanionTypeAfterSchema(node)) {
-					report(
+					return report(
 						node.name,
 						'no-schema-type-order',
 						'Schema companion types must be declared immediately before the schema value.'
 					)
-					return
 				}
 
-				if (isSchemaCompanionType(node)) {
-					return
-				}
+				if (isSchemaCompanionType(node)) return
 
 				analyzeTypeAlias(node, report)
 			}
@@ -90,15 +72,6 @@ export const typeIndirectionRules = [
 	}
 ]
 
-function isDerivedComponentPropsType(node: ts.TypeReferenceNode) {
-	return (
-		(ts.isIdentifier(node.typeName) && ['Pick', 'Omit', 'ComponentProps'].includes(node.typeName.text)) ||
-		(ts.isQualifiedName(node.typeName) &&
-			ts.isIdentifier(node.typeName.right) &&
-			node.typeName.right.text === 'ComponentProps')
-	)
-}
-
 function isInsideDeclareModule(node: ts.Node) {
 	return !!ts.findAncestor(
 		node,
@@ -111,28 +84,23 @@ function isLocalShapeReference(node: ts.TypeReferenceNode, parent: ts.SignatureD
 		ts.isIdentifier(node.typeName) &&
 		!isFunctionTypeParameter(node.typeName, parent) &&
 		isProjectTypeReference(node, checker) &&
-		!pipe(
+		!Array.contains(
 			['Map', 'Set', 'Array', 'ReadonlyArray', 'Promise', 'RunOptions', 'Diagnostic', 'Result'],
-			Array.contains(node.typeName.text)
+			node.typeName.text
 		)
 	)
 }
 
 function isFunctionTypeParameter(node: ts.Identifier, parent: ts.SignatureDeclaration) {
-	return pipe(
-		parent.typeParameters ?? [],
-		Array.some(parameter => parameter.name.text === node.text)
-	)
+	return Array.some(parent.typeParameters ?? [], parameter => parameter.name.text === node.text)
 }
 
 function isProjectTypeReference(node: ts.TypeReferenceNode, checker?: ts.TypeChecker) {
-	if (!checker) {
-		return true
-	}
+	if (!checker) return true
 
-	return pipe(
+	return Array.some(
 		checker.getSymbolAtLocation(node.typeName)?.declarations ?? [],
-		Array.some(declaration => !declaration.getSourceFile().isDeclarationFile)
+		declaration => !declaration.getSourceFile().isDeclarationFile
 	)
 }
 
@@ -141,26 +109,19 @@ function analyzeTypeAlias(
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
 	if (ts.isTypeLiteralNode(node.type)) {
-		report(
+		return report(
 			node.name,
 			'no-type-alias-for-object-shape',
 			'This named type hides a local shape. Inline the shape at the consuming boundary.'
 		)
-		return
 	}
 
 	if (ts.isFunctionTypeNode(node.type)) {
-		report(
-			node.name,
-			'no-callback-type-alias',
-			'This callback type alias hides a function shape. Inline the callback signature where it is consumed.'
-		)
-		report(
+		return report(
 			node.name,
 			'no-function-signature-type-alias',
 			'This function type alias hides a callback shape. Inline the callback signature where it is consumed.'
 		)
-		return
 	}
 
 	report(
@@ -174,48 +135,41 @@ function analyzeNamespaceDeclaration(
 	node: ts.ModuleDeclaration,
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
-	if (!(node.body && ts.isModuleBlock(node.body))) {
-		return
-	}
+	if (!(node.body && ts.isModuleBlock(node.body))) return
 
-	if (hasDeclareModifier(node) && hasCompanionValue(node)) {
-		return
-	}
+	if (hasDeclareModifier(node) && hasCompanionValue(node)) return
 
-	pipe(
-		node.body.statements,
-		Array.map(statement => {
-			if (
-				(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
-				statement.name.text === 'Props'
-			) {
-				report(
-					statement.name,
-					'no-namespace-props-type',
-					'This namespace Props type hides component inputs. Inline props in the component parameter.'
-				)
-			}
+	Array.forEach(node.body.statements, statement => {
+		if (
+			(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+			statement.name.text === 'Props'
+		) {
+			report(
+				statement.name,
+				'no-namespace-props-type',
+				'This namespace Props type hides component inputs. Inline props in the component parameter.'
+			)
+		}
 
-			if (ts.isTypeAliasDeclaration(statement) && ts.isFunctionTypeNode(statement.type)) {
-				report(
-					statement.name,
-					'no-namespace-callback-alias',
-					'This namespace callback alias hides a function shape. Inline the callback signature where it is consumed.'
-				)
-			}
+		if (ts.isTypeAliasDeclaration(statement) && ts.isFunctionTypeNode(statement.type)) {
+			report(
+				statement.name,
+				'no-namespace-callback-alias',
+				'This namespace callback alias hides a function shape. Inline the callback signature where it is consumed.'
+			)
+		}
 
-			if (
-				(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
-				statement.name.text !== 'Props'
-			) {
-				report(
-					statement.name,
-					'no-local-namespace-type',
-					'This namespace type hides a local shape. Inline the shape where it is consumed.'
-				)
-			}
-		})
-	)
+		if (
+			(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+			statement.name.text !== 'Props'
+		) {
+			report(
+				statement.name,
+				'no-local-namespace-type',
+				'This namespace type hides a local shape. Inline the shape where it is consumed.'
+			)
+		}
+	})
 }
 
 function isSchemaCompanionType(node: ts.TypeAliasDeclaration) {
@@ -241,9 +195,7 @@ function isSchemaCompanionTypeAfterSchema(node: ts.TypeAliasDeclaration) {
 }
 
 function nextStatement(node: ts.Statement) {
-	if (!(ts.isSourceFile(node.parent) || ts.isModuleBlock(node.parent))) {
-		return
-	}
+	if (!(ts.isSourceFile(node.parent) || ts.isModuleBlock(node.parent))) return
 	return pipe(
 		node.parent.statements,
 		Array.findFirstIndex(statement => statement === node),
@@ -255,9 +207,7 @@ function nextStatement(node: ts.Statement) {
 }
 
 function previousStatement(node: ts.Statement) {
-	if (!(ts.isSourceFile(node.parent) || ts.isModuleBlock(node.parent))) {
-		return
-	}
+	if (!(ts.isSourceFile(node.parent) || ts.isModuleBlock(node.parent))) return
 
 	return pipe(
 		node.parent.statements,
@@ -272,15 +222,13 @@ function previousStatement(node: ts.Statement) {
 function isSchemaCompanionValue(node: ts.Statement, name: string) {
 	return (
 		ts.isVariableStatement(node) &&
-		pipe(
+		Array.some(
 			node.declarationList.declarations,
-			Array.some(
-				declaration =>
-					ts.isIdentifier(declaration.name) &&
-					declaration.name.text === name &&
-					!!declaration.initializer &&
-					isSchemaExpression(declaration.initializer)
-			)
+			declaration =>
+				ts.isIdentifier(declaration.name) &&
+				declaration.name.text === name &&
+				!!declaration.initializer &&
+				isSchemaExpression(declaration.initializer)
 		)
 	)
 }
@@ -305,34 +253,26 @@ function isRuntimeFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaratio
 }
 
 function hasDeclareModifier(node: ts.ModuleDeclaration) {
-	return pipe(
-		node.modifiers ?? [],
-		Array.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)
-	)
+	return Array.some(node.modifiers ?? [], modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)
 }
 
 function hasExportModifier(node: ts.ModuleDeclaration) {
-	return pipe(
-		node.modifiers ?? [],
-		Array.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
-	)
+	return Array.some(node.modifiers ?? [], modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
 }
 
 function hasCompanionValue(node: ts.ModuleDeclaration) {
 	return (
 		ts.isIdentifier(node.name) &&
 		(ts.isSourceFile(node.parent) || ts.isModuleBlock(node.parent)) &&
-		pipe(
+		Array.some(
 			node.parent.statements,
-			Array.some(
-				statement =>
-					(ts.isFunctionDeclaration(statement) && statement.name?.text === node.name.text) ||
-					(ts.isVariableStatement(statement) &&
-						pipe(
-							statement.declarationList.declarations,
-							Array.some(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === node.name.text)
-						))
-			)
+			statement =>
+				(ts.isFunctionDeclaration(statement) && statement.name?.text === node.name.text) ||
+				(ts.isVariableStatement(statement) &&
+					Array.some(
+						statement.declarationList.declarations,
+						declaration => ts.isIdentifier(declaration.name) && declaration.name.text === node.name.text
+					))
 		)
 	)
 }

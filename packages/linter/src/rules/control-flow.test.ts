@@ -1,25 +1,72 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
 import {StrictLinter} from '../index.ts'
 
-function rulesFor(sourceText: string, filePath = 'sample.ts') {
-	return pipe(
-		StrictLinter.analyzeText(filePath, sourceText),
-		Array.map(diagnostic => diagnostic.rule)
-	)
+function rulesFor(sourceText: string, filePath?: string) {
+	return Array.map(StrictLinter.analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
-function typedRulesFor(sourceText: string, filePath = 'sample.ts') {
-	return pipe(
-		StrictLinter.analyzeTypedText(filePath, sourceText),
-		Array.map(diagnostic => diagnostic.rule)
-	)
+function typedRulesFor(sourceText: string, filePath?: string) {
+	return Array.map(StrictLinter.analyzeTypedText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('control-flow rules', () => {
 	test('no-type-assertion', () => {
 		expect(rulesFor('const value = input as string')).toContain('no-type-assertion')
+	})
+
+	test('no-any', () => {
+		expect(rulesFor('function parse(value: any) { return value }')).toContain('no-any')
+	})
+
+	test('no-throw', () => {
+		expect(rulesFor("function fail() { throw new Error('boom') }")).toContain('no-throw')
+	})
+
+	test('no-error-constructor', () => {
+		expect(rulesFor("const error = new Error('boom')")).toContain('no-error-constructor')
+	})
+
+	test('no-try-catch', () => {
+		expect(rulesFor('try { run() } catch (error) { fail(error) }')).toContain('no-try-catch')
+	})
+
+	test('no-default-export', () => {
+		expect(rulesFor('export default function run() { return value }')).toContain('no-default-export')
+	})
+
+	test('no-async-await outside tests', () => {
+		expect(rulesFor('async function run() { return await work() }')).toContain('no-async-await')
+	})
+
+	test('allows async-await in tests', () => {
+		expect(rulesFor('test("run", async () => { await work() })', 'sample.test.ts')).not.toContain('no-async-await')
+	})
+
+	test('no-class outside Effect service and Schema declarations', () => {
+		expect(rulesFor('class User { constructor(readonly name: string) {} }')).toContain('no-class')
+	})
+
+	test('allows Effect service classes', () => {
+		expect(rulesFor("class Git extends Context.Service<Git>()('Git', {}) {}")).not.toContain('no-class')
+	})
+
+	test('allows Schema classes', () => {
+		expect(rulesFor("class User extends Schema.Class<User>('User')({name: Schema.String}) {}")).not.toContain(
+			'no-class'
+		)
+	})
+
+	test('no-restricted-global', () => {
+		expect(typedRulesFor('const empty = Array.isArray(value)')).toContain('no-restricted-global')
+		expect(typedRulesFor('const value = Math.max(left, right)')).not.toContain('no-restricted-global')
+	})
+
+	test('allows imported Effect modules with restricted global names', () => {
+		expect(typedRulesFor("import {Array} from 'effect'; const empty = Array.isArray(value)")).not.toContain(
+			'no-restricted-global'
+		)
 	})
 
 	test('allows const assertions', () => {
@@ -32,6 +79,15 @@ describe('control-flow rules', () => {
 
 	test('no-length-check', () => {
 		expect(rulesFor('if (items.length > 0) { run() }')).toContain('no-length-check')
+	})
+
+	test('no-deep-parent-chain', () => {
+		expect(rulesFor('const grandparent = node.parent.parent')).toContain('no-deep-parent-chain')
+		expect(rulesFor('const parent = node.parent')).not.toContain('no-deep-parent-chain')
+	})
+
+	test('no-ast-gettext-comparison', () => {
+		expect(rulesFor("if (node.getText() === 'Array') { run() }")).toContain('no-ast-gettext-comparison')
 	})
 
 	test('no-redundant-type-check flags redundant typeof checks', () => {
@@ -110,6 +166,20 @@ describe('control-flow rules', () => {
 		)
 	})
 
+	test('no-deprecated-api', () => {
+		expect(
+			typedRulesFor(`
+				interface Api {
+					/** @deprecated Use phaseModifier instead */
+					phase: () => void
+					phaseModifier: () => void
+				}
+				declare const api: Api
+				api.phase()
+			`)
+		).toContain('no-deprecated-api')
+	})
+
 	test('no-redundant-type-check flags instanceof when type is already known', () => {
 		expect(typedRulesFor('const date = new Date(); if (date instanceof Date) { run() }')).toContain(
 			'no-redundant-type-check'
@@ -132,12 +202,76 @@ describe('control-flow rules', () => {
 		expect(rulesFor('if (value) { run() } else { stop() }')).toContain('no-else')
 	})
 
+	test('no-braced-single-line-guard', () => {
+		expect(rulesFor('function read(node: Node) { if (!node.body) { return [] } return scan(node.body) }')).toContain(
+			'no-braced-single-line-guard'
+		)
+	})
+
+	test('no-unbraced-multiline-guard', () => {
+		expect(
+			rulesFor(`function read(node: Node) {
+				if (node.body && node.body.statements && node.body.statements.length > 0)
+					return scan(node.body)
+			}`)
+		).toContain('no-unbraced-multiline-guard')
+		expect(rulesFor('function read(node: Node) { if (!node.body) return [] }')).not.toContain(
+			'no-unbraced-multiline-guard'
+		)
+	})
+
+	test('no-regex-literal', () => {
+		expect(rulesFor('const testPattern = /test/')).toContain('no-regex-literal')
+	})
+
+	test('no-multiline-ternary', () => {
+		expect(rulesFor("const value = enabled\n\t? 'yes'\n\t: 'no'")).toContain('no-multiline-ternary')
+		expect(rulesFor("const value = enabled ? 'yes' : 'no'")).not.toContain('no-multiline-ternary')
+		expect(
+			rulesFor(
+				`const view = <div>{
+				enabled ? (
+					<EnabledPanel />
+				) : (
+					<DisabledPanel />
+				)
+			}</div>`,
+				'sample.tsx'
+			)
+		).not.toContain('no-multiline-ternary')
+	})
+
+	test('no-redundant-void-return', () => {
+		expect(
+			typedRulesFor(`
+				function report(): void {}
+				function run(value: boolean) {
+					if (value) {
+						report()
+						return
+					}
+				}
+			`)
+		).toContain('no-redundant-void-return')
+		expect(
+			typedRulesFor(`
+				function report(): void {}
+				function read(): string | undefined {
+					report()
+					return
+				}
+			`)
+		).not.toContain('no-redundant-void-return')
+	})
+
 	test('no-ternary-in-jsx', () => {
 		expect(rulesFor('const node = active ? <Panel /> : null', 'sample.tsx')).toContain('no-ternary-in-jsx')
+		expect(rulesFor('const node = <div>{active ? <Panel /> : null}</div>', 'sample.tsx')).toContain('no-ternary-in-jsx')
 	})
 
 	test('no-imperative-array-transform', () => {
 		expect(rulesFor('for (const item of items) { result.push(item) }')).toContain('no-imperative-array-transform')
+		expect(rulesFor('while (running) { tick() }')).toContain('no-imperative-array-transform')
 	})
 
 	test('allows null in JSON stringify replacer and React ref initialization', () => {
@@ -146,8 +280,8 @@ describe('control-flow rules', () => {
 		)
 	})
 
-	test('does not report length arithmetic as a length check', () => {
-		expect(rulesFor('const last = items.length - 1')).not.toContain('no-length-check')
+	test('no-length-check flags length access', () => {
+		expect(typedRulesFor('const last = items.length - 1')).toContain('no-length-check')
 	})
 
 	test('no-top-level-mutable-singleton', () => {

@@ -1,13 +1,10 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
 import {StrictLinter} from '../index.ts'
 
 function rulesFor(sourceText: string) {
-	return pipe(
-		StrictLinter.analyzeText('sample.ts', sourceText),
-		Array.map(diagnostic => diagnostic.rule)
-	)
+	return Array.map(StrictLinter.analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('anti-indirection rules', () => {
@@ -29,6 +26,12 @@ describe('anti-indirection rules', () => {
 
 	test('no-single-use-variable', () => {
 		expect(rulesFor('function run() { const value = getValue(); save(value) }')).toContain('no-single-use-variable')
+	})
+
+	test('no-small-literal-variable', () => {
+		expect(
+			rulesFor("function run() { const result = {output: 'ok'}; save(result); expect(result).toEqual(result) }")
+		).toContain('no-small-literal-variable')
 	})
 
 	test('no-access-helper', () => {
@@ -97,14 +100,6 @@ describe('anti-indirection rules', () => {
 		).toContain('no-helper-branch-growth')
 	})
 
-	test('no-union-normalizer-helper', () => {
-		expect(
-			rulesFor(
-				"const getLabel = (item: {name?: string; title?: string}) => { if (item.name) return item.name; if (item.title) return item.title; return 'Unknown' }"
-			)
-		).toContain('no-union-normalizer-helper')
-	})
-
 	test('no-configurable-helper', () => {
 		expect(rulesFor("const getLabel = (value: string, fallback = 'Unknown') => value || fallback")).toContain(
 			'no-configurable-helper'
@@ -118,6 +113,9 @@ describe('anti-indirection rules', () => {
 	test('allows css constants with Tailwind-like tokens', () => {
 		expect(rulesFor('const DIFF_CSS = `:host { --gap-token: flex; border: 1px solid red; }`')).not.toContain(
 			'no-tailwind-class-variables'
+		)
+		expect(rulesFor('const DIFF_CSS = `:host { --gap-token: flex; border: 1px solid red; }`')).not.toContain(
+			'no-derived-simple-variable'
 		)
 	})
 
@@ -143,8 +141,19 @@ describe('anti-indirection rules', () => {
 		)
 	})
 
+	test('no-effect-antipatterns for arrow Effect.gen wrappers', () => {
+		expect(rulesFor('const runEffect = () => Effect.gen(function* () { return yield* work })')).toContain(
+			'no-effect-antipatterns'
+		)
+	})
+
 	test('no-effect-antipatterns for direct Effect.gen constants', () => {
 		expect(rulesFor('const cli = Effect.gen(function* () { return yield* work })')).toContain('no-effect-antipatterns')
+	})
+
+	test('no-effect-returning-function', () => {
+		expect(rulesFor('function collect() { return Effect.succeed([]) }')).toContain('no-effect-returning-function')
+		expect(rulesFor('const collect = () => Effect.succeed([])')).toContain('no-effect-returning-function')
 	})
 
 	test('allows top-level variables used more than once', () => {
@@ -153,14 +162,24 @@ describe('anti-indirection rules', () => {
 		).not.toContain('no-single-use-top-level-variable')
 	})
 
-	test('allows top-level arrays that are not compositions', () => {
-		expect(rulesFor('const sourceFileExtensions = [".ts", ".tsx"]; use(sourceFileExtensions)')).not.toContain(
+	test('flags small top-level arrays used once', () => {
+		expect(rulesFor('const sourceFileExtensions = [".ts", ".tsx"]; use(sourceFileExtensions)')).toContain(
 			'no-single-use-top-level-variable'
 		)
 	})
 
 	test('no-single-use-top-level-variable', () => {
 		expect(rulesFor('const ruleRegistry = [...a, ...b, ...c]; run(ruleRegistry)')).toContain(
+			'no-single-use-top-level-variable'
+		)
+	})
+
+	test('no-single-use-top-level-variable for small single-use expressions', () => {
+		expect(rulesFor('const matcher = RegExp("test"); matcher.test(value)')).toContain(
+			'no-single-use-top-level-variable'
+		)
+		expect(rulesFor('const names = ["a", "b"]; use(names)')).toContain('no-single-use-top-level-variable')
+		expect(rulesFor('export const hooks = new Set(["memo", "useMemo"]); hooks.has(name)')).toContain(
 			'no-single-use-top-level-variable'
 		)
 	})
