@@ -100,18 +100,15 @@ If no behavior-preserving rewrite exists, continue resolving all other diagnosti
 
 ## Product Shape
 
-Build both:
-
-- `@ai-toolkit/linter` SDK for TypeScript workflows and future app integration.
-- CLI wrapper for slash commands, staged checks, local runs, and CI-like validation.
+Build a CLI for slash commands, staged checks, local runs, and CI-like validation.
 
 CLI modes:
 
-- `strict-lint staged`
-- `strict-lint unstaged`
-- `strict-lint changed`
-- `strict-lint paths <files...>`
-- `strict-lint full` only when explicitly requested
+- `bunx @ai-toolkit/deslop --staged`
+- `bunx @ai-toolkit/deslop --unstaged`
+- `bunx @ai-toolkit/deslop --changed`
+- `bunx @ai-toolkit/deslop <files...>`
+- `bunx @ai-toolkit/deslop --full` only when explicitly requested
 
 The main workflow should run on staged/changed files first.
 
@@ -188,10 +185,10 @@ Needed for deterministic structural rules that oxlint JS plugins alone cannot ha
 - Type-aware native prototype method distinction.
 - Package API surface analysis.
 
-The SDK should expose one core entrypoint that the CLI uses:
+The CLI should expose one internal Effect entrypoint:
 
 ```ts
-const result = await StrictLinter.run({
+const result = yield* runDeslop({
 	mode: 'staged',
 	cwd,
 })
@@ -234,7 +231,7 @@ Use React Doctor as the reference.
 Expected command shape:
 
 ```sh
-node path/to/oxlint -c /tmp/strict-linter-oxlintrc/oxlintrc.json --format json file1.ts file2.tsx
+node path/to/oxlint -c /tmp/deslop-oxlintrc/oxlintrc.json --format json file1.ts file2.tsx
 ```
 
 Config shape:
@@ -651,7 +648,7 @@ Rules:
 - `no-mutation`
 - `no-accumulator-loop`
 - `no-imperative-array-transform`
-- `no-pipe-method`
+- `no-method-pipe`
 
 Precision rule:
 
@@ -900,7 +897,7 @@ Extract examples of:
 - Dependency facade exports used to avoid direct consumer dependencies.
 - Namespace component contracts like `RichTextArea.Handle` / `RichTextArea.Snapshot`.
 - Effect service contracts that require named classes/types.
-- Current abstractions that would become strict-lint diagnostics.
+- Current abstractions that would become deslop diagnostics.
 
 ## Implementation Phases
 

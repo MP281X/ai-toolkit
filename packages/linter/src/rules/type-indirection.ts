@@ -12,29 +12,17 @@ export const typeIndirectionRules = [
 			checker?: ts.TypeChecker
 		) {
 			if (ts.isModuleDeclaration(node) && hasExportModifier(node) && !hasDeclareModifier(node)) {
-				report(
-					node.name,
-					'no-export-namespace',
-					'Do not use `export namespace`. Export plain values and types instead; only `export declare namespace` is allowed for external declarations.'
-				)
+				report(node.name, 'no-export-namespace', 'Replace `export namespace` with separate named exports.')
 			}
 
 			if (isInsideDeclareModule(node)) return
 
 			if (ts.isInterfaceDeclaration(node)) {
 				if (String.endsWith('Props')(node.name.text)) {
-					report(
-						node.name,
-						'no-named-props-type',
-						'Component props must be inline. Replace this named props type with an inline object at the component boundary.'
-					)
+					report(node.name, 'no-named-props-type', 'Inline Props type into component parameter.')
 				}
 
-				report(
-					node.name,
-					'no-interface-for-object-shape',
-					'This interface hides a local shape. Inline the shape at the consuming boundary.'
-				)
+				report(node.name, 'no-interface-for-object-shape', 'Inline type at every use site.')
 			}
 
 			if (ts.isTypeAliasDeclaration(node)) {
@@ -42,7 +30,7 @@ export const typeIndirectionRules = [
 					return report(
 						node.name,
 						'no-schema-type-order',
-						'Schema companion types must be declared immediately before the schema value.'
+						'Move schema companion type immediately before schema value.'
 					)
 				}
 
@@ -58,19 +46,53 @@ export const typeIndirectionRules = [
 				isRuntimeFunctionLike(node.parent) &&
 				isLocalShapeReference(node.type, node.parent, checker)
 			) {
-				report(
-					node.type,
-					'no-named-function-args-type',
-					'This function argument uses a named shape. Inline the object shape at the function boundary.'
-				)
+				report(node.type, 'no-named-function-args-type', 'Inline local parameter type or remove annotation.')
 			}
 
 			if (ts.isModuleDeclaration(node)) {
 				analyzeNamespaceDeclaration(node, report)
 			}
+
+			if (ts.isCallExpression(node) && checker && hasContextuallyInferredType(node, checker)) {
+				const typeArguments = node.typeArguments ?? []
+
+				if (Array.isReadonlyArrayNonEmpty(typeArguments)) {
+					report(typeArguments[0], 'no-unnecessary-type-argument', 'Remove unnecessary type argument.')
+				}
+			}
 		}
 	}
 ]
+
+function hasContextuallyInferredType(node: ts.CallExpression, checker: ts.TypeChecker) {
+	const contextualType = contextualResultType(node, checker)
+
+	if (!contextualType || isAnyType(contextualType) || !isNullishFallback(node)) return false
+
+	const callType = checker.getTypeAtLocation(node)
+
+	return checker.isTypeAssignableTo(callType, contextualType)
+}
+
+function contextualResultType(node: ts.CallExpression, checker: ts.TypeChecker) {
+	if (isNullishFallback(node)) {
+		return checker.getNonNullableType(checker.getTypeAtLocation(node.parent.left))
+	}
+
+	return checker.getContextualType(node)
+}
+
+function isNullishFallback(node: ts.CallExpression): node is ts.CallExpression & {parent: ts.BinaryExpression} {
+	return (
+		ts.isBinaryExpression(node.parent) &&
+		node.parent.right === node &&
+		node.parent.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+	)
+}
+
+function isAnyType(type: ts.Type) {
+	return (type.flags & ts.TypeFlags.Any) !== 0
+}
 
 function isInsideDeclareModule(node: ts.Node) {
 	return !!ts.findAncestor(
@@ -109,26 +131,14 @@ function analyzeTypeAlias(
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
 	if (ts.isTypeLiteralNode(node.type)) {
-		return report(
-			node.name,
-			'no-type-alias-for-object-shape',
-			'This named type hides a local shape. Inline the shape at the consuming boundary.'
-		)
+		return report(node.name, 'no-type-alias-for-object-shape', 'Inline type at every use site.')
 	}
 
 	if (ts.isFunctionTypeNode(node.type)) {
-		return report(
-			node.name,
-			'no-function-signature-type-alias',
-			'This function type alias hides a callback shape. Inline the callback signature where it is consumed.'
-		)
+		return report(node.name, 'no-function-signature-type-alias', 'Inline type at every use site.')
 	}
 
-	report(
-		node.name,
-		'no-single-use-type',
-		'This named type hides an inferred shape. Inline it instead of preserving type indirection.'
-	)
+	report(node.name, 'no-single-use-type', 'Inline local type alias or remove annotation.')
 }
 
 function analyzeNamespaceDeclaration(
@@ -144,30 +154,18 @@ function analyzeNamespaceDeclaration(
 			(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
 			statement.name.text === 'Props'
 		) {
-			report(
-				statement.name,
-				'no-namespace-props-type',
-				'This namespace Props type hides component inputs. Inline props in the component parameter.'
-			)
+			report(statement.name, 'no-namespace-props-type', 'Inline namespace Props type into component parameter.')
 		}
 
 		if (ts.isTypeAliasDeclaration(statement) && ts.isFunctionTypeNode(statement.type)) {
-			report(
-				statement.name,
-				'no-namespace-callback-alias',
-				'This namespace callback alias hides a function shape. Inline the callback signature where it is consumed.'
-			)
+			report(statement.name, 'no-namespace-callback-alias', 'Inline namespace type at every use site.')
 		}
 
 		if (
 			(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
 			statement.name.text !== 'Props'
 		) {
-			report(
-				statement.name,
-				'no-local-namespace-type',
-				'This namespace type hides a local shape. Inline the shape where it is consumed.'
-			)
+			report(statement.name, 'no-local-namespace-type', 'Inline namespace type at every use site.')
 		}
 	})
 }

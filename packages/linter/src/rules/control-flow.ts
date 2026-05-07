@@ -13,68 +13,24 @@ export const controlFlowRules = [
 			report: (node: ts.Node, rule: string, message: string) => void,
 			checker?: ts.TypeChecker
 		) {
-			if (
-				!RegExp('\\.[^.]*test\\.[cm]?[jt]sx?$').test(node.getSourceFile().fileName) &&
-				(isAsyncFunctionLike(node) || isTopLevelAwait(node))
-			) {
-				report(
-					node,
-					'no-async-await',
-					'Do not use async/await. Model asynchronous work with Effect so concurrency, errors, and resources stay explicit.'
-				)
-			}
-
 			if (ts.isTypeNode(node) && node.kind === ts.SyntaxKind.AnyKeyword) {
-				report(
-					node,
-					'no-any',
-					'Do not use `any`. Model the boundary with unknown plus narrowing, Schema, or a concrete inferred type.'
-				)
+				report(node, 'no-any', 'Replace `any` with unknown, Schema decoding, or a concrete type.')
 			}
 
 			if (ts.isThrowStatement(node)) {
-				report(
-					node,
-					'no-throw',
-					'Do not throw exceptions. Return typed failures with Effect, Result, or a schema-validated error boundary.'
-				)
+				report(node, 'no-throw', 'Return a typed Effect or Result failure.')
 			}
 
 			if (ts.isTryStatement(node)) {
-				report(
-					node,
-					'no-try-catch',
-					'Do not use raw try/catch. Use Effect.try, Effect.tryPromise, or Effect.catch* so failures stay typed and composable.'
-				)
-			}
-
-			if (
-				(ts.isExportAssignment(node) && !node.isExportEquals) ||
-				((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) &&
-					hasDefaultModifier(node)) ||
-				(ts.isVariableStatement(node) && hasDefaultModifier(node))
-			) {
-				report(
-					node,
-					'no-default-export',
-					'Do not use default exports. Export named values so imports stay explicit and mechanically searchable.'
-				)
+				report(node, 'no-try-catch', 'Replace try/catch with Effect.try, Effect.tryPromise, or Effect.catch*.')
 			}
 
 			if (ts.isClassDeclaration(node) && !node.heritageClauses) {
-				report(
-					node.name ?? node,
-					'no-class',
-					'Do not create standalone classes. Classes are only allowed when extending an external class contract.'
-				)
+				report(node.name ?? node, 'no-class', 'Replace standalone class with plain data or an Effect service.')
 			}
 
 			if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Error') {
-				report(
-					node.expression,
-					'no-error-constructor',
-					'Do not construct raw Error values. Use Effect failures with explicit domain data so error shape stays reviewable.'
-				)
+				report(node.expression, 'no-error-constructor', 'Replace raw Error with typed domain failure data.')
 			}
 
 			if (ts.isIdentifier(node) && checker) {
@@ -85,35 +41,32 @@ export const controlFlowRules = [
 				report(
 					node.declarationList,
 					'no-top-level-mutable-singleton',
-					'Do not keep mutable file-scope state. Pass state through explicit values so behavior stays statically analyzable.'
+					'Move mutable file-scope state into explicit scope.'
 				)
 			}
 
 			if ((ts.isAsExpression(node) && !isConstAssertion(node)) || ts.isTypeAssertionExpression(node)) {
-				report(node, 'no-type-assertion', 'Remove `as` assertion. Inline, simplify, rewrite until inference works.')
+				report(node, 'no-type-assertion', 'Remove `as`; rewrite until inference works.')
 			}
 
 			if (node.kind === ts.SyntaxKind.NullKeyword && !isAllowedJsxNull(node)) {
-				report(
-					node,
-					'no-null-literal',
-					'Do not use `null`. Use absence with Option, omitted values, or bare return; only JSX empty branches may use null.'
-				)
+				report(node, 'no-null-literal', 'Replace `null` with undefined, omitted value, or bare return.')
 			}
 
 			if (ts.isReturnStatement(node) && node.expression && isNullishExpression(node.expression)) {
-				report(
-					node.expression,
-					'no-return-undefined-null',
-					'Do not return `undefined` or `null` explicitly for an empty branch. Use bare `return` instead so the control flow says stop here without redundant sentinel values.'
-				)
+				report(node.expression, 'no-return-undefined-null', 'Replace `return undefined/null` with bare `return`.')
 			}
 
-			if (ts.isBinaryExpression(node) && assignmentOperators.has(node.operatorToken.kind)) {
+			if (
+				ts.isBinaryExpression(node) &&
+				assignmentOperators.has(node.operatorToken.kind) &&
+				!isRefCurrentAssignment(node, checker) &&
+				!isScopedMutableStateAssignment(node)
+			) {
 				report(
 					node.operatorToken,
 					'no-mutation',
-					'This assignment mutates existing state. Return a new value so data flow stays explicit.'
+					'Derive the next value with an expression and pass it to the consumer once. Use Ref or SubscriptionRef for shared scoped state.'
 				)
 			}
 
@@ -124,19 +77,11 @@ export const controlFlowRules = [
 				ts.isWhileStatement(node) ||
 				ts.isDoStatement(node)
 			) {
-				report(
-					node,
-					'no-imperative-array-transform',
-					'This imperative loop hides control flow in mutable steps. Replace it with Effect, Stream, or collection combinators.'
-				)
+				report(node, 'no-imperative-array-transform', 'Replace loop with Effect, Stream, or collection combinators.')
 			}
 
 			if (ts.isIfStatement(node) && node.elseStatement) {
-				report(
-					node.elseStatement,
-					'no-else',
-					'Remove the else branch. Use an early return so control flow stays flat and visible.'
-				)
+				report(node.elseStatement, 'no-else', 'Remove else branch; return early.')
 			}
 
 			if (ts.isIfStatement(node)) {
@@ -182,11 +127,7 @@ export const controlFlowRules = [
 			}
 
 			if (ts.isRegularExpressionLiteral(node)) {
-				report(
-					node,
-					'no-regex-literal',
-					'Use RegExp(...) instead of regex literals so pattern construction is explicit and mechanically searchable.'
-				)
+				report(node, 'no-regex-literal', 'Replace regex literal with RegExp(...).')
 			}
 		}
 	}
@@ -207,6 +148,30 @@ function analyzeBinaryExpression(
 	analyzeInExpression(node, report, checker)
 }
 
+function isScopedMutableStateAssignment(node: ts.BinaryExpression) {
+	return (
+		node.operatorToken.kind === ts.SyntaxKind.FirstAssignment &&
+		ts.isPropertyAccessExpression(node.left) &&
+		ts.isIdentifier(node.left.expression) &&
+		Array.contains(['session', 'state'], node.left.expression.text) &&
+		!!ts.findAncestor(node, ancestor => isScopedStateCallback(ancestor))
+	)
+}
+
+function isScopedStateCallback(node: ts.Node) {
+	return (
+		(ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+		ts.isCallExpression(node.parent) &&
+		Array.some(node.parent.arguments, argument => argument === node) &&
+		ts.isPropertyAccessExpression(node.parent.expression) &&
+		((ts.isIdentifier(node.parent.expression.expression) &&
+			Array.contains(['Stream', 'Effect'], node.parent.expression.expression.text)) ||
+			(ts.isPropertyAccessExpression(node.parent.expression.expression) &&
+				ts.isIdentifier(node.parent.expression.expression.expression) &&
+				Array.contains(['Stream', 'Effect'], node.parent.expression.expression.expression.text)))
+	)
+}
+
 function analyzeIfStatement(node: ts.IfStatement, report: (node: ts.Node, rule: string, message: string) => void) {
 	if (
 		!node.elseStatement &&
@@ -219,22 +184,14 @@ function analyzeIfStatement(node: ts.IfStatement, report: (node: ts.Node, rule: 
 			`if (${String.replaceAll(RegExp('\\s+', 'g'), ' ')(node.expression.getText(node.getSourceFile()))}) ${String.replaceAll(RegExp('\\s+', 'g'), ' ')(node.thenStatement.statements[0].getText(node.getSourceFile()))}`
 		) <= 120
 	) {
-		report(
-			node.thenStatement,
-			'no-braced-single-line-guard',
-			'Remove braces from short single-return guards that fit on one line.'
-		)
+		report(node.thenStatement, 'no-braced-single-line-guard', 'Remove braces from one-line return guard.')
 	}
 
 	if (
 		!(node.elseStatement || ts.isBlock(node.thenStatement)) &&
 		String.includes('\n')(node.getText(node.getSourceFile()))
 	) {
-		report(
-			node.thenStatement,
-			'no-unbraced-multiline-guard',
-			'Use braces when an if guard wraps across lines so the branch boundary stays visible.'
-		)
+		report(node.thenStatement, 'no-unbraced-multiline-guard', 'Add braces to multiline if guard.')
 	}
 }
 
@@ -250,7 +207,7 @@ function analyzeAstTextComparison(
 		report(
 			node,
 			'no-ast-gettext-comparison',
-			'Do not compare AST text output. Use syntax-kind predicates and node fields so the matched shape is explicit.'
+			'Replace AST text comparison with syntax-kind predicates and node fields.'
 		)
 	}
 }
@@ -276,11 +233,7 @@ function analyzeRedundantVoidReturn(
 						!nextStatement.expression &&
 						isVoidLikeType(checker.getTypeAtLocation(statement.expression))
 					) {
-						report(
-							nextStatement,
-							'no-redundant-void-return',
-							'Return the void call directly instead of calling it and returning on the next line.'
-						)
+						report(nextStatement, 'no-redundant-void-return', 'Replace call plus bare return with `return call()`.')
 					}
 				}
 			})
@@ -312,22 +265,14 @@ function analyzePropertyAccess(
 		node.expression.name.text === 'parent' &&
 		!(ts.isPropertyAccessExpression(node.parent) && node.parent.name.text === 'parent')
 	) {
-		report(
-			node.name,
-			'no-deep-parent-chain',
-			'Do not chain AST parent access. Use ts.findAncestor or a narrowed helper so the tree invariant is explicit.'
-		)
+		report(node.name, 'no-deep-parent-chain', 'Replace parent.parent access with ts.findAncestor or a narrowed helper.')
 	}
 
 	if (
 		node.name.text === 'length' &&
 		!(ts.isIdentifier(node.expression) && Array.contains(['Array', 'String'], node.expression.text))
 	) {
-		report(
-			node.name,
-			'no-length-check',
-			'Do not use `.length` directly. Use the matching Effect String or Array helper so intent and input type stay explicit.'
-		)
+		report(node.name, 'no-length-check', 'Replace `.length` with Array.length(value) or String.length(value).')
 	}
 }
 
@@ -335,31 +280,17 @@ function isConstAssertion(node: ts.AsExpression) {
 	return ts.isTypeReferenceNode(node.type) && ts.isIdentifier(node.type.typeName) && node.type.typeName.text === 'const'
 }
 
-function isAsyncFunctionLike(node: ts.Node) {
-	return (
-		(ts.isFunctionDeclaration(node) ||
-			ts.isFunctionExpression(node) ||
-			ts.isArrowFunction(node) ||
-			ts.isMethodDeclaration(node)) &&
-		Array.some(ts.getModifiers(node) ?? [], modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
-	)
-}
-
-function isTopLevelAwait(node: ts.Node) {
-	return ts.isAwaitExpression(node) && !ts.findAncestor(node, isAsyncFunctionLike)
-}
-
 const restrictedGlobalMessages = new Map([
-	['global', 'Do not use global. Pass dependencies explicitly through Effect services.'],
-	['globalThis', 'Do not use globalThis. Pass dependencies explicitly through Effect services.'],
-	['location', 'Do not use global location. Use router state so navigation stays explicit and testable.'],
-	['Array', "Do not use the global Array. Import Array from 'effect'."],
-	['Option', "Do not use the global Option. Import Option from 'effect'."],
-	['Number', "Do not use the global Number. Import Number from 'effect'."],
-	['String', "Do not use the global String. Import String from 'effect'."],
-	['Object', "Do not use the global Object. Import Record from 'effect'."],
-	['Boolean', "Do not use the global Boolean. Import Boolean from 'effect'."],
-	['Date', 'Do not use the global Date. Use Effect DateTime or inject time through an Effect service.']
+	['global', 'Pass dependencies through Effect services.'],
+	['globalThis', 'Pass dependencies through Effect services.'],
+	['location', 'Use router state for navigation.'],
+	['Array', "Import Array from 'effect'."],
+	['Option', "Import Option from 'effect'."],
+	['Number', "Import Number from 'effect'."],
+	['String', "Import String from 'effect'."],
+	['Object', "Import Record from 'effect'."],
+	['Boolean', "Import Boolean from 'effect'."],
+	['Date', 'Use Effect DateTime or inject time through an Effect service.']
 ])
 
 function analyzeRestrictedGlobal(
@@ -418,10 +349,6 @@ function isImportName(node: ts.Identifier) {
 	)
 }
 
-function hasDefaultModifier(node: ts.HasModifiers) {
-	return Array.some(ts.getModifiers(node) ?? [], modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)
-}
-
 function analyzeOptionalAccess(
 	node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
 	report: (node: ts.Node, rule: string, message: string) => void,
@@ -430,11 +357,7 @@ function analyzeOptionalAccess(
 	if (!node.questionDotToken || isAnyOrUnknown(checker.getTypeAtLocation(node.expression))) return
 
 	if (isNonNullableType(checker.getTypeAtLocation(node.expression), checker)) {
-		reportRedundantTypeCheck(
-			node.questionDotToken,
-			report,
-			'Optional access checks for nullish state that the TypeScript type already excludes.'
-		)
+		reportRedundantTypeCheck(node.questionDotToken, report, 'Remove redundant optional access.')
 	}
 }
 
@@ -464,14 +387,14 @@ function analyzeDeprecatedCallExpression(
 			return report(
 				ts.isPropertyAccessExpression(node.expression) ? node.expression.name : node.expression,
 				'no-deprecated-api',
-				`Do not call deprecated APIs. ${deprecatedTag.value.comment}`
+				`Use replacement API. ${deprecatedTag.value.comment}`
 			)
 		}
 
 		report(
 			ts.isPropertyAccessExpression(node.expression) ? node.expression.name : node.expression,
 			'no-deprecated-api',
-			'Do not call deprecated APIs. Use the replacement named by the owning package.'
+			'Use replacement API named by the owning package.'
 		)
 	}
 }
@@ -484,11 +407,7 @@ function analyzeOptionalCall(
 	if (!node.questionDotToken || isAnyOrUnknown(checker.getTypeAtLocation(node.expression))) return
 
 	if (isNonNullableType(checker.getTypeAtLocation(node.expression), checker)) {
-		reportRedundantTypeCheck(
-			node.questionDotToken,
-			report,
-			'Optional call checks for nullish state that the TypeScript type already excludes.'
-		)
+		reportRedundantTypeCheck(node.questionDotToken, report, 'Remove redundant optional call.')
 	}
 }
 
@@ -512,7 +431,7 @@ function analyzeArrayIsArrayCall(
 	if (isAnyOrUnknown(type)) return
 
 	if (isAlwaysArrayType(type, checker) || isAlwaysNonArrayType(type, checker)) {
-		reportRedundantTypeCheck(node, report, 'Array.isArray checks a shape that the TypeScript type already proves.')
+		reportRedundantTypeCheck(node, report, 'Remove redundant Array.isArray check.')
 	}
 }
 
@@ -524,11 +443,7 @@ function analyzeNonNullExpression(
 	const type = checker.getTypeAtLocation(node.expression)
 
 	if (!isAnyOrUnknown(type) && isNonNullableType(type, checker)) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Non-null assertion repeats nullish state that the TypeScript type already excludes.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove redundant non-null assertion.')
 	}
 }
 
@@ -542,11 +457,7 @@ function analyzePrefixUnaryExpression(
 	const type = checker.getTypeAtLocation(node.operand)
 
 	if (!isAnyOrUnknown(type) && isAlwaysTruthy(type)) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Truthiness check is impossible because the TypeScript type excludes every falsy value.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove impossible truthiness check.')
 	}
 }
 
@@ -563,11 +474,7 @@ function analyzeNullishBinaryExpression(
 		isNonNullableType(checker.getTypeAtLocation(checked.expression), checker) ||
 		isAlwaysCheckedNullish(checker.getTypeAtLocation(checked.expression), checked.nullish)
 	) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Nullish comparison checks a state that the TypeScript type already excludes.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove redundant nullish comparison.')
 	}
 }
 
@@ -581,11 +488,7 @@ function analyzeNullishCoalescingAssignment(
 	const type = checker.getTypeAtLocation(node.left)
 
 	if (!isAnyOrUnknown(type) && isNonNullableType(type, checker)) {
-		reportRedundantTypeCheck(
-			node.operatorToken,
-			report,
-			'Nullish assignment fallback is unreachable because the TypeScript type already excludes nullish state.'
-		)
+		reportRedundantTypeCheck(node.operatorToken, report, 'Remove unreachable nullish assignment fallback.')
 	}
 }
 
@@ -599,11 +502,7 @@ function analyzeNullishCoalescingExpression(
 	const type = checker.getTypeAtLocation(node.left)
 
 	if (!isAnyOrUnknown(type) && isNonNullableType(type, checker)) {
-		reportRedundantTypeCheck(
-			node.operatorToken,
-			report,
-			'Nullish fallback is unreachable because the TypeScript type already excludes nullish state.'
-		)
+		reportRedundantTypeCheck(node.operatorToken, report, 'Remove unreachable nullish fallback.')
 	}
 }
 
@@ -620,11 +519,7 @@ function analyzeTypeofBinaryExpression(
 		isAlwaysTypeof(checker.getTypeAtLocation(check.expression), check.kind) ||
 		isNeverTypeof(checker.getTypeAtLocation(check.expression), check.kind)
 	) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Runtime typeof check repeats information already known by the TypeScript type.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove redundant typeof check.')
 	}
 }
 
@@ -643,11 +538,7 @@ function analyzeInstanceofExpression(
 	const instanceType = instanceTypeOf(node.right, checker)
 
 	if (instanceType && isAlwaysAssignableTo(checker.getTypeAtLocation(node.left), instanceType, checker)) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Runtime instanceof check repeats information already known by the TypeScript type.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove redundant instanceof check.')
 	}
 }
 
@@ -665,11 +556,7 @@ function analyzeInExpression(
 	}
 
 	if (hasRequiredProperty(checker.getTypeAtLocation(node.right), node.left.text)) {
-		reportRedundantTypeCheck(
-			node,
-			report,
-			'Property existence check repeats a required property already known by the TypeScript type.'
-		)
+		reportRedundantTypeCheck(node, report, 'Remove redundant property existence check.')
 	}
 }
 
@@ -677,23 +564,14 @@ function analyzeConditionalExpression(
 	node: ts.ConditionalExpression,
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
-	if (String.includes('\n')(node.getText(node.getSourceFile())) && !isAllowedJsxBranchTernary(node)) {
-		report(
-			node,
-			'no-multiline-ternary',
-			'Do not use ternaries that wrap across lines. Use early returns, Match, or module match helpers so branches stay readable.'
-		)
-	}
-
 	if (
-		(isJsxLike(node.whenTrue) && isNullishExpression(node.whenFalse)) ||
-		(isJsxLike(node.whenFalse) && isNullishExpression(node.whenTrue))
+		String.includes('\n')(node.getText(node.getSourceFile())) &&
+		isReturnLikeConditionalExpression(node) &&
+		!isAllowedJsxBranchTernary(node) &&
+		(String.includes('\n')(node.whenTrue.getText(node.getSourceFile())) ||
+			String.includes('\n')(node.whenFalse.getText(node.getSourceFile())))
 	) {
-		report(
-			node,
-			'no-ternary-in-jsx',
-			'When one branch is empty, use condition && <...> instead of a ternary with null or undefined.'
-		)
+		report(node, 'no-multiline-ternary', 'Rewrite this returned ternary as if guards with early returns.')
 	}
 }
 
@@ -704,6 +582,23 @@ function isAllowedJsxBranchTernary(node: ts.ConditionalExpression) {
 		!isNullishExpression(node.whenTrue) &&
 		!isNullishExpression(node.whenFalse)
 	)
+}
+
+function isReturnLikeConditionalExpression(node: ts.ConditionalExpression) {
+	return (
+		(ts.isReturnStatement(node.parent) && node.parent.expression === node) ||
+		(ts.isArrowFunction(node.parent) && node.parent.body === node)
+	)
+}
+
+function isRefCurrentAssignment(node: ts.BinaryExpression, checker?: ts.TypeChecker) {
+	if (!ts.isPropertyAccessExpression(node.left) || node.left.name.text !== 'current') return false
+
+	if (!checker) return true
+
+	const targetType = checker.typeToString(checker.getTypeAtLocation(node.left.expression))
+
+	return String.includes('RefObject')(targetType) || String.includes('MutableRefObject')(targetType)
 }
 
 function isAllowedJsxNull(node: ts.Node) {

@@ -58,11 +58,7 @@ export const antiIndirectionRules = [
 				node.type.kind !== ts.SyntaxKind.TypePredicate &&
 				node.type.kind !== ts.SyntaxKind.BooleanKeyword
 			) {
-				report(
-					node.type,
-					'no-return-type-annotation',
-					'Remove this return type annotation. Let the implementation define the return type.'
-				)
+				report(node.type, 'no-return-type-annotation', 'Remove return type annotation.')
 			}
 
 			if (ts.isFunctionDeclaration(node) && node.name) {
@@ -93,7 +89,7 @@ function analyzeFunctionParameters(
 			report(
 				parameter.name,
 				'no-arg-destructuring',
-				"Don't destructure function parameters. Keep the original parameter object and access `param.prop` inside the body so the data source stays visible."
+				'Replace parameter destructuring with named parameter plus property access.'
 			)
 		)
 	)
@@ -106,6 +102,7 @@ function analyzeVariableDeclaration(
 ) {
 	if (
 		node.type &&
+		!isRecursiveVariableFunction(node) &&
 		!ts.isTypePredicateNode(node.type) &&
 		node.type.kind !== ts.SyntaxKind.TypePredicate &&
 		node.type.kind !== ts.SyntaxKind.BooleanKeyword
@@ -113,34 +110,22 @@ function analyzeVariableDeclaration(
 		report(
 			node.type,
 			'no-variable-type-annotation',
-			'Remove this variable type annotation. Rely on inference so the implementation stays direct.'
+			'Remove variable type annotation unless TypeScript requires it for recursive functions.'
 		)
 	}
 
 	if (!(ts.isIdentifier(node.name) && node.initializer)) return
 
 	if (isPrimitiveLiteral(node.initializer) && !isTailwindStringLiteral(node.initializer)) {
-		report(
-			node.name,
-			'no-primitive-const',
-			'Do not extract primitive literals into standalone constants. Inline the value at the use site so the code stays direct.'
-		)
+		report(node.name, 'no-primitive-const', 'Inline primitive literal at each read site.')
 	}
 
 	if (isTailwindStringLiteral(node.initializer)) {
-		report(
-			node.name,
-			'no-tailwind-class-variables',
-			'Do not store Tailwind class tokens outside `className` or `className={cn(...)}`. Inline the classes at the JSX use site.'
-		)
+		report(node.name, 'no-tailwind-class-variables', 'Move Tailwind classes directly into className or cn(...).')
 	}
 
 	if (!isTopLevelVariableDeclaration(node) && isSmallLiteralContainer(node.initializer)) {
-		report(
-			node.name,
-			'no-small-literal-variable',
-			'Do not store small object or array literals in local variables. Inline the literal where it is consumed.'
-		)
+		report(node.name, 'no-small-literal-variable', 'Inline small object/array literal at each read site.')
 	}
 
 	if (
@@ -152,84 +137,49 @@ function analyzeVariableDeclaration(
 		) &&
 		references.get(node.name.text) === 1
 	) {
-		report(
-			node.name,
-			'no-single-use-variable',
-			'This variable is used once. Inline the value at the usage site so data flow stays linear.'
-		)
+		report(node.name, 'no-single-use-variable', 'Inline single-use variable at its read site.')
 	}
 
 	if (isAccessExpression(node.initializer)) {
-		report(
-			node.name,
-			'no-access-variable',
-			'This variable only renames property access. Inline the access where the value is consumed.'
-		)
+		report(node.name, 'no-access-variable', 'Inline initializer expression at each read site.')
 	}
 
 	if (ts.isIdentifier(node.initializer)) {
-		report(
-			node.name,
-			'no-access-variable',
-			'Do not copy a value into a same-level alias. Keep using the original name so the code stays direct.'
-		)
+		report(node.name, 'no-access-variable', 'Inline original identifier at each alias read site.')
 	}
 
 	if (
 		ts.isNonNullExpression(node.initializer) &&
 		(ts.isIdentifier(node.initializer.expression) || isAccessExpression(node.initializer.expression))
 	) {
-		report(
-			node.name,
-			'no-access-variable',
-			'Do not copy a value into a non-null alias. Keep using the original expression so the assertion stays visible at the use site.'
-		)
-	}
-
-	if (ts.isCallExpression(node.initializer) && isEffectGenCall(node.initializer)) {
-		report(
-			node.name,
-			'no-effect-antipatterns',
-			'Do not assign `Effect.gen(...)` directly. Rewrite it as `Effect.fnUntraced(function* (...) { ... })` so the effect boundary is explicit.'
-		)
+		report(node.name, 'no-access-variable', 'Move non-null assertion to each read site.')
 	}
 
 	if (isTopLevelSingleUseInlineableExpression(node, references)) {
-		report(
-			node.name,
-			'no-single-use-top-level-variable',
-			'This top-level variable hides a small expression used once. Inline it at the usage site so module scope only holds shared values.'
-		)
+		report(node.name, 'no-single-use-top-level-variable', 'Inline single-use top-level expression at its read site.')
 	}
 
 	if (ts.isObjectLiteralExpression(node.initializer) && node.initializer.properties.some(ts.isSpreadAssignment)) {
-		report(
-			node.name,
-			'no-access-variable',
-			'Do not clone a value into a same-level alias with object spread. Keep using the original name so the code stays direct.'
-		)
+		report(node.name, 'no-access-variable', 'Inline object-spread alias at each read site.')
 	}
 
 	if (isSimpleCondition(node.initializer)) {
-		report(
-			node.name,
-			'no-simple-condition-variable',
-			'This variable only hides a simple condition. Inline the condition where control flow uses it.'
-		)
+		report(node.name, 'no-simple-condition-variable', 'Inline simple condition where control flow uses it.')
 	}
 
 	if (
 		!(
 			isTailwindStringLiteral(node.initializer) ||
 			isCssStringLiteral(node.initializer) ||
-			isSimpleCondition(node.initializer)
+			isSimpleCondition(node.initializer) ||
+			isIdentityBearingExpression(node.initializer)
 		) &&
 		isDerivedSimpleExpression(node.initializer)
 	) {
 		report(
 			node.name,
 			'no-derived-simple-variable',
-			'This variable only hides a simple derived value. Inline the expression at the consuming boundary.'
+			'Inline pure derived expression at each read site. Keep identity-bearing values like random IDs bound once.'
 		)
 	}
 }
@@ -251,7 +201,9 @@ function isTopLevelVariableDeclaration(node: ts.VariableDeclaration) {
 
 function isSmallLiteralContainer(node: ts.Expression) {
 	return (
-		(ts.isObjectLiteralExpression(node) && Array.length(node.properties) <= 5) ||
+		(ts.isObjectLiteralExpression(node) &&
+			Array.length(node.properties) <= 5 &&
+			!Array.some(node.properties, ts.isSpreadAssignment)) ||
 		(ts.isArrayLiteralExpression(node) && Array.length(node.elements) <= 5)
 	)
 }
@@ -260,10 +212,24 @@ function isTopLevelSingleUseInlineableExpression(node: ts.VariableDeclaration, r
 	return (
 		isTopLevelVariableDeclaration(node) &&
 		ts.isIdentifier(node.name) &&
+		!isTanStackRouteDeclaration(node) &&
 		!!node.initializer &&
 		(references.get(node.name.text) === 1 ||
 			(isExportedVariableDeclaration(node) && isSmallCollectionConstructor(node.initializer))) &&
 		isInlineableTopLevelExpression(node.initializer)
+	)
+}
+
+function isTanStackRouteDeclaration(node: ts.VariableDeclaration) {
+	return (
+		ts.isIdentifier(node.name) &&
+		node.name.text === 'Route' &&
+		isExportedVariableDeclaration(node) &&
+		!!node.initializer &&
+		ts.isCallExpression(node.initializer) &&
+		ts.isCallExpression(node.initializer.expression) &&
+		ts.isIdentifier(node.initializer.expression.expression) &&
+		node.initializer.expression.expression.text === 'createFileRoute'
 	)
 }
 
@@ -343,43 +309,23 @@ function analyzeFunctionLike(
 			parameter => ts.isObjectBindingPattern(parameter.name) || ts.isArrayBindingPattern(parameter.name)
 		)
 	) {
-		report(
-			name,
-			'no-arg-destructuring',
-			"Don't destructure function parameters. Keep the original parameter object and access `param.prop` inside the body so the data source stays visible."
-		)
+		report(name, 'no-arg-destructuring', 'Replace parameter destructuring with named parameter plus property access.')
 	}
 
 	if (!ts.isFunctionDeclaration(node) && isBranchGrowingHelper(node) && name.text.startsWith('get')) {
-		report(
-			name,
-			'no-helper-branch-growth',
-			'This helper grows branches over data shapes. Move the branch to the concrete call site so behavior stays local.'
-		)
+		report(name, 'no-helper-branch-growth', 'Move helper branch logic to each concrete call site.')
 	}
 
 	if (hasDefaultParameter(node)) {
-		report(
-			name,
-			'no-configurable-helper',
-			'This helper has local configuration. Inline the policy at the consuming boundary instead of preserving a configurable helper.'
-		)
+		report(name, 'no-configurable-helper', 'Inline configurable helper policy at each call site.')
 	}
 
 	if (isNamedArrowOrFunctionExpression(node)) {
-		report(
-			name,
-			'no-arrow-for-named',
-			'Rewrite this as `function name(...) { ... }`. Named functions must use function declarations; arrows are only allowed for callbacks.'
-		)
+		report(name, 'no-arrow-for-named', 'Rewrite named arrow as `function name(...) { ... }`.')
 	}
 
 	if (returnsEffectFromPlainFunction(node, checker)) {
-		report(
-			name,
-			'no-effect-returning-function',
-			'Do not return Effect values from a plain named function. Use Effect.fnUntraced so the Effect boundary is explicit.'
-		)
+		report(name, 'no-effect-returning-function', effectReturningFunctionMessage(node))
 	}
 
 	if (
@@ -390,19 +336,11 @@ function analyzeFunctionLike(
 		node.type.kind !== ts.SyntaxKind.TypePredicate &&
 		node.type.kind !== ts.SyntaxKind.BooleanKeyword
 	) {
-		report(
-			node.type,
-			'no-return-type-annotation',
-			'Remove this return type annotation. Let the implementation define the return type.'
-		)
+		report(node.type, 'no-return-type-annotation', 'Remove return type annotation.')
 	}
 
 	if (isNamedArrowOrFunctionExpression(node) && references.get(name.text) === 1) {
-		report(
-			name,
-			'no-single-expression-function',
-			'This function is used once. Inline it at the call site so the implementation stays linear.'
-		)
+		report(name, 'no-single-expression-function', 'Inline single-use function at its call site.')
 	}
 
 	const expression = getSingleReturnedExpression(node)
@@ -410,67 +348,112 @@ function analyzeFunctionLike(
 	if (!expression) return
 
 	if (isAccessExpression(expression)) {
-		return report(
-			name,
-			'no-access-helper',
-			'This helper only hides property access. Inline the access at the call site.'
-		)
+		return report(name, 'no-access-helper', 'Inline property access at each helper call site.')
 	}
 
 	if (ts.isCallExpression(expression) && isEffectGenCall(expression)) {
-		report(
-			name,
-			'no-effect-antipatterns',
-			'Do not wrap `Effect.gen(...)` in a function. Rewrite argument-taking effects as `Effect.fnUntraced(function* (value) { ... })`.'
-		)
+		report(name, 'no-effect-antipatterns', effectReturningFunctionMessage(node))
 	}
 
 	if ((isNamedArrowOrFunctionExpression(node) || ts.isFunctionDeclaration(node)) && ts.isCallExpression(expression)) {
 		if (!isEffectGenCall(expression)) {
+			let reportedSpecificRule = false
+
 			if (!isExportedPolicyWrapper(node, expression) && isPassThroughCall(node, expression)) {
-				report(
-					name,
-					'no-pass-through-function',
-					'This function only passes parameters through. Inline the direct call at the call site.'
-				)
+				report(name, 'no-pass-through-function', 'Inline pass-through function at each call site.')
+				reportedSpecificRule = true
 			}
 
 			if (!isExportedPolicyWrapper(node, expression) && isCallShapeAdapter(expression)) {
-				report(
-					name,
-					'no-call-shape-adapter',
-					'This wrapper only reshapes arguments for another call. Call the target directly with the final shape.'
-				)
+				report(name, 'no-call-shape-adapter', 'Call target directly with final argument shape.')
+				reportedSpecificRule = true
 			}
 
 			if (!isExportedPolicyWrapper(node, expression) && isLowValueSignatureWrapper(node, expression)) {
-				report(
-					name,
-					'no-signature-wrapper',
-					'This wrapper only forwards into another call. Call the target directly with the final shape.'
-				)
+				report(name, 'no-signature-wrapper', 'Call target directly with final arguments.')
+				reportedSpecificRule = true
+			}
+
+			if (!reportedSpecificRule && isLowReviewValuePrivateFunction(node, name, expression, references)) {
+				report(name, 'no-low-value-function', 'Inline low-value helper at each call site.')
 			}
 		}
 
 		return
 	}
 
-	if (isNamedArrowOrFunctionExpression(node) && !ts.isCallExpression(expression)) {
-		report(
-			name,
-			'no-one-line-function',
-			'This function only hides one expression. Inline the expression where it is consumed.'
-		)
-		report(
-			name,
-			'no-simple-function-variables',
-			'Inline the expression at each call site. Trivial local helpers add indirection and weaken inference.'
-		)
+	if (isLowReviewValuePrivateFunction(node, name, expression, references)) {
+		report(name, 'no-low-value-function', 'Inline low-value helper at each call site.')
+	} else if (isOneLineSimpleReturnHelper(node, expression)) {
+		report(name, 'no-one-line-function', 'Inline one-expression function at each call site.')
+		report(name, 'no-simple-function-variables', 'Inline helper expression at each call site.')
 	}
+}
+
+function isOneLineSimpleReturnHelper(node: ts.FunctionLikeDeclaration, expression: ts.Expression) {
+	return (
+		(isNamedArrowOrFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+		!isExportedFunctionLike(node) &&
+		!ts.isCallExpression(expression) &&
+		isSimpleInlineableReturnExpression(expression)
+	)
+}
+
+function isLowReviewValuePrivateFunction(
+	node: ts.FunctionLikeDeclaration,
+	name: ts.Identifier,
+	expression: ts.Expression,
+	references: Map<string, number>
+) {
+	return (
+		(ts.isFunctionDeclaration(node) || isNamedArrowOrFunctionExpression(node)) &&
+		!isExportedFunctionLike(node) &&
+		!isRecursiveFunctionLike(node, name.text) &&
+		(isSimpleInlineableReturnExpression(expression) ||
+			expressionComplexity(expression) <= lowValueFunctionComplexityLimit(node, name, references))
+	)
+}
+
+function lowValueFunctionComplexityLimit(
+	node: ts.FunctionLikeDeclaration,
+	name: ts.Identifier,
+	references: Map<string, number>
+) {
+	return references.get(name.text) === 1 ? 42 : 28 + Array.length(node.parameters) * 4
+}
+
+function expressionComplexity(node: ts.Node): number {
+	return 1 + Array.reduce(childNodes(node), 0, (total, child) => total + expressionComplexity(child))
+}
+
+function childNodes(node: ts.Node) {
+	const children = Array.empty<ts.Node>()
+
+	ts.forEachChild(node, child => {
+		children.push(child)
+	})
+
+	return children
+}
+
+function isSimpleInlineableReturnExpression(node: ts.Expression) {
+	return (
+		ts.isIdentifier(node) ||
+		isPrimitiveLiteral(node) ||
+		isSmallLiteralContainer(node) ||
+		isSimpleCondition(node) ||
+		isDerivedSimpleExpression(node)
+	)
 }
 
 function isRecursiveFunctionLike(node: ts.FunctionLikeDeclaration, name: string) {
 	return node.body ? containsIdentifierReference(node.body, name) : false
+}
+
+function isRecursiveVariableFunction(node: ts.VariableDeclaration) {
+	return (
+		ts.isIdentifier(node.name) && !!node.initializer && containsIdentifierReference(node.initializer, node.name.text)
+	)
 }
 
 function returnsEffectFromPlainFunction(node: ts.FunctionLikeDeclaration, checker?: ts.TypeChecker) {
@@ -479,6 +462,12 @@ function returnsEffectFromPlainFunction(node: ts.FunctionLikeDeclaration, checke
 		!isEffectFnUntracedCallback(node) &&
 		Array.some(returnExpressions(node), expression => isEffectExpression(expression, checker))
 	)
+}
+
+function effectReturningFunctionMessage(node: ts.FunctionLikeDeclaration) {
+	return Array.isReadonlyArrayNonEmpty(node.parameters)
+		? 'Replace arg Effect function with Effect.fnUntraced(function* (...) { ... }).'
+		: 'Replace no-arg Effect function with const Effect.gen(function* () { ... }).'
 }
 
 function isEffectFnUntracedCallback(node: ts.FunctionLikeDeclaration) {
@@ -550,6 +539,28 @@ function containsIdentifierReference(node: ts.Node, name: string): boolean {
 	return (
 		(ts.isIdentifier(node) && node.text === name && !ts.isVariableDeclaration(node.parent)) ||
 		!!ts.forEachChild(node, child => (containsIdentifierReference(child, name) ? true : undefined))
+	)
+}
+
+function isIdentityBearingExpression(node: ts.Expression): boolean {
+	return (
+		isIdentityBearingCall(node) ||
+		(ts.isTemplateExpression(node) &&
+			Array.some(node.templateSpans, span => isIdentityBearingExpression(span.expression))) ||
+		(ts.isBinaryExpression(node) && (isIdentityBearingExpression(node.left) || isIdentityBearingExpression(node.right)))
+	)
+}
+
+function isIdentityBearingCall(node: ts.Expression): boolean {
+	return (
+		ts.isCallExpression(node) &&
+		((ts.isPropertyAccessExpression(node.expression) &&
+			ts.isIdentifier(node.expression.expression) &&
+			((node.expression.expression.text === 'crypto' && node.expression.name.text === 'randomUUID') ||
+				(node.expression.expression.text === 'Math' && node.expression.name.text === 'random'))) ||
+			(ts.isPropertyAccessExpression(node.expression) &&
+				ts.isIdentifier(node.expression.expression) &&
+				Array.contains(['Random', 'DateTime'], node.expression.expression.text)))
 	)
 }
 
@@ -638,6 +649,6 @@ export function isDerivedSimpleExpression(node: ts.Expression) {
 		(ts.isBinaryExpression(node) &&
 			!comparisonOperators.has(node.operatorToken.kind) &&
 			!assignmentOperators.has(node.operatorToken.kind)) ||
-		ts.isConditionalExpression(node)
+		(ts.isConditionalExpression(node) && !String.includes('\n')(node.getText(node.getSourceFile())))
 	)
 }

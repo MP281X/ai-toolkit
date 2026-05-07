@@ -1,10 +1,10 @@
 import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
-import {StrictLinter} from '../index.ts'
+import {analyzeText} from '../index.ts'
 
 function rulesFor(sourceText: string) {
-	return Array.map(StrictLinter.analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('anti-indirection rules', () => {
@@ -24,6 +24,12 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor(`const href = \`/users/${'${'}user.id}\``)).toContain('no-derived-simple-variable')
 	})
 
+	test('allows identity-bearing derived variables', () => {
+		expect(rulesFor(`const agentId = \`agent-${'${'}crypto.randomUUID()}\`; save(agentId)`)).not.toContain(
+			'no-derived-simple-variable'
+		)
+	})
+
 	test('no-single-use-variable', () => {
 		expect(rulesFor('function run() { const value = getValue(); save(value) }')).toContain('no-single-use-variable')
 	})
@@ -38,12 +44,78 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('function getName(user: {name: string}) { return user.name }')).toContain('no-access-helper')
 	})
 
-	test('no-one-line-function', () => {
-		expect(rulesFor('const getValue = () => value + 1')).toContain('no-one-line-function')
+	test('no-low-value-function', () => {
+		expect(rulesFor('const getValue = () => value + 1')).toContain('no-low-value-function')
 	})
 
-	test('no-simple-function-variables', () => {
-		expect(rulesFor('const getLabel = () => label')).toContain('no-simple-function-variables')
+	test('no-low-value-function for simple declarations', () => {
+		expect(
+			rulesFor(
+				"function commentSideKey(comment: {side?: 'deletions' | 'additions'}) { return comment.side === 'deletions' ? 'deletions' : 'file' }"
+			)
+		).toContain('no-low-value-function')
+	})
+
+	test('no-low-value-function for simple function variables', () => {
+		expect(rulesFor('const getLabel = () => label')).toContain('no-low-value-function')
+	})
+
+	test('no-low-value-function ignores formatting', () => {
+		expect(
+			rulesFor(
+				"function commentKey(comment: {filePath: string; lineNumber: number; side?: 'deletions' | 'additions'}) {\n\treturn `$" +
+					'{comment.filePath}:$' +
+					"{comment.side === 'deletions' ? 'deletions' : 'file'}:$" +
+					'{comment.lineNumber}`\n}'
+			)
+		).toContain('no-low-value-function')
+	})
+
+	test('no-low-value-function for small private collection transforms', () => {
+		expect(
+			rulesFor(`function commentAnnotations(comments: readonly Comment[] | undefined) {
+	return Array.map(comments ?? Array.empty<Comment>(), comment => ({
+		side: comment.side ?? 'additions',
+		lineNumber: comment.lineNumber,
+		metadata: comment
+	}))
+}
+
+save(commentAnnotations(comments))`)
+		).toContain('no-low-value-function')
+	})
+
+	test('allows multi-statement private functions', () => {
+		expect(
+			rulesFor(`function patchResultContent(patch: string) {
+	const fileDiff = getSingularPatch(patch)
+
+	if (fileDiff.type === 'deleted') return ''
+
+	return Array.join(
+		Array.flatMap(fileDiff.hunks, hunk =>
+			Array.flatMap(hunk.hunkContent, part =>
+				Array.take(
+					Array.drop(fileDiff.additionLines, part.additionLineIndex),
+					part.type === 'context' ? part.lines : part.additions
+				)
+			)
+		),
+		''
+	)
+}`)
+		).not.toContain('no-low-value-function')
+	})
+
+	test('allows exported low-value derived functions', () => {
+		expect(
+			rulesFor(
+				"export function commentKey(comment: {filePath: string; lineNumber: number; side?: 'deletions' | 'additions'}) { return `$" +
+					'{comment.filePath}:$' +
+					"{comment.side === 'deletions' ? 'deletions' : 'file'}:$" +
+					'{comment.lineNumber}` }'
+			)
+		).not.toContain('no-low-value-function')
 	})
 
 	test('no-single-expression-function', () => {
@@ -152,6 +224,17 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('const submit = () => save()')).toContain('no-arrow-for-named')
 	})
 
+	test('allows recursive function type annotations', () => {
+		expect(rulesFor('const collect: (value: number) => number = value => collect(value - 1)')).not.toContain(
+			'no-variable-type-annotation'
+		)
+		expect(
+			rulesFor(
+				'const collect: (value: number) => Effect.Effect<number> = Effect.fnUntraced(function* (value) { return yield* collect(value - 1) })'
+			)
+		).not.toContain('no-variable-type-annotation')
+	})
+
 	test('no-effect-antipatterns for named function Effect.gen wrappers', () => {
 		expect(rulesFor('function runEffect() { return Effect.gen(function* () { return yield* work }) }')).toContain(
 			'no-effect-antipatterns'
@@ -164,8 +247,10 @@ describe('anti-indirection rules', () => {
 		)
 	})
 
-	test('no-effect-antipatterns for direct Effect.gen constants', () => {
-		expect(rulesFor('const cli = Effect.gen(function* () { return yield* work })')).toContain('no-effect-antipatterns')
+	test('allows direct no-arg Effect.gen constants', () => {
+		expect(rulesFor('const cli = Effect.gen(function* () { return yield* work })')).not.toContain(
+			'no-effect-antipatterns'
+		)
 	})
 
 	test('no-effect-returning-function', () => {
@@ -199,5 +284,11 @@ describe('anti-indirection rules', () => {
 		expect(rulesFor('export const hooks = new Set(["memo", "useMemo"]); hooks.has(name)')).toContain(
 			'no-single-use-top-level-variable'
 		)
+	})
+
+	test('allows TanStack Router Route declarations', () => {
+		expect(
+			rulesFor("export const Route = createFileRoute('/(home)/$worktree/diff')({ component: DiffPage })")
+		).not.toContain('no-single-use-top-level-variable')
 	})
 })

@@ -1,14 +1,14 @@
 import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
-import {StrictLinter} from '../index.ts'
+import {analyzeText, analyzeTypedText} from '../index.ts'
 
 function rulesFor(sourceText: string, filePath?: string) {
-	return Array.map(StrictLinter.analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 function typedRulesFor(sourceText: string, filePath?: string) {
-	return Array.map(StrictLinter.analyzeTypedText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeTypedText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('control-flow rules', () => {
@@ -32,16 +32,8 @@ describe('control-flow rules', () => {
 		expect(rulesFor('try { run() } catch (error) { fail(error) }')).toContain('no-try-catch')
 	})
 
-	test('no-default-export', () => {
-		expect(rulesFor('export default function run() { return value }')).toContain('no-default-export')
-	})
-
-	test('no-async-await outside tests', () => {
-		expect(rulesFor('async function run() { return await work() }')).toContain('no-async-await')
-	})
-
-	test('allows async-await in tests', () => {
-		expect(rulesFor('test("run", async () => { await work() })', 'sample.test.ts')).not.toContain('no-async-await')
+	test('allows default exports', () => {
+		expect(rulesFor('export default function run() { return value }')).not.toContain('no-default-export')
 	})
 
 	test('no-class for standalone classes', () => {
@@ -114,6 +106,9 @@ describe('control-flow rules', () => {
 
 	test('no-null-literal', () => {
 		expect(rulesFor('const value = null')).toContain('no-null-literal')
+		expect(analyzeText('sample.ts', 'const value = null')[0]?.message).toBe(
+			'Replace `null` with undefined, omitted value, or bare return.'
+		)
 	})
 
 	test('no-redundant-type-check allows nullable equality checks', () => {
@@ -222,8 +217,30 @@ describe('control-flow rules', () => {
 		expect(rulesFor('const testPattern = /test/')).toContain('no-regex-literal')
 	})
 
+	test('allows React ref current assignment', () => {
+		expect(
+			typedRulesFor(
+				'import {useRef} from "react"; function View() { const hoveredRef = useRef(false); hoveredRef.current = true }',
+				'sample.tsx'
+			)
+		).not.toContain('no-mutation')
+	})
+
+	test('allows scoped session state assignment in Effect callbacks', () => {
+		expect(
+			rulesFor('Stream.tap(status => { session.entry = new AgentEntry({status}); return publishAgents() })')
+		).not.toContain('no-mutation')
+		expect(rulesFor('Array.reduce(items, state => { state.count = state.count + 1; return state })')).toContain(
+			'no-mutation'
+		)
+	})
+
 	test('no-multiline-ternary', () => {
-		expect(rulesFor("const value = enabled\n\t? 'yes'\n\t: 'no'")).toContain('no-multiline-ternary')
+		expect(rulesFor("function label() { return enabled\n\t? 'yes'\n\t: 'no' }")).not.toContain('no-multiline-ternary')
+		expect(rulesFor("function label() { return enabled\n\t? ['yes',\n\t\t'ok']\n\t: ['no'] }")).toContain(
+			'no-multiline-ternary'
+		)
+		expect(rulesFor("const value = enabled\n\t? 'yes'\n\t: 'no'")).not.toContain('no-multiline-ternary')
 		expect(rulesFor("const value = enabled ? 'yes' : 'no'")).not.toContain('no-multiline-ternary')
 		expect(
 			rulesFor(
@@ -260,11 +277,6 @@ describe('control-flow rules', () => {
 				}
 			`)
 		).not.toContain('no-redundant-void-return')
-	})
-
-	test('no-ternary-in-jsx', () => {
-		expect(rulesFor('const node = active ? <Panel /> : null', 'sample.tsx')).toContain('no-ternary-in-jsx')
-		expect(rulesFor('const node = <div>{active ? <Panel /> : null}</div>', 'sample.tsx')).toContain('no-ternary-in-jsx')
 	})
 
 	test('no-imperative-array-transform', () => {

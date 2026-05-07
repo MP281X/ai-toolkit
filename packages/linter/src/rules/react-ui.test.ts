@@ -1,15 +1,18 @@
 import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
-import {StrictLinter} from '../index.ts'
+import {analyzeText} from '../index.ts'
 
 function rulesFor(sourceText: string, filePath?: string) {
-	return Array.map(StrictLinter.analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeText(filePath ?? 'sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('react-ui rules', () => {
 	test('no-react-type-imports', () => {
 		expect(rulesFor("import * as React from 'react'")).toContain('no-react-type-imports')
+		expect(rulesFor("import type {ReactNode} from 'react'")).toContain('no-react-type-imports')
+		expect(rulesFor("import {type ReactNode, useState} from 'react'")).toContain('no-react-type-imports')
+		expect(rulesFor("import {useState} from 'react'")).not.toContain('no-react-type-imports')
 	})
 
 	test('no-react-null-state', () => {
