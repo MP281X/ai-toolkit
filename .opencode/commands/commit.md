@@ -1,6 +1,5 @@
 ---
 description: Generate commit message from staged changes. Commit and push.
-model: opencode-go/kimi-k2.6
 ---
 
 <repo_status>

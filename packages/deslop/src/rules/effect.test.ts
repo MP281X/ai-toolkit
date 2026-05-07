@@ -1,0 +1,86 @@
+import {test} from 'bun:test'
+import {expectRule} from './test-utils.ts'
+
+test('prefer-effect-fn-untraced', () => {
+	return expectRule({
+		rule: 'prefer-effect-fn-untraced',
+		typed: true,
+		source: 'import {Effect} from "effect"\nfunction save(id: string) { return Effect.succeed(id) }\n'
+	})
+})
+test('prefer-effect-gen-program', () => {
+	return expectRule({
+		rule: 'prefer-effect-gen-program',
+		typed: true,
+		source: 'import {Effect} from "effect"\nfunction program() { return Effect.succeed(1) }\n'
+	})
+})
+test('no-floating-effect', () => {
+	return expectRule({
+		rule: 'no-floating-effect',
+		typed: true,
+		source: 'import {Effect} from "effect"\nEffect.succeed(1)\n'
+	})
+})
+test('prefer-top-level-pipe-for-effect-values', () => {
+	return expectRule({
+		rule: 'prefer-top-level-pipe-for-effect-values',
+		typed: true,
+		source: 'import {Effect} from "effect"\nEffect.asVoid(Effect.succeed(1))\n'
+	})
+})
+test('prefer-effect-module-over-standard-library', () => {
+	return expectRule({rule: 'prefer-effect-module-over-standard-library', source: 'const value = " name ".trim()\n'})
+})
+test('prefer-direct-call-for-single-data-operation', () => {
+	return expectRule({
+		rule: 'prefer-direct-call-for-single-data-operation',
+		typed: true,
+		source:
+			'import {Array, pipe} from "effect"\ndeclare const values: ReadonlyArray<string>\nconst result = pipe(values, Array.map(value => value))\n'
+	})
+})
+test('prefer-effect-nullish-predicates', () => {
+	return expectRule({
+		rule: 'prefer-effect-nullish-predicates',
+		source:
+			'import {Array} from "effect"\ndeclare const values: ReadonlyArray<string | undefined>\nconst result = Array.filter(values, value => value !== undefined)\n'
+	})
+})
+test('no-effect-async-constructor-mismatch', () => {
+	return expectRule({
+		rule: 'no-effect-async-constructor-mismatch',
+		source: 'import {Effect} from "effect"\nconst program = Effect.sync(async () => { await fetch("/") })\n'
+	})
+})
+test('no-effect-without-semantics', () => {
+	return expectRule({
+		rule: 'no-effect-without-semantics',
+		source: 'import {Effect} from "effect"\nconst program = Effect.succeed("ok")\n'
+	})
+})
+test('no-effect-run-away-from-boundary', () => {
+	return expectRule({
+		rule: 'no-effect-run-away-from-boundary',
+		source: 'import {Effect} from "effect"\nEffect.runFork(Effect.succeed(1))\n',
+		filePath: 'src/feature.ts'
+	})
+})
+test('no-option-constructor from conversion', () => {
+	return expectRule({
+		rule: 'no-option-constructor',
+		source: 'import {Option} from "effect"\nconst value = Option.fromNullable(input)\n'
+	})
+})
+test('no-option-constructor some', () => {
+	return expectRule({
+		rule: 'no-option-constructor',
+		source: 'import {Option} from "effect"\nconst value = Option.some("value")\n'
+	})
+})
+test('no-option-constructor none', () => {
+	return expectRule({
+		rule: 'no-option-constructor',
+		source: 'import {Option} from "effect"\nconst value = Option.none()\n'
+	})
+})

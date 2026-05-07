@@ -4,82 +4,64 @@ import {Effect, pipe} from 'effect'
 import {Git} from '@ai-toolkit/git/service'
 import type {Plugin} from '@opencode-ai/plugin'
 
-const resources = [
-	{
-		name: 'effect',
-		url: 'https://github.com/Effect-TS/effect-smol'
-	},
-	{
-		name: 'tanstack-router',
-		url: 'https://github.com/TanStack/router'
-	},
-	{
-		name: 'tanstack-hotkey',
-		url: 'https://github.com/TanStack/hotkeys'
-	},
-	{
-		name: 'tanstack-form',
-		url: 'https://github.com/TanStack/form'
-	},
-	{
-		name: 'legend-list',
-		url: 'https://github.com/LegendApp/legend-list'
-	},
-	{
-		name: 'pierre-diffs',
-		url: 'https://github.com/pierrecomputer/pierre'
-	},
-	{
-		name: 'lexical',
-		url: 'https://github.com/facebook/lexical'
-	},
-	{
-		name: 'opencode',
-		url: 'https://github.com/anomalyco/opencode'
-	},
-	{
-		name: 'exa-js',
-		url: 'https://github.com/exa-labs/exa-js'
-	},
-	{
-		name: 'codex',
-		url: 'https://github.com/openai/codex'
-	},
-	{
-		name: 't3-code',
-		url: 'https://github.com/pingdotgg/t3code'
-	},
-	{
-		name: 'react-doctor',
-		url: 'https://github.com/millionco/react-doctor.git'
-	},
-	{
-		name: 'effect-lsp',
-		url: 'https://github.com/Effect-TS/language-service'
-	}
-]
-
 export const plugin = (async context => {
 	void Effect.runPromise(
 		pipe(
 			Effect.forEach(
-				resources,
+				[
+					{
+						name: 'effect',
+						url: 'https://github.com/Effect-TS/effect-smol'
+					},
+					{
+						name: 'tanstack-router',
+						url: 'https://github.com/TanStack/router'
+					},
+					{
+						name: 'tanstack-hotkey',
+						url: 'https://github.com/TanStack/hotkeys'
+					},
+					{
+						name: 'tanstack-form',
+						url: 'https://github.com/TanStack/form'
+					},
+					{
+						name: 'legend-list',
+						url: 'https://github.com/LegendApp/legend-list'
+					},
+					{
+						name: 'pierre-diffs',
+						url: 'https://github.com/pierrecomputer/pierre'
+					},
+					{
+						name: 'lexical',
+						url: 'https://github.com/facebook/lexical'
+					},
+					{
+						name: 'typescript',
+						url: 'https://github.com/microsoft/TypeScript.git'
+					}
+				] as const,
 				Effect.fnUntraced(function* (resource) {
-					yield* Git.use(git =>
-						git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
-					)
-					yield* Effect.sync(() =>
+					yield* Git.use(git => {
+						return git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
+					})
+					yield* Effect.sync(() => {
 						context.client.tui.showToast({body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}})
-					)
+					})
 				}),
 				{concurrency: 'unbounded'}
 			),
-			Effect.tapDefect(message =>
-				Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}}))
-			),
-			Effect.tapError(message =>
-				Effect.sync(() => context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}}))
-			),
+			Effect.tapDefect(message => {
+				return Effect.sync(() => {
+					context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
+				})
+			}),
+			Effect.tapError(message => {
+				return Effect.sync(() => {
+					context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
+				})
+			}),
 			Effect.provide(Git.layer),
 			Effect.provide(BunServices.layer)
 		)
