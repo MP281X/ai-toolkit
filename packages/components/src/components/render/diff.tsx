@@ -36,22 +36,27 @@ const DIFF_CSS = `
 	}
 `
 
+type DiffComment = {
+	readonly filePath: string
+	readonly lineNumber: number
+	readonly side?: AnnotationSide
+	readonly body: string
+}
+
 function CommentAnnotation(props: {
-	comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}
-	isDraft?: boolean
-	onChangeComment?: (comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}) => void
-	onSaveComment?: (comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}) => void
-	onDeleteComment?: (comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}) => void
-	onCloseDraft?: () => void
+	readonly comment: DiffComment
+	readonly isDraft?: boolean
+	readonly onChangeComment?: (comment: DiffComment) => void
+	readonly onSaveComment?: (comment: DiffComment) => void
+	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
 	const [editing, setEditing] = useState(String.isEmpty(props.comment.body))
 	const [body, setBody] = useState(props.comment.body)
 
 	useEffect(() => {
-		if (editing) {
-			inputRef.current?.focus()
-		}
+		if (editing) inputRef.current?.focus()
 	}, [editing])
 
 	function saveDraft() {
@@ -72,9 +77,9 @@ function CommentAnnotation(props: {
 		props.onCloseDraft?.()
 	}
 
-	return (
-		<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
-			{editing ? (
+	if (editing) {
+		return (
+			<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
 				<textarea
 					ref={inputRef}
 					value={body}
@@ -90,9 +95,7 @@ function CommentAnnotation(props: {
 							event.preventDefault()
 
 							if (String.isEmpty(String.trim(body))) {
-								if (!props.isDraft) {
-									props.onDeleteComment?.({...props.comment, body})
-								}
+								if (!props.isDraft) props.onDeleteComment?.({...props.comment, body})
 								props.onCloseDraft?.()
 								return
 							}
@@ -106,18 +109,22 @@ function CommentAnnotation(props: {
 						}
 					}}
 				/>
-			) : (
-				<button
-					type="button"
-					className="block w-full whitespace-pre-wrap bg-transparent p-0 text-left leading-relaxed"
-					onClick={event => {
-						event.stopPropagation()
-						setEditing(true)
-					}}
-				>
-					{props.comment.body}
-				</button>
-			)}
+			</div>
+		)
+	}
+
+	return (
+		<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
+			<button
+				type="button"
+				className="block w-full whitespace-pre-wrap bg-transparent p-0 text-left leading-relaxed"
+				onClick={event => {
+					event.stopPropagation()
+					setEditing(true)
+				}}
+			>
+				{props.comment.body}
+			</button>
 		</div>
 	)
 }
@@ -128,33 +135,28 @@ function patchResultContent(patch: string) {
 	if (fileDiff.type === 'deleted') return ''
 
 	return Array.join(
-		Array.flatMap(fileDiff.hunks, hunk =>
-			Array.flatMap(hunk.hunkContent, part =>
-				Array.take(
+		Array.flatMap(fileDiff.hunks, hunk => {
+			return Array.flatMap(hunk.hunkContent, part => {
+				return Array.take(
 					Array.drop(fileDiff.additionLines, part.additionLineIndex),
 					part.type === 'context' ? part.lines : part.additions
 				)
-			)
-		),
+			})
+		}),
 		''
 	)
 }
 
 export function PatchDiff(props: {
-	filePath: string
-	patch: string
-	comments?: readonly {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}[]
-	onSaveComment?: (comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}) => void
-	onDeleteComment?: (comment: {filePath: string; lineNumber: number; side?: AnnotationSide; body: string}) => void
+	readonly filePath: string
+	readonly patch: string
+	readonly comments?: readonly DiffComment[]
+	readonly onSaveComment?: (comment: DiffComment) => void
+	readonly onDeleteComment?: (comment: DiffComment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const [mode, setMode] = useState<'diff' | 'file'>('diff')
-	const [draftComment, setDraftComment] = useState<{
-		filePath: string
-		lineNumber: number
-		side?: AnnotationSide
-		body: string
-	}>()
+	const [draftComment, setDraftComment] = useState<DiffComment>()
 	function commitDraftComment() {
 		if (draftComment) {
 			if (!String.isEmpty(String.trim(draftComment.body))) {
@@ -164,7 +166,7 @@ export function PatchDiff(props: {
 		}
 	}
 
-	function openComment(line: {lineNumber: number; side?: AnnotationSide}) {
+	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
 		if (!props.onSaveComment) return
 
 		if (
@@ -178,12 +180,12 @@ export function PatchDiff(props: {
 		commitDraftComment()
 
 		if (
-			!Array.some(
-				props.comments ?? Array.empty(),
-				current =>
+			!Array.some(props.comments ?? Array.empty(), current => {
+				return (
 					`${current.filePath}:${current.side === 'deletions' ? 'deletions' : 'file'}:${current.lineNumber}` ===
 					`${props.filePath}:${line.side === 'deletions' ? 'deletions' : 'file'}:${line.lineNumber}`
-			)
+				)
+			})
 		) {
 			setDraftComment({
 				filePath: props.filePath,
@@ -194,34 +196,36 @@ export function PatchDiff(props: {
 		}
 	}
 
-	return (
-		<section
-			ref={containerRef}
-			tabIndex={-1}
-			aria-label="Diff viewer"
-			className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
-			onPointerDownCapture={event => {
-				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
-					event.currentTarget.focus()
-				}
-			}}
-			onKeyDown={event => {
-				if (event.key === 'Tab') {
-					event.preventDefault()
-					setMode(current => (current === 'diff' ? 'file' : 'diff'))
-				}
-			}}
-		>
-			<WorkerPoolContextProvider
-				poolOptions={{
-					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
-					poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
-					totalASTLRUCacheSize: 240
+	if (mode === 'diff') {
+		return (
+			<section
+				ref={containerRef}
+				tabIndex={-1}
+				aria-label="Diff viewer"
+				className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+				onPointerDownCapture={event => {
+					if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
+						event.currentTarget.focus()
+					}
 				}}
-				highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+				onKeyDown={event => {
+					if (event.key === 'Tab') {
+						event.preventDefault()
+						setMode(current => (current === 'diff' ? 'file' : 'diff'))
+					}
+				}}
 			>
-				{mode === 'diff' ? (
-					<PierrePatchDiff<{filePath: string; lineNumber: number; side?: AnnotationSide; body: string}>
+				<WorkerPoolContextProvider
+					poolOptions={{
+						workerFactory: () => {
+							return new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
+						},
+						poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
+						totalASTLRUCacheSize: 240
+					}}
+					highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+				>
+					<PierrePatchDiff<DiffComment>
 						key={props.patch}
 						patch={props.patch}
 						options={{
@@ -230,7 +234,9 @@ export function PatchDiff(props: {
 							onLineNumberClick: line => openComment({lineNumber: line.lineNumber, side: line.annotationSide})
 						}}
 						lineAnnotations={Array.map(
-							draftComment ? Array.append(props.comments ?? Array.empty(), draftComment) : (props.comments ?? Array.empty()),
+							draftComment
+								? Array.append(props.comments ?? Array.empty(), draftComment)
+								: (props.comments ?? Array.empty()),
 							comment => ({
 								side: comment.side ?? 'additions',
 								lineNumber: comment.lineNumber,
@@ -261,55 +267,86 @@ export function PatchDiff(props: {
 							/>
 						)}
 					/>
-				) : (
-					<File<{filePath: string; lineNumber: number; side?: AnnotationSide; body: string}>
-						key={props.patch}
-						file={{
-							name: props.filePath,
-							contents: patchResultContent(props.patch),
-							lang: resolveLanguage(props.filePath)
-						}}
-						options={{
-							overflow: DIFF_OPTIONS.overflow,
-							themeType: DIFF_OPTIONS.themeType,
-							disableFileHeader: DIFF_OPTIONS.disableFileHeader,
-							theme: DIFF_OPTIONS.theme,
-							disableLineNumbers: DIFF_OPTIONS.disableLineNumbers,
-							unsafeCSS: DIFF_CSS,
-							onLineNumberClick: line => openComment({lineNumber: line.lineNumber})
-						}}
-						lineAnnotations={Array.map(
-							Array.filter(
-								draftComment ? Array.append(props.comments ?? Array.empty(), draftComment) : (props.comments ?? Array.empty()),
-								comment => comment.side !== 'deletions'
-							),
-							comment => ({lineNumber: comment.lineNumber, metadata: comment})
-						)}
-						renderAnnotation={annotation => (
-							<CommentAnnotation
-								comment={annotation.metadata}
-								isDraft={
-									`${annotation.metadata.filePath}:${annotation.metadata.side === 'deletions' ? 'deletions' : 'file'}:${annotation.metadata.lineNumber}` ===
-									(draftComment
-										? `${draftComment.filePath}:${draftComment.side === 'deletions' ? 'deletions' : 'file'}:${draftComment.lineNumber}`
-										: '')
+				</WorkerPoolContextProvider>
+			</section>
+		)
+	}
+
+	return (
+		<section
+			ref={containerRef}
+			tabIndex={-1}
+			aria-label="Diff viewer"
+			className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+			onPointerDownCapture={event => {
+				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
+					event.currentTarget.focus()
+				}
+			}}
+			onKeyDown={event => {
+				if (event.key === 'Tab') {
+					event.preventDefault()
+					setMode(current => (current === 'diff' ? 'file' : 'diff'))
+				}
+			}}
+		>
+			<WorkerPoolContextProvider
+				poolOptions={{
+					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
+					poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
+					totalASTLRUCacheSize: 240
+				}}
+				highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+			>
+				<File<DiffComment>
+					key={props.patch}
+					file={{
+						name: props.filePath,
+						contents: patchResultContent(props.patch),
+						lang: resolveLanguage(props.filePath)
+					}}
+					options={{
+						overflow: DIFF_OPTIONS.overflow,
+						themeType: DIFF_OPTIONS.themeType,
+						disableFileHeader: DIFF_OPTIONS.disableFileHeader,
+						theme: DIFF_OPTIONS.theme,
+						disableLineNumbers: DIFF_OPTIONS.disableLineNumbers,
+						unsafeCSS: DIFF_CSS,
+						onLineNumberClick: line => openComment({lineNumber: line.lineNumber})
+					}}
+					lineAnnotations={Array.map(
+						Array.filter(
+							draftComment
+								? Array.append(props.comments ?? Array.empty(), draftComment)
+								: (props.comments ?? Array.empty()),
+							comment => comment.side !== 'deletions'
+						),
+						comment => ({lineNumber: comment.lineNumber, metadata: comment})
+					)}
+					renderAnnotation={annotation => (
+						<CommentAnnotation
+							comment={annotation.metadata}
+							isDraft={
+								`${annotation.metadata.filePath}:${annotation.metadata.side === 'deletions' ? 'deletions' : 'file'}:${annotation.metadata.lineNumber}` ===
+								(draftComment
+									? `${draftComment.filePath}:${draftComment.side === 'deletions' ? 'deletions' : 'file'}:${draftComment.lineNumber}`
+									: '')
+							}
+							onChangeComment={comment => {
+								if (
+									draftComment &&
+									`${comment.filePath}:${comment.side === 'deletions' ? 'deletions' : 'file'}:${comment.lineNumber}` ===
+										`${draftComment.filePath}:${draftComment.side === 'deletions' ? 'deletions' : 'file'}:${draftComment.lineNumber}`
+								) {
+									setDraftComment(comment)
 								}
-								onChangeComment={comment => {
-									if (
-										draftComment &&
-										`${comment.filePath}:${comment.side === 'deletions' ? 'deletions' : 'file'}:${comment.lineNumber}` ===
-											`${draftComment.filePath}:${draftComment.side === 'deletions' ? 'deletions' : 'file'}:${draftComment.lineNumber}`
-									) {
-										setDraftComment(comment)
-									}
-								}}
-								onSaveComment={props.onSaveComment}
-								onDeleteComment={props.onDeleteComment}
-								onCloseDraft={() => setDraftComment(undefined)}
-							/>
-						)}
-					/>
-				)}
+							}}
+							onSaveComment={props.onSaveComment}
+							onDeleteComment={props.onDeleteComment}
+							onCloseDraft={() => setDraftComment(undefined)}
+						/>
+					)}
+				/>
 			</WorkerPoolContextProvider>
 		</section>
 	)

@@ -8,12 +8,14 @@
 	},
 
 	"imports": {
-		"#lib/*": "./src/lib/*"
+		"#lib/*": "./src/lib/*",
+		"#rules/*": "./src/rules/*"
 	},
 
 	"scripts": {
-		"test": "bun test",
 		"build": "bun build --target=bun ./src/index.ts --outfile ./dist/deslop.js",
+
+		"test": "bun test",
 		"fix": "biome check --write --unsafe || true",
 		"check": "tsgo --noEmit && biome check"
 	}

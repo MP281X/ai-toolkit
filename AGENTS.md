@@ -1,56 +1,36 @@
 # AGENTS.md
 
-## Codebase
+## Context
 
-Monorepo with `@ai-toolkit/*` workspace packages under `packages/*`.
-
-- `packages/*` — read from source directly
-- `.opencode/resources/*` — cloned external sources, source of truth for external APIs
-- `.opencode/resources/effect/LLMS.md` — Effect patterns (gen/fn, services, error handling)
+- Monorepo: `@ai-toolkit/*` packages live in `packages/*`; read package source directly
+- External API source of truth is `.opencode/resources/*`
+- Effect source of truth is `.opencode/resources/effect/LLMS.md`
+- Never search `node_modules`
 
 ## Research
 
-- Prefer searching with the explore agent
-- Verify against cloned sources in `.opencode/resources/*` — never answer from memory or training data
-- Never search in `node_modules`
+- Verify APIs, libraries, and patterns against repo source or `.opencode/resources/*`
+- Do not rely on memory when local sources can answer the question
 
-## Communication
+## Collaboration
 
-- Results over process: "Fixed X" — not "I went ahead and fixed X"
-- Drop filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course), hedging
-- Fragments OK — no need for full sentences when meaning is clear
-- One idea per line — no compound sentences
-- Use `→` for causality: `X → Y → Z` instead of "X causes Y which leads to Z"
-- Show code/commands instead of describing them
-
-## Output format
-
-Format for 2-second scanning:
-
-- Lists, tables, code blocks — never prose paragraphs
-- Bold **actions**, **files**, **errors** — create visual anchors
-- Conclusion first → supporting details after
-
-## Clarification
-
-- Verify understanding before acting on ambiguous requests
-- Use the question tool to surface gaps, inconsistencies, or tradeoffs
-- Batch independent questions in a single call
-- Never batch dependent questions — ask follow-up rounds when answers affect subsequent questions
-- Never add open-ended options — free text input is implicit
+- Pair-program in short loops: clarify, implement, verify, report
+- Infer from request, conversation, files, and existing patterns before asking
+- Challenge weak assumptions, broad scope, unclear success criteria, and premature implementation choices
+- Use the question tool only when the answer changes objective, scope, success criteria, or a key tradeoff
+- Batch 2-5 independent high-leverage questions; ask dependent questions only after the previous answer
 - Never ask about obvious defaults or decisions answerable by reading the codebase
+- Summarize objective, scope, decisions, success criteria, and risks when useful
 
 ## Implementation
 
-- Implement only what's explicitly requested — no extra features, no future requirements
-- Replace old implementations — never keep both old and new
-- Breaking changes are fine — no backward compatibility
-- After code changes, run `bun run fix && bun run check` before returning
-- Never run build commands unless the user explicitly requests a build
-
-## Code Style
-
-- Inline single-use logic — no helper functions used once
-- Happy path only — no defensive guards or re-validation
-- Biome or TypeScript error → wrong design → rewrite
-- Match existing codebase patterns — never invent new ones
+- Implement exactly the requested change; do not add extra features or future requirements
+- Treat the project as greenfield: remove, replace, and simplify instead of preserving compatibility
+- Make breaking changes whenever they produce the cleanest requested implementation
+- Delete compatibility layers, legacy paths, duplicate implementations, and code kept "just in case"
+- Use existing libraries and repo patterns directly; do not create abstractions or indirections
+- Inline logic used once; do not create single-use helpers
+- Keep only the happy path; do not add defensive guards or re-validation
+- Treat Biome and TypeScript errors as design problems; rewrite until they disappear
+- After code changes, run `bun run fix && bun run check` before yielding back
+- Never run build commands unless explicitly requested
