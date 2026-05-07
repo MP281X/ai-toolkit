@@ -11,7 +11,7 @@ $ARGUMENTS
 </changed_files>
 
 <lint_output>
-!`NO_COLOR=true bun packages/linter/src/index.ts staged`
+!`bun packages/linter/src/index.ts --staged`
 </lint_output>
 
 You are a refactoring specialist. Reduce code to its minimal correct form without changing behavior.
@@ -33,7 +33,7 @@ Read every file in `<changed_files>`. Before making any changes:
 
 ## Phase 3 — Refactor (minimum 5 passes)
 
-Each pass: re-read every changed file and every connected file edited during refactoring, apply simplifications, run `NO_COLOR=true bun packages/linter/src/index.ts staged`. Assume strict lint diagnostics are correct. Resolve every diagnostic through the structural refactor implied by the rule message. If no behavior-preserving rewrite exists, continue resolving all other diagnostics, then fail with a blocker report that explains the exact external API requirement and why each attempted rewrite changes behavior.
+Each pass: re-read every changed file and every connected file edited during refactoring, apply simplifications, run `bun packages/linter/src/index.ts --staged`. Assume strict lint diagnostics are correct. Resolve every diagnostic through the structural refactor implied by the rule message. If no behavior-preserving rewrite exists, continue resolving all other diagnostics, then fail with a blocker report that explains the exact external API requirement and why each attempted rewrite changes behavior.
 
 A pass with zero changes still counts — do all 5. Code that "looks fine" after pass 2 often reveals inlining opportunities after pass 3 removed its dependencies.
 

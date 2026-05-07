@@ -17,10 +17,6 @@ export const functionalEffectRules = [
 				analyzeCallExpression(node, report, checker)
 			}
 
-			if (ts.isConditionalExpression(node)) {
-				analyzeConditionalExpression(node, report)
-			}
-
 			if (ts.isPropertyAccessExpression(node)) {
 				analyzePropertyAccessExpression(node, report)
 			}
@@ -51,7 +47,7 @@ function analyzeCallExpression(
 			report(
 				node.expression.name,
 				'no-map-set-mutation',
-				'Do not mutate Map or Set. Use Effect HashMap or HashSet so collection updates stay functional.'
+				'Replace Map/Set mutation with Effect HashMap or HashSet update.'
 			)
 		}
 
@@ -64,7 +60,7 @@ function analyzeCallExpression(
 			report(
 				node.expression.name,
 				'no-json-api',
-				'Do not use raw JSON parse/stringify. Use Schema codecs or typed Effect boundaries so data shape stays explicit.'
+				'Replace JSON parse/stringify with Schema codec or typed Effect boundary.'
 			)
 		}
 
@@ -73,11 +69,7 @@ function analyzeCallExpression(
 			node.expression.expression.text === 'Promise' &&
 			['all', 'allSettled', 'any', 'race', 'resolve', 'reject'].includes(node.expression.name.text)
 		) {
-			report(
-				node.expression.name,
-				'no-promise-api',
-				'Do not use Promise APIs directly. Use Effect concurrency and typed error handling instead.'
-			)
+			report(node.expression.name, 'no-promise-api', 'Replace Promise API with Effect concurrency.')
 		}
 
 		if (
@@ -88,16 +80,12 @@ function analyzeCallExpression(
 			return report(
 				node.expression.name,
 				'no-mutation',
-				'This prototype call mutates existing state. Return a new value with an Effect module helper.'
+				'Replace mutating prototype call with Effect Array/String helper.'
 			)
 		}
 
 		if (node.expression.name.text === 'pipe') {
-			report(
-				node.expression.name,
-				'no-pipe-method',
-				'Do not use the `.pipe()` method. Use the free `pipe(value, ...)` function instead.'
-			)
+			report(node.expression.name, 'no-method-pipe', 'Use pipe(value, ...) instead of value.pipe(...).')
 		}
 
 		if (
@@ -108,7 +96,7 @@ function analyzeCallExpression(
 			report(
 				node.expression.name,
 				'no-native-prototype-method',
-				'Use the Effect module helper instead of a native prototype method. Replace string, array, and record transforms with `String.*`, `Array.*`, or `Record.*` inside `pipe`.'
+				'Replace native prototype transform with Effect String/Array/Record helper.'
 			)
 		}
 
@@ -130,19 +118,15 @@ function analyzeCallExpression(
 
 	if (ts.isIdentifier(node.expression)) {
 		if (node.expression.text === 'pipe') {
-			if (isSingleStepEffectPipe(node)) {
-				report(
-					node.expression,
-					'no-useless-pipe',
-					'Do not use pipe with only a value and one helper. Remove the pipe and call the helper directly, e.g. `String.trim(value)` or `String.replace(search, replacement)(value)`.'
-				)
+			if (isSingleStepArrayStringPipe(node)) {
+				report(node.expression, 'no-useless-pipe', 'Use direct Array/String helper calls for one-step transforms.')
 			}
 
-			if (Array.some(node.arguments, containsYieldExpression)) {
+			if (Array.some(node.arguments, argument => containsOwnedYieldExpression(argument, owningRuntimeFunction(node)))) {
 				report(
 					node.expression,
 					'no-yield-in-pipe',
-					'Do not yield inside pipe arguments. Keep the Effect value in the pipeline and compose with Effect.map or Effect.flatMap.'
+					'Current generator yield is inside a pipe argument. Move the yielded Effect before the pipe with Effect.map or Effect.flatMap.'
 				)
 			}
 		}
@@ -151,7 +135,7 @@ function analyzeCallExpression(
 			report(
 				node.expression,
 				'no-react-compiler-antipatterns',
-				`Do not use \`${node.expression.text}\` here. React Compiler already handles this optimization, so remove the wrapper unless an external API requires it.`
+				`Remove \`${node.expression.text}\` wrapper; React Compiler handles it.`
 			)
 		}
 
@@ -160,82 +144,166 @@ function analyzeCallExpression(
 			node.arguments[0] &&
 			(ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]))
 		) {
-			report(
-				node.expression,
-				'no-react-compiler-antipatterns',
-				'Do not use lazy `useState` initializers here. React Compiler already handles memoization, so create the value directly.'
-			)
+			report(node.expression, 'no-react-compiler-antipatterns', 'Replace lazy useState initializer with direct value.')
 		}
 
 		if (node.expression.text === 'cva') {
-			report(
-				node.expression,
-				'no-tailwind-class-variables',
-				'Do not use `cva(...)` outside `components/ui`. Tailwind class tokens may only live directly in `className` or `className={cn(...)}`.'
-			)
+			report(node.expression, 'no-tailwind-class-variables', 'Move cva classes into className or cn(...).')
 		}
 	}
 
-	if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+	if (isNoopEffectGen(node)) {
 		report(
 			node.expression,
-			'no-dynamic-imports',
-			'Remove this dynamic import. Keep module dependencies static and visible.'
+			'no-unnecessary-effect-gen',
+			'Replace Effect.gen(function* () { return yield* value }) with the yielded Effect value directly.'
 		)
+	}
+
+	if (isMatchLiteralBranchWithoutConstAssertion(node)) {
+		report(
+			node,
+			'prefer-const-literal-branch',
+			'Add `as const` to Match literal branches when the branch returns a string, number, or boolean literal.'
+		)
+	}
+
+	if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+		report(node.expression, 'no-dynamic-imports', 'Replace dynamic import with static import.')
 	}
 
 	if (ts.isPropertyAccessExpression(node.expression) && isOptionFromConversion(node.expression)) {
 		report(
 			node.expression.name,
 			'no-option-from-conversion',
-			'Do not wrap non-Option values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
+			'Replace Option.from* conversion with guard, optional chaining, or ??.'
 		)
 	}
 }
 
-function analyzeConditionalExpression(
-	node: ts.ConditionalExpression,
-	report: (node: ts.Node, rule: string, message: string) => void
-) {
-	if (isArrayEmptyCheck(node.condition)) {
-		report(
-			node.condition,
-			'no-array-empty-ternary',
-			'Do not branch on Array emptiness with a ternary. Use Array.match so the empty and non-empty branches are explicit.'
-		)
-	}
-}
-
-function isSingleStepEffectPipe(node: ts.CallExpression) {
+function isSingleStepArrayStringPipe(node: ts.CallExpression) {
 	return (
 		Array.length(node.arguments) === 2 &&
 		!!node.arguments[1] &&
-		(ts.isPropertyAccessExpression(node.arguments[1]) || isEffectModuleHelperCall(node.arguments[1]))
+		(ts.isPropertyAccessExpression(node.arguments[1]) || isArrayStringHelperCall(node.arguments[1])) &&
+		isArrayStringHelper(
+			ts.isPropertyAccessExpression(node.arguments[1]) ? node.arguments[1] : node.arguments[1].expression
+		)
 	)
 }
 
-function isEffectModuleHelperCall(node: ts.Node) {
+function isArrayStringHelperCall(node: ts.Node): node is ts.CallExpression & {expression: ts.PropertyAccessExpression} {
+	return ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+}
+
+function isArrayStringHelper(node: ts.Node) {
 	return (
-		ts.isCallExpression(node) &&
+		ts.isPropertyAccessExpression(node) &&
+		ts.isIdentifier(node.expression) &&
+		Array.contains(['Array', 'String'], node.expression.text)
+	)
+}
+
+function containsOwnedYieldExpression(node: ts.Node, owner: ts.FunctionLikeDeclaration | undefined): boolean {
+	return (
+		(ts.isYieldExpression(node) && ts.findAncestor(node, ts.isFunctionLike) === owner) ||
+		!!ts.forEachChild(node, child => (containsOwnedYieldExpression(child, owner) ? true : undefined))
+	)
+}
+
+function owningRuntimeFunction(node: ts.Node) {
+	return ts.findAncestor(
+		node,
+		ancestor =>
+			ts.isFunctionDeclaration(ancestor) ||
+			ts.isMethodDeclaration(ancestor) ||
+			ts.isConstructorDeclaration(ancestor) ||
+			ts.isGetAccessorDeclaration(ancestor) ||
+			ts.isSetAccessorDeclaration(ancestor) ||
+			ts.isFunctionExpression(ancestor) ||
+			ts.isArrowFunction(ancestor)
+	)
+}
+
+function isNoopEffectGen(node: ts.CallExpression) {
+	const statements = effectGenBodyStatements(node)
+
+	if (!statements) return false
+
+	return isReturnYieldStatement(statements) || isYieldAliasReturn(statements)
+}
+
+function effectGenBodyStatements(node: ts.CallExpression) {
+	if (
+		!(ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)) ||
+		node.expression.expression.text !== 'Effect' ||
+		node.expression.name.text !== 'gen' ||
+		!node.arguments[0] ||
+		!(ts.isFunctionExpression(node.arguments[0]) || ts.isArrowFunction(node.arguments[0])) ||
+		!ts.isBlock(node.arguments[0].body)
+	) {
+		return
+	}
+
+	return node.arguments[0].body.statements
+}
+
+function isReturnYieldStatement(statements: readonly ts.Statement[]) {
+	return (
+		Array.length(statements) === 1 &&
+		!!statements[0] &&
+		ts.isReturnStatement(statements[0]) &&
+		!!statements[0].expression &&
+		ts.isYieldExpression(statements[0].expression) &&
+		statements[0].expression.asteriskToken !== undefined
+	)
+}
+
+function isYieldAliasReturn(statements: readonly ts.Statement[]) {
+	return (
+		Array.length(statements) === 2 &&
+		!!statements[0] &&
+		!!statements[1] &&
+		ts.isVariableStatement(statements[0]) &&
+		Array.length(statements[0].declarationList.declarations) === 1 &&
+		!!statements[0].declarationList.declarations[0] &&
+		ts.isIdentifier(statements[0].declarationList.declarations[0].name) &&
+		!!statements[0].declarationList.declarations[0].initializer &&
+		ts.isYieldExpression(statements[0].declarationList.declarations[0].initializer) &&
+		statements[0].declarationList.declarations[0].initializer.asteriskToken !== undefined &&
+		ts.isReturnStatement(statements[1]) &&
+		!!statements[1].expression &&
+		ts.isIdentifier(statements[1].expression) &&
+		statements[1].expression.text === statements[0].declarationList.declarations[0].name.text
+	)
+}
+
+function isMatchLiteralBranchWithoutConstAssertion(node: ts.CallExpression) {
+	return (
 		ts.isPropertyAccessExpression(node.expression) &&
 		ts.isIdentifier(node.expression.expression) &&
-		effectModuleNames.has(node.expression.expression.text)
+		node.expression.expression.text === 'Match' &&
+		Array.contains(['when', 'orElse'], node.expression.name.text) &&
+		Array.some(
+			node.arguments,
+			argument =>
+				(ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) && isConstAssertableLiteral(argument.body)
+		)
 	)
 }
 
-function containsYieldExpression(node: ts.Node): boolean {
+function isConstAssertableLiteral(node: ts.Node) {
 	return (
-		ts.isYieldExpression(node) || !!ts.forEachChild(node, child => (containsYieldExpression(child) ? true : undefined))
-	)
-}
-
-function isArrayEmptyCheck(node: ts.Expression) {
-	return (
-		ts.isCallExpression(node) &&
-		ts.isPropertyAccessExpression(node.expression) &&
-		ts.isIdentifier(node.expression.expression) &&
-		node.expression.expression.text === 'Array' &&
-		(node.expression.name.text === 'isReadonlyArrayEmpty' || node.expression.name.text === 'isReadonlyArrayNonEmpty')
+		(ts.isStringLiteral(node) ||
+			ts.isNumericLiteral(node) ||
+			node.kind === ts.SyntaxKind.TrueKeyword ||
+			node.kind === ts.SyntaxKind.FalseKeyword) &&
+		!(
+			ts.isAsExpression(node.parent) &&
+			ts.isTypeReferenceNode(node.parent.type) &&
+			ts.isIdentifier(node.parent.type.typeName) &&
+			node.parent.type.typeName.text === 'const'
+		)
 	)
 }
 
@@ -249,7 +317,7 @@ function analyzePropertyAccessExpression(
 		report(
 			node.name,
 			'no-option-from-conversion',
-			'Do not wrap non-Option values with Option.from*. Use direct guards, optional chaining, ??, or caller-proven invariants; keep Option for values already returned by Effect modules.'
+			'Replace Option.from* conversion with guard, optional chaining, or ??.'
 		)
 	}
 }
@@ -266,18 +334,14 @@ function analyzeExpressionStatement(
 	checker?: ts.TypeChecker
 ) {
 	if (isFloatingEffectExpression(node.expression, checker)) {
-		report(
-			node.expression,
-			'floatingEffect',
-			'Effects are lazy and must not float. Assign the Effect, return it, yield it, or run it at the boundary.'
-		)
+		report(node.expression, 'floatingEffect', 'Return, yield, or run the Effect.')
 	}
 
 	if (ts.isCallExpression(node.expression) && isDiscardedArrayTransform(node.expression)) {
 		report(
 			node.expression,
 			'no-discarded-array-transform',
-			'Do not discard an Array transform result. Use Array.forEach for side effects or keep the transformed value in the data flow.'
+			'Use Array.forEach or pass the transform result to its consumer.'
 		)
 	}
 }
@@ -345,11 +409,7 @@ function analyzeNewExpression(node: ts.NewExpression, report: (node: ts.Node, ru
 		(node.expression.text === 'Map' || node.expression.text === 'Set') &&
 		!(isStaticLookupCollection(node) || isLocalCollectionAccumulator(node))
 	) {
-		report(
-			node.expression,
-			'no-map-set-mutation',
-			'Do not create mutable Map or Set collections. Use Effect HashMap or HashSet instead.'
-		)
+		report(node.expression, 'no-map-set-mutation', 'Replace mutable Map/Set with Effect HashMap or HashSet.')
 	}
 }
 

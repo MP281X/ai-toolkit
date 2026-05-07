@@ -1,22 +1,19 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/linter",
+	"name": "@ai-toolkit/deslop",
 
 	"bin": {
-		"strict-lint": "./src/index.ts"
+		"deslop": "./src/index.ts"
 	},
 
 	"imports": {
 		"#lib/*": "./src/lib/*"
 	},
 
-	"exports": {
-		".": "./src/index.ts"
-	},
-
 	"scripts": {
 		"test": "bun test",
+		"build": "bun build --target=bun ./src/index.ts --outfile ./dist/deslop.js",
 		"fix": "biome check --write --unsafe || true",
 		"check": "tsgo --noEmit && biome check"
 	}

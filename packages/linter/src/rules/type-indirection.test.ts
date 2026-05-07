@@ -1,10 +1,14 @@
 import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
-import {StrictLinter} from '../index.ts'
+import {analyzeText, analyzeTypedText} from '../index.ts'
 
 function rulesFor(sourceText: string) {
-	return Array.map(StrictLinter.analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
+}
+
+function typedRulesFor(sourceText: string) {
+	return Array.map(analyzeTypedText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('type-indirection rules', () => {
@@ -67,7 +71,7 @@ describe('type-indirection rules', () => {
 	})
 
 	test('no-export-namespace', () => {
-		expect(rulesFor('export namespace StrictLinter { export type Mode = string }')).toContain('no-export-namespace')
+		expect(rulesFor('export namespace Deslop { export type Mode = string }')).toContain('no-export-namespace')
 	})
 
 	test('allows export declare namespace', () => {
@@ -77,9 +81,7 @@ describe('type-indirection rules', () => {
 	})
 
 	test('lints types inside export declare namespace', () => {
-		expect(rulesFor('export declare namespace StrictLinter { export type Mode = string }')).toContain(
-			'no-single-use-type'
-		)
+		expect(rulesFor('export declare namespace Deslop { export type Mode = string }')).toContain('no-single-use-type')
 	})
 
 	test('allows schema companion type before schema value', () => {
@@ -96,5 +98,19 @@ describe('type-indirection rules', () => {
 				'import {Schema} from "effect"; export const AgentId = Schema.Literal("agent"); export type AgentId = typeof AgentId.Type'
 			)
 		).toContain('no-schema-type-order')
+	})
+
+	test('no-unnecessary-type-argument for contextually inferred call result', () => {
+		expect(
+			typedRulesFor(
+				'import {Array} from "effect"; declare const comments: readonly {body: string}[] | undefined; const value = comments ?? Array.empty<{body: string}>()'
+			)
+		).toContain('no-unnecessary-type-argument')
+	})
+
+	test('allows necessary type argument without contextual type', () => {
+		expect(typedRulesFor('import {Array} from "effect"; const value = Array.empty<{body: string}>()')).not.toContain(
+			'no-unnecessary-type-argument'
+		)
 	})
 })

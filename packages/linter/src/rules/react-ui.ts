@@ -39,11 +39,7 @@ export const reactUiRules = [
 				ts.isExpression(node.initializer) &&
 				isTailwindStringLiteral(node.initializer)
 			) {
-				report(
-					node.name,
-					'no-tailwind-class-variables',
-					'Do not store Tailwind class tokens in objects or config maps. Move the classes directly into className or className={cn(...)}.'
-				)
+				report(node.name, 'no-tailwind-class-variables', 'Move Tailwind classes directly into className or cn(...).')
 			}
 		}
 	}
@@ -55,12 +51,12 @@ function analyzeImportDeclaration(
 ) {
 	if (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
 		Array.forEach(node.importClause.namedBindings.elements, element => {
+			if (ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === 'react' && element.isTypeOnly) {
+				report(element.name, 'no-react-type-imports', 'Remove React type import; use global React.* annotation.')
+			}
+
 			if (element.propertyName && !hasTopLevelDeclarationNamed(node.getSourceFile(), element.propertyName.text)) {
-				report(
-					element.name,
-					'no-import-alias',
-					'Do not rename imports. Keep imported names identical to their source names so dependencies stay obvious.'
-				)
+				report(element.name, 'no-import-alias', 'Use original imported name.')
 			}
 		})
 	}
@@ -71,11 +67,7 @@ function analyzeImportDeclaration(
 			node.moduleSpecifier.text !== 'react' &&
 			node.importClause.namedBindings.name.text !== moduleNamespaceName(node.moduleSpecifier.text)
 		) {
-			report(
-				node.importClause.namedBindings.name,
-				'no-import-alias',
-				'Do not rename namespace imports. Use the module basename as the namespace so the import stays mechanically obvious.'
-			)
+			report(node.importClause.namedBindings.name, 'no-import-alias', 'Use module basename as namespace import name.')
 		}
 	}
 
@@ -85,11 +77,7 @@ function analyzeImportDeclaration(
 		node.importClause.isTypeOnly ||
 		(node.importClause.namedBindings && ts.isNamespaceImport(node.importClause.namedBindings))
 	) {
-		report(
-			node.moduleSpecifier,
-			'no-react-type-imports',
-			'Do not import React namespace from `react`. Named imports are preferred, or use global React types directly.'
-		)
+		report(node.moduleSpecifier, 'no-react-type-imports', 'Remove React type import; use global React.* annotation.')
 	}
 }
 
@@ -129,7 +117,7 @@ function analyzeCallExpression(
 		report(
 			node.expression,
 			'no-react-null-state',
-			'Do not initialize React state with null. Use undefined, omitted state, or a discriminated state object.'
+			'Initialize React state with undefined, omitted state, or discriminated object.'
 		)
 	}
 }
@@ -157,19 +145,11 @@ function analyzeVariableDeclaration(
 			(ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) &&
 			isJsxWrapperFunction(node.initializer)
 		) {
-			report(
-				node.name,
-				'no-jsx-wrapper-component',
-				'This component only wraps another JSX element and forwards props. Inline the wrapped primitive at the call site.'
-			)
+			report(node.name, 'no-jsx-wrapper-component', 'Inline wrapped JSX primitive at each call site.')
 		}
 
 		if (ts.isObjectLiteralExpression(node.initializer) && hasComponentNamespaceMember(node.initializer)) {
-			report(
-				node.name,
-				'no-component-namespace-object',
-				'Do not export component namespace objects. Export and import concrete components directly.'
-			)
+			report(node.name, 'no-component-namespace-object', 'Export concrete components directly.')
 		}
 	}
 }
@@ -179,11 +159,7 @@ function analyzeFunctionDeclaration(
 	report: (node: ts.Node, rule: string, message: string) => void
 ) {
 	if (node.name && isUppercaseIdentifier(node.name) && isJsxWrapperFunction(node)) {
-		report(
-			node.name,
-			'no-jsx-wrapper-component',
-			'This component only wraps another JSX element and forwards props. Inline the wrapped primitive at the call site.'
-		)
+		report(node.name, 'no-jsx-wrapper-component', 'Inline wrapped JSX primitive at each call site.')
 	}
 }
 
@@ -196,11 +172,7 @@ function analyzeJsxAttribute(node: ts.JsxAttribute, report: (node: ts.Node, rule
 		node.initializer.expression &&
 		isJsxLike(node.initializer.expression)
 	) {
-		report(
-			node.name,
-			'no-render-prop-element',
-			'Do not pass JSX through render props. Render the element directly where the branch is visible.'
-		)
+		report(node.name, 'no-render-prop-element', 'Render JSX directly at branch site.')
 	}
 
 	if (
@@ -213,11 +185,7 @@ function analyzeJsxAttribute(node: ts.JsxAttribute, report: (node: ts.Node, rule
 	}
 
 	if (node.initializer.expression && ts.isConditionalExpression(node.initializer.expression)) {
-		report(
-			node.name,
-			'cn-classname',
-			'Do not use ternaries inside className. Use className={cn(base, condition && className)} so conditional classes stay explicit.'
-		)
+		report(node.name, 'cn-classname', 'Rewrite className ternary as className={cn(base, condition && className)}.')
 	}
 
 	if (
@@ -235,7 +203,7 @@ function analyzeJsxAttribute(node: ts.JsxAttribute, report: (node: ts.Node, rule
 		report(
 			node.name,
 			'cn-classname',
-			'Do not interpolate conditional classes in className strings. Use className={cn(base, condition && className)} so conditional classes stay explicit.'
+			'Rewrite conditional class interpolation as className={cn(base, condition && className)}.'
 		)
 	}
 }

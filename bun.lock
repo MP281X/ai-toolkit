@@ -114,9 +114,9 @@
       "name": "@ai-toolkit/git",
     },
     "packages/linter": {
-      "name": "@ai-toolkit/linter",
+      "name": "@ai-toolkit/deslop",
       "bin": {
-        "strict-lint": "./src/index.ts",
+        "deslop": "./src/index.ts",
       },
     },
     "packages/opentelemetry": {
@@ -138,9 +138,9 @@
 
     "@ai-toolkit/components": ["@ai-toolkit/components@workspace:packages/components"],
 
-    "@ai-toolkit/git": ["@ai-toolkit/git@workspace:packages/git"],
+    "@ai-toolkit/deslop": ["@ai-toolkit/deslop@workspace:packages/linter"],
 
-    "@ai-toolkit/linter": ["@ai-toolkit/linter@workspace:packages/linter"],
+    "@ai-toolkit/git": ["@ai-toolkit/git@workspace:packages/git"],
 
     "@ai-toolkit/opentelemetry": ["@ai-toolkit/opentelemetry@workspace:packages/opentelemetry"],
 

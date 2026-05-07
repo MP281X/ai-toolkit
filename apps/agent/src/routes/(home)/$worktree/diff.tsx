@@ -1,8 +1,8 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Match, Option, Predicate, pipe, Stream, String} from 'effect'
+import {Array, Effect, Match, Option, Predicate, pipe, Stream} from 'effect'
 
 import {FileIcon} from '@ai-toolkit/components/icons'
-import {PatchReview} from '@ai-toolkit/components/render/diff'
+import {PatchDiff} from '@ai-toolkit/components/render/diff'
 import {TreeExplorer, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
@@ -58,12 +58,7 @@ const reviewPanelAtom = Atom.family((cwd: string) =>
 				const entries = pipe(
 					changes,
 					Array.map(diff => ({diff, scope: 'staged-to-worktree'})),
-					Array.appendAll(
-						pipe(
-							staged,
-							Array.map(diff => ({diff, scope: 'head-to-staged'}))
-						)
-					)
+					Array.appendAll(Array.map(staged, diff => ({diff, scope: 'head-to-staged'})))
 				)
 
 				return {
@@ -95,7 +90,7 @@ const moveReviewSelectionAtom = Atom.fn(
 					),
 					Option.getOrElse(() => 0)
 				) + input.offset,
-				entries.length - 1
+				Array.length(entries) - 1
 			)
 		)
 
@@ -155,7 +150,7 @@ function DiffPage() {
 
 function ReviewViewPanel(input: {cwd: string}) {
 	const [comments, setComments] = useState<
-		readonly (NonNullable<Parameters<typeof PatchReview>[0]['comments']>[number] & {scope: string})[]
+		readonly (NonNullable<React.ComponentProps<typeof PatchDiff>['comments']>[number] & {scope: string})[]
 	>(Array.empty())
 	const [shortcutsOpen, setShortcutsOpen] = useState(false)
 	const {changesDiffs, entries, selectedEntry, stagedDiffs} = useAtomSuspense(reviewPanelAtom(input.cwd)).value
@@ -243,47 +238,40 @@ function ReviewViewPanel(input: {cwd: string}) {
 							)}
 							{selectedEntry && (
 								<div key={`${selectedEntry.scope}\n${selectedEntry.diff.filePath}`} className="h-full min-h-0 min-w-0">
-									<PatchReview
+									<PatchDiff
 										filePath={selectedEntry.diff.filePath}
 										patch={selectedEntry.diff.patch}
-										comments={pipe(
+										comments={Array.filter(
 											comments,
-											Array.filter(
-												comment =>
-													comment.scope === selectedEntry.scope && comment.filePath === selectedEntry.diff.filePath
-											)
+											comment =>
+												comment.scope === selectedEntry.scope && comment.filePath === selectedEntry.diff.filePath
 										)}
-										onCreateComment={comment =>
-											setComments(current =>
-												Array.append(current, {
-													...comment,
-													id: crypto.randomUUID(),
-													scope: selectedEntry.scope,
-													body: ''
-												})
-											)
-										}
-										onSaveComment={(comment, body) => {
-											const nextBody = pipe(body, String.trim)
-											setComments(current =>
-												String.isEmpty(nextBody)
-													? pipe(
-															current,
-															Array.filter(currentComment => currentComment.id !== comment.id)
-														)
-													: pipe(
-															current,
-															Array.map(currentComment =>
-																currentComment.id === comment.id ? {...currentComment, body: nextBody} : currentComment
-															)
-														)
-											)
-										}}
-										onDeleteComment={comment =>
+										onSaveComment={comment =>
 											setComments(current =>
 												pipe(
 													current,
-													Array.filter(currentComment => currentComment.id !== comment.id)
+													Array.filter(
+														currentComment =>
+															currentComment.scope !== selectedEntry.scope ||
+															currentComment.filePath !== comment.filePath ||
+															currentComment.lineNumber !== comment.lineNumber ||
+															(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
+																(comment.side === 'deletions' ? 'deletions' : 'file')
+													),
+													Array.append({...comment, scope: selectedEntry.scope})
+												)
+											)
+										}
+										onDeleteComment={comment =>
+											setComments(current =>
+												Array.filter(
+													current,
+													currentComment =>
+														currentComment.scope !== selectedEntry.scope ||
+														currentComment.filePath !== comment.filePath ||
+														currentComment.lineNumber !== comment.lineNumber ||
+														(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
+															(comment.side === 'deletions' ? 'deletions' : 'file')
 												)
 											)
 										}
@@ -300,14 +288,15 @@ function ReviewViewPanel(input: {cwd: string}) {
 							) : (
 								<div className="grid content-start gap-2 overflow-y-auto p-2">
 									{Array.map(comments, comment => (
-										<div key={comment.id} className="grid gap-1 border bg-background p-2 text-xs">
+										<div
+											key={`${comment.scope}:${comment.filePath}:${comment.side === 'deletions' ? 'deletions' : 'file'}:${comment.lineNumber}`}
+											className="grid gap-1 border bg-background p-2 text-xs"
+										>
 											<div className="min-w-0 truncate font-medium">{comment.filePath}</div>
 											<div className="text-muted-foreground">
 												{comment.side ? `${comment.side}:${comment.lineNumber}` : `file:${comment.lineNumber}`}
 											</div>
-											<div className="whitespace-pre-wrap text-foreground">
-												{String.isEmpty(comment.body) ? 'Draft comment' : comment.body}
-											</div>
+											<div className="whitespace-pre-wrap text-foreground">{comment.body}</div>
 										</div>
 									))}
 								</div>

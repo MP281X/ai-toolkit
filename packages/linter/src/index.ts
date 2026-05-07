@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
-import {BunRuntime, BunServices} from '@effect/platform-bun'
+import {BunServices} from '@effect/platform-bun'
 import {Array, Effect, Option, Order, pipe, String} from 'effect'
 
+import {Argument, Command, Flag} from 'effect/unstable/cli'
 import ts from 'typescript'
 
 import {antiIndirectionRules} from './rules/anti-indirection.ts'
@@ -11,7 +12,7 @@ import {functionalEffectRules} from './rules/functional-effect.ts'
 import {reactUiRules} from './rules/react-ui.ts'
 import {typeIndirectionRules} from './rules/type-indirection.ts'
 
-export const runEffect = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
+export const runDeslop = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
 	const files = yield* collectFiles(options)
 
 	if (Array.isReadonlyArrayEmpty(files)) return {diagnostics: [], files}
@@ -79,7 +80,6 @@ export function renderText(
 		rule: string
 		severity: 'error'
 		message: string
-		fix: string
 		filePath: string
 		line: number
 		column: number
@@ -90,117 +90,40 @@ export function renderText(
 	return Array.match(diagnostics, {
 		onEmpty: () => '',
 		onNonEmpty: diagnostics =>
-			`${color('strict-lint v1', 'bold')}\n${Array.length(diagnostics)} issues\n\n${pipe(
+			`${pipe(
 				groupDiagnosticsByFile(diagnostics),
-				Array.map(
-					fileDiagnostics =>
-						`${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'dim')}\n${pipe(
-							fileDiagnostics.diagnostics,
-							Array.map(
-								diagnostic =>
-									`- ${color(`L${diagnostic.line}`, 'line')} ${color(`@${diagnostic.symbol}`, 'symbol')} ${color('"', 'quote')}${diagnostic.text}${color('"', 'quote')} ${color(diagnostic.rule, 'rule')} ${color(`-> ${diagnostic.fix}`, 'dim')}`
-							),
-							Array.join('\n')
-						)}`
-				),
+				Array.map(fileDiagnostics => {
+					const widths = diagnosticWidths(fileDiagnostics.diagnostics)
+
+					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
+						fileDiagnostics.diagnostics,
+						Array.map(diagnostic => renderDiagnosticBlock(diagnostic, widths)),
+						Array.join('\n\n')
+					)}`
+				}),
 				Array.join('\n\n')
 			)}\n`
 	})
 }
 
-export const StrictLinter = {
-	analyzeText,
-	analyzeTypedText,
-	renderText,
-	run: (options: {mode: string; cwd: string; paths?: string[]}) => Effect.runPromise(runEffect(options)),
-	runEffect
-}
-
 const sourceFileExtensions = ['.js', '.jsx', '.ts', '.tsx']
 const exclusionParts = ['node_modules', 'dist', 'build', 'coverage', '.turbo', '.next', '.output']
-const fixHints = [
-	['no-access-variable', 'inline access'],
-	['no-accumulator-loop', 'use collection transform'],
-	['no-any', 'use unknown or concrete type'],
-	['no-ast-gettext-comparison', 'use AST predicate'],
-	['no-async-await', 'use Effect'],
-	['no-braced-single-line-guard', 'remove braces'],
-	['cn-classname', 'use cn'],
-	['floatingEffect', 'yield or assign Effect'],
-	['no-class', 'use Effect service or Schema'],
-	['no-configurable-helper', 'inline policy at boundary'],
-	['no-default-export', 'export named value'],
-	['no-derived-simple-variable', 'inline derived value'],
-	['no-deep-parent-chain', 'use ts.findAncestor'],
-	['no-discarded-array-transform', 'use Array.forEach'],
-	['no-else', 'return early'],
-	['no-error-constructor', 'use typed Effect failure'],
-	['no-effect-antipatterns', 'use Effect.fnUntraced'],
-	['no-effect-returning-function', 'use Effect.fnUntraced'],
-	['no-export-namespace', 'export plain values'],
-	['no-array-empty-ternary', 'use Array.match'],
-	['no-imperative-array-transform', 'use collection transform'],
-	['no-interface-for-object-shape', 'use inferred object shape'],
-	['no-import-alias', 'use source import name'],
-	['no-length-check', 'use collection predicate'],
-	['no-local-namespace-type', 'inline local types'],
-	['no-mutation', 'derive instead of mutate'],
-	['no-named-function-args-type', 'infer args'],
-	['no-namespace-props-type', 'infer props'],
-	['no-native-prototype-method', 'use Effect helper'],
-	['no-json-api', 'use Schema codec'],
-	['no-map-set-mutation', 'use HashMap or HashSet'],
-	['no-multiline-ternary', 'use early return'],
-	['no-null-literal', 'use non-null state'],
-	['no-option-from-conversion', 'use direct nullability'],
-	['no-promise-api', 'use Effect'],
-	['no-restricted-global', 'use Effect module'],
-	['no-redundant-type-check', 'remove redundant runtime check'],
-	['no-primitive-const', 'inline primitive'],
-	['no-render-prop-element', 'render element directly'],
-	['no-regex-literal', 'use RegExp'],
-	['no-react-null-state', 'use undefined state'],
-	['no-return-type-annotation', 'infer return type'],
-	['no-redundant-void-return', 'return void call directly'],
-	['no-simple-condition-variable', 'inline condition'],
-	['no-schema-type-order', 'move type before schema'],
-	['no-single-use-interface', 'inline interface'],
-	['no-single-use-type', 'inline type'],
-	['no-single-use-top-level-variable', 'inline module variable'],
-	['no-single-use-variable', 'inline variable'],
-	['no-small-literal-variable', 'inline literal'],
-	['no-tailwind-class-variables', 'inline className'],
-	['no-top-level-mutable-singleton', 'move state into scope'],
-	['no-throw', 'use typed failure'],
-	['no-try-catch', 'use Effect error handling'],
-	['no-type-alias-for-object-shape', 'use inferred object shape'],
-	['no-type-assertion', 'redesign inference'],
-	['no-unbraced-multiline-guard', 'add braces'],
-	['no-useless-pipe', 'remove two-arg pipe'],
-	['no-variable-type-annotation', 'infer variable type'],
-	['no-yield-in-pipe', 'compose the Effect']
-] as const
 const colors = {
 	bold: ['\u001b[1m', '\u001b[22m'],
+	code: ['\u001b[2m', '\u001b[22m'],
+	count: ['\u001b[2m', '\u001b[22m'],
 	dim: ['\u001b[2m', '\u001b[22m'],
 	file: ['\u001b[1;36m', '\u001b[0m'],
+	help: ['\u001b[36m', '\u001b[39m'],
+	label: ['\u001b[2m', '\u001b[22m'],
 	line: ['\u001b[33m', '\u001b[39m'],
-	quote: ['\u001b[32m', '\u001b[39m'],
-	rule: ['\u001b[31m', '\u001b[39m'],
-	symbol: ['\u001b[35m', '\u001b[39m']
+	problem: ['\u001b[31m', '\u001b[39m'],
+	rule: ['\u001b[2m', '\u001b[22m'],
+	symbol: ['\u001b[36m', '\u001b[39m']
 }
 
 function color(value: string, role: keyof typeof colors) {
-	return process.env['NO_COLOR'] ? value : `${colors[role][0]}${value}${colors[role][1]}`
-}
-
-function fixHint(rule: string) {
-	return pipe(
-		fixHints,
-		Array.findFirst(entry => entry[0] === rule),
-		Option.map(entry => entry[1]),
-		Option.getOrUndefined
-	)
+	return process.stdout.isTTY ? `${colors[role][0]}${value}${colors[role][1]}` : value
 }
 
 function groupDiagnosticsByFile(
@@ -208,7 +131,6 @@ function groupDiagnosticsByFile(
 		rule: string
 		severity: 'error'
 		message: string
-		fix: string
 		filePath: string
 		line: number
 		column: number
@@ -235,6 +157,61 @@ function groupDiagnosticsByFile(
 	)
 }
 
+function diagnosticWidths(
+	diagnostics: readonly {
+		line: number
+		column: number
+		symbol: string
+	}[]
+) {
+	return {
+		location: maxLength(Array.map(diagnostics, diagnostic => `L${diagnostic.line}:${diagnostic.column}`)),
+		symbol: maxLength(Array.map(diagnostics, diagnostic => `@${diagnostic.symbol}`))
+	}
+}
+
+function renderDiagnosticBlock(
+	diagnostic: {
+		rule?: string
+		line: number
+		column: number
+		symbol: string
+		text: string
+		message: string
+	},
+	widths: {location: number; symbol: number}
+) {
+	const nextAction = nextActionFor(diagnostic.rule)
+
+	return `${color(padEnd(`L${diagnostic.line}:${diagnostic.column}`, widths.location), 'line')}  ${color(padEnd(`@${diagnostic.symbol}`, widths.symbol), 'symbol')}  ${color(diagnostic.rule ?? 'diagnostic', 'rule')}\n${color(padEnd('Code', widths.location), 'label')}  ${padEnd('', widths.symbol)}  ${color(diagnostic.text, 'code')}\n${color(padEnd('Problem', widths.location), 'label')}  ${padEnd('', widths.symbol)}  ${color(diagnostic.message, 'problem')}${nextAction ? `\n${color(padEnd('Next', widths.location), 'label')}  ${padEnd('', widths.symbol)}  ${color(nextAction, 'help')}` : ''}`
+}
+
+function nextActionFor(rule: string | undefined) {
+	if (rule === 'no-yield-in-pipe') {
+		return 'Yield the Effect first, then transform its value with Effect.map or Effect.flatMap.'
+	}
+
+	if (rule === 'no-imperative-array-transform') {
+		return 'Use Array helpers for pure transforms, Effect.forEach for effectful transforms, or Stream.unfoldEffect for worklist traversal.'
+	}
+
+	if (rule === 'no-unnecessary-effect-gen') {
+		return 'Use the yielded Effect value directly, then compose providers or error handling around it.'
+	}
+
+	if (rule === 'prefer-const-literal-branch') return 'Return the literal with `as const` from the Match branch.'
+
+	return
+}
+
+function maxLength(values: readonly string[]) {
+	return Array.reduce(values, 0, (max, value) => Math.max(max, String.length(value)))
+}
+
+function padEnd(value: string, width: number) {
+	return `${value}${String.repeat(Math.max(0, width - String.length(value)))(' ')}`
+}
+
 const collectFiles = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
 	const selectedPaths = yield* collectSelectedPaths(options)
 	const files = yield* expandPaths(options.cwd, selectedPaths)
@@ -245,10 +222,24 @@ const collectFiles = Effect.fnUntraced(function* (options: {mode: string; cwd: s
 const collectSelectedPaths = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
 	if (options.mode === 'paths') return options.paths ?? []
 
-	if (options.mode === 'full') return ['.']
+	if (options.mode === 'full') return options.paths ?? ['.']
 
-	return yield* runGitDiff(options.cwd, options.mode)
+	const gitPaths = yield* runGitDiff(options.cwd, options.mode)
+
+	return options.paths ? filterPathsByScope(gitPaths, options.paths) : gitPaths
 })
+
+function filterPathsByScope(filePaths: string[], scopes: string[]) {
+	return Array.filter(filePaths, filePath =>
+		Array.some(Array.map(scopes, normalizePath), scope => pathMatchesScope(normalizePath(filePath), scope))
+	)
+}
+
+function pathMatchesScope(filePath: string, scope: string) {
+	if (scope === '.') return true
+
+	return filePath === scope || String.startsWith(`${scope}/`)(filePath)
+}
 
 const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
 	const process = Bun.spawn(
@@ -336,7 +327,6 @@ function analyzeSourceFile(filePath: string, sourceFile: ts.SourceFile, checker?
 		rule: string
 		severity: 'error'
 		message: string
-		fix: string
 		filePath: string
 		line: number
 		column: number
@@ -350,7 +340,6 @@ function analyzeSourceFile(filePath: string, sourceFile: ts.SourceFile, checker?
 			rule,
 			severity: 'error',
 			message,
-			fix: fixHint(rule) ?? message,
 			filePath,
 			line: position.line + 1,
 			column: position.character + 1,
@@ -520,7 +509,13 @@ function isExcluded(filePath: string) {
 }
 
 function normalizePath(filePath: string) {
-	return pipe(filePath, String.replaceAll('\\', '/'), String.replace(RegExp('^\\.\\/'), ''))
+	return pipe(
+		filePath,
+		String.replaceAll('\\', '/'),
+		String.replace(RegExp('^\\.\\/'), ''),
+		String.replace(RegExp('/+$'), ''),
+		path => (path === '' ? '.' : path)
+	)
 }
 
 function extensionName(filePath: string) {
@@ -533,23 +528,8 @@ function extensionName(filePath: string) {
 	return index === -1 ? '' : String.slice(index)(filePath)
 }
 
-function parseRunOptions(args: string[]) {
-	return pipe(
-		args,
-		Array.head,
-		Option.match({
-			onNone: () => ({cwd: process.cwd(), mode: 'full'}),
-			onSome: mode => {
-				if (Array.contains(['staged', 'unstaged', 'changed', 'full'], mode)) return {cwd: process.cwd(), mode}
-
-				return {cwd: process.cwd(), mode: 'paths', paths: args}
-			}
-		})
-	)
-}
-
-const cli = Effect.fnUntraced(function* () {
-	const result = yield* runEffect(parseRunOptions(Array.drop(Bun.argv, 2)))
+const runAndRender = Effect.fnUntraced(function* (options: {mode: string; cwd: string; paths?: string[]}) {
+	const result = yield* runDeslop(options)
 
 	yield* Effect.sync(() => process.stdout.write(renderText(result.diagnostics)))
 
@@ -563,6 +543,57 @@ const cli = Effect.fnUntraced(function* () {
 	)
 })
 
+export const deslopCommand = pipe(
+	Command.make(
+		'deslop',
+		{
+			staged: pipe(Flag.boolean('staged'), Flag.withDescription('Lint staged source files.')),
+			unstaged: pipe(Flag.boolean('unstaged'), Flag.withDescription('Lint unstaged source files.')),
+			changed: pipe(Flag.boolean('changed'), Flag.withDescription('Lint source files changed from HEAD.')),
+			full: pipe(Flag.boolean('full'), Flag.withDescription('Lint every tracked source file.')),
+			paths: pipe(
+				Argument.string('path'),
+				Argument.withDescription('File or directory to lint.'),
+				Argument.variadic({min: 0})
+			)
+		},
+		config => {
+			const modes = [
+				...(config.staged ? ['staged'] : []),
+				...(config.unstaged ? ['unstaged'] : []),
+				...(config.changed ? ['changed'] : []),
+				...(config.full ? ['full'] : [])
+			]
+
+			if (Array.length(modes) > 1) {
+				return Effect.fail('Use only one of --staged, --unstaged, --changed, or --full.')
+			}
+
+			return runAndRender({
+				cwd: process.cwd(),
+				mode: modes[0] ?? 'full',
+				paths: Array.isReadonlyArrayEmpty(config.paths) ? undefined : [...config.paths]
+			})
+		}
+	),
+	Command.withDescription('Remove slop from TypeScript and React code.'),
+	Command.withExamples([
+		{command: 'bunx @ai-toolkit/deslop --staged', description: 'Lint staged files'},
+		{command: 'bunx @ai-toolkit/deslop --changed src', description: 'Lint changed files under src'},
+		{command: 'bunx @ai-toolkit/deslop packages/linter', description: 'Lint explicit paths'}
+	])
+)
+
 if (import.meta.main) {
-	BunRuntime.runMain(Effect.provide(cli(), BunServices.layer))
+	Effect.runFork(
+		pipe(
+			Effect.provide(Command.runWith(deslopCommand, {version: '0.0.0'})(Array.drop(Bun.argv, 2)), BunServices.layer),
+			Effect.catch(error =>
+				Effect.sync(() => {
+					process.stderr.write(`${error}\n`)
+					process.exit(1)
+				})
+			)
+		)
+	)
 }

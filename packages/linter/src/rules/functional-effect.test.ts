@@ -1,14 +1,14 @@
 import {Array} from 'effect'
 
 import {describe, expect, test} from 'bun:test'
-import {StrictLinter} from '../index.ts'
+import {analyzeText, analyzeTypedText} from '../index.ts'
 
 function rulesFor(sourceText: string) {
-	return Array.map(StrictLinter.analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 function typedRulesFor(sourceText: string) {
-	return Array.map(StrictLinter.analyzeTypedText('sample.ts', sourceText), diagnostic => diagnostic.rule)
+	return Array.map(analyzeTypedText('sample.ts', sourceText), diagnostic => diagnostic.rule)
 }
 
 describe('functional-effect rules', () => {
@@ -22,8 +22,11 @@ describe('functional-effect rules', () => {
 		)
 	})
 
-	test('no-pipe-method', () => {
-		expect(rulesFor('const value = input.pipe(Effect.map(value => value))')).toContain('no-pipe-method')
+	test('no-method-pipe', () => {
+		expect(rulesFor('const value = input.pipe(Effect.map(value => value))')).toContain('no-method-pipe')
+		expect(rulesFor('const value = input.pipe(Effect.map(value => value)).pipe(Effect.orDie)')).toContain(
+			'no-method-pipe'
+		)
 	})
 
 	test('no-react-compiler-antipatterns', () => {
@@ -84,6 +87,8 @@ describe('functional-effect rules', () => {
 		expect(rulesFor('const names = pipe(files, Array.map(file => file.name))')).toContain('no-useless-pipe')
 		expect(rulesFor('const text = pipe(value, String.trim)')).toContain('no-useless-pipe')
 		expect(rulesFor('const tsx = pipe(filePath, String.endsWith("x"))')).toContain('no-useless-pipe')
+		expect(rulesFor('const program = pipe(effect, Effect.asVoid)')).not.toContain('no-useless-pipe')
+		expect(rulesFor('const value = pipe(option, Option.getOrElse(() => fallback))')).not.toContain('no-useless-pipe')
 		expect(
 			rulesFor('const names = pipe(files, Array.filter(file => file.enabled), Array.map(file => file.name))')
 		).not.toContain('no-useless-pipe')
@@ -94,13 +99,30 @@ describe('functional-effect rules', () => {
 			rulesFor('const run = Effect.gen(function* () { return yield* Effect.fail(pipe(yield* read, String.trim)) })')
 		).toContain('no-yield-in-pipe')
 		expect(
+			rulesFor(
+				'const run = Effect.gen(function* () { return yield* pipe(Effect.gen(function* () { return yield* Agent }), Effect.provide(layer), Effect.orDie) })'
+			)
+		).not.toContain('no-yield-in-pipe')
+		expect(
 			rulesFor('const run = Effect.gen(function* () { return yield* pipe(read, Effect.map(String.trim)) })')
 		).not.toContain('no-yield-in-pipe')
 	})
 
-	test('no-array-empty-ternary', () => {
-		expect(rulesFor('const text = Array.isReadonlyArrayEmpty(diagnostics) ? "" : render(diagnostics)')).toContain(
-			'no-array-empty-ternary'
+	test('no-unnecessary-effect-gen', () => {
+		expect(rulesFor('const agent = Effect.gen(function* () { return yield* Agent })')).toContain(
+			'no-unnecessary-effect-gen'
+		)
+		expect(rulesFor('const agent = Effect.gen(function* () { const agent = yield* Agent; return agent })')).toContain(
+			'no-unnecessary-effect-gen'
+		)
+	})
+
+	test('prefer-const-literal-branch', () => {
+		expect(rulesFor("pipe(Match.value(status), Match.when('ready', () => 'Ready'))")).toContain(
+			'prefer-const-literal-branch'
+		)
+		expect(rulesFor("pipe(Match.value(status), Match.when('ready', () => 'Ready' as const))")).not.toContain(
+			'prefer-const-literal-branch'
 		)
 	})
 
