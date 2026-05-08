@@ -4,7 +4,7 @@ export const providers = {
 	openai: {apiUrl: Config.succeed('https://api.openai.com/v1'), apiKey: Config.redacted('AI_OPENAI')},
 	'opencode-go': {apiUrl: Config.succeed('https://opencode.ai/zen/go/v1'), apiKey: Config.redacted('AI_OPENCODE')},
 	openrouter: {apiUrl: Config.succeed('https://openrouter.ai/api/v1'), apiKey: Config.redacted('AI_OPENROUTER')}
-}
+} as const
 
 export type AgentId = typeof AgentId.Type
 export const AgentId = Schema.Literals(['effect', 'codex'] as const)
@@ -67,11 +67,11 @@ export const models = [
 		pricing: {input: 0, output: 0}
 	}
 ] as const satisfies readonly {
-	provider: keyof typeof providers
-	model: string
-	agents: readonly AgentId[]
-	contextWindow: number
-	pricing: {input: number; output: number}
+	readonly provider: keyof typeof providers
+	readonly model: string
+	readonly agents: readonly AgentId[]
+	readonly contextWindow: number
+	readonly pricing: {readonly input: number; readonly output: number}
 }[]
 
 export type ProviderId = typeof ProviderId.Type

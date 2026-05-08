@@ -116,7 +116,7 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 							...files,
 							new File(
 								[Predicate.isString(item.data) ? new TextEncoder().encode(item.data) : Uint8Array.from(item.data)],
-								`attachment.${pipe(item.mediaType, String.split('/'))[1] ?? 'bin'}`,
+								`attachment.${String.split('/')(item.mediaType)[1] ?? 'bin'}`,
 								{type: item.mediaType}
 							)
 						]
@@ -159,7 +159,7 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 								...files,
 								new File(
 									[Predicate.isString(part.data) ? new TextEncoder().encode(part.data) : Uint8Array.from(part.data)],
-									part.fileName ?? `attachment.${pipe(part.mediaType, String.split('/'))[1] ?? 'bin'}`,
+									part.fileName ?? `attachment.${String.split('/')(part.mediaType)[1] ?? 'bin'}`,
 									{type: part.mediaType}
 								)
 							]

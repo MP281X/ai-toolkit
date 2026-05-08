@@ -8,7 +8,7 @@ import {Mermaid} from './mermaid.tsx'
 
 const marked = new Marked({gfm: true, breaks: true, async: false})
 
-export function Markdown(props: {children: string; className?: string}) {
+export function Markdown(props: {readonly children: string; readonly className?: string}) {
 	return (
 		<div className={cn('markdown wrap-break-word select-text text-wrap text-[14px] leading-relaxed', props.className)}>
 			{Array.map(marked.lexer(props.children), (token, index) => {

@@ -6,16 +6,16 @@ import mermaid from 'mermaid'
 
 import {cn} from '#lib/utils.ts'
 
-const mermaidAtom = Atom.family((source: string) =>
-	Atom.make(
+const mermaidAtom = Atom.family((source: string) => {
+	return Atom.make(
 		Effect.tryPromise(() => {
 			mermaid.initialize({startOnLoad: false, securityLevel: 'loose'})
 			return mermaid.render(`mermaid_${Hash.string(source)}`, source)
 		})
 	)
-)
+})
 
-export function Mermaid(props: {children: string; className?: string}) {
+export function Mermaid(props: {readonly children: string; readonly className?: string}) {
 	const result = useAtomSuspense(mermaidAtom(props.children), {includeFailure: true})
 
 	if (AsyncResult.isFailure(result)) {

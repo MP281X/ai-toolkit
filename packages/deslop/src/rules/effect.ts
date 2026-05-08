@@ -87,7 +87,12 @@ export const effectRules = [
 	rule('prefer-effect-module-over-standard-library', (node, context) => {
 		if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
 			const module = standardPrototypeMethods.get(node.expression.name.text)
-			if (module && !isEffectModuleReceiver(node.expression.expression)) {
+			if (
+				module &&
+				!isEffectModuleReceiver(context.checker, node.expression.expression) &&
+				ts.isIdentifier(node.expression.name) &&
+				isStandardPrototypeMethod(context.checker, node.expression.name, module)
+			) {
 				context.report(
 					node.expression.name,
 					'prefer-effect-module-over-standard-library',
@@ -100,11 +105,11 @@ export const effectRules = [
 			ts.isPropertyAccessExpression(node.expression) &&
 			ts.isIdentifier(node.expression.expression)
 		) {
-			if (node.expression.expression.text === 'Object') {
+			if (isGlobalObjectConstructor(context.checker, node.expression.expression)) {
 				context.report(
 					node.expression.name,
 					'prefer-effect-module-over-standard-library',
-					`This calls ${node.expression.expression.text}.${node.expression.name.text}. Use the Effect module equivalent and keep the data flow explicit.`
+					`This calls Object.${node.expression.name.text}. Use the Effect module equivalent and keep the data flow explicit.`
 				)
 			}
 		}
@@ -119,6 +124,43 @@ export const effectRules = [
 				node.expression.name,
 				'no-option-constructor',
 				'This creates a new Option value. Do not call Option.some, Option.none, or Option.from*; use guards, optional chaining, or nullish coalescing at the boundary.'
+			)
+		}
+	}),
+	rule('prefer-schema-tagged-error', (node, context) => {
+		if (ts.isClassDeclaration(node) && node.heritageClauses) {
+			for (const clause of node.heritageClauses) {
+				for (const inherited of clause.types) {
+					if (
+						ts.isExpressionWithTypeArguments(inherited) &&
+						ts.isCallExpression(inherited.expression) &&
+						ts.isPropertyAccessExpression(inherited.expression.expression) &&
+						ts.isIdentifier(inherited.expression.expression.expression) &&
+						inherited.expression.expression.expression.text === 'Data' &&
+						inherited.expression.expression.name.text === 'TaggedError'
+					) {
+						context.report(
+							inherited.expression.expression,
+							'prefer-schema-tagged-error',
+							'Data.TaggedError is not schema-aware. Replace it with Schema.TaggedErrorClass so the error is yieldable and has a schema contract.'
+						)
+					}
+				}
+			}
+		}
+		if (
+			ts.isCallExpression(node) &&
+			ts.isPropertyAccessExpression(node.expression) &&
+			ts.isIdentifier(node.expression.expression) &&
+			node.expression.expression.text === 'Effect' &&
+			node.expression.name.text === 'fail' &&
+			node.arguments[0] &&
+			ts.isNewExpression(node.arguments[0])
+		) {
+			context.report(
+				node.expression,
+				'prefer-schema-tagged-error',
+				'Schema.TaggedErrorClass errors are yieldable. Replace Effect.fail(new ErrorClass(...)) with yield* new ErrorClass(...) inside Effect generators.'
 			)
 		}
 	}),
@@ -198,7 +240,8 @@ export const effectRules = [
 			isEffectCall(node) &&
 			Array.contains(['succeed', 'sync'] as const, callName(node)) &&
 			node.arguments[0] &&
-			isLiteral(node.arguments[0])
+			isLiteral(node.arguments[0]) &&
+			!isRequiredEffectCallbackReturn(node)
 		) {
 			context.report(
 				node.expression,
@@ -217,6 +260,42 @@ export const effectRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
+
+function isStandardPrototypeMethod(checker: ts.TypeChecker | undefined, name: ts.Identifier, module: string) {
+	if (!checker) return false
+	return Array.some(checker.getSymbolAtLocation(name)?.declarations ?? [], declaration => {
+		return (
+			(ts.isInterfaceDeclaration(declaration.parent) || ts.isClassDeclaration(declaration.parent)) &&
+			((String.includes('Array')(module) &&
+				Array.contains(['Array', 'ReadonlyArray'] as const, declaration.parent.name?.text ?? '')) ||
+				(String.includes('String')(module) && declaration.parent.name?.text === 'String'))
+		)
+	})
+}
+
+function isGlobalObjectConstructor(checker: ts.TypeChecker | undefined, receiver: ts.Expression) {
+	if (!checker) return false
+	const type = checker.getTypeAtLocation(receiver)
+	return checker.typeToString(type) === 'ObjectConstructor'
+}
+
+function isRequiredEffectCallbackReturn(node: ts.CallExpression) {
+	return hasRequiredEffectCallbackAncestor(node.parent)
+}
+
+function hasRequiredEffectCallbackAncestor(node: ts.Node): boolean {
+	if (ts.isSourceFile(node)) return false
+	if (
+		ts.isCallExpression(node) &&
+		ts.isPropertyAccessExpression(node.expression) &&
+		ts.isIdentifier(node.expression.expression) &&
+		node.expression.expression.text === 'Effect' &&
+		Array.contains(['catch', 'catchAll', 'catchTag', 'orElse'] as const, node.expression.name.text)
+	) {
+		return true
+	}
+	return hasRequiredEffectCallbackAncestor(node.parent)
+}
 
 function isOptionConstructor(node: ts.PropertyAccessExpression) {
 	return (

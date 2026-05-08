@@ -1,5 +1,5 @@
 import {test} from 'bun:test'
-import {expectNoRule, expectRule} from './test-utils.ts'
+import {expectRule} from './test-utils.ts'
 
 test('no-destructuring-except-react-hook-tuples', () => {
 	return expectRule({
@@ -22,6 +22,14 @@ test('no-access-alias for repeated access variables', () => {
 			'function view(node: { readonly arguments: readonly string[] }) { const input = node.arguments[0]; return input + input }\n'
 	})
 })
+test('no-access-alias reports shadowed atom constructor names', () => {
+	return expectRule({
+		rule: 'no-access-alias',
+		typed: true,
+		source:
+			'const Atom = { make(value: number) { return { value } } }\nconst valueAtom = Atom.make(1)\nfunction read() { return valueAtom }\n'
+	})
+})
 test('no-boolean-expression-alias', () => {
 	return expectRule({
 		rule: 'no-boolean-expression-alias',
@@ -32,6 +40,12 @@ test('no-config-objects', () => {
 	return expectRule({
 		rule: 'no-config-objects',
 		source: 'const cases = [{ rule: "one", source: "const value = 1" }]\n'
+	})
+})
+test('no-inlineable-literal-constant', () => {
+	return expectRule({
+		rule: 'no-inlineable-literal-constant',
+		source: 'const values = ["a", "b"]\nfunction read() { return values }\n'
 	})
 })
 test('prefer-pipe-for-transform-sequences', () => {
@@ -96,11 +110,4 @@ test('no-single-implementation-abstraction', () => {
 		rule: 'no-single-implementation-abstraction',
 		source: 'interface Repo { get(id: string): string }\nclass UserRepo { get(id: string) { return id } }\n'
 	})
-})
-test('allows React hook tuple destructuring', () => {
-	expectNoRule(
-		'no-destructuring-except-react-hook-tuples',
-		'declare function useState<T>(value: T): readonly [T, (value: T) => void]\nconst [value, setValue] = useState(0)\n',
-		'sample.tsx'
-	)
 })

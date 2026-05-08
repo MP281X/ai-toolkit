@@ -4,7 +4,7 @@ import ts from 'typescript'
 
 import {containsNode} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
-import {isAllowedCallableValue, isAssignmentOperator, isRefCurrent, rule} from './helpers.ts'
+import {isAllowedCallableValue, isAssignmentOperator, isReactRefCurrent, rule} from './helpers.ts'
 
 export const reactUiRules = [
 	rule('prefer-function-declaration', (node, context) => {
@@ -64,8 +64,9 @@ export const reactUiRules = [
 		if (
 			ts.isBinaryExpression(node) &&
 			isAssignmentOperator(node.operatorToken.kind) &&
-			!isRefCurrent(node.left) &&
-			!ts.isIdentifier(node.left)
+			!isReactRefCurrent(context.checker, node.left) &&
+			!ts.isIdentifier(node.left) &&
+			!isStaticComponentAttachment(context.checker, node)
 		) {
 			context.report(
 				node.operatorToken,
@@ -77,7 +78,7 @@ export const reactUiRules = [
 			ts.isCallExpression(node) &&
 			ts.isPropertyAccessExpression(node.expression) &&
 			Array.contains(['push', 'pop', 'splice', 'set', 'add', 'delete', 'clear'] as const, node.expression.name.text) &&
-			!isRefCurrent(node.expression.expression) &&
+			!isReactRefCurrent(context.checker, node.expression.expression) &&
 			!ts.isIdentifier(node.expression.expression)
 		) {
 			context.report(
@@ -88,3 +89,37 @@ export const reactUiRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
+
+function isStaticComponentAttachment(checker: ts.TypeChecker | undefined, node: ts.BinaryExpression) {
+	return (
+		ts.isPropertyAccessExpression(node.left) &&
+		ts.isIdentifier(node.left.expression) &&
+		RegExp('^[A-Z]').test(node.left.name.text) &&
+		isComponentValue(checker, node.left.expression) &&
+		isComponentInitializer(checker, node.right)
+	)
+}
+
+function isComponentInitializer(checker: ts.TypeChecker | undefined, node: ts.Expression) {
+	return (
+		ts.isArrowFunction(node) ||
+		ts.isFunctionExpression(node) ||
+		ts.isClassExpression(node) ||
+		isComponentValue(checker, node)
+	)
+}
+
+function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!checker) return false
+	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
+		return (
+			ts.isFunctionDeclaration(declaration) ||
+			ts.isClassDeclaration(declaration) ||
+			(ts.isVariableDeclaration(declaration) &&
+				!!declaration.initializer &&
+				(ts.isArrowFunction(declaration.initializer) ||
+					ts.isFunctionExpression(declaration.initializer) ||
+					ts.isClassExpression(declaration.initializer)))
+		)
+	})
+}

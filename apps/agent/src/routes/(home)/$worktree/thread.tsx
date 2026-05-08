@@ -4,6 +4,7 @@ import {Array, Effect, Option, Predicate, pipe, Stream, String} from 'effect'
 import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
 import {compactAiParts} from '@ai-toolkit/ai/utils'
+import {Conversation} from '@ai-toolkit/components/conversation'
 import {
 	Archive,
 	ArrowUpIcon,
@@ -428,14 +429,17 @@ function AgentPanel(input: {
 	)
 	const runs = pipe(
 		events,
-		Array.reduce(Array.empty<{prompt: string; runId: string; parts: readonly AgentEvent[]}>(), (runs, event) => {
-			if (event.type === 'user-message')
-				return Array.append(runs, {parts: [], prompt: event.prompt, runId: event.runId})
-			if (!Array.isArrayNonEmpty(runs)) return runs
-			const [previousRuns, currentRun] = Array.unappend(runs)
-			if (currentRun.runId !== event.runId) return runs
-			return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
-		})
+		Array.reduce(
+			Array.empty<{id: string; prompt: string; runId: string; parts: readonly AgentEvent[]}>(),
+			(runs, event) => {
+				if (event.type === 'user-message')
+					return Array.append(runs, {id: event.runId, parts: [], prompt: event.prompt, runId: event.runId})
+				if (!Array.isArrayNonEmpty(runs)) return runs
+				const [previousRuns, currentRun] = Array.unappend(runs)
+				if (currentRun.runId !== event.runId) return runs
+				return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
+			}
+		)
 	)
 	const promptAgent = useAtomSet(RpcClient.mutation('agent.prompt'), {mode: 'promise'})
 	const stopAgent = useAtomSet(RpcClient.mutation('agent.stop'), {mode: 'promise'})
@@ -491,15 +495,14 @@ function AgentPanel(input: {
 
 	return (
 		<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
-			<div className="min-h-0 flex-1 overflow-y-auto p-4">
-				<div className="mx-auto flex max-w-4xl flex-col gap-3">
-					{Array.isReadonlyArrayEmpty(runs) && (
-						<div className="flex min-h-48 items-center justify-center text-muted-foreground text-sm">
-							Send a message to start the thread.
-						</div>
-					)}
-					{Array.map(runs, run => (
-						<div key={run.runId} className="flex flex-col gap-3">
+			{Array.isReadonlyArrayEmpty(runs) ? (
+				<div className="flex min-h-0 flex-1 items-center justify-center p-4 text-muted-foreground text-sm">
+					Send a message to start the thread.
+				</div>
+			) : (
+				<Conversation items={runs} className="p-4">
+					{run => (
+						<div className="mx-auto flex max-w-4xl flex-col gap-3">
 							<article className="flex gap-2">
 								<div className="w-0.5 shrink-0 bg-orange-500/50" />
 								<div className="min-w-0 flex-1 border-2 border-orange-500/20 bg-orange-500/[0.003] px-3">
@@ -514,9 +517,9 @@ function AgentPanel(input: {
 							</article>
 							<AgentResponse parts={run.parts} />
 						</div>
-					))}
-				</div>
-			</div>
+					)}
+				</Conversation>
+			)}
 			<div className="border-t p-3">
 				<div className="relative mx-auto max-w-4xl">
 					{!Array.isReadonlyArrayEmpty(stashedPrompts) && (

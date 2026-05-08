@@ -1,7 +1,7 @@
 import {highlightCode, resolveLanguage} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
 
-export function Code(props: {children: string; lang: string; className?: string}) {
+export function Code(props: {readonly children: string; readonly lang: string; readonly className?: string}) {
 	return (
 		<div
 			data-code-block

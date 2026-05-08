@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Role
+
+- Work in this repo as an implementation agent, not as a general assistant
+- Make the requested change directly and verify it before reporting back
+
 ## Context
 
 - Monorepo: `@ai-toolkit/*` packages live in `packages/*`; read package source directly
@@ -12,25 +17,26 @@
 - Verify APIs, libraries, and patterns against repo source or `.opencode/resources/*`
 - Do not rely on memory when local sources can answer the question
 
-## Collaboration
+## Work Style
 
-- Pair-program in short loops: clarify, implement, verify, report
-- Infer from request, conversation, files, and existing patterns before asking
-- Challenge weak assumptions, broad scope, unclear success criteria, and premature implementation choices
-- Use the question tool only when the answer changes objective, scope, success criteria, or a key tradeoff
-- Batch 2-5 independent high-leverage questions; ask dependent questions only after the previous answer
-- Never ask about obvious defaults or decisions answerable by reading the codebase
-- Summarize objective, scope, decisions, success criteria, and risks when useful
+- Reason from facts only: read the relevant source, local references, and cloned repos before deciding an implementation
+- Before adding behavior, search for similar code and follow the existing package patterns
+- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
+- If the codebase clearly implies one path, proceed and state the facts that led to it
 
 ## Implementation
 
-- Implement exactly the requested change; do not add extra features or future requirements
-- Treat the project as greenfield: remove, replace, and simplify instead of preserving compatibility
-- Make breaking changes whenever they produce the cleanest requested implementation
-- Delete compatibility layers, legacy paths, duplicate implementations, and code kept "just in case"
-- Use existing libraries and repo patterns directly; do not create abstractions or indirections
-- Inline logic used once; do not create single-use helpers
-- Keep only the happy path; do not add defensive guards or re-validation
-- Treat Biome and TypeScript errors as design problems; rewrite until they disappear
-- After code changes, run `bun run fix && bun run check` before yielding back
-- Never run build commands unless explicitly requested
+- Make the smallest coherent change that fully satisfies the request
+- When refactoring, replace the old implementation completely; do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
+- Do not preserve backward compatibility unless the request explicitly requires it
+- Do not add regression tests, migration code, compatibility layers, or "just in case" code unless explicitly requested
+- Use the repo's libraries and patterns to their full extent, especially Effect; prefer library-native modeling over custom control flow
+- Use the type system as the boundary; do not add defensive runtime validation, re-validation, or guard code to compensate for weak types
+- Do not add speculative abstractions or single-use helpers
+
+## Verification
+
+- After code changes, run `bun run check`, then `bun run test`, before yielding back
+- Treat TypeScript, Biome, and deslop diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them
+
+- Run `bun run deslop` only when explicitly asked to deslop

@@ -3,8 +3,10 @@ import {Array} from 'effect'
 import ts from 'typescript'
 
 import {
+	containsNode,
 	hasModifier,
 	isConstAssertion,
+	isImportedIdentifier,
 	isLiteralContainer,
 	normalizedText,
 	returnedExpression,
@@ -13,7 +15,6 @@ import {
 } from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {
-	countIdentifierUses,
 	isAllowedNamedType,
 	isAllowedNullLiteral,
 	isArrayIsArrayCall,
@@ -21,6 +22,7 @@ import {
 	isInsideTypeName,
 	isMutated,
 	isNullishComparison,
+	isReactRefCurrentPropertySignature,
 	isRecursiveFunction,
 	nullishComparedExpression,
 	rule
@@ -75,6 +77,7 @@ export const typeSafetyRules = [
 	}),
 	rule('prefer-readonly-types', (node, context) => {
 		if (ts.isPropertySignature(node) && !hasModifier(node, ts.SyntaxKind.ReadonlyKeyword)) {
+			if (isReactRefCurrentPropertySignature(node)) return
 			context.report(
 				node.name,
 				'prefer-readonly-types',
@@ -101,14 +104,18 @@ export const typeSafetyRules = [
 		}
 	}),
 	rule('prefer-undefined-over-null', (node, context) => {
-		if (node.kind === ts.SyntaxKind.NullKeyword && !isAllowedNullLiteral(node)) {
+		if (node.kind === ts.SyntaxKind.NullKeyword && !isAllowedNullLiteral(context.checker, node)) {
 			context.report(
 				node,
 				'prefer-undefined-over-null',
 				'"null" is an internal absence value. Use undefined or omit the optional field instead.'
 			)
 		}
-		if (ts.isLiteralTypeNode(node) && node.literal.kind === ts.SyntaxKind.NullKeyword) {
+		if (
+			ts.isLiteralTypeNode(node) &&
+			node.literal.kind === ts.SyntaxKind.NullKeyword &&
+			!isAllowedNullLiteral(context.checker, node.literal)
+		) {
 			context.report(
 				node,
 				'prefer-undefined-over-null',
@@ -133,6 +140,18 @@ export const typeSafetyRules = [
 			ts.isCallExpression(node.parent.parent)
 		) {
 			if (
+				context.checker &&
+				(hasUnknownOrAnyContextualParameterType(context.checker, node) ||
+					hasGenericCallbackParameterType(
+						context.checker,
+						node.parent.parent,
+						argumentIndex(node.parent),
+						parameterIndex(node)
+					))
+			) {
+				return
+			}
+			if (
 				ts.isFunctionExpression(node.parent) &&
 				ts.isPropertyAccessExpression(node.parent.parent.expression) &&
 				ts.isIdentifier(node.parent.parent.expression.expression) &&
@@ -148,6 +167,7 @@ export const typeSafetyRules = [
 			)
 		}
 		if (ts.isVariableDeclaration(node) && node.type && node.initializer && context.checker) {
+			if (isRecursiveEffectFnUntracedVariable(node)) return
 			const annotated = context.checker.getTypeFromTypeNode(node.type)
 			const inferred = context.checker.getTypeAtLocation(node.initializer)
 			if (context.checker.isTypeAssignableTo(inferred, annotated)) {
@@ -175,11 +195,18 @@ export const typeSafetyRules = [
 	}),
 	rule('no-redundant-generic-type-argument', (node, context) => {
 		if (!(ts.isCallExpression(node) && node.typeArguments?.length && context.checker)) return
-		if (ts.isIdentifier(node.expression) && RegExp('^use[A-Z]').test(node.expression.text)) return
 		if (
 			ts.isPropertyAccessExpression(node.expression) &&
-			ts.isIdentifier(node.expression.expression) &&
-			node.expression.expression.text === 'Array'
+			((isImportedIdentifier(context.checker, node.expression.expression, 'effect', 'Schema') &&
+				Array.contains(['Class', 'TaggedClass', 'TaggedErrorClass'] as const, node.expression.name.text)) ||
+				(isImportedIdentifier(context.checker, node.expression.expression, 'effect', 'Context') &&
+					node.expression.name.text === 'Service'))
+		) {
+			return
+		}
+		if (
+			ts.isPropertyAccessExpression(node.expression) &&
+			isImportedIdentifier(context.checker, node.expression.expression, 'effect', 'Array')
 		) {
 			return
 		}
@@ -199,13 +226,6 @@ export const typeSafetyRules = [
 				`"${node.name.text}" has a type constraint that adds no information. Remove the constraint from the type parameter.`
 			)
 			return
-		}
-		if (countIdentifierUses(node.parent, node.name.text) <= 2) {
-			context.report(
-				node.name,
-				'no-unnecessary-type-constraint',
-				`"${node.name.text}" only forwards a type. Replace the type parameter with the concrete required shape at the declaration.`
-			)
 		}
 	}),
 	rule('no-redundant-type-system-check', (node, context) => {
@@ -295,3 +315,80 @@ export const typeSafetyRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
+
+function isRecursiveEffectFnUntracedVariable(node: ts.VariableDeclaration) {
+	if (!(ts.isIdentifier(node.name) && node.initializer)) return false
+	return (
+		ts.isCallExpression(node.initializer) &&
+		ts.isPropertyAccessExpression(node.initializer.expression) &&
+		ts.isIdentifier(node.initializer.expression.expression) &&
+		node.initializer.expression.expression.text === 'Effect' &&
+		node.initializer.expression.name.text === 'fnUntraced' &&
+		containsNode(
+			node.initializer,
+			current => current !== node.name && ts.isIdentifier(current) && current.text === node.name.getText()
+		)
+	)
+}
+
+function hasUnknownOrAnyContextualParameterType(checker: ts.TypeChecker, node: ts.ParameterDeclaration) {
+	if (!(ts.isArrowFunction(node.parent) || ts.isFunctionExpression(node.parent))) return false
+	let index = 0
+	for (const symbol of checker.getContextualType(node.parent)?.getCallSignatures()[0]?.getParameters() ?? []) {
+		if (index === parameterIndex(node)) {
+			return (checker.getTypeOfSymbolAtLocation(symbol, node).flags & (ts.TypeFlags.Unknown | ts.TypeFlags.Any)) !== 0
+		}
+		index += 1
+	}
+	return false
+}
+
+function hasGenericCallbackParameterType(
+	checker: ts.TypeChecker,
+	call: ts.CallExpression,
+	argument: number,
+	parameter: number
+) {
+	if (argument < 0 || parameter < 0) return false
+	return Array.some(checker.getResolvedSignature(call)?.getDeclaration()?.parameters ?? [], (declaration, index) => {
+		return index === argument && callbackParameterTypeNeedsAnnotation(checker, declaration.type, parameter)
+	})
+}
+
+function callbackParameterTypeNeedsAnnotation(
+	checker: ts.TypeChecker,
+	node: ts.TypeNode | undefined,
+	parameter: number
+): boolean {
+	if (!node) return false
+	if (!(ts.isFunctionTypeNode(node) && node.parameters[parameter]?.type)) return false
+	return (
+		node.parameters[parameter].type.kind === ts.SyntaxKind.UnknownKeyword ||
+		node.parameters[parameter].type.kind === ts.SyntaxKind.AnyKeyword ||
+		(ts.isTypeReferenceNode(node.parameters[parameter].type) &&
+			ts.isIdentifier(node.parameters[parameter].type.typeName) &&
+			Array.some(
+				checker.getSymbolAtLocation(node.parameters[parameter].type.typeName)?.declarations ?? [],
+				ts.isTypeParameterDeclaration
+			))
+	)
+}
+
+function parameterIndex(node: ts.ParameterDeclaration) {
+	let index = 0
+	for (const parameter of node.parent.parameters) {
+		if (parameter === node) return index
+		index += 1
+	}
+	return -1
+}
+
+function argumentIndex(node: ts.Expression) {
+	if (!ts.isCallExpression(node.parent)) return -1
+	let index = 0
+	for (const argument of node.parent.arguments) {
+		if (argument === node) return index
+		index += 1
+	}
+	return -1
+}

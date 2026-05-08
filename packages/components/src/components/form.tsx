@@ -14,24 +14,26 @@ import {Spinner} from '#components/ui/spinner.tsx'
 import {Textarea} from '#components/ui/textarea.tsx'
 import {cn, formatError, toSentenceCase} from '#lib/utils.ts'
 
-const {fieldContext, formContext, useFieldContext, useFormContext} = tanstackForm.createFormHookContexts()
+const formContexts = tanstackForm.createFormHookContexts()
+export const useFieldContext = formContexts.useFieldContext
+export const useFormContext = formContexts.useFormContext
 
 function FieldWrapper(props: {
-	name: string
-	isInvalid: boolean
-	errors: {message?: string}[]
-	children: React.ReactNode
+	readonly name: string
+	readonly isInvalid: boolean
+	readonly errors: ReadonlyArray<{readonly message?: string}>
+	readonly children: React.ReactNode
 }) {
 	return (
 		<Field data-invalid={props.isInvalid}>
 			<FieldLabel htmlFor={props.name}>{toSentenceCase(props.name)}</FieldLabel>
 			{props.children}
-			{props.isInvalid && <FieldError errors={props.errors} />}
+			{props.isInvalid && <FieldError errors={[...props.errors]} />}
 		</Field>
 	)
 }
 
-function SubmitButton(props: {children: React.ReactNode}) {
+function SubmitButton(props: {readonly children: React.ReactNode}) {
 	const form = useFormContext()
 
 	return (
@@ -51,7 +53,7 @@ function SubmitButton(props: {children: React.ReactNode}) {
 	)
 }
 
-function CancelButton(props: {children: React.ReactNode; onClick: () => void}) {
+function CancelButton(props: {readonly children: React.ReactNode; readonly onClick: () => void}) {
 	const form = useFormContext()
 
 	return (
@@ -230,9 +232,9 @@ function FileField() {
 	)
 }
 
-function ComboboxField<TOption extends {id: string}>(props: {
-	options: TOption[]
-	children: (option: TOption) => React.ReactNode
+function ComboboxField<TOption extends {readonly id: string}>(props: {
+	readonly options: readonly TOption[]
+	readonly children: (option: TOption) => React.ReactNode
 }) {
 	const field = useFieldContext<string>()
 	const [open, setOpen] = useState(false)
@@ -289,8 +291,8 @@ function ComboboxField<TOption extends {id: string}>(props: {
 }
 
 const formHook = tanstackForm.createFormHook({
-	fieldContext,
-	formContext,
+	fieldContext: formContexts.fieldContext,
+	formContext: formContexts.formContext,
 	fieldComponents: {
 		TextField,
 		TextAreaField,
@@ -307,17 +309,15 @@ const formHook = tanstackForm.createFormHook({
 export const useForm = formHook.useAppForm
 export const revalidateLogic = tanstackForm.revalidateLogic
 
-export {useFieldContext, useFormContext}
-
 export declare namespace Form {
 	export type Props = {
-		form: {
-			handleSubmit: () => Promise<void>
-			reset: () => void
-			AppForm: React.ComponentType<{children?: React.ReactNode}>
+		readonly form: {
+			readonly handleSubmit: () => Promise<void>
+			readonly reset: () => void
+			readonly AppForm: React.ComponentType<{readonly children?: React.ReactNode}>
 		}
-		className?: string
-		children: React.ReactNode
+		readonly className?: string
+		readonly children: React.ReactNode
 	}
 }
 

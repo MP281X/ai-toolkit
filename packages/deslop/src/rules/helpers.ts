@@ -7,11 +7,13 @@ import {
 	containsNode,
 	hasModifier,
 	isAccessExpression,
+	isAtomConstructorCall,
 	isCheapExpression,
 	isEffectCall,
 	isEffectConstructorCall,
 	isEffectGenLikeCall,
 	isFlowCall,
+	isImportedIdentifier,
 	isMatchCall,
 	isSchemaExpression,
 	normalizedText,
@@ -117,12 +119,51 @@ export function isInsideTypeName(node: ts.Identifier) {
 	return ts.isTypeReferenceNode(node.parent) && node.parent.typeName === node
 }
 
-export function isAllowedNullLiteral(node: ts.Node) {
+export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (ts.isReturnStatement(node.parent) && isReactComponentFunction(node.parent)) return true
 	if (
 		ts.isCallExpression(node.parent) &&
 		ts.isIdentifier(node.parent.expression) &&
 		node.parent.expression.text === 'useRef'
+	) {
+		return true
+	}
+	if (
+		ts.findAncestor(node, ancestor => {
+			return (
+				ts.isTypeNode(ancestor) &&
+				ts.isCallExpression(ancestor.parent) &&
+				ts.isIdentifier(ancestor.parent.expression) &&
+				ancestor.parent.expression.text === 'useRef' &&
+				Array.some(ancestor.parent.typeArguments ?? [], argument => argument === ancestor)
+			)
+		}) ||
+		(ts.isBinaryExpression(node.parent) &&
+			isAssignmentOperator(node.parent.operatorToken.kind) &&
+			isReactRefCurrent(checker, node.parent.left))
+	) {
+		return true
+	}
+	if (
+		ts.findAncestor(node, ancestor => {
+			return (
+				ts.isTypeReferenceNode(ancestor) &&
+				ts.isQualifiedName(ancestor.typeName) &&
+				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
+			)
+		}) ||
+		ts.findAncestor(node, ancestor => ts.isPropertySignature(ancestor) && isReactRefCurrentPropertySignature(ancestor))
+	) {
+		return true
+	}
+	if (
+		ts.findAncestor(node, ancestor => {
+			return (
+				ts.isJsxAttribute(ancestor) &&
+				ts.isIdentifier(ancestor.name) &&
+				Array.contains(['triggerFn', 'menuRenderFn'] as const, ancestor.name.text)
+			)
+		})
 	) {
 		return true
 	}
@@ -144,10 +185,23 @@ export function isAccessAliasInitializer(node: ts.Expression): boolean {
 	return false
 }
 
-export function isExemptNamedValue(node: ts.VariableDeclaration) {
+export function isExemptNamedValue(checker: ts.TypeChecker | undefined, node: ts.VariableDeclaration) {
 	if (!node.initializer) return false
 	return (
-		isEffectConstructorCall(node.initializer) || isSchemaExpression(node.initializer) || isFlowCall(node.initializer)
+		isEffectConstructorCall(node.initializer) ||
+		isTopLevelAtomConstructor(checker, node) ||
+		isSchemaExpression(node.initializer) ||
+		isFlowCall(node.initializer)
+	)
+}
+
+function isTopLevelAtomConstructor(checker: ts.TypeChecker | undefined, node: ts.VariableDeclaration) {
+	return (
+		!!node.initializer &&
+		ts.isVariableDeclarationList(node.parent) &&
+		ts.isVariableStatement(node.parent.parent) &&
+		ts.isSourceFile(node.parent.parent.parent) &&
+		isAtomConstructorCall(checker, node.initializer)
 	)
 }
 
@@ -268,10 +322,15 @@ export function isDataFirstEffectOperation(node: ts.CallExpression) {
 	)
 }
 
-export function isEffectModuleReceiver(node: ts.Expression) {
+export function isEffectModuleReceiver(checker: ts.TypeChecker | undefined, node: ts.Expression) {
 	return (
-		ts.isIdentifier(node) &&
-		Array.contains(['Array', 'String', 'Record', 'Number', 'Predicate', 'Effect', 'Option'] as const, node.text)
+		isImportedIdentifier(checker, node, 'effect', 'Array') ||
+		isImportedIdentifier(checker, node, 'effect', 'String') ||
+		isImportedIdentifier(checker, node, 'effect', 'Record') ||
+		isImportedIdentifier(checker, node, 'effect', 'Number') ||
+		isImportedIdentifier(checker, node, 'effect', 'Predicate') ||
+		isImportedIdentifier(checker, node, 'effect', 'Effect') ||
+		isImportedIdentifier(checker, node, 'effect', 'Option')
 	)
 }
 
@@ -405,8 +464,24 @@ export function isRuntimeBoundary(filePath: string) {
 	return RegExp('(^|/)(main|index|runtime|entry|resources)\\.tsx?$').test(filePath)
 }
 
-export function isRefCurrent(node: ts.Node) {
-	return ts.isPropertyAccessExpression(node) && node.name.text === 'current'
+export function isReactRefCurrent(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!(checker && ts.isPropertyAccessExpression(node) && node.name.text === 'current')) return false
+	const type = checker.getTypeAtLocation(node.expression)
+	return String.includes('RefObject<')(checker.typeToString(type))
+}
+
+export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {
+	return (
+		ts.isIdentifier(node.name) &&
+		node.name.text === 'current' &&
+		!!ts.findAncestor(node, ancestor => {
+			return (
+				ts.isTypeReferenceNode(ancestor) &&
+				ts.isQualifiedName(ancestor.typeName) &&
+				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
+			)
+		})
+	)
 }
 
 export function previousFunctionWithSameBody(node: ts.FunctionDeclaration) {

@@ -42,6 +42,41 @@ export function isEffectConstructorCall(node: ts.Node) {
 	)
 }
 
+export function isImportedIdentifier(
+	checker: ts.TypeChecker | undefined,
+	node: ts.Node,
+	moduleName: string,
+	importedName: string
+) {
+	if (!(checker && ts.isIdentifier(node))) return false
+	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
+		if (
+			ts.isImportSpecifier(declaration) &&
+			ts.isStringLiteral(declaration.parent.parent.parent.moduleSpecifier) &&
+			declaration.parent.parent.parent.moduleSpecifier.text === moduleName
+		) {
+			return (declaration.propertyName ?? declaration.name).text === importedName
+		}
+		if (
+			ts.isNamespaceImport(declaration) &&
+			ts.isStringLiteral(declaration.parent.parent.moduleSpecifier) &&
+			declaration.parent.parent.moduleSpecifier.text === moduleName
+		) {
+			return declaration.name.text === importedName
+		}
+		return false
+	})
+}
+
+export function isAtomConstructorCall(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	return (
+		ts.isCallExpression(node) &&
+		ts.isPropertyAccessExpression(node.expression) &&
+		isImportedIdentifier(checker, node.expression.expression, 'effect/unstable/reactivity', 'Atom') &&
+		Array.contains(['family', 'make'] as const, node.expression.name.text)
+	)
+}
+
 export function isEffectGenLikeCall(node: ts.CallExpression) {
 	return (
 		ts.isPropertyAccessExpression(node.expression) &&
@@ -82,10 +117,7 @@ export function isReactHookTupleCall(node: ts.Node) {
 	return (
 		ts.isCallExpression(node) &&
 		ts.isIdentifier(node.expression) &&
-		Array.contains(
-			['useState', 'useReducer', 'useTransition', 'useActionState', 'useOptimistic'] as const,
-			node.expression.text
-		)
+		String.match(RegExp('^use[A-Z]'))(node.expression.text)._tag === 'Some'
 	)
 }
 

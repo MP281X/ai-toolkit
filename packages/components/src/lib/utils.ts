@@ -4,29 +4,29 @@ import type {ClassValue} from 'clsx'
 import {clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
 
-export function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: readonly ClassValue[]) {
 	return twMerge(clsx(inputs))
 }
 
 export const formatError = pipe(
-	Match.type<unknown>(),
+	Match.type(),
 	Match.when(Predicate.isError, error => {
 		if (String.isEmpty(error.message) || error.message === 'Error') return error.name
 		return error.message
 	}),
-	Match.when(Cause.isCause, cause =>
-		pipe(
+	Match.when(Cause.isCause, cause => {
+		return pipe(
 			cause,
 			Cause.prettyErrors,
 			Array.map(error => error.message || error.name),
 			Array.join('\n')
 		)
-	),
+	}),
 	Match.when(Predicate.hasProperty('message'), error => String.String(error.message)),
 	Match.when(Predicate.isString, string => string),
-	Match.when(Predicate.isNullish, () => 'Error'),
-	Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, null, 2)),
-	Match.orElse(() => 'Unknown Error')
+	Match.when(Predicate.isNullish, () => 'Error' as const),
+	Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, undefined, 2)),
+	Match.orElse(() => 'Unknown Error' as const)
 )
 
 export const formatTimestamp = pipe(
