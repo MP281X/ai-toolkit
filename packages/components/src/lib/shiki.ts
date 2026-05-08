@@ -11,15 +11,16 @@ const highlighter = await getSharedHighlighter({
 })
 
 export const resolveLanguage = flow(
-	(lang: string = '') =>
-		Match.value(
+	(lang: string = '') => {
+		return Match.value(
 			pipe(
 				String.toLowerCase(lang),
 				String.split('.'),
 				Array.last,
 				Option.getOrElse(() => '')
 			)
-		),
+		)
+	},
 	Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx' as const),
 	Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell' as const),
 	Match.when(Match.is('md', 'markdown'), () => 'markdown' as const),

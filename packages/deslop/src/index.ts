@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 
 import {BunRuntime, BunServices} from '@effect/platform-bun'
-import {Array, Data, Effect, Match, pipe, Runtime, Terminal} from 'effect'
+import {Array, Effect, Match, pipe, Runtime, Schema, Terminal} from 'effect'
 
 import {Argument, Command, Flag} from 'effect/unstable/cli'
 
 import {renderText, runDeslop} from '#lib/analyzer.ts'
 
-class LintFailure extends Data.TaggedError('LintFailure')<Record<never, never>> {
+class LintFailure extends Schema.TaggedErrorClass<LintFailure>()('LintFailure', {}) {
 	override readonly [Runtime.errorExitCode] = 1
 	override readonly [Runtime.errorReported] = false
 }
@@ -22,7 +22,7 @@ const runAndRender = Effect.fnUntraced(function* (options: {
 		Terminal.Terminal.asEffect(),
 		Effect.flatMap(terminal => terminal.display(renderText(result.diagnostics)))
 	)
-	if (!Array.isReadonlyArrayEmpty(result.diagnostics)) return yield* Effect.fail(new LintFailure())
+	if (!Array.isReadonlyArrayEmpty(result.diagnostics)) return yield* new LintFailure()
 })
 
 BunRuntime.runMain(
@@ -76,8 +76,8 @@ BunRuntime.runMain(
 		Effect.provide(BunServices.layer),
 		Effect.catch(error => {
 			return Effect.sync(() => {
-				process.stderr.write(`${error}\n`)
-				process.exit(1)
+				if (Runtime.getErrorReported(error)) process.stderr.write(`${error}\n`)
+				process.exit(Runtime.getErrorExitCode(error))
 			})
 		})
 	)

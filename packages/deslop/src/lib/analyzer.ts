@@ -123,7 +123,7 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 const colors = {
 	code: ['\u001b[2m', '\u001b[22m'],
 	count: ['\u001b[2m', '\u001b[22m'],
-	file: ['\u001b[1;36m', '\u001b[0m'],
+	file: ['\u001b[1;35m', '\u001b[0m'],
 	help: ['\u001b[36m', '\u001b[39m'],
 	label: ['\u001b[2m', '\u001b[22m'],
 	line: ['\u001b[33m', '\u001b[39m'],
@@ -132,7 +132,7 @@ const colors = {
 	symbol: ['\u001b[36m', '\u001b[39m']
 } as const
 
-function analyzeSourceFile(
+export function analyzeSourceFile(
 	filePath: string,
 	sourceFile: ts.SourceFile,
 	references: ReadonlyMap<string, number>,
@@ -365,7 +365,7 @@ function nearestSymbol(node: ts.Node) {
 	return symbolNode ? declarationName(symbolNode) : '<root>'
 }
 
-function collectReferences(sourceFiles: readonly ts.SourceFile[]) {
+export function collectReferences(sourceFiles: readonly ts.SourceFile[]) {
 	const references = new Map<string, number>()
 	function increment(name: string) {
 		references.set(name, (references.get(name) ?? 0) + 1)
@@ -395,7 +395,7 @@ function collectReferences(sourceFiles: readonly ts.SourceFile[]) {
 	return references
 }
 
-function collectReferenceFiles(sourceFiles: readonly ts.SourceFile[]) {
+export function collectReferenceFiles(sourceFiles: readonly ts.SourceFile[]) {
 	const referenceFiles = new Map<string, Set<string>>()
 	function record(name: string, filePath: string) {
 		const files = referenceFiles.get(name) ?? new Set<string>()
@@ -427,7 +427,7 @@ function collectReferenceFiles(sourceFiles: readonly ts.SourceFile[]) {
 	return referenceFiles
 }
 
-function collectDeclarations(sourceFiles: readonly ts.SourceFile[]) {
+export function collectDeclarations(sourceFiles: readonly ts.SourceFile[]) {
 	const declarations = new Map<string, ts.Declaration>()
 	function visit(node: ts.Node) {
 		const name = declarationName(node)

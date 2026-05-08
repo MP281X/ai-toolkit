@@ -16,7 +16,7 @@
 	},
 
 	"scripts": {
-		"test": "bun test",
+		"test": "bun test --concurrent",
 		"fix": "biome check --write --unsafe || true",
 		"check": "tsgo --noEmit && biome check"
 	},

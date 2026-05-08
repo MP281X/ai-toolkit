@@ -15,7 +15,3 @@ export function expectRule(testCase: {
 
 	expect(Array.map(diagnostics, diagnostic => diagnostic.rule)).toContain(testCase.rule)
 }
-
-export function expectNoRule(rule: string, source: string, filePath = 'sample.ts') {
-	expect(Array.map(analyzeText(filePath, source), diagnostic => diagnostic.rule)).not.toContain(rule)
-}

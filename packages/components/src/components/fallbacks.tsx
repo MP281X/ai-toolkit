@@ -24,7 +24,7 @@ export function Loading() {
 	)
 }
 
-export function Error(props: {error: Error; reset: () => void}) {
+export function Error(props: {readonly error: Error; readonly reset: () => void}) {
 	const message = formatError(props.error)
 
 	return (

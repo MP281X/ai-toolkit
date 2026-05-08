@@ -30,7 +30,11 @@ test('prefer-top-level-pipe-for-effect-values', () => {
 	})
 })
 test('prefer-effect-module-over-standard-library', () => {
-	return expectRule({rule: 'prefer-effect-module-over-standard-library', source: 'const value = " name ".trim()\n'})
+	return expectRule({
+		rule: 'prefer-effect-module-over-standard-library',
+		typed: true,
+		source: 'const value = " name ".trim()\n'
+	})
 })
 test('prefer-direct-call-for-single-data-operation', () => {
 	return expectRule({
@@ -82,5 +86,19 @@ test('no-option-constructor none', () => {
 	return expectRule({
 		rule: 'no-option-constructor',
 		source: 'import {Option} from "effect"\nconst value = Option.none()\n'
+	})
+})
+test('prefer-schema-tagged-error over Data.TaggedError', () => {
+	return expectRule({
+		rule: 'prefer-schema-tagged-error',
+		source:
+			'import {Data} from "effect"\nclass LintFailure extends Data.TaggedError("LintFailure")<Record<never, never>> {}\n'
+	})
+})
+test('prefer yieldable tagged error over Effect.fail', () => {
+	return expectRule({
+		rule: 'prefer-schema-tagged-error',
+		source:
+			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { return yield* Effect.fail(new LintFailure()) })\n'
 	})
 })

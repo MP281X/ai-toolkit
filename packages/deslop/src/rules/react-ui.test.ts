@@ -41,6 +41,14 @@ test('no-property-mutation-outside-ref-current', () => {
 		filePath: 'sample.tsx'
 	})
 })
+test('no-property-mutation-outside-ref-current reports non-component static attachments', () => {
+	return expectRule({
+		rule: 'no-property-mutation-outside-ref-current',
+		typed: true,
+		source: 'function Config() { return null }\nConfig.Value = 1\n',
+		filePath: 'sample.tsx'
+	})
+})
 test('no-tailwind-class-variables', () => {
 	return expectRule({rule: 'no-tailwind-class-variables', source: 'const button = "flex rounded bg-blue-500"\n'})
 })

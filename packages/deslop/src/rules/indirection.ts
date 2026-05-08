@@ -53,7 +53,7 @@ export const indirectionRules = [
 	}),
 	rule('no-access-alias', (node, context) => {
 		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
-		if (isExemptNamedValue(node)) return
+		if (isExemptNamedValue(context.checker, node)) return
 		if (isAccessAliasInitializer(node.initializer)) {
 			context.report(
 				node.name,
@@ -91,6 +91,11 @@ export const indirectionRules = [
 	rule('no-inlineable-literal-constant', (node, context) => {
 		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer && isConstVariable(node))) {
 			return
+		}
+		if (ts.isVariableDeclarationList(node.parent) && ts.isVariableStatement(node.parent.parent)) {
+			if (Array.some(node.parent.parent.modifiers ?? [], modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+				return
+			}
 		}
 		if (ts.isArrayLiteralExpression(node.initializer) && node.initializer.elements.length <= 5) {
 			context.report(

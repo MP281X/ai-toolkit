@@ -1,10 +1,14 @@
 import {cn} from '#lib/utils.ts'
 
-export function TreeExplorer(props: {className?: string; children: React.ReactNode}) {
+export function TreeExplorer(props: {readonly className?: string; readonly children: React.ReactNode}) {
 	return <div className={cn('flex min-h-0 flex-1 flex-col', props.className)}>{props.children}</div>
 }
 
-export function TreeExplorerSection(props: {label?: React.ReactNode; className?: string; children: React.ReactNode}) {
+export function TreeExplorerSection(props: {
+	readonly label?: React.ReactNode
+	readonly className?: string
+	readonly children: React.ReactNode
+}) {
 	return (
 		<section className={cn('flex flex-col gap-1.5', props.className)}>
 			{props.label && (
@@ -18,11 +22,11 @@ export function TreeExplorerSection(props: {label?: React.ReactNode; className?:
 }
 
 export function TreeExplorerRow(props: {
-	selected?: boolean
-	onClick?: () => void
-	icon?: React.ReactNode
-	actions?: React.ReactNode
-	children: React.ReactNode
+	readonly selected?: boolean
+	readonly onClick?: () => void
+	readonly icon?: React.ReactNode
+	readonly actions?: React.ReactNode
+	readonly children: React.ReactNode
 }) {
 	const className = cn(
 		'grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-muted-foreground text-xs hover:bg-muted/60 hover:text-foreground',

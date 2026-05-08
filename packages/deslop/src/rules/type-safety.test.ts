@@ -1,4 +1,7 @@
-import {test} from 'bun:test'
+import {Array} from 'effect'
+
+import {expect, test} from 'bun:test'
+import {analyzeTypedText} from '#lib/analyzer.ts'
 import {expectRule} from './test-utils.ts'
 
 test('no-type-assertion-except-as-const', () => {
@@ -13,8 +16,24 @@ test('prefer-strict-literal-const', () => {
 test('prefer-readonly-types', () => {
 	return expectRule({rule: 'prefer-readonly-types', source: 'type Props = { tags: string[] }\n'})
 })
+test('prefer-readonly-types reports non-ref current properties', () => {
+	return expectRule({rule: 'prefer-readonly-types', source: 'type State = { current: string }\n'})
+})
 test('prefer-undefined-over-null', () => {
 	return expectRule({rule: 'prefer-undefined-over-null', source: 'type Props = { readonly value: string | null }\n'})
+})
+test('prefer-undefined-over-null reports non-ref current properties', () => {
+	return expectRule({
+		rule: 'prefer-undefined-over-null',
+		source: 'type Cursor = { readonly current: string | null }\n'
+	})
+})
+test('prefer-undefined-over-null reports non-ref current assignments', () => {
+	return expectRule({
+		rule: 'prefer-undefined-over-null',
+		typed: true,
+		source: 'function reset(state: { readonly current: string | undefined }) { state.current = null }\n'
+	})
 })
 test('no-any', () => {
 	return expectRule({rule: 'no-any', source: 'function parse(value: any) { return value }\n'})
@@ -22,11 +41,32 @@ test('no-any', () => {
 test('no-redundant-type-annotation', () => {
 	return expectRule({rule: 'no-redundant-type-annotation', typed: true, source: 'const value: string = "value"\n'})
 })
+test('reports callback parameter annotation for concrete named contextual type', () => {
+	const diagnostics = analyzeTypedText(
+		'sample.ts',
+		'type User = { readonly name: string }\ndeclare function onUser(callback: (user: User) => void): void\nonUser((user: User) => user.name)\n'
+	)
+	expect(Array.map(diagnostics, diagnostic => diagnostic.rule)).toContain('no-callback-parameter-type-annotation')
+})
 test('no-redundant-generic-type-argument', () => {
 	return expectRule({
 		rule: 'no-redundant-generic-type-argument',
 		typed: true,
 		source: 'function identity<T>(value: T) { return value }\nconst value = identity<string>("value")\n'
+	})
+})
+test('no-redundant-generic-type-argument reports local use-prefixed functions', () => {
+	return expectRule({
+		rule: 'no-redundant-generic-type-argument',
+		typed: true,
+		source: 'function useValue<T>(value: T) { return value }\nconst value = useValue<string>("value")\n'
+	})
+})
+test('no-redundant-generic-type-argument reports shadowed effect module names', () => {
+	return expectRule({
+		rule: 'no-redundant-generic-type-argument',
+		typed: true,
+		source: 'const Array = { first<T>(value: T) { return value } }\nconst value = Array.first<string>("value")\n'
 	})
 })
 test('no-unnecessary-type-constraint', () => {

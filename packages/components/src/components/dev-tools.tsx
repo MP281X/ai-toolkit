@@ -6,11 +6,11 @@ import {Children, useState} from 'react'
 import {Button} from '#components/ui/button.tsx'
 import {cn} from '#lib/utils.ts'
 
-export const DevTools = {
-	Navigation: <const Route extends string>(props: {
-		routes: readonly [Route, ...Route[]]
-		onChange: (route: Route) => void
-	}) => {
+export namespace DevTools {
+	export function Navigation<const Route extends string>(props: {
+		readonly routes: readonly [Route, ...(readonly Route[])]
+		readonly onChange: (route: Route) => void
+	}) {
 		const [value, setValue] = useState(0)
 
 		function select(index: number) {
@@ -54,8 +54,9 @@ export const DevTools = {
 				</div>
 			</nav>
 		)
-	},
-	Variants: (props: {children: React.ReactNode}) => {
+	}
+
+	export function Variants(props: {readonly children: React.ReactNode}) {
 		const children = Children.toArray(props.children)
 		const [value, setValue] = useState(0)
 

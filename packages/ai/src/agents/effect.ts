@@ -25,16 +25,14 @@ export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMes
 
 			return Agent.of({
 				status,
-				streamText: input =>
-					Stream.callback(
+				streamText: input => {
+					return Stream.callback(
 						Effect.fnUntraced(function* (queue) {
 							yield* pipe(
 								DateTime.now,
 								Effect.flatMap(updatedAt => SubscriptionRef.set(status, {state: 'running', updatedAt} as const))
 							)
-							let prompt = pipe(Prompt.fromMessages(input.messages), current =>
-								Prompt.prependSystem(current, config.systemPrompt.content)
-							)
+							let prompt = Prompt.prependSystem(Prompt.fromMessages(input.messages), config.systemPrompt.content)
 
 							while (true) {
 								const last = yield* pipe(
@@ -60,6 +58,7 @@ export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMes
 							}
 						})
 					)
+				}
 			})
 		}),
 		Effect.provide(WebSearchToolKitLayer),

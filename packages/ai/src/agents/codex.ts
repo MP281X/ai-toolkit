@@ -74,15 +74,15 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 						}
 
 						if (event.type === 'item.completed' && event.item.type === 'command_execution') {
-							const isFailure = event.item.status === 'failed' || event.item.exit_code !== 0
-							const result = isFailure
-								? new AiError.UnknownError({description: event.item.aggregated_output})
-								: {output: event.item.aggregated_output}
+							const result =
+								event.item.status === 'failed' || event.item.exit_code !== 0
+									? new AiError.UnknownError({description: event.item.aggregated_output})
+									: {output: event.item.aggregated_output}
 							return Stream.make<readonly [StreamPart]>(
 								Response.makePart('tool-result', {
 									encodedResult: result,
 									id: event.item.id,
-									isFailure,
+									isFailure: event.item.status === 'failed' || event.item.exit_code !== 0,
 									name: 'command_execution',
 									preliminary: false,
 									providerExecuted: true,
@@ -222,10 +222,12 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 							)
 						}
 
-						if (event.type === 'turn.failed')
+						if (event.type === 'turn.failed') {
 							return Stream.make<readonly [StreamPart]>(Response.makePart('error', {error: event.error.message}))
-						if (event.type === 'error')
+						}
+						if (event.type === 'error') {
 							return Stream.make<readonly [StreamPart]>(Response.makePart('error', {error: event.message}))
+						}
 
 						return Stream.fromIterable(Array.empty<StreamPart>())
 					}),

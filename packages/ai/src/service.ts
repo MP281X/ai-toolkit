@@ -19,9 +19,9 @@ export class Agent extends Context.Service<
 			readonly updatedAt: DateTime.Utc
 		}>
 		readonly streamText: (input: {
-			provider: ProviderId
-			model: ModelId
-			messages: readonly Prompt.Message[]
+			readonly provider: ProviderId
+			readonly model: ModelId
+			readonly messages: readonly Prompt.Message[]
 		}) => Stream.Stream<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>>
 	}
 >()('@ai-toolkit/ai/service/Agent') {
@@ -30,10 +30,10 @@ export class Agent extends Context.Service<
 }
 
 export class Compaction extends Context.Service<Compaction>()('@ai-toolkit/ai/service/Compaction', {
-	make: Effect.fnUntraced(function* (config: {model: ModelId; provider: ProviderId}) {
+	make: Effect.fnUntraced(function* (config: {readonly model: ModelId; readonly provider: ProviderId}) {
 		return {
-			compact: (input: {readonly intent: string; readonly messages: readonly Prompt.Message[]}) =>
-				pipe(
+			compact: (input: {readonly intent: string; readonly messages: readonly Prompt.Message[]}) => {
+				return pipe(
 					LanguageModel.generateText({
 						prompt: Prompt.fromMessages([
 							Prompt.makeMessage('system', {
@@ -52,6 +52,7 @@ export class Compaction extends Context.Service<Compaction>()('@ai-toolkit/ai/se
 					Effect.map(response => Prompt.makeMessage('system', {content: response.text})),
 					Effect.provide(resolveLanguageModel({provider: config.provider, model: config.model}))
 				)
+			}
 		}
 	})
 }) {

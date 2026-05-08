@@ -15,7 +15,7 @@ import {ReactDark} from './ui/svgs/reactDark.tsx'
 
 export * from 'lucide-react'
 
-export function AgentIcon(props: {layer: 'codex' | 'effect'; className?: string}) {
+export function AgentIcon(props: {readonly layer: 'codex' | 'effect'; readonly className?: string}) {
 	return pipe(
 		Match.value(props.layer),
 		Match.when('codex', () => <CodexDark className={cn('size-3.5 shrink-0', props.className)} />),
@@ -25,8 +25,8 @@ export function AgentIcon(props: {layer: 'codex' | 'effect'; className?: string}
 }
 
 export function StatusIcon(props: {
-	state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
-	className?: string
+	readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
+	readonly className?: string
 }) {
 	return pipe(
 		Match.value(props.state),
@@ -37,7 +37,10 @@ export function StatusIcon(props: {
 	)
 }
 
-export function ProviderIcon(props: {provider: 'openai' | 'opencode-go' | 'openrouter'; className?: string}) {
+export function ProviderIcon(props: {
+	readonly provider: 'openai' | 'opencode-go' | 'openrouter'
+	readonly className?: string
+}) {
 	return pipe(
 		Match.value(props.provider),
 		Match.when('openai', () => <OpenaiDark className={cn('size-3.5 shrink-0', props.className)} />),
@@ -47,7 +50,7 @@ export function ProviderIcon(props: {provider: 'openai' | 'opencode-go' | 'openr
 	)
 }
 
-export function FileIcon(props: {filePath: string; className?: string}) {
+export function FileIcon(props: {readonly filePath: string; readonly className?: string}) {
 	return pipe(
 		Match.value(resolveLanguage(props.filePath)),
 		Match.when('shell', () => <BashDark className={cn('size-3.5 shrink-0', props.className)} />),
