@@ -4,7 +4,7 @@ import ts from 'typescript'
 
 import {containsNode} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
-import {isAllowedCallableValue, isAssignmentOperator, isReactRefCurrent, rule} from './helpers.ts'
+import {isAllowedCallableValue, isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, rule} from './helpers.ts'
 
 export const reactUiRules = [
 	rule('prefer-function-declaration', (node, context) => {
@@ -47,6 +47,20 @@ export const reactUiRules = [
 			)
 		}
 	}),
+	rule('no-react-use-state-lazy-initializer', (node, context) => {
+		if (
+			ts.isCallExpression(node) &&
+			isReactUseStateCall(context.checker, node) &&
+			node.arguments[0] &&
+			(ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]))
+		) {
+			context.report(
+				node.arguments[0],
+				'no-react-use-state-lazy-initializer',
+				'This useState lazy initializer adds manual render caching. Move the initializer to a plain const and let the React compiler memoize it.'
+			)
+		}
+	}),
 	rule('prefer-composition-over-render-branching', (node, context) => {
 		if (
 			ts.isConditionalExpression(node) &&
@@ -66,7 +80,16 @@ export const reactUiRules = [
 			isAssignmentOperator(node.operatorToken.kind) &&
 			!isReactRefCurrent(context.checker, node.left) &&
 			!ts.isIdentifier(node.left) &&
-			!isStaticComponentAttachment(context.checker, node)
+			!(
+				ts.isPropertyAccessExpression(node.left) &&
+				ts.isIdentifier(node.left.expression) &&
+				RegExp('^[A-Z]').test(node.left.name.text) &&
+				isComponentValue(context.checker, node.left.expression) &&
+				(ts.isArrowFunction(node.right) ||
+					ts.isFunctionExpression(node.right) ||
+					ts.isClassExpression(node.right) ||
+					isComponentValue(context.checker, node.right))
+			)
 		) {
 			context.report(
 				node.operatorToken,
@@ -89,25 +112,6 @@ export const reactUiRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
-
-function isStaticComponentAttachment(checker: ts.TypeChecker | undefined, node: ts.BinaryExpression) {
-	return (
-		ts.isPropertyAccessExpression(node.left) &&
-		ts.isIdentifier(node.left.expression) &&
-		RegExp('^[A-Z]').test(node.left.name.text) &&
-		isComponentValue(checker, node.left.expression) &&
-		isComponentInitializer(checker, node.right)
-	)
-}
-
-function isComponentInitializer(checker: ts.TypeChecker | undefined, node: ts.Expression) {
-	return (
-		ts.isArrowFunction(node) ||
-		ts.isFunctionExpression(node) ||
-		ts.isClassExpression(node) ||
-		isComponentValue(checker, node)
-	)
-}
 
 function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!checker) return false

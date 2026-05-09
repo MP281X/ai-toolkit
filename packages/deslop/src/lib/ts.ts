@@ -77,6 +77,15 @@ export function isAtomConstructorCall(checker: ts.TypeChecker | undefined, node:
 	)
 }
 
+export function isRcMapConstructorCall(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	return (
+		ts.isCallExpression(node) &&
+		ts.isPropertyAccessExpression(node.expression) &&
+		isImportedIdentifier(checker, node.expression.expression, 'effect', 'RcMap') &&
+		node.expression.name.text === 'make'
+	)
+}
+
 export function isEffectGenLikeCall(node: ts.CallExpression) {
 	return (
 		ts.isPropertyAccessExpression(node.expression) &&
@@ -143,6 +152,10 @@ export function isCheapExpression(node: ts.Expression): boolean {
 	if (ts.isIdentifier(node) || isAccessExpression(node) || isLiteral(node)) return true
 	if (ts.isNonNullExpression(node)) return isCheapExpression(node.expression)
 	if (ts.isParenthesizedExpression(node)) return isCheapExpression(node.expression)
+	if (ts.isNoSubstitutionTemplateLiteral(node)) return true
+	if (ts.isTemplateExpression(node)) {
+		return Array.every(node.templateSpans, span => isCheapExpression(span.expression))
+	}
 	if (ts.isBinaryExpression(node)) return isCheapExpression(node.left) && isCheapExpression(node.right)
 	if (ts.isPrefixUnaryExpression(node)) return isCheapExpression(node.operand)
 	if (ts.isConditionalExpression(node)) {

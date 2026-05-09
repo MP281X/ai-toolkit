@@ -48,6 +48,14 @@ test('no-inlineable-literal-constant', () => {
 		source: 'const values = ["a", "b"]\nfunction read() { return values }\n'
 	})
 })
+test('no-inlineable-literal-constant reports scalar literals', () => {
+	return expectRule({
+		rule: 'no-inlineable-literal-constant',
+		source: `const separator = "\\u0000"
+function join(left: string, right: string) { return \`\${left}\${separator}\${right}\` }
+`
+	})
+})
 test('prefer-pipe-for-transform-sequences', () => {
 	return expectRule({
 		rule: 'prefer-pipe-for-transform-sequences',
@@ -73,6 +81,23 @@ test('no-trivial-local-helper near use', () => {
 	return expectRule({
 		rule: 'no-trivial-local-helper',
 		source: 'function value() { return 1 }\nconst result = value()\n'
+	})
+})
+test('no-trivial-local-helper reports typed template helpers', () => {
+	return expectRule({
+		rule: 'no-trivial-local-helper',
+		source: `function makeKey(input: { readonly id: string; readonly cwd: string }) { return \`\${input.id}\\u0000\${input.cwd}\` }
+const key = makeKey({ id: "one", cwd: "/" })
+`
+	})
+})
+test('no-trivial-local-helper reports repeated template helpers', () => {
+	return expectRule({
+		rule: 'no-trivial-local-helper',
+		source: `function makeKey(input: { readonly id: string; readonly cwd: string }) { return \`\${input.id}\\u0000\${input.cwd}\` }
+const one = makeKey({ id: "one", cwd: "/" })
+const two = makeKey({ id: "two", cwd: "/" })
+`
 	})
 })
 test('no-trivial-local-helper predicate', () => {

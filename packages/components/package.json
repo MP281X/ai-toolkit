@@ -40,6 +40,10 @@
 		"mermaid": "latest",
 		"@pierre/diffs": "latest",
 
+		"@xterm/xterm": "latest",
+		"@xterm/addon-fit": "latest",
+		"@xterm/addon-webgl": "latest",
+
 		"clsx": "latest",
 		"tailwind-merge": "latest",
 		"tw-animate-css": "latest",

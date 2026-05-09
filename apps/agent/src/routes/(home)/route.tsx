@@ -1,5 +1,5 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Hash, Option, Predicate, pipe, Schema, String} from 'effect'
+import {Array, Effect, Hash, Match, Option, Predicate, pipe, Schema, String} from 'effect'
 
 import {AgentId} from '@ai-toolkit/ai/catalog'
 import {
@@ -12,6 +12,7 @@ import {
 	SparklesIcon,
 	Square,
 	StatusIcon,
+	TerminalIcon,
 	Trash
 } from '@ai-toolkit/components/icons'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
@@ -54,61 +55,61 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
 ] as const
 
-type ActionPaletteMode = 'create-thread' | 'create-worktree'
-
-const branchesAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
+const branchesAtom = Atom.family((cwd: string) => {
+	return Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient.asEffect(),
-				Effect.flatMap(client =>
-					String.isNonEmpty(cwd)
+				Effect.flatMap(client => {
+					return String.isNonEmpty(cwd)
 						? client('projects.branches', {cwd})
 						: Effect.succeed(new BranchesSnapshot({branches: [], defaultBranch: 'main'}))
-				)
+				})
 			),
 			{initialValue: new BranchesSnapshot({branches: [], defaultBranch: 'main'})}
 		)
 	)
-)
+})
 
 function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
-	const {activeView, activeWorktreeId} = useRouterState({
+	const homeRouteState = useRouterState({
 		select: state => {
-			const [worktree] = pipe(state.location.pathname, String.split('/'), Array.drop(1))
-			const activeView = pipe(state.location.pathname, String.endsWith('/thread'))
-				? ('thread' as const)
-				: ('diff' as const)
+			const activeView = pipe(
+				Match.value(state.location.pathname),
+				Match.when(String.endsWith('/thread'), () => 'thread' as const),
+				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
+				Match.orElse(() => 'diff' as const)
+			)
 
 			return {
 				activeView,
-				activeWorktreeId: worktree
+				activeWorktreeId: String.split('/')(state.location.pathname)[1]
 			}
 		}
 	})
-	const {activeProject, activeWorktree, projects} = useAtomSuspense(activeHomeAtom(activeWorktreeId)).value
-	const agents = useAtomSuspense(agentsAtom).value
+	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
+	const agentsSnapshot = useAtomSuspense(agentsAtom)
 
 	return (
 		<div className="h-full min-h-0 flex-1 overflow-hidden bg-background font-mono">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
 					<WorktreeManager
-						agents={agents}
-						activeProject={activeProject}
-						activeWorktree={activeWorktree}
+						agents={agentsSnapshot.value}
+						activeProject={activeHome.value.activeProject}
+						activeWorktree={activeHome.value.activeWorktree}
 						activeAgentId={search.threadId}
-						activeView={activeView}
-						projects={projects}
-						selectWorktree={worktreeRoot =>
-							startTransition(() => {
+						activeView={homeRouteState.activeView}
+						projects={activeHome.value.projects}
+						selectWorktree={worktreeRoot => {
+							return startTransition(() => {
 								navigate({to: '/$worktree/diff', params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}})
 							})
-						}
-						selectAgent={(worktreeRoot, agentId) =>
-							startTransition(() => {
+						}}
+						selectAgent={(worktreeRoot, agentId) => {
+							return startTransition(() => {
 								navigate({
 									to: '/$worktree/thread',
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
@@ -117,7 +118,15 @@ function HomeLayout() {
 									}
 								})
 							})
-						}
+						}}
+						selectTerminal={worktreeRoot => {
+							return startTransition(() => {
+								navigate({
+									to: '/$worktree/terminal',
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}
+								})
+							})
+						}}
 					/>
 				</ResizablePanel>
 
@@ -134,38 +143,45 @@ function HomeLayout() {
 }
 
 function pathLabel(value: string) {
-	const segments = pipe(value, String.split('/'))
+	const segments = String.split('/')(value)
 
 	for (let index = segments.length - 1; index >= 0; index--) {
-		const segment = segments[index]
-
-		if (segment && segment !== '.') {
-			return segment
-		}
+		if (String.isNonEmpty(segments[index] ?? '') && segments[index] !== '.') return segments[index] ?? value
 	}
 
 	return value
 }
 
 function shortPath(value: string) {
-	const homeSegments = pipe(value, String.startsWith('/home/'))
-		? pipe(value, String.split('/'), Array.take(3), Array.join('/'))
+	const homeSegments = String.startsWith('/home/')(value)
+		? pipe(String.split('/')(value), Array.take(3), Array.join('/'))
 		: undefined
-	if (homeSegments && pipe(value, String.startsWith(`${homeSegments}/`))) {
-		return `~/${pipe(value, String.slice(String.length(homeSegments) + 1))}`
+	if (homeSegments && String.startsWith(`${homeSegments}/`)(value)) {
+		return `~/${String.slice(String.length(homeSegments) + 1)(value)}`
 	}
 	return pathLabel(value)
 }
 
+function BranchCandidateIcon(input: {readonly type: 'local' | 'remote'}) {
+	if (input.type === 'local') return <GitBranch className="size-3.5" />
+	return <Square className="size-3.5" />
+}
+
+function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) {
+	if (input.root) return <PanelTop className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
+	return <Square className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
+}
+
 function WorktreeManager(input: {
-	agents: readonly AgentEntry[]
-	activeProject: ProjectEntry | undefined
-	activeWorktree: ProjectEntry['worktrees'][number] | undefined
-	activeAgentId: string | undefined
-	activeView: 'thread' | 'diff'
-	projects: readonly ProjectEntry[]
-	selectWorktree: (worktreeRoot: string) => void
-	selectAgent: (worktreeRoot: string, agentId: string) => void
+	readonly agents: readonly AgentEntry[]
+	readonly activeProject: ProjectEntry | undefined
+	readonly activeWorktree: ProjectEntry['worktrees'][number] | undefined
+	readonly activeAgentId: string | undefined
+	readonly activeView: 'thread' | 'diff' | 'terminal'
+	readonly projects: readonly ProjectEntry[]
+	readonly selectWorktree: (worktreeRoot: string) => void
+	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
+	readonly selectTerminal: (worktreeRoot: string) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const setDraftAgents = useAtomSet(draftAgentsAtom)
@@ -177,7 +193,7 @@ function WorktreeManager(input: {
 	const [switcherValue, setSwitcherValue] = useState('')
 	const [switcherOpen, setSwitcherOpen] = useState(false)
 	const [actionsOpen, setActionsOpen] = useState(false)
-	const [actionPaletteMode, setActionPaletteMode] = useState<ActionPaletteMode>('create-thread')
+	const [actionPaletteMode, setActionPaletteMode] = useState<'create-thread' | 'create-worktree'>('create-thread')
 	const [createWorktreeProjectRoot, setCreateWorktreeProjectRoot] = useState(input.activeProject?.repository.root)
 	const createWorktreeProject =
 		pipe(
@@ -185,31 +201,24 @@ function WorktreeManager(input: {
 			Array.findFirst(project => project.repository.root === createWorktreeProjectRoot),
 			Option.getOrUndefined
 		) ?? input.activeProject
-	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? '')).value
+	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
 	const availableBranches = pipe(
-		branchSnapshot.branches,
-		Array.filter(candidate => pipe(candidate.name, String.isNonEmpty)),
+		branchSnapshot.value.branches,
+		Array.filter(candidate => String.isNonEmpty(candidate.name)),
 		Array.dedupeWith((left, right) => left.name === right.name),
-		Array.filter(
-			candidate =>
-				!pipe(
-					createWorktreeProject?.worktrees ?? [],
-					Array.map(worktree => worktree.branch ?? ''),
-					Array.filter(String.isNonEmpty),
-					Array.contains(candidate.name)
-				)
-		)
+		Array.filter(candidate => {
+			return !pipe(
+				createWorktreeProject?.worktrees ?? [],
+				Array.map(worktree => worktree.branch ?? ''),
+				Array.filter(String.isNonEmpty),
+				Array.contains(candidate.name)
+			)
+		})
 	)
-	const selectedBranch = pipe(
-		availableBranches,
-		Array.findFirst(candidate => candidate.name === branch),
-		Option.getOrUndefined
-	)
-
 	useEffect(() => {
 		function openThreadSearch(event: KeyboardEvent) {
 			if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return
-			if (pipe(event.key, String.toLowerCase) !== 'p') return
+			if (String.toLowerCase(event.key) !== 'p') return
 
 			event.preventDefault()
 			setSwitcherValue('')
@@ -224,24 +233,26 @@ function WorktreeManager(input: {
 	}, [])
 
 	async function createFastWorktree(nextBranch = branch) {
-		const selectedProject = pipe(Option.fromNullishOr(createWorktreeProject), Option.getOrThrow)
 		const nextSelectedBranch = pipe(
 			availableBranches,
 			Array.findFirst(candidate => candidate.name === nextBranch),
 			Option.getOrUndefined
 		)
-		let mode: 'existing-local' | 'existing-remote' | 'new-local' = 'new-local'
-		if (nextSelectedBranch?.type === 'local') mode = 'existing-local'
-		if (nextSelectedBranch?.type === 'remote') mode = 'existing-remote'
+		const mode = pipe(
+			Match.value(nextSelectedBranch?.type),
+			Match.when('local', () => 'existing-local' as const),
+			Match.when('remote', () => 'existing-remote' as const),
+			Match.orElse(() => 'new-local' as const)
+		)
 
 		const worktreeRoot = await createWorktree({
 			payload: {
 				baseBranch:
 					nextSelectedBranch?.type === 'remote'
 						? `${nextSelectedBranch.remote}/${nextSelectedBranch.name}`
-						: `origin/${branchSnapshot.defaultBranch}`,
+						: `origin/${branchSnapshot.value.defaultBranch}`,
 				branch: nextBranch,
-				cwd: selectedProject.repository.root,
+				cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
 				mode
 			}
 		})
@@ -252,19 +263,17 @@ function WorktreeManager(input: {
 	}
 
 	async function createFastAgent(layer: typeof AgentId.Type) {
-		const selectedProjectRoot = pipe(Option.fromNullishOr(input.activeProject?.repository.root), Option.getOrThrow)
-		const selectedWorktreeRoot = pipe(Option.fromNullishOr(input.activeWorktree?.root), Option.getOrThrow)
 		const agent = await createAgent({
 			payload: {
 				layer,
-				projectRoot: selectedProjectRoot,
-				worktreeRoot: selectedWorktreeRoot
+				projectRoot: input.activeProject?.repository.root ?? '',
+				worktreeRoot: input.activeWorktree?.root ?? ''
 			}
 		})
 
 		setActionsOpen(false)
 		setDraftAgents(draftAgents => ({...draftAgents, [agent.agentId]: agent}))
-		input.selectAgent(selectedWorktreeRoot, agent.agentId)
+		input.selectAgent(input.activeWorktree?.root ?? '', agent.agentId)
 	}
 
 	return (
@@ -286,11 +295,16 @@ function WorktreeManager(input: {
 						type="button"
 						className="flex h-8 w-8 items-center justify-center text-destructive hover:bg-muted hover:text-destructive"
 						onClick={async () => {
-							const selectedWorktree = pipe(Option.fromNullishOr(input.activeWorktree), Option.getOrThrow)
-							if (!window.confirm(`Delete worktree ${selectedWorktree.branch ?? pathLabel(selectedWorktree.root)}?`))
+							if (!input.activeWorktree) return
+							if (
+								!window.confirm(
+									`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`
+								)
+							) {
 								return
+							}
 
-							await deleteWorktree({payload: {cwd: selectedWorktree.root, force: true}})
+							await deleteWorktree({payload: {cwd: input.activeWorktree.root, force: true}})
 							setActionsOpen(false)
 							refreshProjects()
 						}}
@@ -323,46 +337,41 @@ function WorktreeManager(input: {
 					<CommandList>
 						<CommandEmpty>No thread found.</CommandEmpty>
 						<CommandGroup>
-							{pipe(
-								input.agents,
-								Array.map(agent => {
-									const project = pipe(
-										input.projects,
-										Array.findFirst(candidate => candidate.repository.root === agent.projectRoot),
-										Option.getOrUndefined
-									)
-									const worktree = pipe(
-										project?.worktrees ?? [],
-										Array.findFirst(candidate => candidate.root === agent.worktreeRoot),
-										Option.getOrUndefined
-									)
-									const worktreeLabel = worktree?.branch ?? pathLabel(agent.worktreeRoot)
+							{Array.map(input.agents, agent => {
+								const worktreeLabel = pipe(
+									input.projects,
+									Array.findFirst(candidate => candidate.repository.root === agent.projectRoot),
+									Option.flatMap(project => {
+										return Array.findFirst(project.worktrees, candidate => candidate.root === agent.worktreeRoot)
+									}),
+									Option.map(worktree => worktree.branch ?? pathLabel(agent.worktreeRoot)),
+									Option.getOrElse(() => pathLabel(agent.worktreeRoot))
+								)
 
-									return (
-										<CommandItem
-											key={agent.agentId}
-											value={`agent:${agent.agentId}`}
-											keywords={[
-												worktreeLabel,
-												agent.layer,
-												agent.agentId,
-												pathLabel(agent.projectRoot),
-												agent.firstPromptPreview ?? ''
-											]}
-											onSelect={() => {
-												setSwitcherOpen(false)
-												input.selectAgent(agent.worktreeRoot, agent.agentId)
-											}}
-										>
-											<AgentIcon layer={agent.layer} className="size-3.5" />
-											<span className="min-w-0 truncate">{agent.firstPromptPreview ?? 'thread'}</span>
-											<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
-												{worktreeLabel}
-											</CommandShortcut>
-										</CommandItem>
-									)
-								})
-							)}
+								return (
+									<CommandItem
+										key={agent.agentId}
+										value={`agent:${agent.agentId}`}
+										keywords={[
+											worktreeLabel,
+											agent.layer,
+											agent.agentId,
+											pathLabel(agent.projectRoot),
+											agent.firstPromptPreview ?? ''
+										]}
+										onSelect={() => {
+											setSwitcherOpen(false)
+											input.selectAgent(agent.worktreeRoot, agent.agentId)
+										}}
+									>
+										<AgentIcon layer={agent.layer} className="size-3.5" />
+										<span className="min-w-0 truncate">{agent.firstPromptPreview ?? 'thread'}</span>
+										<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
+											{worktreeLabel}
+										</CommandShortcut>
+									</CommandItem>
+								)
+							})}
 						</CommandGroup>
 					</CommandList>
 				</Command>
@@ -386,11 +395,11 @@ function WorktreeManager(input: {
 					}}
 				>
 					<CommandInput
-						placeholder={(() => {
-							if (actionPaletteMode === 'create-worktree')
-								return `Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`
-							return `Create thread in ${input.activeWorktree ? (input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)) : 'worktree'}...`
-						})()}
+						placeholder={
+							actionPaletteMode === 'create-worktree'
+								? `Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`
+								: `Create thread in ${input.activeWorktree ? (input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)) : 'worktree'}...`
+						}
 						value={actionPaletteMode === 'create-worktree' ? branch : undefined}
 						onValueChange={value => {
 							if (actionPaletteMode === 'create-worktree') setBranch(value)
@@ -420,18 +429,21 @@ function WorktreeManager(input: {
 											void createFastWorktree(candidate.name)
 										}}
 									>
-										{candidate.type === 'local' ? <GitBranch className="size-3.5" /> : <Square className="size-3.5" />}
+										<BranchCandidateIcon type={candidate.type} />
 										<span className="min-w-0 truncate">{candidate.name}</span>
 										<CommandShortcut>{candidate.type}</CommandShortcut>
 									</CommandItem>
 								))}
-								{branch !== '' && Predicate.isUndefined(selectedBranch) && (
-									<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
-										<GitBranchPlus className="size-3.5" />
-										Create {branch}
-										<CommandShortcut>origin/{branchSnapshot.defaultBranch}</CommandShortcut>
-									</CommandItem>
-								)}
+								{branch !== '' &&
+									Predicate.isUndefined(
+										Option.getOrUndefined(Array.findFirst(availableBranches, candidate => candidate.name === branch))
+									) && (
+										<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
+											<GitBranchPlus className="size-3.5" />
+											Create {branch}
+											<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
+										</CommandItem>
+									)}
 							</CommandGroup>
 						)}
 						{actionPaletteMode === 'create-thread' && input.activeProject && input.activeWorktree && (
@@ -452,10 +464,8 @@ function WorktreeManager(input: {
 				<TreeExplorerSection>
 					{Array.map(input.projects, (project, index) => {
 						const projectWorktree =
-							pipe(
-								project.worktrees,
-								Array.findFirst(candidate => candidate.root === project.repository.root),
-								Option.getOrUndefined
+							Option.getOrUndefined(
+								Array.findFirst(project.worktrees, candidate => candidate.root === project.repository.root)
 							) ?? project.worktrees[0]
 
 						return (
@@ -496,101 +506,113 @@ function WorktreeManager(input: {
 									</Button>
 								</div>
 								<ul className="flex flex-col gap-px border-muted-foreground/20 border-l" style={{marginLeft: 15}}>
-									{pipe(
-										project.worktrees,
-										Array.map(worktree => {
-											const worktreeAgents = pipe(
-												input.agents,
-												Array.filter(
-													agent => agent.projectRoot === project.repository.root && agent.worktreeRoot === worktree.root
-												)
-											)
-											return (
-												<li key={worktree.root} className="w-full min-w-0">
-													<TreeExplorerRow
-														key={worktree.root}
-														icon={
-															worktree.root === project.repository.root ? (
-																<PanelTop
-																	className={`size-3.5 ${worktree.status?.dirtyTracked || worktree.status?.untracked || worktree.status?.unpushedCommits || worktree.status?.behind ? 'text-amber-500' : 'text-current'}`}
-																/>
-															) : (
-																<Square
-																	className={`size-3.5 ${worktree.status?.dirtyTracked || worktree.status?.untracked || worktree.status?.unpushedCommits || worktree.status?.behind ? 'text-amber-500' : 'text-current'}`}
-																/>
-															)
-														}
-														selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
-														actions={
-															<Button
-																variant="ghost"
-																size="icon-xs"
-																className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
-																onClick={event => {
-																	event.stopPropagation()
-																	input.selectWorktree(worktree.root)
-																	setActionPaletteMode('create-thread')
-																	setActionsOpen(true)
-																}}
-																title="Create thread"
-															>
-																<SparklesIcon className="size-3" />
-															</Button>
-														}
-														onClick={() => input.selectWorktree(worktree.root)}
-													>
-														{worktree.branch ?? pathLabel(worktree.root)}
-													</TreeExplorerRow>
-													{!Array.isReadonlyArrayEmpty(worktreeAgents) && (
-														<ul
-															className="flex flex-col gap-px border-muted-foreground/20 border-l"
-															style={{marginLeft: 15}}
+									{Array.map(project.worktrees, worktree => {
+										const worktreeAgents = Array.filter(
+											input.agents,
+											agent => agent.projectRoot === project.repository.root && agent.worktreeRoot === worktree.root
+										)
+										return (
+											<li key={worktree.root} className="w-full min-w-0">
+												<TreeExplorerRow
+													key={worktree.root}
+													icon={
+														<WorktreeIcon
+															dirty={
+																!!(
+																	worktree.status?.dirtyTracked ||
+																	worktree.status?.untracked ||
+																	worktree.status?.unpushedCommits ||
+																	worktree.status?.behind
+																)
+															}
+															root={worktree.root === project.repository.root}
+														/>
+													}
+													selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
+													actions={
+														<Button
+															variant="ghost"
+															size="icon-xs"
+															className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
+															onClick={event => {
+																event.stopPropagation()
+																input.selectWorktree(worktree.root)
+																setActionPaletteMode('create-thread')
+																setActionsOpen(true)
+															}}
+															title="Create thread"
 														>
-															{Array.map(worktreeAgents, agent => (
-																<li key={agent.agentId} className="w-full min-w-0">
-																	<TreeExplorerRow
-																		icon={<AgentIcon layer={agent.layer} className="size-3.5" />}
-																		actions={
-																			<div className="flex items-center gap-1">
-																				<StatusIcon state={agent.status.state} className="shrink-0" />
-																				<Button
-																					variant="ghost"
-																					size="icon-xs"
-																					className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
-																					onClick={event => {
-																						event.stopPropagation()
-																						void (async () => {
-																							await archiveAgent({payload: {agentId: agent.agentId}})
-																							const nextAgent = pipe(
-																								input.agents,
-																								Array.filter(candidate => candidate.agentId !== agent.agentId),
-																								Array.head,
-																								Option.getOrUndefined
-																							)
-																							if (nextAgent)
-																								input.selectAgent(nextAgent.worktreeRoot, nextAgent.agentId)
-																						})()
-																					}}
-																				>
-																					<Archive className="size-3" />
-																				</Button>
-																			</div>
-																		}
-																		selected={input.activeAgentId === agent.agentId}
-																		onClick={() => input.selectAgent(worktree.root, agent.agentId)}
-																	>
-																		<span className="min-w-0 flex-1 truncate">
-																			{agent.firstPromptPreview ?? 'thread'}
-																		</span>
-																	</TreeExplorerRow>
-																</li>
-															))}
-														</ul>
-													)}
-												</li>
-											)
-										})
-									)}
+															<SparklesIcon className="size-3" />
+														</Button>
+													}
+													onClick={() => input.selectWorktree(worktree.root)}
+												>
+													{worktree.branch ?? pathLabel(worktree.root)}
+												</TreeExplorerRow>
+												<ul
+													className="flex flex-col gap-px border-muted-foreground/20 border-l"
+													style={{marginLeft: 15}}
+												>
+													<li className="w-full min-w-0">
+														<TreeExplorerRow
+															icon={<TerminalIcon className="size-3.5" />}
+															selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
+															onClick={() => input.selectTerminal(worktree.root)}
+														>
+															terminal
+														</TreeExplorerRow>
+													</li>
+												</ul>
+												{!Array.isReadonlyArrayEmpty(worktreeAgents) && (
+													<ul
+														className="flex flex-col gap-px border-muted-foreground/20 border-l"
+														style={{marginLeft: 15}}
+													>
+														{Array.map(worktreeAgents, agent => (
+															<li key={agent.agentId} className="w-full min-w-0">
+																<TreeExplorerRow
+																	icon={<AgentIcon layer={agent.layer} className="size-3.5" />}
+																	actions={
+																		<div className="flex items-center gap-1">
+																			<StatusIcon state={agent.status.state} className="shrink-0" />
+																			<Button
+																				variant="ghost"
+																				size="icon-xs"
+																				className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
+																				onClick={async event => {
+																					event.stopPropagation()
+																					await archiveAgent({payload: {agentId: agent.agentId}})
+																					pipe(
+																						input.agents,
+																						Array.filter(candidate => candidate.agentId !== agent.agentId),
+																						Array.head,
+																						Option.match({
+																							onNone: () => undefined,
+																							onSome: nextAgent => {
+																								return input.selectAgent(nextAgent.worktreeRoot, nextAgent.agentId)
+																							}
+																						})
+																					)
+																				}}
+																			>
+																				<Archive className="size-3" />
+																			</Button>
+																		</div>
+																	}
+																	selected={input.activeAgentId === agent.agentId}
+																	onClick={() => input.selectAgent(worktree.root, agent.agentId)}
+																>
+																	<span className="min-w-0 flex-1 truncate">
+																		{agent.firstPromptPreview ?? 'thread'}
+																	</span>
+																</TreeExplorerRow>
+															</li>
+														))}
+													</ul>
+												)}
+											</li>
+										)
+									})}
 								</ul>
 							</li>
 						)

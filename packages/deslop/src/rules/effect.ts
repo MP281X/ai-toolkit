@@ -9,6 +9,7 @@ import {
 	isLiteral,
 	isMatchCall,
 	isPipeCall,
+	isRcMapConstructorCall,
 	returnedExpression,
 	typeLooksEffect
 } from '#lib/ts.ts'
@@ -84,6 +85,15 @@ export const effectRules = [
 			)
 		}
 	}),
+	rule('prefer-top-level-rcmap', (node, context) => {
+		if (!isRcMapConstructorCall(context.checker, node)) return
+		if (isRootRcMapConstructor(node)) return
+		context.report(
+			node,
+			'prefer-top-level-rcmap',
+			'This creates an RcMap away from the root scope. Move RcMap.make(...) to a module-level value or a root Effect generator statement, then use RcMap.get/invalidate locally.'
+		)
+	}),
 	rule('prefer-effect-module-over-standard-library', (node, context) => {
 		if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
 			const module = standardPrototypeMethods.get(node.expression.name.text)
@@ -118,7 +128,11 @@ export const effectRules = [
 		if (
 			ts.isCallExpression(node) &&
 			ts.isPropertyAccessExpression(node.expression) &&
-			isOptionConstructor(node.expression)
+			ts.isIdentifier(node.expression.expression) &&
+			node.expression.expression.text === 'Option' &&
+			(node.expression.name.text === 'some' ||
+				node.expression.name.text === 'none' ||
+				String.startsWith('from')(node.expression.name.text))
 		) {
 			context.report(
 				node.expression.name,
@@ -241,7 +255,7 @@ export const effectRules = [
 			Array.contains(['succeed', 'sync'] as const, callName(node)) &&
 			node.arguments[0] &&
 			isLiteral(node.arguments[0]) &&
-			!isRequiredEffectCallbackReturn(node)
+			!hasRequiredEffectCallbackAncestor(node.parent)
 		) {
 			context.report(
 				node.expression,
@@ -279,8 +293,33 @@ function isGlobalObjectConstructor(checker: ts.TypeChecker | undefined, receiver
 	return checker.typeToString(type) === 'ObjectConstructor'
 }
 
-function isRequiredEffectCallbackReturn(node: ts.CallExpression) {
-	return hasRequiredEffectCallbackAncestor(node.parent)
+function isRootRcMapConstructor(node: ts.Node) {
+	const statement = variableStatementContainingRcMapConstructor(node)
+	if (!statement) return false
+	if (
+		!Array.some(statement.declarationList.declarations, declaration => {
+			return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
+		})
+	) {
+		return false
+	}
+	if (ts.isSourceFile(statement.parent)) return true
+	return (
+		ts.isBlock(statement.parent) &&
+		ts.isFunctionExpression(statement.parent.parent) &&
+		ts.isCallExpression(statement.parent.parent.parent) &&
+		ts.isPropertyAccessExpression(statement.parent.parent.parent.expression) &&
+		ts.isIdentifier(statement.parent.parent.parent.expression.expression) &&
+		statement.parent.parent.parent.expression.expression.text === 'Effect' &&
+		statement.parent.parent.parent.expression.name.text === 'gen' &&
+		Array.contains(statement.parent.statements, statement)
+	)
+}
+
+function variableStatementContainingRcMapConstructor(node: ts.Node): ts.VariableStatement | undefined {
+	if (ts.isSourceFile(node) || ts.isClassLike(node)) return
+	if (ts.isVariableStatement(node)) return node
+	return variableStatementContainingRcMapConstructor(node.parent)
 }
 
 function hasRequiredEffectCallbackAncestor(node: ts.Node): boolean {
@@ -295,12 +334,4 @@ function hasRequiredEffectCallbackAncestor(node: ts.Node): boolean {
 		return true
 	}
 	return hasRequiredEffectCallbackAncestor(node.parent)
-}
-
-function isOptionConstructor(node: ts.PropertyAccessExpression) {
-	return (
-		ts.isIdentifier(node.expression) &&
-		node.expression.text === 'Option' &&
-		(node.name.text === 'some' || node.name.text === 'none' || String.startsWith('from')(node.name.text))
-	)
 }

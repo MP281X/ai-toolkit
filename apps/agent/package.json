@@ -29,6 +29,7 @@
 
 		"@ai-toolkit/ai": "workspace:*",
 		"@ai-toolkit/git": "workspace:*",
+		"@ai-toolkit/terminal": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},

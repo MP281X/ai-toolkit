@@ -7,6 +7,22 @@ import type {Rule} from './helpers.ts'
 import {containsComments, isMatchHandlerCall, rule} from './helpers.ts'
 
 export const controlFlowRules = [
+	rule('no-iife', (node, context) => {
+		if (!ts.isCallExpression(node)) return
+		function reportIifeExpression(expression: ts.Expression): void {
+			if (ts.isParenthesizedExpression(expression)) {
+				reportIifeExpression(expression.expression)
+				return
+			}
+			if (!(ts.isFunctionExpression(expression) || ts.isArrowFunction(expression))) return
+			context.report(
+				expression,
+				'no-iife',
+				'This immediately invokes a function expression. Move the logic into ordinary surrounding flow or a named function boundary.'
+			)
+		}
+		reportIifeExpression(node.expression)
+	}),
 	rule('prefer-match-for-pattern-branching', (node, context) => {
 		if (ts.isSwitchStatement(node) && isAccessExpression(node.expression)) {
 			context.report(
