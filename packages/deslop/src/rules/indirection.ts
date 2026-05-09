@@ -66,7 +66,7 @@ export const indirectionRules = [
 			context.report(
 				node.name,
 				'no-access-alias',
-				`"${node.name.text}" is a single-use constant alias. Move the initializer to the use site and delete the constant.`
+				`"${node.name.text}" is a single-use constant alias. Move the initializer directly to the use site and delete the constant; do not replace it with a one-use helper.`
 			)
 		}
 	}),
@@ -220,7 +220,7 @@ export const indirectionRules = [
 			context.report(
 				node.name,
 				'no-trivial-local-helper',
-				`"${node.name.text}" is a helper with one consumer. Move its return expression to the call site and delete the helper.`
+				`"${node.name.text}" is a helper with one consumer. Inline its return expression at the call site and delete the helper, even if the helper improves local naming.`
 			)
 		}
 	}),
