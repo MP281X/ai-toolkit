@@ -9,7 +9,6 @@ import {
 	isImportedIdentifier,
 	isLiteralContainer,
 	normalizedText,
-	returnedExpression,
 	typeIncludesNullish,
 	typeLooksReadonlyArray
 } from '#lib/ts.ts'
@@ -19,10 +18,13 @@ import {
 	isAllowedNullLiteral,
 	isArrayIsArrayCall,
 	isConstVariable,
+	isExportedDeclaration,
 	isInsideTypeName,
 	isMutated,
 	isNullishComparison,
 	isReactRefCurrentPropertySignature,
+	isReactUseRefCall,
+	isReactUseStateCall,
 	isRecursiveFunction,
 	nullishComparedExpression,
 	rule
@@ -104,6 +106,17 @@ export const typeSafetyRules = [
 		}
 	}),
 	rule('prefer-undefined-over-null', (node, context) => {
+		if (ts.isCallExpression(node) && isReactUseRefCall(context.checker, node)) {
+			for (const argument of node.arguments) {
+				if (!ts.isIdentifier(argument) || argument.text !== 'undefined') break
+				context.report(
+					argument,
+					'prefer-undefined-over-null',
+					'React refs use null for the unmounted value. Initialize this ref with null.'
+				)
+				break
+			}
+		}
 		if (node.kind === ts.SyntaxKind.NullKeyword && !isAllowedNullLiteral(context.checker, node)) {
 			context.report(
 				node,
@@ -168,9 +181,12 @@ export const typeSafetyRules = [
 		}
 		if (ts.isVariableDeclaration(node) && node.type && node.initializer && context.checker) {
 			if (isRecursiveEffectFnUntracedVariable(node)) return
-			const annotated = context.checker.getTypeFromTypeNode(node.type)
-			const inferred = context.checker.getTypeAtLocation(node.initializer)
-			if (context.checker.isTypeAssignableTo(inferred, annotated)) {
+			if (
+				context.checker.isTypeAssignableTo(
+					context.checker.getTypeAtLocation(node.initializer),
+					context.checker.getTypeFromTypeNode(node.type)
+				)
+			) {
 				context.report(
 					node.type,
 					'no-redundant-type-annotation',
@@ -178,19 +194,21 @@ export const typeSafetyRules = [
 				)
 			}
 		}
-		if (ts.isFunctionDeclaration(node) && node.type && node.body && !isRecursiveFunction(node) && context.checker) {
+		if (
+			(ts.isFunctionDeclaration(node) ||
+				ts.isFunctionExpression(node) ||
+				ts.isArrowFunction(node) ||
+				ts.isMethodDeclaration(node)) &&
+			node.type &&
+			node.body &&
+			!isRecursiveFunction(node)
+		) {
 			if (ts.isTypePredicateNode(node.type)) return
-			const expression = returnedExpression(node)
-			if (!expression) return
-			const annotated = context.checker.getTypeFromTypeNode(node.type)
-			const inferred = context.checker.getTypeAtLocation(expression)
-			if (context.checker.isTypeAssignableTo(inferred, annotated)) {
-				context.report(
-					node.type,
-					'no-redundant-type-annotation',
-					'This return annotation duplicates the returned expression type. Delete the return annotation.'
-				)
-			}
+			context.report(
+				node.type,
+				'no-redundant-type-annotation',
+				'This function return annotation is unnecessary. Delete it and let the implementation define the return type.'
+			)
 		}
 	}),
 	rule('no-redundant-generic-type-argument', (node, context) => {
@@ -209,6 +227,19 @@ export const typeSafetyRules = [
 			isImportedIdentifier(context.checker, node.expression.expression, 'effect', 'Array')
 		) {
 			return
+		}
+		if (node.arguments.length === 0) return
+		if (isReactUseStateCall(context.checker, node)) return
+		if (isReactUseRefCall(context.checker, node)) {
+			for (const argument of node.arguments) {
+				if (
+					argument.kind === ts.SyntaxKind.NullKeyword ||
+					(ts.isIdentifier(argument) && argument.text === 'undefined')
+				) {
+					return
+				}
+				break
+			}
 		}
 		if (!context.checker.getResolvedSignature(node)) return
 		context.report(
@@ -280,9 +311,16 @@ export const typeSafetyRules = [
 		if (ts.isInterfaceDeclaration(node) && Array.some(node.members, ts.isMethodSignature)) return
 		if (
 			(ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node)) &&
+			!isExportedDeclaration(node) &&
 			!isAllowedNamedType(node, context.sourceFile)
 		) {
-			if ((context.references.get(node.name.text) ?? 0) <= 1) {
+			if (
+				(context.references.get(node.name.text) ?? 0) <= 1 ||
+				(ts.isTypeAliasDeclaration(node) &&
+					((ts.isUnionTypeNode(node.type) && node.type.types.length <= 5) ||
+						(ts.isTypeLiteralNode(node.type) && node.type.members.length <= 5))) ||
+				(ts.isInterfaceDeclaration(node) && node.members.length <= 5)
+			) {
 				context.report(
 					node.name,
 					'no-floating-type-contract',
@@ -359,7 +397,7 @@ function callbackParameterTypeNeedsAnnotation(
 	checker: ts.TypeChecker,
 	node: ts.TypeNode | undefined,
 	parameter: number
-): boolean {
+) {
 	if (!node) return false
 	if (!(ts.isFunctionTypeNode(node) && node.parameters[parameter]?.type)) return false
 	return (

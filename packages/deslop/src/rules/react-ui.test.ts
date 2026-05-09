@@ -27,6 +27,14 @@ test('no-react-forward-ref', () => {
 		filePath: 'sample.tsx'
 	})
 })
+test('no-react-use-state-lazy-initializer', () => {
+	return expectRule({
+		rule: 'no-react-use-state-lazy-initializer',
+		source:
+			'import {useState} from "react"\nfunction Component() { const [subscriptionId] = useState(() => crypto.randomUUID()); return subscriptionId }\n',
+		filePath: 'sample.tsx'
+	})
+})
 test('prefer-composition-over-render-branching', () => {
 	return expectRule({
 		rule: 'prefer-composition-over-render-branching',

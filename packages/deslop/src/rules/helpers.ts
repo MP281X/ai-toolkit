@@ -15,6 +15,7 @@ import {
 	isFlowCall,
 	isImportedIdentifier,
 	isMatchCall,
+	isRcMapConstructorCall,
 	isSchemaExpression,
 	normalizedText,
 	previousStatement
@@ -120,21 +121,13 @@ export function isInsideTypeName(node: ts.Identifier) {
 }
 
 export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: ts.Node) {
-	if (ts.isReturnStatement(node.parent) && isReactComponentFunction(node.parent)) return true
-	if (
-		ts.isCallExpression(node.parent) &&
-		ts.isIdentifier(node.parent.expression) &&
-		node.parent.expression.text === 'useRef'
-	) {
-		return true
-	}
+	if (ts.isCallExpression(node.parent) && isReactUseRefCall(checker, node.parent)) return true
 	if (
 		ts.findAncestor(node, ancestor => {
 			return (
 				ts.isTypeNode(ancestor) &&
 				ts.isCallExpression(ancestor.parent) &&
-				ts.isIdentifier(ancestor.parent.expression) &&
-				ancestor.parent.expression.text === 'useRef' &&
+				isReactUseRefCall(checker, ancestor.parent) &&
 				Array.some(ancestor.parent.typeArguments ?? [], argument => argument === ancestor)
 			)
 		}) ||
@@ -156,28 +149,31 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 	) {
 		return true
 	}
-	if (
-		ts.findAncestor(node, ancestor => {
-			return (
-				ts.isJsxAttribute(ancestor) &&
-				ts.isIdentifier(ancestor.name) &&
-				Array.contains(['triggerFn', 'menuRenderFn'] as const, ancestor.name.text)
-			)
-		})
-	) {
-		return true
-	}
-	if (ts.isJsxExpression(node.parent)) return false
 	return false
 }
 
-function isReactComponentFunction(node: ts.Node) {
-	const fn = ts.findAncestor(node, isNamedFunctionLike)
-	const name = fn ? functionLikeName(fn) : ''
-	return RegExp('^[A-Z]').test(name)
+export function isReactUseRefCall(checker: ts.TypeChecker | undefined, node: ts.CallExpression) {
+	return isReactHookCall(checker, node, 'useRef')
 }
 
-export function isAccessAliasInitializer(node: ts.Expression): boolean {
+export function isReactUseStateCall(checker: ts.TypeChecker | undefined, node: ts.CallExpression) {
+	return isReactHookCall(checker, node, 'useState')
+}
+
+function isReactHookCall(checker: ts.TypeChecker | undefined, node: ts.CallExpression, name: 'useRef' | 'useState') {
+	if (ts.isIdentifier(node.expression)) {
+		return checker ? isImportedIdentifier(checker, node.expression, 'react', name) : node.expression.text === name
+	}
+	return (
+		ts.isPropertyAccessExpression(node.expression) &&
+		node.expression.name.text === name &&
+		(checker
+			? isImportedIdentifier(checker, node.expression.expression, 'react', 'React')
+			: node.expression.expression.getText(node.getSourceFile()) === 'React')
+	)
+}
+
+export function isAccessAliasInitializer(node: ts.Expression) {
 	if (isAccessExpression(node) || ts.isIdentifier(node)) return true
 	if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
 		return isCheapExpression(node)
@@ -189,28 +185,22 @@ export function isExemptNamedValue(checker: ts.TypeChecker | undefined, node: ts
 	if (!node.initializer) return false
 	return (
 		isEffectConstructorCall(node.initializer) ||
-		isTopLevelAtomConstructor(checker, node) ||
+		(ts.isVariableDeclarationList(node.parent) &&
+			ts.isVariableStatement(node.parent.parent) &&
+			ts.isSourceFile(node.parent.parent.parent) &&
+			(isAtomConstructorCall(checker, node.initializer) || isRcMapConstructorCall(checker, node.initializer))) ||
 		isSchemaExpression(node.initializer) ||
-		isFlowCall(node.initializer)
+		isFlowCall(node.initializer) ||
+		(ts.isCallExpression(node.initializer) &&
+			ts.isIdentifier(node.initializer.expression) &&
+			String.match(RegExp('^use[A-Z]'))(node.initializer.expression.text)._tag === 'Some')
 	)
 }
 
-function isTopLevelAtomConstructor(checker: ts.TypeChecker | undefined, node: ts.VariableDeclaration) {
-	return (
-		!!node.initializer &&
-		ts.isVariableDeclarationList(node.parent) &&
-		ts.isVariableStatement(node.parent.parent) &&
-		ts.isSourceFile(node.parent.parent.parent) &&
-		isAtomConstructorCall(checker, node.initializer)
-	)
-}
-
-export function isRecursiveFunction(node: ts.FunctionDeclaration) {
-	return (
-		!!node.name &&
-		!!node.body &&
-		containsNode(node.body, child => ts.isIdentifier(child) && child.text === node.name?.text)
-	)
+export function isRecursiveFunction(node: ts.FunctionLikeDeclaration) {
+	const name = functionLikeName(node)
+	if (name === '<anonymous>') return false
+	return !!node.body && containsNode(node.body, child => ts.isIdentifier(child) && child.text === name)
 }
 
 export function countIdentifierUses(node: ts.Node, name: string) {
@@ -266,7 +256,6 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 	) {
 		return true
 	}
-	if (ts.isTypeAliasDeclaration(node) && ts.isUnionTypeNode(node.type) && node.type.types.length > 1) return true
 	return containsNode(node, child => ts.isIdentifier(child) && child.text === node.name.text && child !== node.name)
 }
 

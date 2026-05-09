@@ -104,13 +104,23 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 		onEmpty: () => '',
 		onNonEmpty: diagnostics => {
 			return `${pipe(
-				groupDiagnosticsByFile(diagnostics),
+				Array.map(Array.dedupe(Array.map(diagnostics, diagnostic => diagnostic.filePath)), filePath => ({
+					diagnostics: Array.filter(diagnostics, diagnostic => diagnostic.filePath === filePath),
+					filePath
+				})),
+				Array.sortWith(fileDiagnostics => Array.length(fileDiagnostics.diagnostics), Order.flip(Order.Number)),
 				Array.map(fileDiagnostics => {
-					const widths = diagnosticWidths(fileDiagnostics.diagnostics)
+					const locationWidth = maxLength([
+						'Problem',
+						...Array.map(fileDiagnostics.diagnostics, diagnostic => `L${diagnostic.line}:${diagnostic.column}`)
+					])
+					const symbolWidth = maxLength(Array.map(fileDiagnostics.diagnostics, diagnostic => `@${diagnostic.symbol}`))
 
 					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
 						fileDiagnostics.diagnostics,
-						Array.map(diagnostic => renderDiagnosticBlock(diagnostic, widths)),
+						Array.map(diagnostic => {
+							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.message, 'problem')}`
+						}),
 						Array.join('\n\n')
 					)}`
 				}),
@@ -185,43 +195,8 @@ function color(value: string, role: keyof typeof colors) {
 	return process.stdout.isTTY ? `${colors[role][0]}${value}${colors[role][1]}` : value
 }
 
-function compareFileDiagnostics(
-	left: {readonly diagnostics: readonly Diagnostic[]},
-	right: {readonly diagnostics: readonly Diagnostic[]}
-) {
-	return Order.Number(Array.length(right.diagnostics), Array.length(left.diagnostics))
-}
-
-function groupDiagnosticsByFile(diagnostics: readonly Diagnostic[]) {
-	return Array.sort(
-		Array.map(Array.dedupe(Array.map(diagnostics, diagnostic => diagnostic.filePath)), filePath => ({
-			diagnostics: Array.filter(diagnostics, diagnostic => diagnostic.filePath === filePath),
-			filePath
-		})),
-		compareFileDiagnostics
-	)
-}
-
-function diagnosticWidths(diagnostics: readonly Diagnostic[]) {
-	return {
-		location: maxLength([
-			'Problem',
-			...Array.map(diagnostics, diagnostic => `L${diagnostic.line}:${diagnostic.column}`)
-		]),
-		symbol: maxLength(Array.map(diagnostics, diagnostic => `@${diagnostic.symbol}`))
-	}
-}
-
-function renderDiagnosticBlock(diagnostic: Diagnostic, widths: {readonly location: number; readonly symbol: number}) {
-	return `${color(padEnd(`L${diagnostic.line}:${diagnostic.column}`, widths.location), 'line')}  ${color(padEnd(`@${diagnostic.symbol}`, widths.symbol), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(padEnd('Code', widths.location), 'label')}  ${padEnd('', widths.symbol)}  ${color(diagnostic.text, 'code')}\n${color(padEnd('Problem', widths.location), 'label')}  ${padEnd('', widths.symbol)}  ${color(diagnostic.message, 'problem')}`
-}
-
 function maxLength(values: readonly string[]) {
 	return Array.reduce(values, 0, (max, value) => Math.max(max, String.length(value)))
-}
-
-function padEnd(value: string, width: number) {
-	return `${value}${String.repeat(Math.max(0, width - String.length(value)))(' ')}`
 }
 
 const collectFiles = Effect.fnUntraced(function* (options: {
@@ -250,14 +225,13 @@ const collectSelectedPaths = Effect.fnUntraced(function* (options: {
 	if (options.mode === 'paths') return Array.fromIterable(options.paths ?? [])
 	if (options.mode === 'full') return Array.fromIterable(options.paths ?? ['.'])
 	const gitPaths = yield* runGitDiff(options.cwd, options.mode)
-	return options.paths ? filterPathsByScope(gitPaths, Array.fromIterable(options.paths)) : gitPaths
-})
-
-function filterPathsByScope(filePaths: readonly string[], scopes: readonly string[]) {
-	return Array.filter(filePaths, filePath => {
-		return Array.some(Array.map(scopes, normalizePath), scope => pathMatchesScope(normalizePath(filePath), scope))
+	if (!options.paths) return gitPaths
+	return Array.filter(gitPaths, filePath => {
+		return Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope => {
+			return pathMatchesScope(normalizePath(filePath), scope)
+		})
 	})
-}
+})
 
 function pathMatchesScope(filePath: string, scope: string) {
 	if (scope === '.') return true

@@ -40,6 +40,18 @@ export const plugin = (async context => {
 					{
 						name: 'typescript',
 						url: 'https://github.com/microsoft/TypeScript.git'
+					},
+					{
+						name: 'xterm.js',
+						url: 'https://github.com/xtermjs/xterm.js'
+					},
+					{
+						name: 't3code',
+						url: 'https://github.com/pingdotgg/t3code'
+					},
+					{
+						name: 'vscode',
+						url: 'https://github.com/microsoft/vscode'
 					}
 				] as const,
 				Effect.fnUntraced(function* (resource) {

@@ -7,6 +7,23 @@ import type {Rule} from './helpers.ts'
 import {hasExtends, isAllowedPublicDeclaration, isExportedDeclaration, nameNodeForDeclaration, rule} from './helpers.ts'
 
 export const architectureRules = [
+	rule('prefer-type-before-value-with-same-name', (node, context) => {
+		if (!ts.isSourceFile(node)) return
+		for (const statement of node.statements) {
+			if (!ts.isTypeAliasDeclaration(statement)) continue
+			if (
+				Array.some(node.statements, candidate => {
+					return candidate.pos < statement.pos && declaresValueName(candidate, statement.name.text)
+				})
+			) {
+				context.report(
+					statement.name,
+					'prefer-type-before-value-with-same-name',
+					`"${statement.name.text}" has a type and value declaration. Move the type declaration before the value declaration.`
+				)
+			}
+		}
+	}),
 	rule('no-type-only-file', (node, context) => {
 		if (!ts.isSourceFile(node)) return
 		if (node.statements.length === 0) return
@@ -118,3 +135,13 @@ export const architectureRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
+
+function declaresValueName(node: ts.Statement, name: string) {
+	if (ts.isFunctionDeclaration(node) && node.name?.text === name) return true
+	if (ts.isVariableStatement(node)) {
+		return Array.some(node.declarationList.declarations, declaration => {
+			return ts.isIdentifier(declaration.name) && declaration.name.text === name
+		})
+	}
+	return false
+}

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as homeRouteRouteImport } from './routes/(home)/route'
 import { Route as homeIndexRouteImport } from './routes/(home)/index'
 import { Route as homeWorktreeThreadRouteImport } from './routes/(home)/$worktree/thread'
+import { Route as homeWorktreeTerminalRouteImport } from './routes/(home)/$worktree/terminal'
 import { Route as homeWorktreeDiffRouteImport } from './routes/(home)/$worktree/diff'
 
 const homeRouteRoute = homeRouteRouteImport.update({
@@ -28,6 +29,11 @@ const homeWorktreeThreadRoute = homeWorktreeThreadRouteImport.update({
   path: '/$worktree/thread',
   getParentRoute: () => homeRouteRoute,
 } as any)
+const homeWorktreeTerminalRoute = homeWorktreeTerminalRouteImport.update({
+  id: '/$worktree/terminal',
+  path: '/$worktree/terminal',
+  getParentRoute: () => homeRouteRoute,
+} as any)
 const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
   id: '/$worktree/diff',
   path: '/$worktree/diff',
@@ -37,11 +43,13 @@ const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof homeIndexRoute
   '/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/$worktree/terminal': typeof homeWorktreeTerminalRoute
   '/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof homeIndexRoute
   '/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/$worktree/terminal': typeof homeWorktreeTerminalRoute
   '/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRoutesById {
@@ -49,18 +57,24 @@ export interface FileRoutesById {
   '/(home)': typeof homeRouteRouteWithChildren
   '/(home)/': typeof homeIndexRoute
   '/(home)/$worktree/diff': typeof homeWorktreeDiffRoute
+  '/(home)/$worktree/terminal': typeof homeWorktreeTerminalRoute
   '/(home)/$worktree/thread': typeof homeWorktreeThreadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$worktree/diff' | '/$worktree/thread'
+  fullPaths:
+    | '/'
+    | '/$worktree/diff'
+    | '/$worktree/terminal'
+    | '/$worktree/thread'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$worktree/diff' | '/$worktree/thread'
+  to: '/' | '/$worktree/diff' | '/$worktree/terminal' | '/$worktree/thread'
   id:
     | '__root__'
     | '/(home)'
     | '/(home)/'
     | '/(home)/$worktree/diff'
+    | '/(home)/$worktree/terminal'
     | '/(home)/$worktree/thread'
   fileRoutesById: FileRoutesById
 }
@@ -91,6 +105,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeWorktreeThreadRouteImport
       parentRoute: typeof homeRouteRoute
     }
+    '/(home)/$worktree/terminal': {
+      id: '/(home)/$worktree/terminal'
+      path: '/$worktree/terminal'
+      fullPath: '/$worktree/terminal'
+      preLoaderRoute: typeof homeWorktreeTerminalRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
     '/(home)/$worktree/diff': {
       id: '/(home)/$worktree/diff'
       path: '/$worktree/diff'
@@ -104,12 +125,14 @@ declare module '@tanstack/react-router' {
 interface homeRouteRouteChildren {
   homeIndexRoute: typeof homeIndexRoute
   homeWorktreeDiffRoute: typeof homeWorktreeDiffRoute
+  homeWorktreeTerminalRoute: typeof homeWorktreeTerminalRoute
   homeWorktreeThreadRoute: typeof homeWorktreeThreadRoute
 }
 
 const homeRouteRouteChildren: homeRouteRouteChildren = {
   homeIndexRoute: homeIndexRoute,
   homeWorktreeDiffRoute: homeWorktreeDiffRoute,
+  homeWorktreeTerminalRoute: homeWorktreeTerminalRoute,
   homeWorktreeThreadRoute: homeWorktreeThreadRoute,
 }
 

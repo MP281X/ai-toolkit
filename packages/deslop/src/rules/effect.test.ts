@@ -1,4 +1,7 @@
-import {test} from 'bun:test'
+import {Array} from 'effect'
+
+import {expect, test} from 'bun:test'
+import {analyzeTypedText} from '#lib/analyzer.ts'
 import {expectRule} from './test-utils.ts'
 
 test('prefer-effect-fn-untraced', () => {
@@ -28,6 +31,25 @@ test('prefer-top-level-pipe-for-effect-values', () => {
 		typed: true,
 		source: 'import {Effect} from "effect"\nEffect.asVoid(Effect.succeed(1))\n'
 	})
+})
+test('prefer-top-level-rcmap', () => {
+	return expectRule({
+		rule: 'prefer-top-level-rcmap',
+		typed: true,
+		source:
+			'import {Effect, RcMap} from "effect"\nconst program = Effect.gen(function* () { if (true) { const resources = yield* RcMap.make({ lookup: () => Effect.void }); return resources } })\n'
+	})
+})
+test('prefer-top-level-rcmap allows top-level RcMap values', () => {
+	const rules = Array.map(
+		analyzeTypedText(
+			'sample.ts',
+			'import {Effect, RcMap} from "effect"\nconst resources = RcMap.make({ lookup: () => Effect.void })\nexport const program = Effect.gen(function* () { return yield* resources })\n'
+		),
+		diagnostic => diagnostic.rule
+	)
+	expect(rules).not.toContain('prefer-top-level-rcmap')
+	expect(rules).not.toContain('no-access-alias')
 })
 test('prefer-effect-module-over-standard-library', () => {
 	return expectRule({

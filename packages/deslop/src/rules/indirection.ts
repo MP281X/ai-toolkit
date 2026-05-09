@@ -1,4 +1,4 @@
-import {Array, Predicate} from 'effect'
+import {Array} from 'effect'
 
 import ts from 'typescript'
 
@@ -6,7 +6,6 @@ import {
 	bindingNames,
 	callName,
 	isBooleanExpression,
-	isCheapExpression,
 	isPipeCall,
 	isReactHookTupleCall,
 	normalizedText,
@@ -97,6 +96,20 @@ export const indirectionRules = [
 				return
 			}
 		}
+		if (
+			ts.isStringLiteral(node.initializer) ||
+			ts.isNumericLiteral(node.initializer) ||
+			ts.isNoSubstitutionTemplateLiteral(node.initializer) ||
+			node.initializer.kind === ts.SyntaxKind.TrueKeyword ||
+			node.initializer.kind === ts.SyntaxKind.FalseKeyword ||
+			node.initializer.kind === ts.SyntaxKind.NullKeyword
+		) {
+			context.report(
+				node.name,
+				'no-inlineable-literal-constant',
+				`"${node.name.text}" is an inlineable literal constant. Put the literal directly at each use site and delete the constant.`
+			)
+		}
 		if (ts.isArrayLiteralExpression(node.initializer) && node.initializer.elements.length <= 5) {
 			context.report(
 				node.name,
@@ -176,21 +189,29 @@ export const indirectionRules = [
 			return
 		}
 		if (
+			expression &&
+			(ts.isTemplateExpression(expression) ||
+				ts.isNoSubstitutionTemplateLiteral(expression) ||
+				ts.isStringLiteral(expression))
+		) {
+			context.report(
+				nameNode(node),
+				'no-trivial-local-helper',
+				`"${functionLikeName(node)}" only formats a string. Move the expression to each use site and delete the helper.`
+			)
+			return
+		}
+		if (
 			ts.isFunctionDeclaration(node) &&
 			node.name &&
 			!isTopLevelExempt(node) &&
-			!Array.some(
-				Array.map(node.parameters, parameter => parameter.type),
-				Predicate.isNotUndefined
-			) &&
 			(context.references.get(node.name.text) ?? 0) === 1 &&
-			expression &&
-			isCheapExpression(expression)
+			expression
 		) {
 			context.report(
 				node.name,
 				'no-trivial-local-helper',
-				`"${node.name.text}" is a cheap helper with one consumer. Move its return expression to the call site and delete the helper.`
+				`"${node.name.text}" is a helper with one consumer. Move its return expression to the call site and delete the helper.`
 			)
 		}
 	}),

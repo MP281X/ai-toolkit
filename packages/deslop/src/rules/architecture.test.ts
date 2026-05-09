@@ -9,6 +9,12 @@ import {expectRule} from './test-utils.ts'
 test('no-type-only-file', () => {
 	return expectRule({rule: 'no-type-only-file', source: 'export type User = { readonly name: string }\n'})
 })
+test('prefer-type-before-value-with-same-name', () => {
+	return expectRule({
+		rule: 'prefer-type-before-value-with-same-name',
+		source: 'export const AgentEvent = Schema.Union([])\nexport type AgentEvent = typeof AgentEvent.Type\n'
+	})
+})
 test('no-fake-public-export', () => {
 	return expectRule({rule: 'no-fake-public-export', source: 'export function helper(value: string) { return value }\n'})
 })

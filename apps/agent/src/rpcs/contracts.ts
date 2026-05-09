@@ -45,6 +45,12 @@ export class BranchesSnapshot extends Schema.Class<BranchesSnapshot>('BranchesSn
 	defaultBranch: Schema.String
 }) {}
 
+export type TerminalEvent = typeof TerminalEvent.Type
+export const TerminalEvent = Schema.Union([
+	Schema.Struct({data: Schema.String, type: Schema.Literal('data')}),
+	Schema.Struct({data: Schema.String, type: Schema.Literal('snapshot')})
+])
+
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.watch', {
 		stream: true,
@@ -135,6 +141,29 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({
 			cwd: Schema.String,
 			force: Schema.Boolean
+		})
+	}),
+	Rpc.make('terminal.events', {
+		stream: true,
+		payload: Schema.Struct({
+			cwd: Schema.String,
+			id: Schema.String
+		}),
+		success: TerminalEvent
+	}),
+	Rpc.make('terminal.input', {
+		payload: Schema.Struct({
+			data: Schema.String,
+			cwd: Schema.String,
+			id: Schema.String
+		})
+	}),
+	Rpc.make('terminal.resize', {
+		payload: Schema.Struct({
+			cols: Schema.Number,
+			cwd: Schema.String,
+			id: Schema.String,
+			rows: Schema.Number
 		})
 	})
 ) {}

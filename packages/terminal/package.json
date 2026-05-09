@@ -1,0 +1,19 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/terminal",
+
+	"exports": {
+		"./service": "./src/service.ts"
+	},
+
+	"scripts": {
+		"fix": "biome check --write --unsafe || true",
+		"check": "tsgo --noEmit && biome check"
+	},
+
+	"dependencies": {
+		"@xterm/headless": "latest",
+		"@xterm/addon-serialize": "latest"
+	}
+}

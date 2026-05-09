@@ -1,6 +1,12 @@
 import {test} from 'bun:test'
 import {expectRule} from './test-utils.ts'
 
+test('no-iife reports sync function expressions', () => {
+	return expectRule({rule: 'no-iife', source: 'const value = (() => "value")()\n'})
+})
+test('no-iife reports async function expressions', () => {
+	return expectRule({rule: 'no-iife', source: 'const value = (async () => "value")()\n'})
+})
 test('prefer-match-for-pattern-branching', () => {
 	return expectRule({
 		rule: 'prefer-match-for-pattern-branching',

@@ -2,6 +2,7 @@ import {Layer, pipe} from 'effect'
 
 import {Git} from '@ai-toolkit/git/service'
 import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
+import {Terminal} from '@ai-toolkit/terminal/service'
 import {FetchHttpClient} from 'effect/unstable/http'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
@@ -13,6 +14,7 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(RpcHandlers),
 	// application layers
 	Layer.provideMerge(Git.layer),
+	Layer.provideMerge(Terminal.layer),
 	// base layers
 	Layer.provideMerge(OtelLayer('agent-server')),
 	Layer.provideMerge(FetchHttpClient.layer),
