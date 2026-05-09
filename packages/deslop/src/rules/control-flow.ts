@@ -127,7 +127,7 @@ export const controlFlowRules = [
 				context.report(
 					node.body,
 					'prefer-minimal-if-braces',
-					'This arrow expression body spans lines. Convert it to a block body and return the expression explicitly.'
+					'This arrow expression body spans lines. Convert that callback to a block body and return the expression explicitly, e.g. value => { return ... }.'
 				)
 			}
 		}

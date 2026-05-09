@@ -151,7 +151,7 @@ export const effectRules = [
 			context.report(
 				node.expression.name,
 				'no-option-constructor',
-				'This creates a new Option value. Do not call Option.some, Option.none, or Option.from*; use guards, optional chaining, or nullish coalescing at the boundary.'
+				'This creates a new Option value. Do not call Option.some, Option.none, or Option.from*; use guards, optional chaining, nullish coalescing, or a plain typed sentinel at the boundary.'
 			)
 		}
 	}),

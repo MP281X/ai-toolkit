@@ -39,4 +39,9 @@
 - After code changes, run `bun run check`, then `bun run test`, before yielding back
 - Treat TypeScript, Biome, and deslop diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them
 
+## Deslop
+
 - Run `bun run deslop` only when explicitly asked to deslop
+- Fix deslop by reshaping the whole changed file, not by patching one diagnostic at a time
+- Prefer this order: remove destructuring/aliases, inline one-use helpers, fix multiline arrows, replace one-step `pipe`, then rerun
+- Do not introduce `Option.some/none`, type assertions, or single-use wrappers to satisfy another rule
