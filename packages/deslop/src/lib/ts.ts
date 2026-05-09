@@ -21,6 +21,10 @@ export function callName(node: ts.CallExpression) {
 	return ''
 }
 
+export function isHookCall(node: ts.Node): node is ts.CallExpression {
+	return ts.isCallExpression(node) && String.match(RegExp('^use[A-Z0-9]'))(callName(node))._tag === 'Some'
+}
+
 export function isEffectCall(
 	node: ts.Node
 ): node is ts.CallExpression & {readonly expression: ts.PropertyAccessExpression} {
@@ -123,11 +127,7 @@ export function isSchemaExpression(node: ts.Node) {
 }
 
 export function isReactHookTupleCall(node: ts.Node) {
-	return (
-		ts.isCallExpression(node) &&
-		ts.isIdentifier(node.expression) &&
-		String.match(RegExp('^use[A-Z]'))(node.expression.text)._tag === 'Some'
-	)
+	return isHookCall(node)
 }
 
 export function isLiteral(node: ts.Node) {

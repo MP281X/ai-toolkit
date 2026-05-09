@@ -2,6 +2,7 @@ import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 import {Array, Effect, Hash, Match, Option, Predicate, pipe, Schema, String} from 'effect'
 
 import {AgentId} from '@ai-toolkit/ai/catalog'
+import type {AgentKey} from '@ai-toolkit/ai/schema'
 import {
 	AgentIcon,
 	Archive,
@@ -11,7 +12,6 @@ import {
 	PanelTop,
 	SparklesIcon,
 	Square,
-	StatusIcon,
 	TerminalIcon,
 	Trash
 } from '@ai-toolkit/components/icons'
@@ -28,14 +28,14 @@ import {
 	CommandShortcut
 } from '@ai-toolkit/components/ui/command'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
+import type {GitProject} from '@ai-toolkit/git/schema'
+import {GitBranchesSnapshot} from '@ai-toolkit/git/schema'
 import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useEffect, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom, agentsAtom, draftAgentsAtom, projectsAtom} from '#lib/state.ts'
-import type {AgentEntry, ProjectEntry} from '#rpcs/contracts.ts'
-import {BranchesSnapshot} from '#rpcs/contracts.ts'
 
 export const Route = createFileRoute('/(home)')({
 	validateSearch: Schema.toStandardSchemaV1(
@@ -63,10 +63,10 @@ const branchesAtom = Atom.family((cwd: string) => {
 				Effect.flatMap(client => {
 					return String.isNonEmpty(cwd)
 						? client('projects.branches', {cwd})
-						: Effect.succeed(new BranchesSnapshot({branches: [], defaultBranch: 'main'}))
+						: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
 				})
 			),
-			{initialValue: new BranchesSnapshot({branches: [], defaultBranch: 'main'})}
+			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
 		)
 	)
 })
@@ -173,12 +173,12 @@ function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) 
 }
 
 function WorktreeManager(input: {
-	readonly agents: readonly AgentEntry[]
-	readonly activeProject: ProjectEntry | undefined
-	readonly activeWorktree: ProjectEntry['worktrees'][number] | undefined
-	readonly activeAgentId: string | undefined
+	readonly agents: readonly AgentKey[]
+	readonly activeProject?: GitProject
+	readonly activeWorktree?: GitProject['worktrees'][number]
+	readonly activeAgentId?: string
 	readonly activeView: 'thread' | 'diff' | 'terminal'
-	readonly projects: readonly ProjectEntry[]
+	readonly projects: readonly GitProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
@@ -187,7 +187,7 @@ function WorktreeManager(input: {
 	const setDraftAgents = useAtomSet(draftAgentsAtom)
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const createAgent = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
-	const archiveAgent = useAtomSet(RpcClient.mutation('agent.archive'), {mode: 'promise'})
+	const deleteAgent = useAtomSet(RpcClient.mutation('agent.delete'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const [branch, setBranch] = useState('')
 	const [switcherValue, setSwitcherValue] = useState('')
@@ -265,15 +265,14 @@ function WorktreeManager(input: {
 	async function createFastAgent(layer: typeof AgentId.Type) {
 		const agent = await createAgent({
 			payload: {
-				layer,
-				projectRoot: input.activeProject?.repository.root ?? '',
-				worktreeRoot: input.activeWorktree?.root ?? ''
+				agent: layer,
+				cwd: input.activeWorktree?.root ?? ''
 			}
 		})
 
 		setActionsOpen(false)
-		setDraftAgents(draftAgents => ({...draftAgents, [agent.agentId]: agent}))
-		input.selectAgent(input.activeWorktree?.root ?? '', agent.agentId)
+		setDraftAgents(draftAgents => ({...draftAgents, [agent.id]: agent}))
+		input.selectAgent(input.activeWorktree?.root ?? '', agent.id)
 	}
 
 	return (
@@ -340,32 +339,28 @@ function WorktreeManager(input: {
 							{Array.map(input.agents, agent => {
 								const worktreeLabel = pipe(
 									input.projects,
-									Array.findFirst(candidate => candidate.repository.root === agent.projectRoot),
-									Option.flatMap(project => {
-										return Array.findFirst(project.worktrees, candidate => candidate.root === agent.worktreeRoot)
+									Array.findFirst(project => {
+										return Array.some(project.worktrees, worktree => worktree.root === agent.cwd)
 									}),
-									Option.map(worktree => worktree.branch ?? pathLabel(agent.worktreeRoot)),
-									Option.getOrElse(() => pathLabel(agent.worktreeRoot))
+									Option.flatMap(project => {
+										return Array.findFirst(project.worktrees, candidate => candidate.root === agent.cwd)
+									}),
+									Option.map(worktree => worktree.branch ?? pathLabel(agent.cwd)),
+									Option.getOrElse(() => pathLabel(agent.cwd))
 								)
 
 								return (
 									<CommandItem
-										key={agent.agentId}
-										value={`agent:${agent.agentId}`}
-										keywords={[
-											worktreeLabel,
-											agent.layer,
-											agent.agentId,
-											pathLabel(agent.projectRoot),
-											agent.firstPromptPreview ?? ''
-										]}
+										key={agent.id}
+										value={`agent:${agent.id}`}
+										keywords={[worktreeLabel, agent.agent, agent.id]}
 										onSelect={() => {
 											setSwitcherOpen(false)
-											input.selectAgent(agent.worktreeRoot, agent.agentId)
+											input.selectAgent(agent.cwd, agent.id)
 										}}
 									>
-										<AgentIcon layer={agent.layer} className="size-3.5" />
-										<span className="min-w-0 truncate">{agent.firstPromptPreview ?? 'thread'}</span>
+										<AgentIcon layer={agent.agent} className="size-3.5" />
+										<span className="min-w-0 truncate">thread</span>
 										<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
 											{worktreeLabel}
 										</CommandShortcut>
@@ -507,10 +502,7 @@ function WorktreeManager(input: {
 								</div>
 								<ul className="flex flex-col gap-px border-muted-foreground/20 border-l" style={{marginLeft: 15}}>
 									{Array.map(project.worktrees, worktree => {
-										const worktreeAgents = Array.filter(
-											input.agents,
-											agent => agent.projectRoot === project.repository.root && agent.worktreeRoot === worktree.root
-										)
+										const worktreeAgents = Array.filter(input.agents, agent => agent.cwd === worktree.root)
 										return (
 											<li key={worktree.root} className="w-full min-w-0">
 												<TreeExplorerRow
@@ -569,27 +561,26 @@ function WorktreeManager(input: {
 														style={{marginLeft: 15}}
 													>
 														{Array.map(worktreeAgents, agent => (
-															<li key={agent.agentId} className="w-full min-w-0">
+															<li key={agent.id} className="w-full min-w-0">
 																<TreeExplorerRow
-																	icon={<AgentIcon layer={agent.layer} className="size-3.5" />}
+																	icon={<AgentIcon layer={agent.agent} className="size-3.5" />}
 																	actions={
 																		<div className="flex items-center gap-1">
-																			<StatusIcon state={agent.status.state} className="shrink-0" />
 																			<Button
 																				variant="ghost"
 																				size="icon-xs"
 																				className="h-5 w-5 rounded-none opacity-60 hover:opacity-100"
 																				onClick={async event => {
 																					event.stopPropagation()
-																					await archiveAgent({payload: {agentId: agent.agentId}})
+																					await deleteAgent({payload: {key: agent}})
 																					pipe(
 																						input.agents,
-																						Array.filter(candidate => candidate.agentId !== agent.agentId),
+																						Array.filter(candidate => candidate.id !== agent.id),
 																						Array.head,
 																						Option.match({
 																							onNone: () => undefined,
 																							onSome: nextAgent => {
-																								return input.selectAgent(nextAgent.worktreeRoot, nextAgent.agentId)
+																								return input.selectAgent(nextAgent.cwd, nextAgent.id)
 																							}
 																						})
 																					)
@@ -599,12 +590,10 @@ function WorktreeManager(input: {
 																			</Button>
 																		</div>
 																	}
-																	selected={input.activeAgentId === agent.agentId}
-																	onClick={() => input.selectAgent(worktree.root, agent.agentId)}
+																	selected={input.activeAgentId === agent.id}
+																	onClick={() => input.selectAgent(worktree.root, agent.id)}
 																>
-																	<span className="min-w-0 flex-1 truncate">
-																		{agent.firstPromptPreview ?? 'thread'}
-																	</span>
+																	<span className="min-w-0 flex-1 truncate">thread</span>
 																</TreeExplorerRow>
 															</li>
 														))}

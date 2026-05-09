@@ -56,6 +56,13 @@ function join(left: string, right: string) { return \`\${left}\${separator}\${ri
 `
 	})
 })
+test('no-inlineable-literal-constant reports const asserted one-property objects', () => {
+	return expectRule({
+		rule: 'no-inlineable-literal-constant',
+		source:
+			'function view(activeHome: { readonly value: { readonly activeWorktree: { readonly root: string } } }) { const input = {cwd: activeHome.value.activeWorktree.root} as const; return input.cwd }\n'
+	})
+})
 test('prefer-pipe-for-transform-sequences', () => {
 	return expectRule({
 		rule: 'prefer-pipe-for-transform-sequences',

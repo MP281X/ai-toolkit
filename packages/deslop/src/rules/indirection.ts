@@ -6,6 +6,8 @@ import {
 	bindingNames,
 	callName,
 	isBooleanExpression,
+	isConstAssertion,
+	isHookCall,
 	isPipeCall,
 	isReactHookTupleCall,
 	normalizedText,
@@ -107,20 +109,26 @@ export const indirectionRules = [
 			context.report(
 				node.name,
 				'no-inlineable-literal-constant',
-				`"${node.name.text}" is an inlineable literal constant. Put the literal directly at each use site and delete the constant.`
+				`"${node.name.text}" only names a simple literal. Inline the literal at each use and delete the const.`
 			)
 		}
 		if (ts.isArrayLiteralExpression(node.initializer) && node.initializer.elements.length <= 5) {
 			context.report(
 				node.name,
 				'no-inlineable-literal-constant',
-				`"${node.name.text}" is a small array literal. Put the array literal directly at each use site and delete the constant.`
+				`"${node.name.text}" only names a small array. Inline the array at each use and delete the const.`
 			)
 		}
+		const initializer =
+			ts.isAsExpression(node.initializer) &&
+			isConstAssertion(node.initializer) &&
+			ts.isExpression(node.initializer.expression)
+				? node.initializer.expression
+				: node.initializer
 		if (
-			ts.isObjectLiteralExpression(node.initializer) &&
-			(node.initializer.properties.length <= 5 ||
-				Array.every(node.initializer.properties, property => {
+			ts.isObjectLiteralExpression(initializer) &&
+			(initializer.properties.length <= 5 ||
+				Array.every(initializer.properties, property => {
 					return (
 						ts.isShorthandPropertyAssignment(property) ||
 						(ts.isPropertyAssignment(property) && ts.isIdentifier(property.initializer))
@@ -130,7 +138,7 @@ export const indirectionRules = [
 			context.report(
 				node.name,
 				'no-inlineable-literal-constant',
-				`"${node.name.text}" is an inlineable object literal. Put the object literal directly at each use site and delete the constant.`
+				`"${node.name.text}" only names a small object. Inline the object fields at each use and delete the const.`
 			)
 		}
 	}),
@@ -138,6 +146,7 @@ export const indirectionRules = [
 		if (!ts.isBlock(node)) return
 		const chain = linearVariableChain(node, declaration => countIdentifierUses(node, declaration.name.text) === 2)
 		if (chain.length < 2 || !chain[0]) return
+		if (isHookCall(chain[0].initializer)) return
 		context.report(
 			chain[0].name,
 			'prefer-pipe-for-transform-sequences',

@@ -136,6 +136,14 @@ export const typeSafetyRules = [
 			)
 		}
 	}),
+	rule('prefer-optional-property', (node, context) => {
+		if (!(ts.isPropertySignature(node) && node.type && typeNodeIncludesUndefined(node.type))) return
+		context.report(
+			node.name,
+			'prefer-optional-property',
+			`"${node.name.getText(context.sourceFile)}" uses "| undefined" for an object property. Use "?" on the property and remove undefined from the type.`
+		)
+	}),
 	rule('no-any', (node, context) => {
 		if (ts.isTypeNode(node) && node.kind === ts.SyntaxKind.AnyKeyword) {
 			context.report(
@@ -259,6 +267,33 @@ export const typeSafetyRules = [
 			return
 		}
 	}),
+	rule('no-accessor-type-alias', (node, context) => {
+		if (ts.isModuleDeclaration(node) && hasModifier(node, ts.SyntaxKind.ExportKeyword)) {
+			if (!hasModifier(node, ts.SyntaxKind.DeclareKeyword)) {
+				context.report(
+					node.name,
+					'no-accessor-type-alias',
+					'Runtime namespaces are banned. Use export declare namespace only for same-name type companions.'
+				)
+			}
+			return
+		}
+		if (!ts.isTypeAliasDeclaration(node)) return
+		if (!containsAccessorType(node.type)) return
+		if (
+			containsNode(node.type, child => {
+				return ts.isTypeQueryNode(child) && entityNameRoot(child.exprName) === node.name.text
+			}) &&
+			containsAccessorType(node.type)
+		) {
+			return
+		}
+		context.report(
+			node.name,
+			'no-accessor-type-alias',
+			`"${node.name.text}" re-exports an accessor type. Import and use the source type directly, unless this is a same-name companion using typeof ${node.name.text}.`
+		)
+	}),
 	rule('no-redundant-type-system-check', (node, context) => {
 		if (!context.checker) return
 		if (
@@ -324,7 +359,7 @@ export const typeSafetyRules = [
 				context.report(
 					node.name,
 					'no-floating-type-contract',
-					`"${node.name.text}" is a named type with only local or single use. Move the shape to its use site and delete the named type.`
+					`"${node.name.text}" is a local type alias with too little reuse. Inline the shape at the use site, or export it if it is a real boundary.`
 				)
 			}
 		}
@@ -334,7 +369,7 @@ export const typeSafetyRules = [
 			context.report(
 				node.type,
 				'no-broad-literal-annotation',
-				'This literal annotation widens keys or values. Remove the annotation, keep the literal, and use as const with satisfies if a shape check is needed.'
+				'This annotates a literal and widens it. Remove the annotation; use as const with satisfies only when a shape check is needed.'
 			)
 		}
 	}),
@@ -353,6 +388,29 @@ export const typeSafetyRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
+
+function typeNodeIncludesUndefined(node: ts.TypeNode): boolean {
+	if (node.kind === ts.SyntaxKind.UndefinedKeyword) return true
+	if (ts.isUnionTypeNode(node)) return Array.some(node.types, typeNodeIncludesUndefined)
+	if (ts.isParenthesizedTypeNode(node)) return typeNodeIncludesUndefined(node.type)
+	return false
+}
+
+function containsAccessorType(node: ts.TypeNode) {
+	if (ts.isTypeQueryNode(node) || ts.isIndexedAccessTypeNode(node)) return true
+	if (ts.isTypeReferenceNode(node)) {
+		return ts.isQualifiedName(node.typeName) || Array.some(node.typeArguments ?? [], containsAccessorType)
+	}
+	if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) return Array.some(node.types, containsAccessorType)
+	if (ts.isArrayTypeNode(node)) return containsAccessorType(node.elementType)
+	if (ts.isTypeOperatorNode(node)) return containsAccessorType(node.type)
+	if (ts.isParenthesizedTypeNode(node)) return containsAccessorType(node.type)
+	return false
+}
+
+function entityNameRoot(node: ts.EntityName): string {
+	return ts.isIdentifier(node) ? node.text : entityNameRoot(node.left)
+}
 
 function isRecursiveEffectFnUntracedVariable(node: ts.VariableDeclaration) {
 	if (!(ts.isIdentifier(node.name) && node.initializer)) return false

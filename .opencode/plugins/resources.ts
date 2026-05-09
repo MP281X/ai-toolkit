@@ -1,7 +1,7 @@
 import {BunServices} from '@effect/platform-bun'
 import {Effect, pipe} from 'effect'
 
-import {Git} from '@ai-toolkit/git/service'
+import {GitWorkspace} from '@ai-toolkit/git/service'
 import type {Plugin} from '@opencode-ai/plugin'
 
 export const plugin = (async context => {
@@ -55,7 +55,7 @@ export const plugin = (async context => {
 					}
 				] as const,
 				Effect.fnUntraced(function* (resource) {
-					yield* Git.use(git => {
+					yield* GitWorkspace.use(git => {
 						return git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
 					})
 					yield* Effect.sync(() => {
@@ -74,7 +74,7 @@ export const plugin = (async context => {
 					context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
 			}),
-			Effect.provide(Git.layer),
+			Effect.provide(GitWorkspace.layer),
 			Effect.provide(BunServices.layer)
 		)
 	)

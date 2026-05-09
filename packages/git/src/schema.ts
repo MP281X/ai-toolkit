@@ -28,6 +28,11 @@ export class GitBranch extends Schema.Class<GitBranch>('GitBranch')({
 	type: Schema.Literals(['local', 'remote'])
 }) {}
 
+export class GitBranchesSnapshot extends Schema.Class<GitBranchesSnapshot>('GitBranchesSnapshot')({
+	branches: Schema.Array(GitBranch),
+	defaultBranch: Schema.String
+}) {}
+
 export class GitWorktreeStatus extends Schema.Class<GitWorktreeStatus>('GitWorktreeStatus')({
 	ahead: Schema.Number,
 	behind: Schema.Number,
@@ -40,4 +45,9 @@ export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
 	branch: Schema.optional(Schema.String),
 	root: Schema.String,
 	status: Schema.optional(GitWorktreeStatus)
+}) {}
+
+export class GitProject extends Schema.Class<GitProject>('GitProject')({
+	repository: GitRepository,
+	worktrees: Schema.Array(GitWorktree)
 }) {}

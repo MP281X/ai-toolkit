@@ -40,16 +40,31 @@ test('prefer-top-level-rcmap', () => {
 			'import {Effect, RcMap} from "effect"\nconst program = Effect.gen(function* () { if (true) { const resources = yield* RcMap.make({ lookup: () => Effect.void }); return resources } })\n'
 	})
 })
+test('prefer-top-level-rcmap reports root effect generator rcmap constructors', () => {
+	return expectRule({
+		rule: 'prefer-top-level-rcmap',
+		typed: true,
+		source:
+			'import {Effect, RcMap} from "effect"\nexport const program = Effect.gen(function* () { const resources = yield* RcMap.make({ lookup: () => Effect.void }); return resources })\n'
+	})
+})
 test('prefer-top-level-rcmap allows top-level RcMap values', () => {
 	const rules = Array.map(
 		analyzeTypedText(
 			'sample.ts',
-			'import {Effect, RcMap} from "effect"\nconst resources = RcMap.make({ lookup: () => Effect.void })\nexport const program = Effect.gen(function* () { return yield* resources })\n'
+			'import {Effect, RcMap} from "effect"\nconst Resources = RcMap.make({ lookup: () => Effect.void })\nexport const program = Effect.gen(function* () { return yield* Resources })\n'
 		),
 		diagnostic => diagnostic.rule
 	)
 	expect(rules).not.toContain('prefer-top-level-rcmap')
 	expect(rules).not.toContain('no-access-alias')
+})
+test('prefer-top-level-rcmap reports lowercase top-level RcMap constructors', () => {
+	return expectRule({
+		rule: 'prefer-top-level-rcmap',
+		typed: true,
+		source: 'import {Effect, RcMap} from "effect"\nconst resources = RcMap.make({ lookup: () => Effect.void })\n'
+	})
 })
 test('prefer-effect-module-over-standard-library', () => {
 	return expectRule({

@@ -1,5 +1,5 @@
 import type {DateTime, Stream, SubscriptionRef} from 'effect'
-import {Context, Effect, flow, Layer, pipe} from 'effect'
+import {Context, Effect, flow, Layer, Match, pipe} from 'effect'
 
 import type {Response, Toolkit} from 'effect/unstable/ai'
 import {LanguageModel, Prompt} from 'effect/unstable/ai'
@@ -9,7 +9,7 @@ import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 import type {AgentToolKit} from '#tools/contracts.ts'
 import {makeLayerCodex} from './agents/codex.ts'
 import {makeLayerEffect} from './agents/effect.ts'
-import type {ModelId, ProviderId} from './catalog.ts'
+import type {AgentId, ModelId, ProviderId} from './catalog.ts'
 
 export class Agent extends Context.Service<
 	Agent,
@@ -25,6 +25,15 @@ export class Agent extends Context.Service<
 		}) => Stream.Stream<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>>
 	}
 >()('@ai-toolkit/ai/service/Agent') {
+	static layer(config: {readonly agent: AgentId; readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {
+		return pipe(
+			Match.value(config),
+			Match.when({agent: 'codex'}, input => Agent.layerCodex({cwd: input.cwd, systemPrompt: input.systemPrompt})),
+			Match.when({agent: 'effect'}, input => Agent.layerEffect({cwd: input.cwd, systemPrompt: input.systemPrompt})),
+			Match.exhaustive
+		)
+	}
+
 	static layerEffect = flow(makeLayerEffect, Layer.effect(this))
 	static layerCodex = flow(makeLayerCodex, Layer.effect(this))
 }

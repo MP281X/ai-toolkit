@@ -2,7 +2,7 @@ import {Array} from 'effect'
 
 import ts from 'typescript'
 
-import {containsNode} from '#lib/ts.ts'
+import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {isAllowedCallableValue, isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, rule} from './helpers.ts'
 
@@ -61,6 +61,23 @@ export const reactUiRules = [
 			)
 		}
 	}),
+	rule('prefer-hook-variable', (node, context) => {
+		if (!RegExp('\\.tsx$').test(context.filePath)) return
+		if (!isHookCall(node)) return
+		if (ts.isExpressionStatement(node.parent)) return
+		if (
+			ts.isVariableDeclaration(node.parent) &&
+			node.parent.initializer === node &&
+			(ts.isIdentifier(node.parent.name) || ts.isArrayBindingPattern(node.parent.name))
+		) {
+			return
+		}
+		context.report(
+			node,
+			'prefer-hook-variable',
+			`"${normalizedText(node)}" calls a hook inline. Assign the hook call to a const first, then use that const.`
+		)
+	}),
 	rule('prefer-composition-over-render-branching', (node, context) => {
 		if (
 			ts.isConditionalExpression(node) &&
@@ -94,7 +111,7 @@ export const reactUiRules = [
 			context.report(
 				node.operatorToken,
 				'no-property-mutation-outside-ref-current',
-				'This writes to a property outside ref.current. Derive a new value and pass it once, or move the mutation behind an explicit ref boundary.'
+				'This writes through a property. Use a local variable, return a new value, or keep mutable state behind ref.current.'
 			)
 		}
 		if (
@@ -107,7 +124,7 @@ export const reactUiRules = [
 			context.report(
 				node.expression.name,
 				'no-property-mutation-outside-ref-current',
-				'This mutates a collection outside ref.current. Replace it with an immutable update, or move the mutation behind an explicit ref boundary.'
+				'This mutates a nested collection. Store the collection in a local const, use an immutable update, or keep it behind ref.current.'
 			)
 		}
 	})
