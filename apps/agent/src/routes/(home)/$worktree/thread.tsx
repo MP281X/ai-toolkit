@@ -3,6 +3,7 @@ import {Array, Effect, Option, Predicate, pipe, Stream, String} from 'effect'
 
 import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
+import type {AgentEvent, AgentKey, AgentStatus} from '@ai-toolkit/ai/schema'
 import {compactAiParts} from '@ai-toolkit/ai/utils'
 import {Conversation} from '@ai-toolkit/components/conversation'
 import {
@@ -10,7 +11,6 @@ import {
 	ArrowUpIcon,
 	Brain,
 	ChevronRight,
-	FileIcon,
 	ProviderIcon,
 	SparklesIcon,
 	Square,
@@ -30,7 +30,6 @@ import {useEffect, useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom, selectedAgentAtom} from '#lib/state.ts'
-import type {AgentEntry, AgentEvent} from '#rpcs/contracts.ts'
 
 export const Route = createFileRoute('/(home)/$worktree/thread')({
 	component: ThreadPage
@@ -48,24 +47,12 @@ const agentStashedPrompts = new Map<
 	}[]
 >()
 
-const filesAtom = Atom.family((cwd: string) =>
+const agentEventsAtom = Atom.family((key: AgentKey) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient.asEffect(),
-				Effect.flatMap(client => client('files.search', {cwd}))
-			),
-			{initialValue: Array.empty<string>()}
-		)
-	)
-)
-
-const agentEventsAtom = Atom.family((agentId: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient.asEffect(),
-				Effect.map(client => client('agent.events', {agentId})),
+				Effect.map(client => client('agent.events', {key})),
 				Stream.unwrap,
 				Stream.scan(Array.empty<AgentEvent>(), (events, event) => [...events, event])
 			),
@@ -74,6 +61,18 @@ const agentEventsAtom = Atom.family((agentId: string) =>
 	)
 )
 
+const agentStatusAtom = Atom.family((key: AgentKey) => {
+	return Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient.asEffect(),
+				Effect.map(client => client('agent.status', {key})),
+				Stream.unwrap
+			)
+		)
+	)
+})
+
 function ThreadPage() {
 	const search = Route.useSearch()
 	const params = Route.useParams()
@@ -81,16 +80,17 @@ function ThreadPage() {
 	return <ThreadView threadId={search.threadId} />
 }
 
-function ThreadView(props: {threadId: string}) {
+function ThreadView(props: {readonly threadId: string}) {
 	const params = Route.useParams()
 	const activeWorktree = useAtomSuspense(activeHomeAtom(params.worktree)).value.activeWorktree
 	const selectedAgent = useAtomSuspense(selectedAgentAtom(props.threadId)).value
 	if (!(activeWorktree && selectedAgent)) return <Navigate to="/$worktree/diff" params={params} replace />
-	return <ThreadAgentPanel cwd={activeWorktree.root} selectedAgent={selectedAgent} />
+	return <ThreadAgentPanel selectedAgent={selectedAgent} />
 }
 
-function ThreadAgentPanel(input: {cwd: string; selectedAgent: AgentEntry}) {
-	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(input.selectedAgent.layer)))
+function ThreadAgentPanel(input: {selectedAgent: AgentKey}) {
+	const status = useAtomSuspense(agentStatusAtom(input.selectedAgent)).value
+	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(input.selectedAgent.agent)))
 	const [agentModel, setAgentModel] = useState(`${availableModels[0]?.provider}:${availableModels[0]?.model}`)
 	const selectedModel = pipe(
 		availableModels,
@@ -101,19 +101,18 @@ function ThreadAgentPanel(input: {cwd: string; selectedAgent: AgentEntry}) {
 
 	return (
 		<AgentPanel
-			key={input.selectedAgent.agentId}
-			agentId={input.selectedAgent.agentId}
-			cwd={input.cwd}
-			layer={input.selectedAgent.layer}
+			key={input.selectedAgent.id}
+			agent={input.selectedAgent.agent}
+			agentKey={input.selectedAgent}
 			model={selectedModel.model}
 			provider={selectedModel.provider}
 			setModel={setAgentModel}
-			status={input.selectedAgent.status}
+			status={status}
 		/>
 	)
 }
 
-function AgentResponse(input: {parts: readonly AgentEvent[]}) {
+function AgentResponse(input: {readonly parts: readonly AgentEvent[]}) {
 	const effectiveParts = pipe(
 		input.parts,
 		Array.filter(event => event.type === 'agent-part'),
@@ -230,8 +229,8 @@ function AgentResponse(input: {parts: readonly AgentEvent[]}) {
 }
 
 function ToolPart(input: {
-	callPart?: Extract<ReturnType<typeof compactAiParts>[number], {type: 'tool-call'}>
-	resultPart?: Extract<ReturnType<typeof compactAiParts>[number], {type: 'tool-result'}>
+	readonly callPart?: Extract<ReturnType<typeof compactAiParts>[number], {readonly type: 'tool-call'}>
+	readonly resultPart?: Extract<ReturnType<typeof compactAiParts>[number], {readonly type: 'tool-result'}>
 }) {
 	const part = input.resultPart ?? input.callPart
 	if (!part) return
@@ -310,7 +309,7 @@ function getErrorText(value: unknown) {
 	)
 }
 
-function ToolField(input: {label: string; value: unknown}) {
+function ToolField(input: {readonly label: string; readonly value: unknown}) {
 	if (Predicate.isUndefined(input.value) || Predicate.isNull(input.value)) return
 	if (Predicate.isString(input.value) && String.isEmpty(input.value)) return
 
@@ -406,19 +405,17 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 }
 
 function AgentPanel(input: {
-	agentId: string
-	cwd: string
-	layer: AgentId
-	model: ModelId
-	provider: ProviderId
-	setModel: (model: string) => void
-	status: AgentEntry['status']
+	readonly agent: AgentId
+	readonly agentKey: AgentKey
+	readonly model: ModelId
+	readonly provider: ProviderId
+	readonly setModel: (model: string) => void
+	readonly status: AgentStatus
 }) {
 	const inputRef = useRef<RichTextArea.Handle<{label: string}>>(null)
-	const files = useAtomSuspense(filesAtom(input.cwd)).value
-	const events = useAtomSuspense(agentEventsAtom(input.agentId)).value
+	const events = useAtomSuspense(agentEventsAtom(input.agentKey)).value
 	const [stashedPrompts, setStashedPrompts] = useState(
-		agentStashedPrompts.get(input.agentId) ??
+		agentStashedPrompts.get(input.agentKey.id) ??
 			Array.empty<{
 				id: string
 				model: ModelId
@@ -429,17 +426,13 @@ function AgentPanel(input: {
 	)
 	const runs = pipe(
 		events,
-		Array.reduce(
-			Array.empty<{id: string; prompt: string; runId: string; parts: readonly AgentEvent[]}>(),
-			(runs, event) => {
-				if (event.type === 'user-message')
-					return Array.append(runs, {id: event.runId, parts: [], prompt: event.prompt, runId: event.runId})
-				if (!Array.isArrayNonEmpty(runs)) return runs
-				const [previousRuns, currentRun] = Array.unappend(runs)
-				if (currentRun.runId !== event.runId) return runs
-				return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
-			}
-		)
+		Array.reduce(Array.empty<{id: string; prompt: string; parts: readonly AgentEvent[]}>(), (runs, event) => {
+			if (event.type === 'user-message')
+				return Array.append(runs, {id: `${Array.length(runs)}`, parts: [], prompt: event.prompt})
+			if (!Array.isArrayNonEmpty(runs)) return runs
+			const [previousRuns, currentRun] = Array.unappend(runs)
+			return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
+		})
 	)
 	const promptAgent = useAtomSet(RpcClient.mutation('agent.prompt'), {mode: 'promise'})
 	const stopAgent = useAtomSet(RpcClient.mutation('agent.stop'), {mode: 'promise'})
@@ -452,7 +445,7 @@ function AgentPanel(input: {
 			text: string
 		}[]
 	) {
-		agentStashedPrompts.set(input.agentId, prompts)
+		agentStashedPrompts.set(input.agentKey.id, prompts)
 		setStashedPrompts(prompts)
 	}
 
@@ -468,11 +461,10 @@ function AgentPanel(input: {
 
 		void promptAgent({
 			payload: {
-				agentId: input.agentId,
+				key: input.agentKey,
 				model: prompt.model,
 				prompt: prompt.text,
-				provider: prompt.provider,
-				runId: crypto.randomUUID()
+				provider: prompt.provider
 			}
 		})
 		inputRef.current?.clear()
@@ -489,9 +481,9 @@ function AgentPanel(input: {
 	useEffect(() => {
 		return () => {
 			const snapshot = inputRef.current?.getSnapshot()
-			if (snapshot && String.isNonEmpty(snapshot.text)) agentInputStates.set(input.agentId, snapshot)
+			if (snapshot && String.isNonEmpty(snapshot.text)) agentInputStates.set(input.agentKey.id, snapshot)
 		}
-	}, [input.agentId])
+	}, [input.agentKey.id])
 
 	return (
 		<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
@@ -543,7 +535,7 @@ function AgentPanel(input: {
 												const nextPrompts = Array.filter(stashedPrompts, savedPrompt => savedPrompt.id !== prompt.id)
 
 												setAgentStash(currentPrompt ? [...nextPrompts, currentPrompt] : nextPrompts)
-												agentInputStates.set(input.agentId, prompt.snapshot)
+												agentInputStates.set(input.agentKey.id, prompt.snapshot)
 												inputRef.current?.restore(prompt.snapshot)
 												input.setModel(`${prompt.provider}:${prompt.model}`)
 											}}
@@ -572,26 +564,10 @@ function AgentPanel(input: {
 					)}
 					<RichTextArea
 						ref={inputRef}
-						initialSnapshot={agentInputStates.get(input.agentId)}
+						initialSnapshot={agentInputStates.get(input.agentKey.id)}
 						onSubmit={submitPrompt}
-						placeholder="Send a message, type @ to attach files..."
-						options={{
-							'@': {
-								color: 'oklch(0.74 0.12 220)',
-								values: pipe(
-									files,
-									Array.map(label => ({label}))
-								)
-							}
-						}}
-					>
-						{entry => (
-							<>
-								<FileIcon filePath={entry.value.label} className="size-3.5" />
-								<span className="min-w-0 truncate">{entry.value.label}</span>
-							</>
-						)}
-					</RichTextArea>
+						placeholder="Send a message..."
+					/>
 					<RichTextArea.ToolBar>
 						<div className="flex w-full items-center gap-2">
 							<Select
@@ -609,7 +585,7 @@ function AgentPanel(input: {
 								<SelectContent>
 									{pipe(
 										models,
-										Array.filter(model => pipe(model.agents, Array.contains(input.layer))),
+										Array.filter(model => pipe(model.agents, Array.contains(input.agent))),
 										Array.map(model => (
 											<SelectItem key={`${model.provider}:${model.model}`} value={`${model.provider}:${model.model}`}>
 												<ProviderIcon provider={model.provider} className="size-3" />
@@ -629,7 +605,7 @@ function AgentPanel(input: {
 									className="rounded-none"
 									disabled={input.status.state === 'idle'}
 									onClick={() => {
-										void stopAgent({payload: {agentId: input.agentId}})
+										void stopAgent({payload: {key: input.agentKey}})
 									}}
 								>
 									<Square className="size-3.5 fill-current" />

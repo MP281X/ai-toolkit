@@ -58,6 +58,12 @@ test('prefer-undefined-over-null reports non-ref current assignments', () => {
 		source: 'function reset(state: { readonly current: string | undefined }) { state.current = null }\n'
 	})
 })
+test('prefer-optional-property reports undefined property unions', () => {
+	return expectRule({
+		rule: 'prefer-optional-property',
+		source: 'type Props = { readonly activeProject: GitProject | undefined }\n'
+	})
+})
 test('no-any', () => {
 	return expectRule({rule: 'no-any', source: 'function parse(value: any) { return value }\n'})
 })
@@ -117,6 +123,26 @@ test('no-unnecessary-type-constraint', () => {
 	return expectRule({
 		rule: 'no-unnecessary-type-constraint',
 		source: 'function identity<T extends unknown>(value: T) { return value }\n'
+	})
+})
+test('no-accessor-type-alias reports schema type re-export aliases', () => {
+	return expectRule({
+		rule: 'no-accessor-type-alias',
+		source:
+			'import {TerminalEvent as TerminalEventSchema} from "@ai-toolkit/terminal/schema"\nexport type TerminalEvent = typeof TerminalEventSchema.Type\n'
+	})
+})
+test('no-accessor-type-alias allows companion type aliases', () => {
+	const diagnostics = analyzeTypedText(
+		'sample.ts',
+		'export type TerminalEvent = typeof TerminalEvent.Type\nexport const TerminalEvent = { Type: "" }\n'
+	)
+	expect(Array.map(diagnostics, diagnostic => diagnostic.rule)).not.toContain('no-accessor-type-alias')
+})
+test('no-accessor-type-alias reports exported runtime namespaces', () => {
+	return expectRule({
+		rule: 'no-accessor-type-alias',
+		source: 'export namespace DevTools { export function Navigation() { return null } }\n'
 	})
 })
 test('no-redundant-type-system-check', () => {

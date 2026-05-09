@@ -35,6 +35,14 @@ test('no-react-use-state-lazy-initializer', () => {
 		filePath: 'sample.tsx'
 	})
 })
+test('prefer-hook-variable reports property-access hook calls inside expressions', () => {
+	return expectRule({
+		rule: 'prefer-hook-variable',
+		filePath: 'sample.tsx',
+		source:
+			'const Route = { useParams() { return { worktree: "one" } } }\ndeclare function activeHomeAtom(id: string): string\ndeclare function useAtomSuspense(value: string): string\nfunction View() { const activeHome = useAtomSuspense(activeHomeAtom(Route.useParams().worktree)); return activeHome }\n'
+	})
+})
 test('prefer-composition-over-render-branching', () => {
 	return expectRule({
 		rule: 'prefer-composition-over-render-branching',

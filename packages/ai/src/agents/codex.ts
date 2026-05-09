@@ -11,6 +11,7 @@ import {Agent} from '../service.ts'
 type StreamPart = Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>
 
 export const makeLayerCodex = Effect.fnUntraced(function* (config: {
+	readonly cwd: string
 	readonly sessionId?: string
 	readonly systemPrompt: Prompt.SystemMessage
 }) {
@@ -18,12 +19,12 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 		? new Codex().resumeThread(config.sessionId, {
 				model: undefined,
 				sandboxMode: 'workspace-write',
-				workingDirectory: process.cwd()
+				workingDirectory: config.cwd
 			})
 		: new Codex().startThread({
 				model: undefined,
 				sandboxMode: 'workspace-write',
-				workingDirectory: process.cwd()
+				workingDirectory: config.cwd
 			})
 	const status = yield* SubscriptionRef.make<{
 		readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'

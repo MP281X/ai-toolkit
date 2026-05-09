@@ -10,6 +10,7 @@
 
 	"exports": {
 		"./service": "./src/service.ts",
+		"./schema": "./src/schema.ts",
 		"./tools": "./src/tools/contracts.ts",
 		"./utils": "./src/lib/utils.ts",
 		"./catalog": "./src/catalog.ts"

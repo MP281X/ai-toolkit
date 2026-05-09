@@ -10,7 +10,7 @@ import {WebFetchToolKit, WebSearchToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 import {Agent} from '../service.ts'
 
-export function makeLayerEffect(config: {readonly systemPrompt: Prompt.SystemMessage}) {
+export function makeLayerEffect(config: {readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {
 	return pipe(
 		Effect.gen(function* () {
 			const services = yield* Effect.context<

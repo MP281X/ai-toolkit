@@ -1,22 +1,20 @@
-import {Context, Duration, Effect, Layer, pipe, Queue, RcMap, Stream} from 'effect'
+import {Context, Effect, flow, Layer, pipe, Queue, Stream} from 'effect'
 
 import {SerializeAddon} from '@xterm/addon-serialize'
 import {Terminal as HeadlessTerminal} from '@xterm/headless'
 
-const terminalSessions = RcMap.make({
-	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (key: string) {
+import type {TerminalEvent} from './schema.ts'
+import {TerminalError} from './schema.ts'
+
+export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/service/Terminal', {
+	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		let cols = 120
 		let rows = 32
 		let processHandle: ReturnType<typeof Bun.spawn> | undefined
 		const decoder = new TextDecoder()
 		let screenParsed = Promise.resolve()
-		const readySubscribers = new WeakSet<{
-			readonly queue: Queue.Queue<{readonly data: string; readonly type: 'data' | 'snapshot'}>
-		}>()
-		const subscribers = new Set<{
-			readonly queue: Queue.Queue<{readonly data: string; readonly type: 'data' | 'snapshot'}>
-		}>()
+		const readySubscribers = new WeakSet<Queue.Queue<TerminalEvent>>()
+		const subscribers = new Set<Queue.Queue<TerminalEvent>>()
 		const screen = new HeadlessTerminal({allowProposedApi: true, cols, rows, scrollback: 10_000})
 		const serialize = new SerializeAddon()
 		screen.loadAddon(serialize)
@@ -33,28 +31,31 @@ const terminalSessions = RcMap.make({
 			Effect.forever(
 				Effect.gen(function* () {
 					const subprocess = yield* Effect.acquireRelease(
-						Effect.sync(() => {
-							const subprocess = Bun.spawn([process.env['SHELL'] ?? 'bash'], {
-								cwd: key.split('\u0000')[1] ?? '',
-								env: {...process.env, TERM: 'xterm-256color'},
-								terminal: {
-									cols,
-									data: (_terminal, data) => {
-										const text = decoder.decode(data, {stream: true})
-										screenParsed = new Promise(resolve => {
-											screen.write(text, resolve)
-										})
-										for (const subscriber of subscribers) {
-											if (readySubscribers.has(subscriber)) {
-												Queue.offerUnsafe(subscriber.queue, {data: text, type: 'data'})
+						Effect.try({
+							try: () => {
+								const subprocess = Bun.spawn([process.env['SHELL'] ?? 'bash'], {
+									cwd: config.cwd,
+									env: {...process.env, TERM: 'xterm-256color'},
+									terminal: {
+										cols,
+										data: (_terminal, data) => {
+											const text = decoder.decode(data, {stream: true})
+											screenParsed = new Promise(resolve => {
+												screen.write(text, resolve)
+											})
+											for (const subscriber of subscribers) {
+												if (readySubscribers.has(subscriber)) {
+													Queue.offerUnsafe(subscriber, {data: text, type: 'data'})
+												}
 											}
-										}
-									},
-									rows
-								}
-							})
-							processHandle = subprocess
-							return subprocess
+										},
+										rows
+									}
+								})
+								processHandle = subprocess
+								return subprocess
+							},
+							catch: cause => new TerminalError({message: `failed to spawn terminal in ${config.cwd}`, cause})
 						}),
 						subprocess => {
 							return Effect.sync(() => {
@@ -65,16 +66,12 @@ const terminalSessions = RcMap.make({
 					)
 
 					yield* Effect.promise(() => subprocess.exited)
-					yield* Effect.sleep(Duration.millis(250))
+					yield* Effect.sleep('250 millis')
 				})
 			)
 		)
 
-		const shutdown = Effect.sync(() => {
-			decoder.decode()
-		})
-
-		yield* Effect.addFinalizer(() => shutdown)
+		yield* Effect.addFinalizer(() => Effect.sync(() => decoder.decode()))
 
 		return {
 			events: Stream.scoped(
@@ -82,17 +79,16 @@ const terminalSessions = RcMap.make({
 					pipe(
 						Effect.acquireRelease(
 							pipe(
-								Queue.unbounded<{readonly data: string; readonly type: 'data' | 'snapshot'}>(),
+								Queue.unbounded<TerminalEvent>(),
 								Effect.tap(() => waitForScreen),
 								Effect.map(queue => {
-									const subscriber = {queue} as const
-									subscribers.add(subscriber)
-									Queue.offerUnsafe(subscriber.queue, {
+									subscribers.add(queue)
+									Queue.offerUnsafe(queue, {
 										data: serialize.serialize({scrollback: 10_000}),
 										type: 'snapshot'
 									})
-									readySubscribers.add(subscriber)
-									return subscriber
+									readySubscribers.add(queue)
+									return queue
 								})
 							),
 							subscriber => {
@@ -101,13 +97,13 @@ const terminalSessions = RcMap.make({
 										Effect.sync(() => {
 											subscribers.delete(subscriber)
 										}),
-										Queue.shutdown(subscriber.queue)
+										Queue.shutdown(subscriber)
 									],
 									{discard: true}
 								)
 							}
 						),
-						Effect.map(subscriber => Stream.fromQueue(subscriber.queue))
+						Effect.map(Stream.fromQueue)
 					)
 				)
 			),
@@ -123,39 +119,6 @@ const terminalSessions = RcMap.make({
 			write: (data: string) => Effect.sync(() => processHandle?.terminal?.write(data))
 		}
 	})
-})
-
-export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/service/Terminal', {
-	make: Effect.gen(function* () {
-		const sessions = yield* terminalSessions
-
-		return {
-			events: (input: {readonly cwd: string; readonly id: string}) => {
-				return Stream.unwrap(
-					pipe(
-						RcMap.get(sessions, `${input.id}\u0000${input.cwd}`),
-						Effect.map(session => session.events)
-					)
-				)
-			},
-			resize: (input: {readonly cols: number; readonly cwd: string; readonly id: string; readonly rows: number}) => {
-				return Effect.scoped(
-					Effect.gen(function* () {
-						const session = yield* RcMap.get(sessions, `${input.id}\u0000${input.cwd}`)
-						yield* session.resize({cols: input.cols, rows: input.rows})
-					})
-				)
-			},
-			write: (input: {readonly cwd: string; readonly data: string; readonly id: string}) => {
-				return Effect.scoped(
-					Effect.gen(function* () {
-						const session = yield* RcMap.get(sessions, `${input.id}\u0000${input.cwd}`)
-						yield* session.write(input.data)
-					})
-				)
-			}
-		}
-	})
 }) {
-	static layer = Layer.effect(this, this.make)
+	static layer = flow(this.make, Layer.effect(this))
 }

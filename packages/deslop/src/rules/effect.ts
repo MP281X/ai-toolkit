@@ -1,4 +1,4 @@
-import {Array, String} from 'effect'
+import {Array, Option, String} from 'effect'
 
 import ts from 'typescript'
 
@@ -60,7 +60,7 @@ export const effectRules = [
 		context.report(
 			node.expression,
 			'no-floating-effect',
-			'This Effect is created and then ignored. Yield it inside an Effect generator, compose it into another Effect, assign it for later composition, or run it only at a configured boundary.'
+			'This Effect is not used. Add yield* inside Effect.gen, return it from the current Effect, or run it at an approved boundary.'
 		)
 	}),
 	rule('prefer-top-level-pipe-for-effect-values', (node, context) => {
@@ -87,11 +87,25 @@ export const effectRules = [
 	}),
 	rule('prefer-top-level-rcmap', (node, context) => {
 		if (!isRcMapConstructorCall(context.checker, node)) return
-		if (isRootRcMapConstructor(node)) return
+		const rootDeclaration = rootRcMapConstructorDeclaration(node)
+		if (rootDeclaration) {
+			if (
+				ts.isIdentifier(rootDeclaration.name) &&
+				rootDeclaration.name.text[0] !== undefined &&
+				rootDeclaration.name.text[0] !== String.toUpperCase(rootDeclaration.name.text[0])
+			) {
+				context.report(
+					rootDeclaration.name,
+					'prefer-top-level-rcmap',
+					'RcMap constructor consts must start with an uppercase letter. Rename this top-level RcMap value to PascalCase.'
+				)
+			}
+			return
+		}
 		context.report(
 			node,
 			'prefer-top-level-rcmap',
-			'This creates an RcMap away from the root scope. Move RcMap.make(...) to a module-level value or a root Effect generator statement, then use RcMap.get/invalidate locally.'
+			'RcMap.make must be module-scoped. Move this constructor to a top-level const and keep RcMap.get/invalidate at the use site.'
 		)
 	}),
 	rule('prefer-effect-module-over-standard-library', (node, context) => {
@@ -106,7 +120,7 @@ export const effectRules = [
 				context.report(
 					node.expression.name,
 					'prefer-effect-module-over-standard-library',
-					`This calls ${module}.prototype.${node.expression.name.text}. Use the matching Effect module function directly, or compose multiple module functions inside pipe(...).`
+					`This calls ${module}.prototype.${node.expression.name.text}. Use ${module}.${node.expression.name.text} in pipe(...) instead.`
 				)
 			}
 		}
@@ -119,7 +133,7 @@ export const effectRules = [
 				context.report(
 					node.expression.name,
 					'prefer-effect-module-over-standard-library',
-					`This calls Object.${node.expression.name.text}. Use the Effect module equivalent and keep the data flow explicit.`
+					`This calls Object.${node.expression.name.text}. Prefer the Effect collection module helper, or write the direct assignments when mutation is intentional.`
 				)
 			}
 		}
@@ -293,27 +307,12 @@ function isGlobalObjectConstructor(checker: ts.TypeChecker | undefined, receiver
 	return checker.typeToString(type) === 'ObjectConstructor'
 }
 
-function isRootRcMapConstructor(node: ts.Node) {
+function rootRcMapConstructorDeclaration(node: ts.Node) {
 	const statement = variableStatementContainingRcMapConstructor(node)
-	if (!statement) return false
-	if (
-		!Array.some(statement.declarationList.declarations, declaration => {
-			return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
-		})
-	) {
-		return false
-	}
-	if (ts.isSourceFile(statement.parent)) return true
-	return (
-		ts.isBlock(statement.parent) &&
-		ts.isFunctionExpression(statement.parent.parent) &&
-		ts.isCallExpression(statement.parent.parent.parent) &&
-		ts.isPropertyAccessExpression(statement.parent.parent.parent.expression) &&
-		ts.isIdentifier(statement.parent.parent.parent.expression.expression) &&
-		statement.parent.parent.parent.expression.expression.text === 'Effect' &&
-		statement.parent.parent.parent.expression.name.text === 'gen' &&
-		Array.contains(statement.parent.statements, statement)
-	)
+	if (!(statement && ts.isSourceFile(statement.parent))) return
+	return Array.findFirst(statement.declarationList.declarations, declaration => {
+		return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
+	}).pipe(Option.getOrUndefined)
 }
 
 function variableStatementContainingRcMapConstructor(node: ts.Node): ts.VariableStatement | undefined {

@@ -13,6 +13,7 @@ import {
 	isEffectConstructorCall,
 	isEffectGenLikeCall,
 	isFlowCall,
+	isHookCall,
 	isImportedIdentifier,
 	isMatchCall,
 	isRcMapConstructorCall,
@@ -191,9 +192,7 @@ export function isExemptNamedValue(checker: ts.TypeChecker | undefined, node: ts
 			(isAtomConstructorCall(checker, node.initializer) || isRcMapConstructorCall(checker, node.initializer))) ||
 		isSchemaExpression(node.initializer) ||
 		isFlowCall(node.initializer) ||
-		(ts.isCallExpression(node.initializer) &&
-			ts.isIdentifier(node.initializer.expression) &&
-			String.match(RegExp('^use[A-Z]'))(node.initializer.expression.text)._tag === 'Some')
+		isHookCall(node.initializer)
 	)
 }
 
