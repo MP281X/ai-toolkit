@@ -66,7 +66,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		const getDefaultBranch = Effect.fnUntraced(function* (cwd: string) {
 			return yield* pipe(
 				git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
-				Effect.map(value => pipe(value, String.trim, String.replace(RegExp('^origin/'), ''))),
+				Effect.map(flow(String.trim, String.replace(RegExp('^origin/'), ''))),
 				Effect.catchTag('GitError', () => {
 					return pipe(
 						git.string(cwd, ['rev-parse', '--verify', 'main']),
@@ -80,7 +80,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		const getWorktreeStatus = Effect.fnUntraced(function* (cwd: string, branch?: string) {
 			const counts = yield* pipe(
 				git.string(cwd, ['rev-list', '--left-right', '--count', `origin/${branch ?? ''}...HEAD`]),
-				Effect.map(value => pipe(value, String.trim, String.split(RegExp('\\s+')))),
+				Effect.map(flow(String.trim, String.split(RegExp('\\s+')))),
 				Effect.orElseSucceed(() => ['0', '0'])
 			)
 			const ahead = Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0)
@@ -286,27 +286,19 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		)
 
 		return {
-			clone: Effect.fnUntraced(function* (input: {
-				readonly cwd?: string
-				readonly directory: string
-				readonly url: string
-			}) {
+			clone: Effect.fnUntraced(function* (input) {
 				const targetDirectory = path.isAbsolute(input.directory)
 					? input.directory
-					: path.join(input.cwd ?? (yield* fs.realPath(process.env['HOME'] ?? '/home')), input.directory)
+					: path.join(input.cwd, input.directory)
 
 				yield* pipe(fs.makeDirectory(targetDirectory, {recursive: true}), Effect.ignore)
 
 				yield* pipe(
-					fs.realPath(process.env['HOME'] ?? '/home'),
-					Effect.orElseSucceed(() => '/home'),
-					Effect.flatMap(homeRoot => {
-						return execString(
-							ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', input.url, targetDirectory], {
-								cwd: input.cwd ?? homeRoot
-							})
-						)
-					}),
+					execString(
+						ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', input.url, targetDirectory], {
+							cwd: input.cwd
+						})
+					),
 					Effect.asVoid,
 					Effect.catch(() => {
 						return pipe(
@@ -319,7 +311,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					})
 				)
 			}),
-			branches: Effect.fnUntraced(function* (cwd: string) {
+			branches: Effect.fnUntraced(function* (cwd) {
 				return new GitBranchesSnapshot({
 					branches: yield* pipe(
 						git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
@@ -348,12 +340,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					defaultBranch: yield* getDefaultBranch(cwd)
 				})
 			}),
-			createWorktree: Effect.fnUntraced(function* (input: {
-				readonly baseBranch: string
-				readonly branch: string
-				readonly cwd: string
-				readonly mode: 'existing-local' | 'existing-remote' | 'new-local'
-			}) {
+			createWorktree: Effect.fnUntraced(function* (input) {
 				const targetDirectory = path.join(
 					process.env['HOME'] ?? input.cwd,
 					'.ai-toolkit',
@@ -386,7 +373,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 				yield* refreshProjects()
 				return targetDirectory
 			}),
-			deleteWorktree: Effect.fnUntraced(function* (input: {readonly cwd: string; readonly force: boolean}) {
+			deleteWorktree: Effect.fnUntraced(function* (input) {
 				const worktree = yield* pipe(
 					git.lines(input.cwd, ['worktree', 'list', '--porcelain']),
 					Effect.map(lines => {
@@ -452,7 +439,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 }
 
 export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git/service/GitWorktree', {
-	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
+	make: Effect.fnUntraced(function* (config) {
 		const git = yield* makeGitExecutor
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path

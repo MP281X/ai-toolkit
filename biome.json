@@ -36,24 +36,9 @@
 				"noUnusedTemplateLiteral": "error",
 				"useImportType": { "level": "error", "options": { "style": "separatedType" } },
 				"useConsistentArrayType": { "level": "error", "options": { "syntax": "shorthand" } },
-				"noParameterAssign": { "level": "error", "options": { "propertyAssignment": "deny" } },
-				"noRestrictedGlobals": {
-					"level": "error",
-					"options": {
-						"deniedGlobals": {
-							"global": "",
-							"globalThis": "",
-							"location": "Use Tanstack router",
-							"Array": "Import Array from 'effect' instead",
-							"Option": "Import Option from 'effect' instead",
-							"Number": "Import Number from 'effect' instead",
-							"String": "Import String from 'effect' instead",
-							"Object": "Import Record from 'effect' instead",
-							"Boolean": "Import Boolean from 'effect' instead"
-						}
-					}
-				}
+				"noParameterAssign": { "level": "error", "options": { "propertyAssignment": "deny" } }
 			},
+			"performance": { "noBarrelFile": "error" },
 			"correctness": {
 				"useYield": "off",
 				"noChildrenProp": "off",
@@ -139,6 +124,10 @@
 		{
 			"includes": ["**/components/ui/**"],
 			"linter": { "enabled": false }
+		},
+		{
+			"includes": ["packages/components/src/components/icons.tsx"],
+			"linter": { "rules": { "performance": { "noBarrelFile": "off" } } }
 		}
 	]
 }

@@ -52,6 +52,10 @@ export const plugin = (async context => {
 					{
 						name: 'vscode',
 						url: 'https://github.com/microsoft/vscode'
+					},
+					{
+						name: 'effect-lsp',
+						url: 'https://github.com/Effect-TS/language-service'
 					}
 				] as const,
 				Effect.fnUntraced(function* (resource) {

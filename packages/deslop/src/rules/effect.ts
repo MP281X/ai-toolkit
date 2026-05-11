@@ -10,6 +10,7 @@ import {
 	isMatchCall,
 	isPipeCall,
 	isRcMapConstructorCall,
+	normalizedText,
 	returnedExpression,
 	typeLooksEffect
 } from '#lib/ts.ts'
@@ -18,13 +19,9 @@ import {
 	functionLikeName,
 	hasParameters,
 	isComposedEffectArgument,
-	isDataFirstEffectOperation,
 	isEffectModuleReceiver,
 	isEffectRunCall,
 	isNamedFunctionLike,
-	isNullishPredicateExpression,
-	isRuntimeBoundary,
-	isTailwindStringLiteral,
 	nameNode,
 	rule,
 	standardPrototypeMethods
@@ -35,55 +32,30 @@ export const effectRules = [
 		if (!(isNamedFunctionLike(node) && hasParameters(node) && context.checker)) return
 		const expression = returnedExpression(node)
 		if (expression && typeLooksEffect(context.checker, expression)) {
-			context.report(
-				nameNode(node),
-				'prefer-effect-fn-untraced',
-				`"${functionLikeName(node)}" takes arguments and returns an Effect wrapper. Rewrite the function value with Effect.fnUntraced, yield each Effect with yield*, and return plain values from the generator.`
-			)
+			context.report(nameNode(node), 'prefer-effect-fn-untraced', {
+				description: `"${functionLikeName(node)}" takes parameters and returns Effect.`,
+				fix: 'Rewrite as Effect.fnUntraced(function* (...) { ... }), yield Effects with yield*, return plain values.'
+			})
 		}
 	}),
 	rule('prefer-effect-gen-program', (node, context) => {
 		if (!isNamedFunctionLike(node) || hasParameters(node) || !context.checker) return
 		const expression = returnedExpression(node)
 		if (expression && typeLooksEffect(context.checker, expression)) {
-			context.report(
-				nameNode(node),
-				'prefer-effect-gen-program',
-				`"${functionLikeName(node)}" has no arguments and only returns an Effect. Replace the function with one Effect.gen program value and remove the wrapper call layer.`
-			)
+			context.report(nameNode(node), 'prefer-effect-gen-program', {
+				description: `"${functionLikeName(node)}" has no parameters and only returns Effect.`,
+				fix: 'Replace the function with a top-level Effect value; remove the extra call layer.'
+			})
 		}
 	}),
 	rule('no-floating-effect', (node, context) => {
 		if (!ts.isExpressionStatement(node)) return
 		if (!(context.checker && typeLooksEffect(context.checker, node.expression))) return
 		if (isEffectRunCall(node.expression) || isComposedEffectArgument(node.expression)) return
-		context.report(
-			node.expression,
-			'no-floating-effect',
-			'This Effect is not used. Add yield* inside Effect.gen, return it from the current Effect, or run it at an approved boundary.'
-		)
-	}),
-	rule('prefer-top-level-pipe-for-effect-values', (node, context) => {
-		if (!(ts.isCallExpression(node) && context.checker)) return
-		if (ts.isCallExpression(node.parent) && isPipeCall(node.parent) && node.parent.arguments[0] !== node) return
-		if (
-			ts.isPropertyAccessExpression(node.expression) &&
-			node.expression.name.text === 'pipe' &&
-			typeLooksEffect(context.checker, node.expression.expression)
-		) {
-			context.report(
-				node.expression.name,
-				'prefer-top-level-pipe-for-effect-values',
-				'This Effect is composed with .pipe. Rewrite the composition as pipe(effect, ...) so Effect pipelines use the project shape.'
-			)
-		}
-		if (isDataFirstEffectOperation(node) && node.arguments[0] && typeLooksEffect(context.checker, node.arguments[0])) {
-			context.report(
-				node.expression,
-				'prefer-top-level-pipe-for-effect-values',
-				'This Effect is passed to a data-first Effect operation. Rewrite it as pipe(effect, Effect.operation) and keep the same operation arguments.'
-			)
-		}
+		context.report(node.expression, 'no-floating-effect', {
+			description: `Effect "${normalizedText(node.expression)}" is unused.`,
+			fix: 'Yield* it in Effect.gen, return/compose it, or run it only at a runtime boundary.'
+		})
 	}),
 	rule('prefer-top-level-rcmap', (node, context) => {
 		if (!isRcMapConstructorCall(context.checker, node)) return
@@ -94,21 +66,19 @@ export const effectRules = [
 				rootDeclaration.name.text[0] !== undefined &&
 				rootDeclaration.name.text[0] !== String.toUpperCase(rootDeclaration.name.text[0])
 			) {
-				context.report(
-					rootDeclaration.name,
-					'prefer-top-level-rcmap',
-					'RcMap constructor consts must start with an uppercase letter. Rename this top-level RcMap value to PascalCase.'
-				)
+				context.report(rootDeclaration.name, 'prefer-top-level-rcmap', {
+					description: `Top-level RcMap "${rootDeclaration.name.text}" must be PascalCase.`,
+					fix: 'Rename it to an uppercase resource name.'
+				})
 			}
 			return
 		}
-		context.report(
-			node,
-			'prefer-top-level-rcmap',
-			'RcMap.make must be module-scoped. Move this constructor to a top-level const and keep RcMap.get/invalidate at the use site.'
-		)
+		context.report(node, 'prefer-top-level-rcmap', {
+			description: 'RcMap.make is not module-scoped.',
+			fix: 'Move this constructor to a top-level PascalCase const; keep RcMap.get/invalidate at use sites.'
+		})
 	}),
-	rule('prefer-effect-module-over-standard-library', (node, context) => {
+	rule('no-standard-prototype-methods', (node, context) => {
 		if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
 			const module = standardPrototypeMethods.get(node.expression.name.text)
 			if (
@@ -117,11 +87,10 @@ export const effectRules = [
 				ts.isIdentifier(node.expression.name) &&
 				isStandardPrototypeMethod(context.checker, node.expression.name, module)
 			) {
-				context.report(
-					node.expression.name,
-					'prefer-effect-module-over-standard-library',
-					`This calls ${module}.prototype.${node.expression.name.text}. Use ${module}.${node.expression.name.text} in pipe(...) instead.`
-				)
+				context.report(node.expression.name, 'no-standard-prototype-methods', {
+					description: `Prototype call "${normalizedText(node.expression)}" is banned.`,
+					fix: `Use ${module}.${node.expression.name.text}(${normalizedText(node.expression.expression)}, ...) or pipe for chains.`
+				})
 			}
 		}
 		if (
@@ -130,11 +99,10 @@ export const effectRules = [
 			ts.isIdentifier(node.expression.expression)
 		) {
 			if (isGlobalObjectConstructor(context.checker, node.expression.expression)) {
-				context.report(
-					node.expression.name,
-					'prefer-effect-module-over-standard-library',
-					`This calls Object.${node.expression.name.text}. Prefer the Effect collection module helper, or write the direct assignments when mutation is intentional.`
-				)
+				context.report(node.expression.name, 'no-standard-prototype-methods', {
+					description: `Object.${node.expression.name.text} is banned in Effect scope.`,
+					fix: 'Use the matching Record/Struct helper, or write explicit object construction for intentional mutation.'
+				})
 			}
 		}
 	}),
@@ -144,16 +112,51 @@ export const effectRules = [
 			ts.isPropertyAccessExpression(node.expression) &&
 			ts.isIdentifier(node.expression.expression) &&
 			node.expression.expression.text === 'Option' &&
-			(node.expression.name.text === 'some' ||
-				node.expression.name.text === 'none' ||
-				String.startsWith('from')(node.expression.name.text))
+			String.startsWith('from')(node.expression.name.text)
 		) {
-			context.report(
-				node.expression.name,
-				'no-option-constructor',
-				'This creates a new Option value. Do not call Option.some, Option.none, or Option.from*; use guards, optional chaining, nullish coalescing, or a plain typed sentinel at the boundary.'
-			)
+			context.report(node.expression.name, 'no-option-constructor', {
+				description: `Option.${node.expression.name.text} adds Option indirection.`,
+				fix: 'Keep a plain optional value with guards, optional chaining, or ?? undefined.'
+			})
 		}
+	}),
+	rule('prefer-effect-random', (node, context) => {
+		if (!isCryptoRandomUuidCall(context.checker, node)) return
+		context.report(node, 'prefer-effect-random', {
+			description: `Crypto UUID call "${normalizedText(node)}" is banned.`,
+			fix: 'Use yield* Random.nextUUIDv4 inside Effect code.'
+		})
+	}),
+	rule('prefer-effect-catch-tag', (node, context) => {
+		if (
+			!(
+				context.checker &&
+				ts.isCallExpression(node) &&
+				ts.isPropertyAccessExpression(node.expression) &&
+				ts.isIdentifier(node.expression.expression) &&
+				node.expression.expression.text === 'Effect' &&
+				Array.contains(['catch', 'catchAll', 'catchIf', 'catchSome'] as const, node.expression.name.text)
+			)
+		) {
+			return
+		}
+		const input = effectCatchInput(context.checker, node)
+		if (!input) return
+		const channels = effectChannels(context.checker, input)
+		if (!channels) return
+		if (channels.error.flags & ts.TypeFlags.Never) {
+			context.report(node.expression, 'prefer-effect-catch-tag', {
+				description: `"${normalizedText(node.expression)}" catches an Effect with error channel never.`,
+				fix: 'Delete this unreachable catch.'
+			})
+			return
+		}
+		if (!Array.some(unionMembers(channels.error), member => !!context.checker?.getPropertyOfType(member, '_tag')))
+			return
+		context.report(node.expression, 'prefer-effect-catch-tag', {
+			description: `Broad ${node.expression.name.text} on tagged error channel ${formatType(context.checker, channels.error, node)}.`,
+			fix: 'Use Effect.catchTag/catchTags for the specific _tag cases.'
+		})
 	}),
 	rule('prefer-schema-tagged-error', (node, context) => {
 		if (ts.isClassDeclaration(node) && node.heritageClauses) {
@@ -167,102 +170,79 @@ export const effectRules = [
 						inherited.expression.expression.expression.text === 'Data' &&
 						inherited.expression.expression.name.text === 'TaggedError'
 					) {
-						context.report(
-							inherited.expression.expression,
-							'prefer-schema-tagged-error',
-							'Data.TaggedError is not schema-aware. Replace it with Schema.TaggedErrorClass so the error is yieldable and has a schema contract.'
-						)
+						context.report(inherited.expression.expression, 'prefer-schema-tagged-error', {
+							description: `Data.TaggedError class "${node.name?.text ?? '<anonymous>'}" has no schema.`,
+							fix: 'Extend Schema.TaggedErrorClass<...>()("Tag", fields).'
+						})
 					}
 				}
 			}
 		}
 		if (
-			ts.isCallExpression(node) &&
-			ts.isPropertyAccessExpression(node.expression) &&
-			ts.isIdentifier(node.expression.expression) &&
-			node.expression.expression.text === 'Effect' &&
-			node.expression.name.text === 'fail' &&
-			node.arguments[0] &&
-			ts.isNewExpression(node.arguments[0])
+			ts.isYieldExpression(node) &&
+			node.asteriskToken &&
+			node.expression &&
+			ts.isCallExpression(node.expression) &&
+			ts.isPropertyAccessExpression(node.expression.expression) &&
+			ts.isIdentifier(node.expression.expression.expression) &&
+			node.expression.expression.expression.text === 'Effect' &&
+			node.expression.expression.name.text === 'fail'
 		) {
-			context.report(
-				node.expression,
-				'prefer-schema-tagged-error',
-				'Schema.TaggedErrorClass errors are yieldable. Replace Effect.fail(new ErrorClass(...)) with yield* new ErrorClass(...) inside Effect generators.'
-			)
+			context.report(node, 'prefer-schema-tagged-error', {
+				description: `Yield wraps "${normalizedText(node.expression.arguments[0] ?? node.expression)}" in Effect.fail.`,
+				fix: 'For yieldable tagged errors use yield* error directly.'
+			})
 		}
 	}),
-	rule('no-dynamic-imports', (node, context) => {
-		if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-			context.report(
-				node.expression,
-				'no-dynamic-imports',
-				'This uses dynamic import. Replace it with a static top-level import.'
-			)
+	rule('prefer-effect-try', (node, context) => {
+		if (ts.isAwaitExpression(node) && hasEffectTryPromiseCallbackAncestor(node.parent)) return
+		if (ts.isAwaitExpression(node) && hasEffectGeneratorAncestor(node.parent)) {
+			context.report(node, 'prefer-effect-try', {
+				description: `Await "${normalizedText(node.expression)}" inside Effect code hides promise errors.`,
+				fix: 'Replace with yield* Effect.tryPromise({ try: () => ..., catch }).'
+			})
 		}
 	}),
-	rule('no-tailwind-class-variables', (node, context) => {
-		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'cva') {
-			context.report(
-				node.expression,
-				'no-tailwind-class-variables',
-				'This hides Tailwind classes behind cva. Move the class strings directly into className or cn(...).'
-			)
+	rule('no-single-operation-pipe', (node, context) => {
+		if (!isPipeCall(node)) return
+		if (node.arguments.length === 1) {
+			context.report(node.expression, 'no-single-operation-pipe', {
+				description: `pipe(${node.arguments[0] ? normalizedText(node.arguments[0]) : '<subject>'}) has no operations.`,
+				fix: 'Use the subject directly.'
+			})
+			return
 		}
-		if (
-			ts.isVariableDeclaration(node) &&
-			ts.isIdentifier(node.name) &&
-			node.initializer &&
-			isTailwindStringLiteral(node.initializer)
-		) {
-			context.report(
-				node.name,
-				'no-tailwind-class-variables',
-				'This variable only stores Tailwind classes. Move the class string directly into className or cn(...) and delete the variable.'
-			)
+		if (node.arguments[0] && isPipeCall(node.arguments[0])) {
+			context.report(node.expression, 'no-single-operation-pipe', {
+				description: 'Nested pipe call adds no step.',
+				fix: 'Merge the inner pipe operations into this pipe call.'
+			})
+			return
 		}
-	}),
-	rule('prefer-direct-call-for-single-data-operation', (node, context) => {
-		if (!isPipeCall(node) || node.arguments.length !== 2 || !context.checker) return
+		if (node.arguments.length !== 2 || !context.checker) return
 		if (!node.arguments[0] || typeLooksEffect(context.checker, node.arguments[0])) return
 		if (isMatchCall(node.arguments[0])) return
-		context.report(
-			node.expression,
-			'prefer-direct-call-for-single-data-operation',
-			'This pipe has one non-Effect data operation. Replace the pipe with the direct module call and keep pipe for multi-step or Effect composition.'
-		)
-	}),
-	rule('prefer-effect-nullish-predicates', (node, context) => {
-		if (!(ts.isArrowFunction(node) && ts.isCallExpression(node.parent))) return
-		const expression = returnedExpression(node)
-		if (expression && isNullishPredicateExpression(expression)) {
-			context.report(
-				node,
-				'prefer-effect-nullish-predicates',
-				'This callback only checks nullishness. Replace the callback with the matching Effect Predicate helper.'
-			)
-		}
-	}),
-	rule('no-effect-async-constructor-mismatch', (node, context) => {
-		if (
-			ts.isCallExpression(node) &&
-			ts.isPropertyAccessExpression(node.expression) &&
-			ts.isIdentifier(node.expression.expression)
-		) {
-			if (
-				node.expression.expression.text === 'Effect' &&
-				node.expression.name.text === 'sync' &&
-				containsNode(node, ts.isAwaitExpression)
-			) {
-				context.report(
-					node.expression.name,
-					'no-effect-async-constructor-mismatch',
-					'Effect.sync contains async work. Replace the constructor with Effect.promise or Effect.tryPromise.'
-				)
-			}
-		}
+		context.report(node.expression, 'no-single-operation-pipe', {
+			description: `pipe has one non-Effect operation "${node.arguments[1] ? normalizedText(node.arguments[1]) : '<operation>'}".`,
+			fix: 'Call the module function directly; keep pipe for multi-step or Effect composition.'
+		})
 	}),
 	rule('no-effect-without-semantics', (node, context) => {
+		if (ts.isCallExpression(node) && isUnnecessaryEffectGen(context.checker, node)) {
+			context.report(node.expression, 'no-effect-without-semantics', {
+				description: 'Effect.gen only yields one Effect.',
+				fix: 'Use the yielded Effect directly and delete the wrapper generator.'
+			})
+			return
+		}
+		const syncReturnedEffect = effectSyncReturnedExpression(context.checker, node)
+		if (syncReturnedEffect) {
+			context.report(node, 'no-effect-without-semantics', {
+				description: `Effect.sync callback returns Effect "${normalizedText(syncReturnedEffect)}".`,
+				fix: 'Remove Effect.sync and use the returned Effect directly; do not create Effect<Effect<...>>.'
+			})
+			return
+		}
 		if (
 			ts.isCallExpression(node) &&
 			isEffectCall(node) &&
@@ -271,21 +251,32 @@ export const effectRules = [
 			isLiteral(node.arguments[0]) &&
 			!hasRequiredEffectCallbackAncestor(node.parent)
 		) {
-			context.report(
-				node.expression,
-				'no-effect-without-semantics',
-				'This Effect only wraps a literal. Use the literal directly unless an actual Effect boundary is required.'
-			)
+			context.report(node.expression, 'no-effect-without-semantics', {
+				description: `Effect.${callName(node)} only wraps literal ${normalizedText(node.arguments[0])}.`,
+				fix: 'Use the literal directly unless a required Effect callback needs an Effect.'
+			})
 		}
 	}),
-	rule('no-effect-run-away-from-boundary', (node, context) => {
-		if (ts.isCallExpression(node) && isEffectRunCall(node) && !isRuntimeBoundary(context.filePath)) {
-			context.report(
-				node.expression,
-				'no-effect-run-away-from-boundary',
-				'This runs an Effect outside a runtime boundary. Return or compose the Effect here, and run it only from an allowed boundary file.'
-			)
+	rule('no-untyped-effect-error', (node, context) => {
+		if (!context.checker) return
+		if (ts.isCallExpression(node) && isEffectTryWithUntypedCatch(context.checker, node)) {
+			context.report(node.expression, 'no-untyped-effect-error', {
+				description: `Effect.${callName(node)} catch returns unknown/any/global Error.`,
+				fix: 'Return a specific Schema.TaggedErrorClass value and store the original as cause if needed.'
+			})
+			return
 		}
+		if (!(ts.isCallExpression(node) || ts.isVariableDeclaration(node))) return
+		const target = ts.isVariableDeclaration(node) ? node.initializer : node
+		if (!target) return
+		const channels = effectChannels(context.checker, target)
+		if (!channels) return
+		const problem = errorChannelProblem(context.checker, channels.error)
+		if (!problem) return
+		context.report(target, 'no-untyped-effect-error', {
+			description: `Effect error channel is ${problem}: ${formatType(context.checker, channels.error, target)}.`,
+			fix: 'Model failures as specific tagged errors.'
+		})
 	})
 ] as const satisfies readonly Rule[]
 
@@ -333,4 +324,172 @@ function hasRequiredEffectCallbackAncestor(node: ts.Node): boolean {
 		return true
 	}
 	return hasRequiredEffectCallbackAncestor(node.parent)
+}
+
+function hasEffectGeneratorAncestor(node: ts.Node): boolean {
+	if (ts.isSourceFile(node)) return false
+	if (
+		(ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
+		node.asteriskToken &&
+		ts.isCallExpression(node.parent) &&
+		((ts.isPropertyAccessExpression(node.parent.expression) &&
+			ts.isIdentifier(node.parent.expression.expression) &&
+			node.parent.expression.expression.text === 'Effect' &&
+			Array.contains(['gen', 'fnUntraced'] as const, node.parent.expression.name.text)) ||
+			ts.isIdentifier(node.parent.expression))
+	) {
+		return true
+	}
+	return hasEffectGeneratorAncestor(node.parent)
+}
+
+function hasEffectTryPromiseCallbackAncestor(node: ts.Node): boolean {
+	if (ts.isSourceFile(node)) return false
+	if (
+		(ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
+		ts.isPropertyAssignment(node.parent) &&
+		ts.isIdentifier(node.parent.name) &&
+		node.parent.name.text === 'try' &&
+		ts.isObjectLiteralExpression(node.parent.parent) &&
+		ts.isCallExpression(node.parent.parent.parent) &&
+		ts.isPropertyAccessExpression(node.parent.parent.parent.expression) &&
+		ts.isIdentifier(node.parent.parent.parent.expression.expression) &&
+		node.parent.parent.parent.expression.expression.text === 'Effect' &&
+		node.parent.parent.parent.expression.name.text === 'tryPromise'
+	) {
+		return true
+	}
+	return hasEffectTryPromiseCallbackAncestor(node.parent)
+}
+
+function isCryptoRandomUuidCall(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!(ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression))) {
+		return (
+			ts.isCallExpression(node) &&
+			ts.isIdentifier(node.expression) &&
+			isImportedCryptoRandomUuid(checker, node.expression)
+		)
+	}
+	if (node.expression.name.text !== 'randomUUID') return false
+	return (
+		(ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'crypto') ||
+		(ts.isPropertyAccessExpression(node.expression.expression) &&
+			node.expression.expression.getText(node.getSourceFile()) === 'globalThis.crypto') ||
+		isImportedCryptoNamespace(checker, node.expression.expression)
+	)
+}
+
+function isImportedCryptoRandomUuid(checker: ts.TypeChecker | undefined, node: ts.Identifier) {
+	if (!checker) return false
+	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
+		return (
+			ts.isImportSpecifier(declaration) &&
+			(declaration.propertyName ?? declaration.name).text === 'randomUUID' &&
+			ts.isStringLiteral(declaration.parent.parent.parent.moduleSpecifier) &&
+			Array.contains(['crypto', 'node:crypto'] as const, declaration.parent.parent.parent.moduleSpecifier.text)
+		)
+	})
+}
+
+function isImportedCryptoNamespace(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!(checker && ts.isIdentifier(node))) return false
+	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
+		return (
+			ts.isNamespaceImport(declaration) &&
+			ts.isStringLiteral(declaration.parent.parent.moduleSpecifier) &&
+			Array.contains(['crypto', 'node:crypto'] as const, declaration.parent.parent.moduleSpecifier.text)
+		)
+	})
+}
+
+function effectCatchInput(checker: ts.TypeChecker, node: ts.CallExpression) {
+	if (node.arguments[0] && effectChannels(checker, node.arguments[0])) return node.arguments[0]
+	if (!(ts.isCallExpression(node.parent) && isPipeCall(node.parent))) return
+	let index = 0
+	for (const argument of node.parent.arguments) {
+		if (argument === node) return index === 1 ? node.parent.arguments[0] : undefined
+		index += 1
+	}
+}
+
+function effectChannels(checker: ts.TypeChecker, node: ts.Node) {
+	const type = checker.getTypeAtLocation(node)
+	const typeId = checker.getPropertyOfType(type, '~effect/Effect')
+	if (typeId) {
+		const error = varianceReturnType(checker, checker.getTypeOfSymbolAtLocation(typeId, node), '_E', node)
+		if (error) return {error}
+	}
+}
+
+function varianceReturnType(checker: ts.TypeChecker, type: ts.Type, propertyName: string, node: ts.Node) {
+	const symbol = checker.getPropertyOfType(type, propertyName)
+	if (!symbol) return
+	const signatures = checker.getSignaturesOfType(checker.getTypeOfSymbolAtLocation(symbol, node), ts.SignatureKind.Call)
+	return signatures[0] ? checker.getReturnTypeOfSignature(signatures[0]) : undefined
+}
+
+function errorChannelProblem(checker: ts.TypeChecker, type: ts.Type) {
+	const members = unionMembers(type)
+	if (Array.some(members, member => (member.flags & ts.TypeFlags.Unknown) !== 0)) return 'unknown'
+	if (Array.some(members, member => (member.flags & ts.TypeFlags.Any) !== 0)) return 'any'
+	if (Array.some(members, member => checker.typeToString(member) === 'Error')) return 'global Error'
+}
+
+function unionMembers(type: ts.Type) {
+	return type.isUnion() ? type.types : [type]
+}
+
+function formatType(checker: ts.TypeChecker, type: ts.Type, node: ts.Node) {
+	return checker.typeToString(type, node, ts.TypeFormatFlags.NoTruncation)
+}
+
+function isUnnecessaryEffectGen(checker: ts.TypeChecker | undefined, node: ts.CallExpression) {
+	if (!(checker && isEffectCall(node) && callName(node) === 'gen')) return false
+	if (
+		!(
+			node.arguments[0] &&
+			(ts.isFunctionExpression(node.arguments[0]) || ts.isArrowFunction(node.arguments[0])) &&
+			ts.isBlock(node.arguments[0].body)
+		)
+	) {
+		return false
+	}
+	if (node.arguments[0].body.statements.length !== 1) return false
+	if (!node.arguments[0].body.statements[0]) return false
+	let expression: ts.Expression | undefined
+	if (ts.isReturnStatement(node.arguments[0].body.statements[0]))
+		expression = node.arguments[0].body.statements[0].expression
+	if (ts.isExpressionStatement(node.arguments[0].body.statements[0]))
+		expression = node.arguments[0].body.statements[0].expression
+	if (!(expression && ts.isYieldExpression(expression) && expression.asteriskToken && expression.expression))
+		return false
+	return !!effectChannels(checker, expression.expression)
+}
+
+function effectSyncReturnedExpression(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!(checker && ts.isCallExpression(node) && isEffectCall(node) && callName(node) === 'sync')) return
+	if (!(node.arguments[0] && (ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]))))
+		return
+	const expression = returnedExpression(node.arguments[0])
+	if (!(expression && typeLooksEffect(checker, expression))) return
+	return expression
+}
+
+function isEffectTryWithUntypedCatch(checker: ts.TypeChecker, node: ts.CallExpression) {
+	if (!(isEffectCall(node) && Array.contains(['try', 'tryPromise'] as const, callName(node)))) return false
+	if (!(node.arguments[0] && ts.isObjectLiteralExpression(node.arguments[0]))) return false
+	const catchProperty = Array.findFirst(node.arguments[0].properties, property => {
+		return ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'catch'
+	})
+	if (catchProperty._tag === 'None' || !ts.isPropertyAssignment(catchProperty.value)) return false
+	if (
+		!(ts.isArrowFunction(catchProperty.value.initializer) || ts.isFunctionExpression(catchProperty.value.initializer))
+	)
+		return false
+	const signatures = checker.getSignaturesOfType(
+		checker.getTypeAtLocation(catchProperty.value.initializer),
+		ts.SignatureKind.Call
+	)
+	const returnType = signatures[0] ? checker.getReturnTypeOfSignature(signatures[0]) : undefined
+	return returnType ? errorChannelProblem(checker, returnType) !== undefined : false
 }
