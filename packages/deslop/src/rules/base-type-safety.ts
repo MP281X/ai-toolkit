@@ -7,7 +7,6 @@ import {
 	hasModifier,
 	isConstAssertion,
 	isImportedIdentifier,
-	isLiteralContainer,
 	normalizedText,
 	typeIncludesNullish,
 	typeLooksReadonlyArray
@@ -17,10 +16,8 @@ import {
 	isAllowedNamedType,
 	isAllowedNullLiteral,
 	isArrayIsArrayCall,
-	isConstVariable,
 	isExportedDeclaration,
 	isInsideTypeName,
-	isMutated,
 	isNullishComparison,
 	isReactRefCurrentPropertySignature,
 	isReactUseRefCall,
@@ -30,68 +27,59 @@ import {
 	rule
 } from './helpers.ts'
 
-export const typeSafetyRules = [
+export const baseTypeSafetyRules = [
 	rule('no-type-assertion-except-as-const', (node, context) => {
 		if (ts.isAsExpression(node)) {
 			if (isConstAssertion(node)) return
-			context.report(
-				node,
-				'no-type-assertion-except-as-const',
-				`"${normalizedText(node)}" forces a type without proof. Remove the assertion and fix the producer type or add a real runtime decode/refinement.`
-			)
+			context.report(node, 'no-type-assertion-except-as-const', {
+				description: 'Assertion hides the real type.',
+				fix: `Remove "as ${normalizedText(node.type)}" and make "${normalizedText(node.expression)}" produce that type, or decode/refine at the boundary.`
+			})
 		}
 		if (ts.isTypeAssertionExpression(node)) {
-			context.report(
-				node,
-				'no-type-assertion-except-as-const',
-				`"${normalizedText(node)}" forces a type without proof. Remove the assertion and make the value's source produce the correct type.`
-			)
+			context.report(node, 'no-type-assertion-except-as-const', {
+				description: 'Assertion hides the real type.',
+				fix: `Remove "<${normalizedText(node.type)}>" and make "${normalizedText(node.expression)}" produce that type.`
+			})
 		}
 		if (ts.isNonNullExpression(node)) {
-			context.report(
-				node,
-				'no-type-assertion-except-as-const',
-				`"${normalizedText(node)}" bypasses nullish checking. Remove the assertion and narrow the value with control flow before this use.`
-			)
+			context.report(node, 'no-type-assertion-except-as-const', {
+				description: 'Non-null assertion bypasses narrowing.',
+				fix: `Remove "!" from "${normalizedText(node.expression)}" and prove non-null with control flow before this use.`
+			})
 		}
 		if (ts.isPropertyDeclaration(node) && node.exclamationToken) {
-			context.report(
-				node.name,
-				'no-type-assertion-except-as-const',
-				`"${node.name.getText(context.sourceFile)}" skips definite assignment checking. Initialize it from a proven value and remove the assertion token.`
-			)
+			context.report(node.name, 'no-type-assertion-except-as-const', {
+				description: `Property "${node.name.getText(context.sourceFile)}" skips definite assignment.`,
+				fix: 'Remove "!" and initialize it with a proven value.'
+			})
 		}
-	}),
-	rule('prefer-strict-literal-const', (node, context) => {
-		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
-		if (
-			!(isConstVariable(node) && isLiteralContainer(node.initializer)) ||
-			isMutated(node.name.text, context.sourceFile)
-		) {
-			return
-		}
-		if (ts.isAsExpression(node.initializer) && isConstAssertion(node.initializer)) return
-		context.report(
-			node.name,
-			'prefer-strict-literal-const',
-			`"${node.name.text}" is an immutable literal whose keys or values can widen. Add as const${node.type ? ' and use satisfies for the shape' : ''}; do not add another type assertion.`
-		)
 	}),
 	rule('prefer-readonly-types', (node, context) => {
 		if (ts.isPropertySignature(node) && !hasModifier(node, ts.SyntaxKind.ReadonlyKeyword)) {
+			if (ts.isIdentifier(node.name) && node.name.text === 'current') return
 			if (isReactRefCurrentPropertySignature(node)) return
-			context.report(
-				node.name,
-				'prefer-readonly-types',
-				`"${node.name.getText(context.sourceFile)}" declares mutable object shape. Add readonly to the property type.`
-			)
+			context.report(node.name, 'prefer-readonly-types', {
+				description: `Property "${node.name.getText(context.sourceFile)}" is mutable in a type shape.`,
+				fix: 'Add readonly to this property signature.'
+			})
 		}
 		if (ts.isArrayTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			context.report(
-				node,
-				'prefer-readonly-types',
-				`"${normalizedText(node)}" is a mutable array type. Replace it with ReadonlyArray<T> using the same element type.`
-			)
+			if (
+				ts.findAncestor(node, ancestor => {
+					return (
+						ts.isCallExpression(ancestor) &&
+						isReactUseRefCall(context.checker, ancestor) &&
+						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
+					)
+				})
+			) {
+				return
+			}
+			context.report(node, 'prefer-readonly-types', {
+				description: `Array type "${normalizedText(node)}" is mutable.`,
+				fix: `Use readonly ${normalizedText(node)} or ReadonlyArray<${normalizedText(node.elementType)}> with the same element type.`
+			})
 		}
 		if (
 			ts.isTypeReferenceNode(node) &&
@@ -99,61 +87,65 @@ export const typeSafetyRules = [
 			node.typeName.text === 'Array' &&
 			!isInsideTypeName(node.typeName)
 		) {
-			context.report(node.typeName, 'prefer-readonly-types', '"Array<T>" is mutable. Replace it with ReadonlyArray<T>.')
+			context.report(node.typeName, 'prefer-readonly-types', {
+				description: 'Array<T> is mutable.',
+				fix: 'Replace it with ReadonlyArray<T>.'
+			})
 		}
 		if (ts.isTupleTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			context.report(node, 'prefer-readonly-types', 'This tuple type is mutable. Prefix the tuple type with readonly.')
+			if (
+				ts.findAncestor(node, ancestor => {
+					return (
+						ts.isCallExpression(ancestor) &&
+						isReactUseRefCall(context.checker, ancestor) &&
+						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
+					)
+				})
+			) {
+				return
+			}
+			context.report(node, 'prefer-readonly-types', {
+				description: `Tuple type "${normalizedText(node)}" is mutable.`,
+				fix: 'Prefix it with readonly.'
+			})
 		}
 	}),
 	rule('prefer-undefined-over-null', (node, context) => {
 		if (ts.isCallExpression(node) && isReactUseRefCall(context.checker, node)) {
 			for (const argument of node.arguments) {
 				if (!ts.isIdentifier(argument) || argument.text !== 'undefined') break
-				context.report(
-					argument,
-					'prefer-undefined-over-null',
-					'React refs use null for the unmounted value. Initialize this ref with null.'
-				)
+				context.report(argument, 'prefer-undefined-over-null', {
+					description: 'React refs are the exception: unmounted refs are null.',
+					fix: 'Initialize this useRef call with null, not undefined.'
+				})
 				break
 			}
 		}
 		if (node.kind === ts.SyntaxKind.NullKeyword && !isAllowedNullLiteral(context.checker, node)) {
-			context.report(
-				node,
-				'prefer-undefined-over-null',
-				'"null" is an internal absence value. Use undefined or omit the optional field instead.'
-			)
+			context.report(node, 'prefer-undefined-over-null', {
+				description: 'Null is banned for internal absence.',
+				fix: 'Use undefined, omit the property, or keep null only at an explicit schema/API boundary.'
+			})
 		}
 		if (
 			ts.isLiteralTypeNode(node) &&
 			node.literal.kind === ts.SyntaxKind.NullKeyword &&
 			!isAllowedNullLiteral(context.checker, node.literal)
 		) {
-			context.report(
-				node,
-				'prefer-undefined-over-null',
-				'"null" appears in a type union. Replace it with undefined or model absence with an optional property.'
-			)
+			context.report(node, 'prefer-undefined-over-null', {
+				description: 'Null in a type union models absence inconsistently.',
+				fix: 'Replace null with undefined, or make the property optional.'
+			})
 		}
 	}),
 	rule('prefer-optional-property', (node, context) => {
 		if (!(ts.isPropertySignature(node) && node.type && typeNodeIncludesUndefined(node.type))) return
-		context.report(
-			node.name,
-			'prefer-optional-property',
-			`"${node.name.getText(context.sourceFile)}" uses "| undefined" for an object property. Use "?" on the property and remove undefined from the type.`
-		)
+		context.report(node.name, 'prefer-optional-property', {
+			description: `Property "${node.name.getText(context.sourceFile)}" unions with undefined.`,
+			fix: `Change it to "${node.name.getText(context.sourceFile)}?" and remove undefined from the property type.`
+		})
 	}),
-	rule('no-any', (node, context) => {
-		if (ts.isTypeNode(node) && node.kind === ts.SyntaxKind.AnyKeyword) {
-			context.report(
-				node,
-				'no-any',
-				'any disables type checking. Replace it with unknown plus decoding/refinement, or with the concrete type.'
-			)
-		}
-	}),
-	rule('no-redundant-type-annotation', (node, context) => {
+	rule('no-redundant-type-syntax', (node, context) => {
 		if (
 			ts.isParameter(node) &&
 			node.type &&
@@ -163,6 +155,7 @@ export const typeSafetyRules = [
 			if (
 				context.checker &&
 				(hasUnknownOrAnyContextualParameterType(context.checker, node) ||
+					isEffectFnParameterNeedingAnnotation(context.checker, node) ||
 					hasGenericCallbackParameterType(
 						context.checker,
 						node.parent.parent,
@@ -172,20 +165,10 @@ export const typeSafetyRules = [
 			) {
 				return
 			}
-			if (
-				ts.isFunctionExpression(node.parent) &&
-				ts.isPropertyAccessExpression(node.parent.parent.expression) &&
-				ts.isIdentifier(node.parent.parent.expression.expression) &&
-				node.parent.parent.expression.expression.text === 'Effect' &&
-				node.parent.parent.expression.name.text === 'fnUntraced'
-			) {
-				return
-			}
-			context.report(
-				node.type,
-				'no-callback-parameter-type-annotation',
-				`"${node.name.getText(context.sourceFile)}" annotates a callback parameter. Remove the annotation by rewriting the surrounding call so the callback argument type is inferred.`
-			)
+			context.report(node.type, 'no-redundant-type-syntax', {
+				description: `Callback parameter "${node.name.getText(context.sourceFile)}" repeats contextual typing.`,
+				fix: 'Remove this parameter annotation; keep annotations only when context is any/unknown/generic.'
+			})
 		}
 		if (ts.isVariableDeclaration(node) && node.type && node.initializer && context.checker) {
 			if (isRecursiveEffectFnUntracedVariable(node)) return
@@ -195,11 +178,10 @@ export const typeSafetyRules = [
 					context.checker.getTypeFromTypeNode(node.type)
 				)
 			) {
-				context.report(
-					node.type,
-					'no-redundant-type-annotation',
-					'This variable annotation duplicates the initializer type. Delete the annotation and keep the initializer unchanged.'
-				)
+				context.report(node.type, 'no-redundant-type-syntax', {
+					description: `Variable "${node.name.getText(context.sourceFile)}" annotation duplicates its initializer.`,
+					fix: `Delete ": ${normalizedText(node.type)}" and keep the initializer.`
+				})
 			}
 		}
 		if (
@@ -212,14 +194,13 @@ export const typeSafetyRules = [
 			!isRecursiveFunction(node)
 		) {
 			if (ts.isTypePredicateNode(node.type)) return
-			context.report(
-				node.type,
-				'no-redundant-type-annotation',
-				'This function return annotation is unnecessary. Delete it and let the implementation define the return type.'
-			)
+			context.report(node.type, 'no-redundant-type-syntax', {
+				description: `Return annotation on "${(ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isMethodDeclaration(node)) && node.name ? node.name.getText(context.sourceFile) : '<anonymous>'}" repeats the implementation.`,
+				fix: `Delete ": ${normalizedText(node.type)}" and let TypeScript infer it.`
+			})
 		}
 	}),
-	rule('no-redundant-generic-type-argument', (node, context) => {
+	rule('no-redundant-type-syntax', (node, context) => {
 		if (!(ts.isCallExpression(node) && node.typeArguments?.length && context.checker)) return
 		if (
 			ts.isPropertyAccessExpression(node.expression) &&
@@ -250,31 +231,28 @@ export const typeSafetyRules = [
 			}
 		}
 		if (!context.checker.getResolvedSignature(node)) return
-		context.report(
-			node.typeArguments[0] ?? node,
-			'no-redundant-generic-type-argument',
-			`"${normalizedText(node.expression)}" has an explicit generic argument that should be inferred. Remove the generic argument list without adding an annotation or assertion.`
-		)
+		context.report(node.typeArguments[0] ?? node, 'no-redundant-type-syntax', {
+			description: `Generic arguments on "${normalizedText(node.expression)}" should infer from arguments.`,
+			fix: `Remove <${Array.join(Array.map(node.typeArguments, normalizedText), ', ')}> without adding an assertion.`
+		})
 	}),
-	rule('no-unnecessary-type-constraint', (node, context) => {
+	rule('no-redundant-type-syntax', (node, context) => {
 		if (!ts.isTypeParameterDeclaration(node)) return
 		if (node.constraint?.kind === ts.SyntaxKind.UnknownKeyword || node.constraint?.kind === ts.SyntaxKind.AnyKeyword) {
-			context.report(
-				node.name,
-				'no-unnecessary-type-constraint',
-				`"${node.name.text}" has a type constraint that adds no information. Remove the constraint from the type parameter.`
-			)
+			context.report(node.name, 'no-redundant-type-syntax', {
+				description: `Type parameter "${node.name.text}" has a useless "extends ${normalizedText(node.constraint)}" constraint.`,
+				fix: 'Remove the constraint.'
+			})
 			return
 		}
 	}),
-	rule('no-accessor-type-alias', (node, context) => {
+	rule('no-unnecessary-named-type', (node, context) => {
 		if (ts.isModuleDeclaration(node) && hasModifier(node, ts.SyntaxKind.ExportKeyword)) {
 			if (!hasModifier(node, ts.SyntaxKind.DeclareKeyword)) {
-				context.report(
-					node.name,
-					'no-accessor-type-alias',
-					'Runtime namespaces are banned. Use export declare namespace only for same-name type companions.'
-				)
+				context.report(node.name, 'no-unnecessary-named-type', {
+					description: `Runtime namespace "${node.name.getText(context.sourceFile)}" is banned.`,
+					fix: 'Export named values directly; only export declare namespace is allowed for type companions.'
+				})
 			}
 			return
 		}
@@ -288,11 +266,10 @@ export const typeSafetyRules = [
 		) {
 			return
 		}
-		context.report(
-			node.name,
-			'no-accessor-type-alias',
-			`"${node.name.text}" re-exports an accessor type. Import and use the source type directly, unless this is a same-name companion using typeof ${node.name.text}.`
-		)
+		context.report(node.name, 'no-unnecessary-named-type', {
+			description: `Type alias "${node.name.text}" only re-exports "${normalizedText(node.type)}".`,
+			fix: 'Use the source type directly, unless this is a same-name typeof companion.'
+		})
 	}),
 	rule('no-redundant-type-system-check', (node, context) => {
 		if (!context.checker) return
@@ -301,32 +278,37 @@ export const typeSafetyRules = [
 			node.questionDotToken &&
 			!typeIncludesNullish(context.checker.getTypeAtLocation(node.expression))
 		) {
-			context.report(
-				node.name,
-				'no-redundant-type-system-check',
-				`"${normalizedText(node.expression)}" is not typed as nullish. Remove the optional chain and use normal property access.`
-			)
+			context.report(node.name, 'no-redundant-type-system-check', {
+				description: `"${normalizedText(node.expression)}" is not nullish by type.`,
+				fix: 'Replace "?." with "." here.'
+			})
 		}
 		if (ts.isBinaryExpression(node)) {
 			if (
 				node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+				!containsNode(node.left, child => {
+					return (
+						(ts.isPropertyAccessExpression(child) ||
+							ts.isElementAccessExpression(child) ||
+							ts.isCallExpression(child)) &&
+						child.questionDotToken !== undefined
+					)
+				}) &&
 				!typeIncludesNullish(context.checker.getTypeAtLocation(node.left))
 			) {
-				context.report(
-					node.operatorToken,
-					'no-redundant-type-system-check',
-					`"${normalizedText(node.left)}" is not typed as nullish. Delete the fallback and use the left expression directly.`
-				)
+				context.report(node.operatorToken, 'no-redundant-type-system-check', {
+					description: `"${normalizedText(node.left)}" is not nullish by type.`,
+					fix: `Delete "?? ${normalizedText(node.right)}" and use the left expression.`
+				})
 			}
 			if (
 				isNullishComparison(node) &&
 				!typeIncludesNullish(context.checker.getTypeAtLocation(nullishComparedExpression(node)))
 			) {
-				context.report(
-					node,
-					'no-redundant-type-system-check',
-					`"${normalizedText(node)}" checks an unreachable nullish case. Delete the check and keep the branch that matches the static type.`
-				)
+				context.report(node, 'no-redundant-type-system-check', {
+					description: `"${normalizedText(nullishComparedExpression(node))}" is not nullish by type.`,
+					fix: 'Remove this unreachable nullish check and keep the non-nullish branch.'
+				})
 			}
 		}
 		if (
@@ -335,14 +317,13 @@ export const typeSafetyRules = [
 			node.arguments[0] &&
 			typeLooksReadonlyArray(context.checker, node.arguments[0])
 		) {
-			context.report(
-				node.expression,
-				'no-redundant-type-system-check',
-				`"${normalizedText(node)}" checks a value already typed as an array. Delete the Array.isArray branch and use the value directly.`
-			)
+			context.report(node.expression, 'no-redundant-type-system-check', {
+				description: `"${normalizedText(node.arguments[0])}" is already array-typed.`,
+				fix: 'Remove Array.isArray and keep the array branch.'
+			})
 		}
 	}),
-	rule('no-floating-type-contract', (node, context) => {
+	rule('no-unnecessary-named-type', (node, context) => {
 		if (ts.isInterfaceDeclaration(node) && Array.some(node.members, ts.isMethodSignature)) return
 		if (
 			(ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node)) &&
@@ -356,35 +337,11 @@ export const typeSafetyRules = [
 						(ts.isTypeLiteralNode(node.type) && node.type.members.length <= 5))) ||
 				(ts.isInterfaceDeclaration(node) && node.members.length <= 5)
 			) {
-				context.report(
-					node.name,
-					'no-floating-type-contract',
-					`"${node.name.text}" is a local type alias with too little reuse. Inline the shape at the use site, or export it if it is a real boundary.`
-				)
+				context.report(node.name, 'no-unnecessary-named-type', {
+					description: `Local type "${node.name.text}" has too little reuse (${context.references.get(node.name.text) ?? 0} refs).`,
+					fix: 'Inline the shape at uses, or export it if it is a real boundary.'
+				})
 			}
-		}
-	}),
-	rule('no-broad-literal-annotation', (node, context) => {
-		if (ts.isVariableDeclaration(node) && node.type && node.initializer && isLiteralContainer(node.initializer)) {
-			context.report(
-				node.type,
-				'no-broad-literal-annotation',
-				'This annotates a literal and widens it. Remove the annotation; use as const with satisfies only when a shape check is needed.'
-			)
-		}
-	}),
-	rule('no-effect-type-erasure', (node, context) => {
-		if (
-			ts.isTypeReferenceNode(node) &&
-			ts.isQualifiedName(node.typeName) &&
-			node.typeName.getText(context.sourceFile) === 'Effect.Effect' &&
-			(node.typeArguments?.length ?? 0) < 2
-		) {
-			context.report(
-				node,
-				'no-effect-type-erasure',
-				'Effect.Effect omits error or requirement parameters. Preserve the full Effect type arguments at this type reference.'
-			)
 		}
 	})
 ] as const satisfies readonly Rule[]
@@ -437,6 +394,20 @@ function hasUnknownOrAnyContextualParameterType(checker: ts.TypeChecker, node: t
 		index += 1
 	}
 	return false
+}
+
+function isEffectFnParameterNeedingAnnotation(checker: ts.TypeChecker, node: ts.ParameterDeclaration) {
+	if (!(ts.isFunctionExpression(node.parent) || ts.isArrowFunction(node.parent))) return false
+	return (
+		ts.isCallExpression(node.parent.parent) &&
+		ts.isPropertyAccessExpression(node.parent.parent.expression) &&
+		ts.isIdentifier(node.parent.parent.expression.expression) &&
+		node.parent.parent.expression.expression.text === 'Effect' &&
+		Array.contains(['fn', 'fnUntraced'] as const, node.parent.parent.expression.name.text) &&
+		!Array.some(checker.getContextualType(node.parent.parent)?.getCallSignatures() ?? [], signature => {
+			return signature.getParameters().length > 0
+		})
+	)
 }
 
 function hasGenericCallbackParameterType(

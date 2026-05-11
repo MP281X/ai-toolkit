@@ -5,18 +5,15 @@ import {Array, Effect, flow, Option, Order, pipe, String} from 'effect'
 import ts from 'typescript'
 
 import {declarationName} from '#lib/ts.ts'
-import {architectureRules} from '#rules/architecture.ts'
-import {controlFlowRules} from '#rules/control-flow.ts'
-import {effectRules} from '#rules/effect.ts'
-import {shouldRunRule} from '#rules/helpers.ts'
-import {indirectionRules} from '#rules/indirection.ts'
-import {reactUiRules} from '#rules/react-ui.ts'
-import {typeSafetyRules} from '#rules/type-safety.ts'
+import type {RuleScope} from '#rules/helpers.ts'
+import {scopedRuleId, shouldRunRule} from '#rules/helpers.ts'
+import {allRuleScopes, rulesForScopes} from '#rules/index.ts'
 
 type Diagnostic = {
 	readonly rule: string
 	readonly severity: 'error'
-	readonly message: string
+	readonly description: string
+	readonly fix: string
 	readonly filePath: string
 	readonly line: number
 	readonly column: number
@@ -28,10 +25,11 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 	readonly mode: string
 	readonly cwd: string
 	readonly paths?: readonly string[]
+	readonly scopes?: readonly RuleScope[]
 }) {
 	const files = yield* collectFiles(options)
 	if (Array.isReadonlyArrayEmpty(files)) return {diagnostics: [], files}
-	const programFiles = yield* collectFiles({...options, mode: 'full', paths: ['.']})
+	const programFiles = yield* collectFiles({cwd: options.cwd, mode: 'full', paths: ['.']})
 
 	const program = ts.createProgram(
 		Array.map(programFiles, filePath => `${options.cwd}/${filePath}`),
@@ -51,7 +49,17 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 		sourceFiles,
 		Array.flatMap(sourceFile => {
 			const filePath = normalizePath(sourceFile.fileName).replace(`${normalizePath(options.cwd)}/`, '')
-			return analyzeSourceFile(filePath, sourceFile, references, referenceFiles, declarations, checker, program)
+			return analyzeSourceFile(
+				filePath,
+				sourceFile,
+				references,
+				referenceFiles,
+				declarations,
+				checker,
+				program,
+				options.scopes,
+				true
+			)
 		}),
 		Array.sort(compareDiagnosticPosition)
 	)
@@ -59,7 +67,12 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 	return {diagnostics, files}
 })
 
-export function analyzeText(filePath: string, sourceText: string) {
+export function analyzeText(
+	filePath: string,
+	sourceText: string,
+	scopes: readonly RuleScope[] = allRuleScopes,
+	useScopedRuleIds = false
+) {
 	const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true, scriptKind(filePath))
 	return Array.sort(
 		analyzeSourceFile(
@@ -67,22 +80,46 @@ export function analyzeText(filePath: string, sourceText: string) {
 			sourceFile,
 			collectReferences([sourceFile]),
 			collectReferenceFiles([sourceFile]),
-			collectDeclarations([sourceFile])
+			collectDeclarations([sourceFile]),
+			undefined,
+			undefined,
+			scopes,
+			useScopedRuleIds
 		),
 		compareDiagnosticPosition
 	)
 }
 
-export function analyzeTypedText(filePath: string, sourceText: string) {
+export function analyzeTypedText(
+	filePath: string,
+	sourceText: string,
+	scopes: readonly RuleScope[] = allRuleScopes,
+	useScopedRuleIds = false
+) {
 	const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true, scriptKind(filePath))
 	const compilerOptions = readCompilerOptions(process.cwd())
-	const defaultHost = ts.createCompilerHost(compilerOptions)
 	const program = ts.createProgram([filePath], compilerOptions, {
-		...defaultHost,
+		createHash: ts.createCompilerHost(compilerOptions).createHash,
+		directoryExists: ts.createCompilerHost(compilerOptions).directoryExists,
+		fileExists: ts.createCompilerHost(compilerOptions).fileExists,
+		getCanonicalFileName: ts.createCompilerHost(compilerOptions).getCanonicalFileName,
+		getCurrentDirectory: ts.createCompilerHost(compilerOptions).getCurrentDirectory,
+		getDefaultLibFileName: ts.createCompilerHost(compilerOptions).getDefaultLibFileName,
+		getDefaultLibLocation: ts.createCompilerHost(compilerOptions).getDefaultLibLocation,
+		getDirectories: ts.createCompilerHost(compilerOptions).getDirectories,
+		getNewLine: ts.createCompilerHost(compilerOptions).getNewLine,
 		getSourceFile(requestedFilePath, languageVersion, onError, shouldCreateNewSourceFile) {
 			if (normalizePath(requestedFilePath) === normalizePath(filePath)) return sourceFile
-			return defaultHost.getSourceFile(requestedFilePath, languageVersion, onError, shouldCreateNewSourceFile)
-		}
+			return ts
+				.createCompilerHost(compilerOptions)
+				.getSourceFile(requestedFilePath, languageVersion, onError, shouldCreateNewSourceFile)
+		},
+		readDirectory: ts.createCompilerHost(compilerOptions).readDirectory,
+		readFile: ts.createCompilerHost(compilerOptions).readFile,
+		realpath: ts.createCompilerHost(compilerOptions).realpath,
+		trace: ts.createCompilerHost(compilerOptions).trace,
+		useCaseSensitiveFileNames: ts.createCompilerHost(compilerOptions).useCaseSensitiveFileNames,
+		writeFile: ts.createCompilerHost(compilerOptions).writeFile
 	})
 
 	return Array.sort(
@@ -93,7 +130,9 @@ export function analyzeTypedText(filePath: string, sourceText: string) {
 			collectReferenceFiles([sourceFile]),
 			collectDeclarations([sourceFile]),
 			program.getTypeChecker(),
-			program
+			program,
+			scopes,
+			useScopedRuleIds
 		),
 		compareDiagnosticPosition
 	)
@@ -110,16 +149,18 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 				})),
 				Array.sortWith(fileDiagnostics => Array.length(fileDiagnostics.diagnostics), Order.flip(Order.Number)),
 				Array.map(fileDiagnostics => {
-					const locationWidth = maxLength([
-						'Problem',
-						...Array.map(fileDiagnostics.diagnostics, diagnostic => `L${diagnostic.line}:${diagnostic.column}`)
-					])
+					const locationWidth = maxLength(
+						Array.prepend(
+							Array.map(fileDiagnostics.diagnostics, diagnostic => `L${diagnostic.line}:${diagnostic.column}`),
+							'Problem'
+						)
+					)
 					const symbolWidth = maxLength(Array.map(fileDiagnostics.diagnostics, diagnostic => `@${diagnostic.symbol}`))
 
 					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
 						fileDiagnostics.diagnostics,
 						Array.map(diagnostic => {
-							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.message, 'problem')}`
+							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
 						}),
 						Array.join('\n\n')
 					)}`
@@ -149,15 +190,18 @@ export function analyzeSourceFile(
 	referenceFiles: ReadonlyMap<string, ReadonlySet<string>>,
 	declarations: ReadonlyMap<string, ts.Declaration>,
 	checker?: ts.TypeChecker,
-	program?: ts.Program
+	program?: ts.Program,
+	scopes: readonly RuleScope[] = allRuleScopes,
+	useScopedRuleIds = false
 ) {
 	const diagnostics = Array.empty<Diagnostic>()
-	function report(node: ts.Node, rule: string, message: string) {
+	function report(node: ts.Node, rule: string, diagnostic: {readonly description: string; readonly fix: string}) {
 		const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
 		diagnostics.push({
 			rule,
 			severity: 'error',
-			message,
+			description: diagnostic.description,
+			fix: diagnostic.fix,
 			filePath,
 			line: position.line + 1,
 			column: position.character + 1,
@@ -172,16 +216,19 @@ export function analyzeSourceFile(
 		})
 	}
 	function visit(node: ts.Node) {
-		for (const rule of [
-			...typeSafetyRules,
-			...indirectionRules,
-			...effectRules,
-			...controlFlowRules,
-			...reactUiRules,
-			...architectureRules
-		]) {
+		for (const rule of rulesForScopes(scopes, useScopedRuleIds)) {
 			if (shouldRunRule(rule.id, filePath)) {
-				rule.run(node, {filePath, sourceFile, checker, program, references, referenceFiles, declarations, report})
+				rule.run(node, {
+					filePath,
+					sourceFile,
+					checker,
+					program,
+					references,
+					referenceFiles,
+					declarations,
+					report: (node, ruleId, diagnostic) =>
+						report(node, useScopedRuleIds ? scopedRuleId(rule.scope, ruleId) : ruleId, diagnostic)
+				})
 			}
 		}
 		ts.forEachChild(node, visit)
@@ -240,7 +287,9 @@ function pathMatchesScope(filePath: string, scope: string) {
 
 const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
 	const process = Bun.spawn(
-		['git', 'diff', '--name-only', '--diff-filter=ACMR', ...(mode === 'changed' ? ['HEAD'] : [])],
+		mode === 'changed'
+			? ['git', 'diff', '--name-only', '--diff-filter=ACMR', 'HEAD']
+			: ['git', 'diff', '--name-only', '--diff-filter=ACMR'],
 		{cwd, stdout: 'pipe', stderr: 'pipe'}
 	)
 	const output = yield* Effect.promise(() => new Response(process.stdout).text())
@@ -270,16 +319,16 @@ const expandPaths = Effect.fnUntraced(function* (cwd: string, selectedPaths: rea
 })
 
 const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selectedPaths: readonly string[]) {
-	const output = yield* runGitString(cwd, [
-		'ls-files',
-		'-co',
-		'--exclude-standard',
-		'--',
-		...Array.match(selectedPaths, {
-			onEmpty: () => ['.'],
-			onNonEmpty: selectedPaths => Array.map(selectedPaths, normalizePath)
-		})
-	])
+	const output = yield* runGitString(
+		cwd,
+		Array.appendAll(
+			['git', 'ls-files', '-co', '--exclude-standard', '--'],
+			Array.match(selectedPaths, {
+				onEmpty: () => ['.'],
+				onNonEmpty: selectedPaths => Array.map(selectedPaths, normalizePath)
+			})
+		)
+	)
 	return pipe(
 		output,
 		String.split('\n'),
@@ -289,8 +338,8 @@ const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selected
 	)
 })
 
-const runGitString = Effect.fnUntraced(function* (cwd: string, args: readonly string[]) {
-	const process = Bun.spawn(['git', ...args], {cwd, stdout: 'pipe', stderr: 'pipe'})
+const runGitString = Effect.fnUntraced(function* (cwd: string, command: readonly string[]) {
+	const process = Bun.spawn(Array.fromIterable(command), {cwd, stdout: 'pipe', stderr: 'pipe'})
 	const output = yield* Effect.promise(() => new Response(process.stdout).text())
 	const exitCode = yield* Effect.promise(() => process.exited)
 	if (exitCode !== 0) {
@@ -426,21 +475,19 @@ export function collectDeclarations(sourceFiles: readonly ts.SourceFile[]) {
 function isExcluded(filePath: string) {
 	const normalized = normalizePath(filePath)
 	return (
-		String.endsWith('.d.ts')(normalized) ||
-		String.endsWith('/gen.ts')(normalized) ||
-		String.endsWith('/gen.tsx')(normalized) ||
-		RegExp('\\.gen\\.tsx?$').test(normalized) ||
 		String.includes('/components/ui/')(normalized) ||
 		String.startsWith('components/ui/')(normalized) ||
-		String.startsWith('.opencode/resources/')(normalized) ||
-		String.startsWith('.opencode/plans/')(normalized)
+		String.endsWith('/routeTree.gen.ts')(normalized) ||
+		String.endsWith('/routeTree.gen.tsx')(normalized) ||
+		normalized === 'routeTree.gen.ts' ||
+		normalized === 'routeTree.gen.tsx'
 	)
 }
 
 const normalizePath = flow(
 	String.replaceAll('\\', '/'),
-	String.replace(RegExp('^\\.\\/'), ''),
 	String.replace(RegExp('/+$'), ''),
+	path => (String.startsWith('./')(path) ? String.slice(2)(path) : path),
 	path => (path === '' ? '.' : path)
 )
 

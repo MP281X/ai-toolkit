@@ -34,10 +34,16 @@ export type Rule = {
 			readonly references: ReadonlyMap<string, number>
 			readonly referenceFiles: ReadonlyMap<string, ReadonlySet<string>>
 			readonly declarations: ReadonlyMap<string, ts.Declaration>
-			readonly report: (node: ts.Node, rule: string, message: string) => void
+			readonly report: (
+				node: ts.Node,
+				rule: string,
+				diagnostic: {readonly description: string; readonly fix: string}
+			) => void
 		}
 	) => void
 }
+
+export type RuleScope = 'base' | 'react' | 'effect'
 
 export const standardPrototypeMethods = new Map([
 	['map', 'Array'],
@@ -57,34 +63,22 @@ export const standardPrototypeMethods = new Map([
 	['endsWith', 'String']
 ])
 
-const architectureRules = new Set([
-	'no-floating-type-contract',
-	'no-trivial-local-helper',
-	'no-fake-public-export',
-	'no-equivalent-helper-duplicates',
-	'no-constant-variation-parameter',
-	'no-single-implementation-abstraction',
-	'no-facade-object',
-	'prefer-composition-over-render-branching',
-	'no-single-variant-abstraction',
-	'no-internal-barrel-import',
-	'no-re-export'
-])
-
 export function shouldRunRule(ruleId: string, filePath: string) {
 	if (!RegExp('\\.config\\.[cm]?tsx?$').test(filePath)) return true
 	return (
-		!architectureRules.has(ruleId) ||
+		!Array.contains(['no-vacuous-abstraction', 'no-plain-class'] as const, ruleId) ||
 		new Set([
 			'no-type-assertion-except-as-const',
-			'prefer-strict-literal-const',
 			'prefer-readonly-types',
 			'prefer-undefined-over-null',
 			'no-redundant-type-system-check',
-			'no-redundant-generic-type-argument',
-			'no-unnecessary-type-constraint'
+			'no-redundant-type-syntax'
 		]).has(ruleId)
 	)
+}
+
+export function scopedRuleId(scope: RuleScope, ruleId: string) {
+	return `${scope}/${ruleId}`
 }
 
 export function rule(id: string, run: Rule['run']) {
@@ -124,17 +118,37 @@ export function isInsideTypeName(node: ts.Identifier) {
 export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (ts.isCallExpression(node.parent) && isReactUseRefCall(checker, node.parent)) return true
 	if (
+		ts.isCallExpression(node.parent) &&
+		ts.isPropertyAccessExpression(node.parent.expression) &&
+		ts.isIdentifier(node.parent.expression.expression) &&
+		node.parent.expression.expression.text === 'Schema' &&
+		node.parent.expression.name.text === 'NullOr'
+	) {
+		return true
+	}
+	if (
 		ts.findAncestor(node, ancestor => {
 			return (
-				ts.isTypeNode(ancestor) &&
-				ts.isCallExpression(ancestor.parent) &&
-				isReactUseRefCall(checker, ancestor.parent) &&
-				Array.some(ancestor.parent.typeArguments ?? [], argument => argument === ancestor)
+				ts.isCallExpression(ancestor) &&
+				isReactUseRefCall(checker, ancestor) &&
+				Array.some(ancestor.arguments, argument => containsNode(argument, child => child === node))
+			)
+		})
+	) {
+		return true
+	}
+	if (
+		ts.findAncestor(node, ancestor => {
+			return (
+				ts.isCallExpression(ancestor) &&
+				isReactUseRefCall(checker, ancestor) &&
+				Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
 			)
 		}) ||
 		(ts.isBinaryExpression(node.parent) &&
 			isAssignmentOperator(node.parent.operatorToken.kind) &&
-			isReactRefCurrent(checker, node.parent.left))
+			ts.isPropertyAccessExpression(node.parent.left) &&
+			node.parent.left.name.text === 'current')
 	) {
 		return true
 	}
@@ -146,7 +160,9 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
 			)
 		}) ||
-		ts.findAncestor(node, ancestor => ts.isPropertySignature(ancestor) && isReactRefCurrentPropertySignature(ancestor))
+		ts.findAncestor(node, ancestor => {
+			return ts.isPropertySignature(ancestor) && ts.isIdentifier(ancestor.name) && ancestor.name.text === 'current'
+		})
 	) {
 		return true
 	}
@@ -292,7 +308,13 @@ export function functionLikeName(node: ts.FunctionLikeDeclaration) {
 }
 
 export function isEffectRunCall(node: ts.Node) {
-	return isEffectCall(node) && ts.isCallExpression(node) && String.startsWith('run')(callName(node))
+	return (
+		ts.isCallExpression(node) &&
+		ts.isPropertyAccessExpression(node.expression) &&
+		ts.isIdentifier(node.expression.expression) &&
+		String.startsWith('run')(callName(node)) &&
+		(node.expression.expression.text === 'Effect' || String.endsWith('Runtime')(node.expression.expression.text))
+	)
 }
 
 export function isComposedEffectArgument(node: ts.Expression) {
@@ -446,10 +468,6 @@ export function nameNodeForDeclaration(node: ts.Node) {
 		return node.name
 	}
 	return node
-}
-
-export function isRuntimeBoundary(filePath: string) {
-	return RegExp('(^|/)(main|index|runtime|entry|resources)\\.tsx?$').test(filePath)
 }
 
 export function isReactRefCurrent(checker: ts.TypeChecker | undefined, node: ts.Node) {

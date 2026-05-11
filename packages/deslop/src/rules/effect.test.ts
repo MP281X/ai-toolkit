@@ -1,141 +1,164 @@
-import {Array} from 'effect'
+import {test} from 'bun:test'
+import {expectNoRule, expectRule} from './test-utils.ts'
 
-import {expect, test} from 'bun:test'
-import {analyzeTypedText} from '#lib/analyzer.ts'
-import {expectRule} from './test-utils.ts'
-
-test('prefer-effect-fn-untraced', () => {
+test('prefer-effect-fn-untraced reports parameterized functions returning Effect', () => {
 	return expectRule({
 		rule: 'prefer-effect-fn-untraced',
 		typed: true,
-		source: 'import {Effect} from "effect"\nfunction save(id: string) { return Effect.succeed(id) }\n'
+		source: 'import {Effect} from "effect"\nfunction loadUser(id: string) { return Effect.succeed(id) }\n'
 	})
 })
-test('prefer-effect-gen-program', () => {
+
+test('prefer-effect-gen-program reports no-argument functions returning Effect', () => {
 	return expectRule({
 		rule: 'prefer-effect-gen-program',
 		typed: true,
-		source: 'import {Effect} from "effect"\nfunction program() { return Effect.succeed(1) }\n'
+		source: 'import {Effect} from "effect"\nfunction program() { return Effect.succeed("ready") }\n'
 	})
 })
-test('no-floating-effect', () => {
+
+test('no-floating-effect reports unused Effect expressions', () => {
 	return expectRule({
 		rule: 'no-floating-effect',
 		typed: true,
-		source: 'import {Effect} from "effect"\nEffect.succeed(1)\n'
+		source: 'import {Effect} from "effect"\nEffect.log("saved")\n'
 	})
 })
-test('prefer-top-level-pipe-for-effect-values', () => {
-	return expectRule({
-		rule: 'prefer-top-level-pipe-for-effect-values',
-		typed: true,
-		source: 'import {Effect} from "effect"\nEffect.asVoid(Effect.succeed(1))\n'
-	})
-})
-test('prefer-top-level-rcmap', () => {
+
+test('prefer-top-level-rcmap reports RcMap constructors inside programs', () => {
 	return expectRule({
 		rule: 'prefer-top-level-rcmap',
 		typed: true,
 		source:
-			'import {Effect, RcMap} from "effect"\nconst program = Effect.gen(function* () { if (true) { const resources = yield* RcMap.make({ lookup: () => Effect.void }); return resources } })\n'
+			'import {Effect, RcMap} from "effect"\nconst program = Effect.gen(function* () { return yield* RcMap.make({ lookup: () => Effect.succeed("user") }) })\n'
 	})
 })
-test('prefer-top-level-rcmap reports root effect generator rcmap constructors', () => {
-	return expectRule({
+
+test('prefer-top-level-rcmap allows PascalCase top-level RcMap values', () => {
+	return expectNoRule({
 		rule: 'prefer-top-level-rcmap',
 		typed: true,
 		source:
-			'import {Effect, RcMap} from "effect"\nexport const program = Effect.gen(function* () { const resources = yield* RcMap.make({ lookup: () => Effect.void }); return resources })\n'
+			'import {Effect, RcMap} from "effect"\nconst Users = RcMap.make({ lookup: () => Effect.succeed("user") })\nconst program = Effect.gen(function* () { return yield* Users })\n'
 	})
 })
-test('prefer-top-level-rcmap allows top-level RcMap values', () => {
-	const rules = Array.map(
-		analyzeTypedText(
-			'sample.ts',
-			'import {Effect, RcMap} from "effect"\nconst Resources = RcMap.make({ lookup: () => Effect.void })\nexport const program = Effect.gen(function* () { return yield* Resources })\n'
-		),
-		diagnostic => diagnostic.rule
-	)
-	expect(rules).not.toContain('prefer-top-level-rcmap')
-	expect(rules).not.toContain('no-access-alias')
-})
-test('prefer-top-level-rcmap reports lowercase top-level RcMap constructors', () => {
+
+test('no-standard-prototype-methods reports standard method calls', () => {
 	return expectRule({
-		rule: 'prefer-top-level-rcmap',
+		rule: 'no-standard-prototype-methods',
 		typed: true,
-		source: 'import {Effect, RcMap} from "effect"\nconst resources = RcMap.make({ lookup: () => Effect.void })\n'
+		source: 'const name = " Ada ".trim()\n'
 	})
 })
-test('prefer-effect-module-over-standard-library', () => {
+
+test('no-standard-prototype-methods reports Object module calls', () => {
 	return expectRule({
-		rule: 'prefer-effect-module-over-standard-library',
+		rule: 'no-standard-prototype-methods',
 		typed: true,
-		source: 'const value = " name ".trim()\n'
+		source: 'const keys = Object.keys({ name: "Ada" })\n'
 	})
 })
-test('prefer-direct-call-for-single-data-operation', () => {
+
+test('prefer-effect-random reports crypto UUID calls', () => {
 	return expectRule({
-		rule: 'prefer-direct-call-for-single-data-operation',
+		rule: 'prefer-effect-random',
+		typed: true,
+		source: 'import {randomUUID} from "node:crypto"\nconst id = randomUUID()\n'
+	})
+})
+
+test('no-single-operation-pipe reports pipe with one operation', () => {
+	return expectRule({
+		rule: 'no-single-operation-pipe',
 		typed: true,
 		source:
-			'import {Array, pipe} from "effect"\ndeclare const values: ReadonlyArray<string>\nconst result = pipe(values, Array.map(value => value))\n'
+			'import {Array, pipe} from "effect"\ndeclare const names: readonly string[]\nconst trimmed = pipe(names, Array.map(name => name.trim()))\n'
 	})
 })
-test('prefer-effect-nullish-predicates', () => {
-	return expectRule({
-		rule: 'prefer-effect-nullish-predicates',
-		source:
-			'import {Array} from "effect"\ndeclare const values: ReadonlyArray<string | undefined>\nconst result = Array.filter(values, value => value !== undefined)\n'
-	})
-})
-test('no-effect-async-constructor-mismatch', () => {
-	return expectRule({
-		rule: 'no-effect-async-constructor-mismatch',
-		source: 'import {Effect} from "effect"\nconst program = Effect.sync(async () => { await fetch("/") })\n'
-	})
-})
-test('no-effect-without-semantics', () => {
+
+test('no-effect-without-semantics reports literal Effect wrappers', () => {
 	return expectRule({
 		rule: 'no-effect-without-semantics',
-		source: 'import {Effect} from "effect"\nconst program = Effect.succeed("ok")\n'
+		source: 'import {Effect} from "effect"\nconst program = Effect.succeed("ready")\n'
 	})
 })
-test('no-effect-run-away-from-boundary', () => {
+
+test('no-effect-without-semantics reports Effect.sync callbacks returning Effect', () => {
 	return expectRule({
-		rule: 'no-effect-run-away-from-boundary',
-		source: 'import {Effect} from "effect"\nEffect.runFork(Effect.succeed(1))\n',
-		filePath: 'src/feature.ts'
+		rule: 'no-effect-without-semantics',
+		typed: true,
+		source: 'import {Effect} from "effect"\nconst program = Effect.sync(() => Effect.succeed("ready"))\n'
 	})
 })
-test('no-option-constructor from conversion', () => {
+
+test('no-effect-without-semantics allows Effect.sync callbacks returning plain values', () => {
+	return expectNoRule({
+		rule: 'no-effect-without-semantics',
+		typed: true,
+		source: 'import {Effect} from "effect"\nconst program = Effect.sync(() => "ready")\n'
+	})
+})
+
+test('prefer-effect-catch-tag reports broad catches for tagged errors', () => {
+	return expectRule({
+		rule: 'prefer-effect-catch-tag',
+		typed: true,
+		source:
+			'import {Effect, pipe} from "effect"\nclass NotFound { readonly _tag = "NotFound" }\nconst program = pipe(Effect.fail(new NotFound()), Effect.catch(() => Effect.succeed("fallback")))\n'
+	})
+})
+
+test('no-untyped-effect-error reports unknown error channels', () => {
+	return expectRule({
+		rule: 'no-untyped-effect-error',
+		typed: true,
+		source:
+			'import {Effect} from "effect"\ndeclare const program: Effect.Effect<string, unknown>\nconst value = program\n'
+	})
+})
+
+test('no-option-constructor reports Option.from conversions', () => {
 	return expectRule({
 		rule: 'no-option-constructor',
 		source: 'import {Option} from "effect"\nconst value = Option.fromNullable(input)\n'
 	})
 })
-test('no-option-constructor some', () => {
-	return expectRule({
+
+test('no-option-constructor allows explicit Some and None values', () => {
+	return expectNoRule({
 		rule: 'no-option-constructor',
-		source: 'import {Option} from "effect"\nconst value = Option.some("value")\n'
+		source: 'import {Option} from "effect"\nconst one = Option.some("Ada")\nconst two = Option.none()\n'
 	})
 })
-test('no-option-constructor none', () => {
+
+test('prefer-effect-try reports await inside Effect generators', () => {
 	return expectRule({
-		rule: 'no-option-constructor',
-		source: 'import {Option} from "effect"\nconst value = Option.none()\n'
+		rule: 'prefer-effect-try',
+		source:
+			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { const response = await fetch("/"); return response })\n'
 	})
 })
-test('prefer-schema-tagged-error over Data.TaggedError', () => {
+
+test('prefer-effect-try allows awaits inside Effect.tryPromise callbacks', () => {
+	return expectNoRule({
+		rule: 'prefer-effect-try',
+		source:
+			'import {Effect} from "effect"\nconst program = Effect.tryPromise({ try: async () => await fetch("/"), catch: error => error })\n'
+	})
+})
+
+test('prefer-schema-tagged-error reports Data.TaggedError classes', () => {
 	return expectRule({
 		rule: 'prefer-schema-tagged-error',
 		source:
-			'import {Data} from "effect"\nclass LintFailure extends Data.TaggedError("LintFailure")<Record<never, never>> {}\n'
+			'import {Data} from "effect"\nclass UserError extends Data.TaggedError("UserError")<{ readonly message: string }> {}\n'
 	})
 })
-test('prefer yieldable tagged error over Effect.fail', () => {
+
+test('prefer-schema-tagged-error reports yield of Effect.fail', () => {
 	return expectRule({
 		rule: 'prefer-schema-tagged-error',
 		source:
-			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { return yield* Effect.fail(new LintFailure()) })\n'
+			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { return yield* Effect.fail(new UserError()) })\n'
 	})
 })

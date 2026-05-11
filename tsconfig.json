@@ -1,21 +1,5 @@
 {
 	"compilerOptions": {
-		// effect-ts
-		"plugins": [
-			{
-				"name": "@effect/language-service",
-				"diagnosticSeverity": {
-					"anyUnknownInErrorContext": "error",
-					"deterministicKeys": "error",
-					"extendsNativeError": "error",
-					"instanceOfSchema": "error",
-					"missedPipeableOpportunity": "error",
-					"nodeBuiltinImport": "error",
-					"serviceNotAsClass": "error"
-				}
-			}
-		],
-
 		// type checking
 		"strict": true,
 		"noUnusedLocals": true,
