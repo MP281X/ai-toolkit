@@ -12,11 +12,14 @@ export function expectRule(testCase: {
 	readonly scopes?: readonly RuleScope[]
 	readonly scoped?: boolean
 }) {
-	const diagnostics = testCase.typed
-		? analyzeTypedText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
-		: analyzeText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
-
-	expect(Array.map(diagnostics, diagnostic => diagnostic.rule)).toContain(testCase.rule)
+	expect(
+		Array.map(
+			testCase.typed
+				? analyzeTypedText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
+				: analyzeText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped),
+			diagnostic => diagnostic.rule
+		)
+	).toContain(testCase.rule)
 }
 
 export function expectNoRule(testCase: {
@@ -27,9 +30,12 @@ export function expectNoRule(testCase: {
 	readonly scopes?: readonly RuleScope[]
 	readonly scoped?: boolean
 }) {
-	const diagnostics = testCase.typed
-		? analyzeTypedText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
-		: analyzeText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
-
-	expect(Array.map(diagnostics, diagnostic => diagnostic.rule)).not.toContain(testCase.rule)
+	expect(
+		Array.map(
+			testCase.typed
+				? analyzeTypedText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped)
+				: analyzeText(testCase.filePath ?? 'sample.ts', testCase.source, testCase.scopes, testCase.scoped),
+			diagnostic => diagnostic.rule
+		)
+	).not.toContain(testCase.rule)
 }

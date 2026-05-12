@@ -220,7 +220,7 @@ export function declarationName(node: ts.Node) {
 		return node.name.text
 	}
 	if (ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node)) {
-		return node.name.getText()
+		return node.name.text
 	}
 	if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) return node.name.text
 	return '<root>'

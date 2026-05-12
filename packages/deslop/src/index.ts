@@ -20,10 +20,7 @@ const runAndRender = Effect.fnUntraced(function* (options: {
 	readonly scopes?: readonly RuleScope[]
 }) {
 	const result = yield* runDeslop(options)
-	yield* pipe(
-		Terminal.Terminal.asEffect(),
-		Effect.flatMap(terminal => terminal.display(renderText(result.diagnostics)))
-	)
+	yield* Effect.flatMap(Terminal.Terminal, terminal => terminal.display(renderText(result.diagnostics)))
 	if (!Array.isReadonlyArrayEmpty(result.diagnostics)) return yield* new LintFailure()
 })
 
@@ -37,11 +34,13 @@ BunRuntime.runMain(
 						unstaged: Flag.withDescription(Flag.boolean('unstaged'), 'Lint unstaged source files.'),
 						changed: Flag.withDescription(Flag.boolean('changed'), 'Lint source files changed from HEAD.'),
 						full: Flag.withDescription(Flag.boolean('full'), 'Lint every tracked source file.'),
-						scopes: Flag.string('scopes').pipe(
+						scopes: pipe(
+							Flag.string('scopes'),
 							Flag.withDescription('Comma-separated rule scopes to run: base,react,effect.'),
 							Flag.optional
 						),
-						paths: Argument.string('path').pipe(
+						paths: pipe(
+							Argument.string('path'),
 							Argument.withDescription('File or directory to lint.'),
 							Argument.variadic({min: 0})
 						)

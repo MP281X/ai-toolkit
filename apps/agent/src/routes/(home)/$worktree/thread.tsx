@@ -35,15 +35,15 @@ export const Route = createFileRoute('/(home)/$worktree/thread')({
 	component: ThreadPage
 })
 
-const agentInputStates = new Map<string, RichTextArea.Snapshot<{label: string}>>()
+const agentInputStates = new Map<string, RichTextArea.Snapshot<{readonly label: string}>>()
 const agentStashedPrompts = new Map<
 	string,
 	readonly {
-		id: string
-		model: ModelId
-		provider: ProviderId
-		snapshot: RichTextArea.Snapshot<{label: string}>
-		text: string
+		readonly id: string
+		readonly model: ModelId
+		readonly provider: ProviderId
+		readonly snapshot: RichTextArea.Snapshot<{readonly label: string}>
+		readonly text: string
 	}[]
 >()
 
@@ -51,7 +51,7 @@ const agentEventsAtom = Atom.family((key: AgentKey) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
-				RpcClient.asEffect(),
+				RpcClient,
 				Effect.map(client => client('agent.events', {key})),
 				Stream.unwrap,
 				Stream.scan(Array.empty<AgentEvent>(), (events, event) => [...events, event])
@@ -65,7 +65,7 @@ const agentStatusAtom = Atom.family((key: AgentKey) => {
 	return Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
-				RpcClient.asEffect(),
+				RpcClient,
 				Effect.map(client => client('agent.status', {key})),
 				Stream.unwrap
 			)
@@ -417,32 +417,33 @@ function AgentPanel(input: {
 	const [stashedPrompts, setStashedPrompts] = useState(
 		agentStashedPrompts.get(input.agentKey.id) ??
 			Array.empty<{
-				id: string
-				model: ModelId
-				provider: ProviderId
-				snapshot: RichTextArea.Snapshot<{label: string}>
-				text: string
+				readonly id: string
+				readonly model: ModelId
+				readonly provider: ProviderId
+				readonly snapshot: RichTextArea.Snapshot<{readonly label: string}>
+				readonly text: string
 			}>()
 	)
-	const runs = pipe(
+	const runs = Array.reduce(
 		events,
-		Array.reduce(Array.empty<{id: string; prompt: string; parts: readonly AgentEvent[]}>(), (runs, event) => {
+		Array.empty<{readonly id: string; readonly prompt: string; readonly parts: readonly AgentEvent[]}>(),
+		(runs, event) => {
 			if (event.type === 'user-message')
 				return Array.append(runs, {id: `${Array.length(runs)}`, parts: [], prompt: event.prompt})
 			if (!Array.isArrayNonEmpty(runs)) return runs
 			const [previousRuns, currentRun] = Array.unappend(runs)
 			return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
-		})
+		}
 	)
 	const promptAgent = useAtomSet(RpcClient.mutation('agent.prompt'), {mode: 'promise'})
 	const stopAgent = useAtomSet(RpcClient.mutation('agent.stop'), {mode: 'promise'})
 	function setAgentStash(
 		prompts: readonly {
-			id: string
-			model: ModelId
-			provider: ProviderId
-			snapshot: RichTextArea.Snapshot<{label: string}>
-			text: string
+			readonly id: string
+			readonly model: ModelId
+			readonly provider: ProviderId
+			readonly snapshot: RichTextArea.Snapshot<{readonly label: string}>
+			readonly text: string
 		}[]
 	) {
 		agentStashedPrompts.set(input.agentKey.id, prompts)
@@ -585,7 +586,7 @@ function AgentPanel(input: {
 								<SelectContent>
 									{pipe(
 										models,
-										Array.filter(model => pipe(model.agents, Array.contains(input.agent))),
+										Array.filter(model => Array.contains(model.agents, input.agent)),
 										Array.map(model => (
 											<SelectItem key={`${model.provider}:${model.model}`} value={`${model.provider}:${model.model}`}>
 												<ProviderIcon provider={model.provider} className="size-3" />

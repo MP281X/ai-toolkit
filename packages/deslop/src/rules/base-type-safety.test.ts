@@ -84,6 +84,15 @@ test('no-redundant-type-syntax reports explicit generic call arguments', () => {
 	})
 })
 
+test('no-redundant-type-syntax reports property callback parameter annotations', () => {
+	return expectRule({
+		rule: 'no-redundant-type-syntax',
+		typed: true,
+		source:
+			'type Handlers = { readonly LintFailure: (error: Error) => void }\ndeclare function catchTags(handlers: Handlers): void\ncatchTags({ LintFailure: (error: Error) => { console.log(error.message) } })\n'
+	})
+})
+
 test('no-redundant-type-syntax allows useRef generic arguments', () => {
 	return expectNoRule({
 		rule: 'no-redundant-type-syntax',

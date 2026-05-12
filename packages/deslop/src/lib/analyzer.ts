@@ -35,27 +35,21 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 		Array.map(programFiles, filePath => `${options.cwd}/${filePath}`),
 		readCompilerOptions(options.cwd)
 	)
-	const checker = program.getTypeChecker()
-	const sourceFiles = Array.flatMap(files, filePath => {
-		return Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
-	})
 	const programSourceFiles = Array.flatMap(programFiles, filePath => {
 		return Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
 	})
-	const references = collectReferences(programSourceFiles)
-	const referenceFiles = collectReferenceFiles(programSourceFiles)
-	const declarations = collectDeclarations(programSourceFiles)
 	const diagnostics = pipe(
-		sourceFiles,
+		Array.flatMap(files, filePath => {
+			return Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
+		}),
 		Array.flatMap(sourceFile => {
-			const filePath = normalizePath(sourceFile.fileName).replace(`${normalizePath(options.cwd)}/`, '')
 			return analyzeSourceFile(
-				filePath,
+				normalizePath(sourceFile.fileName).replace(`${normalizePath(options.cwd)}/`, ''),
 				sourceFile,
-				references,
-				referenceFiles,
-				declarations,
-				checker,
+				collectReferences(programSourceFiles),
+				collectReferenceFiles(programSourceFiles),
+				collectDeclarations(programSourceFiles),
+				program.getTypeChecker(),
 				program,
 				options.scopes,
 				true
@@ -251,10 +245,8 @@ const collectFiles = Effect.fnUntraced(function* (options: {
 	readonly cwd: string
 	readonly paths?: readonly string[]
 }) {
-	const selectedPaths = yield* collectSelectedPaths(options)
-	const files = yield* expandPaths(options.cwd, selectedPaths)
 	return pipe(
-		files,
+		yield* expandPaths(options.cwd, yield* collectSelectedPaths(options)),
 		Array.map(normalizePath),
 		Array.dedupe,
 		Array.filter(
@@ -292,16 +284,18 @@ const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
 			: ['git', 'diff', '--name-only', '--diff-filter=ACMR'],
 		{cwd, stdout: 'pipe', stderr: 'pipe'}
 	)
-	const output = yield* Effect.promise(() => new Response(process.stdout).text())
-	const exitCode = yield* Effect.promise(() => process.exited)
-	if (exitCode !== 0) {
+	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
 			Effect.promise(() => new Response(process.stderr).text()),
 			Effect.map(String.trim),
 			Effect.flatMap(Effect.fail)
 		)
 	}
-	return pipe(output, String.split('\n'), Array.filter(String.isNonEmpty))
+	return pipe(
+		yield* Effect.promise(() => new Response(process.stdout).text()),
+		String.split('\n'),
+		Array.filter(String.isNonEmpty)
+	)
 })
 
 const expandPaths = Effect.fnUntraced(function* (cwd: string, selectedPaths: readonly string[]) {
@@ -319,18 +313,17 @@ const expandPaths = Effect.fnUntraced(function* (cwd: string, selectedPaths: rea
 })
 
 const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selectedPaths: readonly string[]) {
-	const output = yield* runGitString(
-		cwd,
-		Array.appendAll(
-			['git', 'ls-files', '-co', '--exclude-standard', '--'],
-			Array.match(selectedPaths, {
-				onEmpty: () => ['.'],
-				onNonEmpty: selectedPaths => Array.map(selectedPaths, normalizePath)
-			})
-		)
-	)
 	return pipe(
-		output,
+		yield* runGitString(
+			cwd,
+			Array.appendAll(
+				['git', 'ls-files', '-co', '--exclude-standard', '--'],
+				Array.match(selectedPaths, {
+					onEmpty: () => ['.'],
+					onNonEmpty: selectedPaths => Array.map(selectedPaths, normalizePath)
+				})
+			)
+		),
 		String.split('\n'),
 		Array.filter(String.isNonEmpty),
 		Array.map(normalizePath),
@@ -340,16 +333,14 @@ const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selected
 
 const runGitString = Effect.fnUntraced(function* (cwd: string, command: readonly string[]) {
 	const process = Bun.spawn(Array.fromIterable(command), {cwd, stdout: 'pipe', stderr: 'pipe'})
-	const output = yield* Effect.promise(() => new Response(process.stdout).text())
-	const exitCode = yield* Effect.promise(() => process.exited)
-	if (exitCode !== 0) {
+	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
 			Effect.promise(() => new Response(process.stderr).text()),
 			Effect.map(String.trim),
 			Effect.flatMap(Effect.fail)
 		)
 	}
-	return output
+	return yield* Effect.promise(() => new Response(process.stdout).text())
 })
 
 function compareDiagnosticPosition(
@@ -365,9 +356,8 @@ function compareDiagnosticPosition(
 function readCompilerOptions(cwd: string) {
 	const configPath = ts.findConfigFile(cwd, ts.sys.fileExists, 'tsconfig.json')
 	if (!configPath) return {strict: true, jsx: ts.JsxEmit.ReactJSX}
-	const config = ts.readConfigFile(configPath, ts.sys.readFile)
 	return ts.parseJsonConfigFileContent(
-		config.config,
+		ts.readConfigFile(configPath, ts.sys.readFile).config,
 		ts.sys,
 		pipe(
 			configPath,
@@ -396,6 +386,7 @@ export function collectReferences(sourceFiles: readonly ts.SourceFile[]) {
 	function visit(node: ts.Node) {
 		if (
 			ts.isIdentifier(node) &&
+			node.parent &&
 			!(
 				(ts.isVariableDeclaration(node.parent) && node.parent.name === node) ||
 				(ts.isFunctionDeclaration(node.parent) && node.parent.name === node) ||
@@ -428,6 +419,7 @@ export function collectReferenceFiles(sourceFiles: readonly ts.SourceFile[]) {
 	function visit(sourceFile: ts.SourceFile, node: ts.Node) {
 		if (
 			ts.isIdentifier(node) &&
+			node.parent &&
 			!(
 				(ts.isVariableDeclaration(node.parent) && node.parent.name === node) ||
 				(ts.isFunctionDeclaration(node.parent) && node.parent.name === node) ||

@@ -237,6 +237,14 @@ export const effectRules = [
 		})
 	}),
 	rule('no-effect-without-semantics', (node, context) => {
+		const yieldedMapping = effectGenYieldedMapping(context.checker, node)
+		if (yieldedMapping) {
+			context.report(node, 'no-effect-without-semantics', {
+				description: `Effect.gen only maps yielded Effect "${normalizedText(yieldedMapping)}".`,
+				fix: 'Replace with Effect.map(effect, value => ...) or Effect.flatMap(effect, value => ...); do not wrap it in Effect.gen.'
+			})
+			return
+		}
 		if (ts.isCallExpression(node) && isUnnecessaryEffectGen(context.checker, node)) {
 			context.report(node.expression, 'no-effect-without-semantics', {
 				description: 'Effect.gen only yields one Effect.',
@@ -303,16 +311,17 @@ function isStandardPrototypeMethod(checker: ts.TypeChecker | undefined, name: ts
 
 function isGlobalObjectConstructor(checker: ts.TypeChecker | undefined, receiver: ts.Expression) {
 	if (!checker) return false
-	const type = checker.getTypeAtLocation(receiver)
-	return checker.typeToString(type) === 'ObjectConstructor'
+	return checker.typeToString(checker.getTypeAtLocation(receiver)) === 'ObjectConstructor'
 }
 
 function rootRcMapConstructorDeclaration(node: ts.Node) {
 	const statement = variableStatementContainingRcMapConstructor(node)
 	if (!(statement && ts.isSourceFile(statement.parent))) return
-	return Array.findFirst(statement.declarationList.declarations, declaration => {
-		return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
-	}).pipe(Option.getOrUndefined)
+	return Option.getOrUndefined(
+		Array.findFirst(statement.declarationList.declarations, declaration => {
+			return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
+		})
+	)
 }
 
 function variableStatementContainingRcMapConstructor(node: ts.Node): ts.VariableStatement | undefined {
@@ -433,11 +442,10 @@ function effectCatchInput(checker: ts.TypeChecker, node: ts.CallExpression) {
 }
 
 function effectChannels(checker: ts.TypeChecker, node: ts.Node) {
-	const type = checker.getTypeAtLocation(node)
-	const typeId = checker.getPropertyOfType(type, '~effect/Effect')
+	const typeId = checker.getPropertyOfType(checker.getTypeAtLocation(node), '~effect/Effect')
 	if (typeId) {
 		const error = varianceReturnType(checker, checker.getTypeOfSymbolAtLocation(typeId, node), '_E', node)
-		if (error) return {error}
+		return error ? {error: error} : undefined
 	}
 }
 
@@ -484,6 +492,47 @@ function isUnnecessaryEffectGen(checker: ts.TypeChecker | undefined, node: ts.Ca
 	if (!(expression && ts.isYieldExpression(expression) && expression.asteriskToken && expression.expression))
 		return false
 	return !!effectChannels(checker, expression.expression)
+}
+
+function effectGenYieldedMapping(checker: ts.TypeChecker | undefined, node: ts.Node) {
+	if (!(checker && ts.isCallExpression(node) && isEffectCall(node) && callName(node) === 'gen')) return
+	if (
+		!(
+			node.arguments[0] &&
+			(ts.isFunctionExpression(node.arguments[0]) || ts.isArrowFunction(node.arguments[0])) &&
+			ts.isBlock(node.arguments[0].body)
+		)
+	) {
+		return
+	}
+	if (node.arguments[0].body.statements.length !== 1) return
+	if (
+		!(
+			node.arguments[0].body.statements[0] &&
+			ts.isReturnStatement(node.arguments[0].body.statements[0]) &&
+			node.arguments[0].body.statements[0].expression
+		)
+	)
+		return
+	const yielded = singleYieldExpression(node.arguments[0].body.statements[0].expression)
+	if (!(yielded?.expression && yielded.asteriskToken)) return
+	if (node.arguments[0].body.statements[0].expression === yielded) return
+	if (!effectChannels(checker, yielded.expression)) return
+	return yielded.expression
+}
+
+function singleYieldExpression(node: ts.Node) {
+	let yielded: ts.YieldExpression | undefined
+	let count = 0
+	function visit(child: ts.Node) {
+		if (ts.isYieldExpression(child) && child.asteriskToken) {
+			yielded = child
+			count += 1
+		}
+		ts.forEachChild(child, visit)
+	}
+	visit(node)
+	return count === 1 ? yielded : undefined
 }
 
 function effectSyncReturnedExpression(checker: ts.TypeChecker | undefined, node: ts.Node) {

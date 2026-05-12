@@ -8,7 +8,7 @@ import {RpcClient} from '#lib/atomRuntime.ts'
 export const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
-			RpcClient.asEffect(),
+			RpcClient,
 			Effect.map(client => client('projects.watch', void 0)),
 			Stream.unwrap
 		)
@@ -18,7 +18,7 @@ export const projectsAtom = Atom.keepAlive(
 export const agentsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
-			RpcClient.asEffect(),
+			RpcClient,
 			Effect.map(client => client('agents.watch', void 0)),
 			Stream.unwrap
 		)

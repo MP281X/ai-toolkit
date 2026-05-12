@@ -99,6 +99,15 @@ test('no-effect-without-semantics allows Effect.sync callbacks returning plain v
 	})
 })
 
+test('no-effect-without-semantics reports Effect.gen wrappers that only map one yield', () => {
+	return expectRule({
+		rule: 'no-effect-without-semantics',
+		typed: true,
+		source:
+			'import {Config, Effect, Option} from "effect"\nconst program = Effect.gen(function* () { return Option.match(yield* Config.option(Config.string("URL")), { onNone: () => "", onSome: value => value }) })\n'
+	})
+})
+
 test('prefer-effect-catch-tag reports broad catches for tagged errors', () => {
 	return expectRule({
 		rule: 'prefer-effect-catch-tag',

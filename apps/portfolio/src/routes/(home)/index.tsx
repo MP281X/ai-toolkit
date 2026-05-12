@@ -131,7 +131,7 @@ function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 const portfolioAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
-			RpcClient.asEffect(),
+			RpcClient,
 			Effect.map(client => client('portfolio.join', {id: identity.id, name: identity.name, color: identity.color})),
 			Stream.unwrap,
 			Stream.scan(new PortfolioState({}), applyPortfolioEvent)

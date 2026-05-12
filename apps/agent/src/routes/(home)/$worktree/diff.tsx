@@ -25,7 +25,7 @@ const changesAtom = Atom.family((cwd: string) => {
 	return Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
-				RpcClient.asEffect(),
+				RpcClient,
 				Effect.map(client => client('review.watch', {cwd, scope: 'staged-to-worktree'})),
 				Stream.unwrap
 			)
@@ -37,7 +37,7 @@ const stagedAtom = Atom.family((cwd: string) => {
 	return Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
-				RpcClient.asEffect(),
+				RpcClient,
 				Effect.map(client => client('review.watch', {cwd, scope: 'head-to-staged'})),
 				Stream.unwrap
 			)
@@ -125,7 +125,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		setReviewSelection(selection)
 	}
 	const moveReviewSelectionAtom = Atom.fn(
-		Effect.fnUntraced(function* (selectionInput: {readonly cwd: string; readonly offset: number}, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (selectionInput, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(selectionInput.cwd))
 			if (!panel.selectedEntry) return
 			const nextEntry = Array.get(
@@ -158,7 +158,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const moveReviewSelection = useAtomSet(moveReviewSelectionAtom, {mode: 'promise'})
 	void moveReviewSelectionAtom
 	const toggleStageReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (cwd, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(cwd))
 			if (!panel.selectedEntry) return
 
@@ -182,7 +182,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const toggleStageReviewEntry = useAtomSet(toggleStageReviewEntryAtom, {mode: 'promise'})
 	void toggleStageReviewEntryAtom
 	const discardReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (cwd, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(cwd))
 			if (!panel.selectedEntry) return
 
@@ -463,7 +463,13 @@ function DiffList(input: {
 	return (
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
 			<TreeExplorerSection label={input.title} className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-				<DiffListEntries {...input} />
+				<DiffListEntries
+					diffs={input.diffs}
+					empty={input.empty}
+					scope={input.scope}
+					selectedEntry={input.selectedEntry}
+					selectReviewEntry={input.selectReviewEntry}
+				/>
 			</TreeExplorerSection>
 		</TreeExplorer>
 	)
