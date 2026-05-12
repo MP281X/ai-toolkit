@@ -15,10 +15,33 @@ test('no-type-assertion-except-as-const allows const assertions', () => {
 	})
 })
 
+test('no-type-assertion-except-as-const reports redundant non-null assertions', () => {
+	return expectRule({
+		rule: 'no-type-assertion-except-as-const',
+		typed: true,
+		source: 'declare const root: HTMLElement\nconst value = root!\n'
+	})
+})
+
+test('no-type-assertion-except-as-const allows narrowing non-null assertions', () => {
+	return expectNoRule({
+		rule: 'no-type-assertion-except-as-const',
+		typed: true,
+		source: 'declare const root: HTMLElement | null\nconst value = root!\n'
+	})
+})
+
 test('prefer-readonly-types reports mutable object and array types', () => {
 	return expectRule({
 		rule: 'prefer-readonly-types',
 		source: 'type User = { name: string; tags: string[] }\n'
+	})
+})
+
+test('prefer-readonly-types allows mutable React RefObject values', () => {
+	return expectNoRule({
+		rule: 'prefer-readonly-types',
+		source: 'type ItemsRef = React.RefObject<string[]>\n'
 	})
 })
 
@@ -58,6 +81,15 @@ test('no-redundant-type-syntax reports explicit generic call arguments', () => {
 		rule: 'no-redundant-type-syntax',
 		typed: true,
 		source: 'function identity<T>(value: T) { return value }\nconst name = identity<string>("Ada")\n'
+	})
+})
+
+test('no-redundant-type-syntax allows useRef generic arguments', () => {
+	return expectNoRule({
+		rule: 'no-redundant-type-syntax',
+		filePath: 'sample.tsx',
+		typed: true,
+		source: 'import {useRef} from "react"\nconst names = useRef<readonly string[]>([])\n'
 	})
 })
 

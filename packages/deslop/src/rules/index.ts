@@ -42,6 +42,7 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'base/prefer-optional-property',
 						'base/no-redundant-type-syntax',
 						'base/no-redundant-type-system-check',
+						'base/no-explicit-default-value',
 						'base/no-unnecessary-named-type',
 						'base/no-destructuring',
 						'base/no-single-use-local-binding',
@@ -74,6 +75,7 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'effect/no-untyped-effect-error',
 						'effect/prefer-effect-random',
 						'effect/prefer-effect-try',
+						'effect/prefer-yield-property-access',
 						'effect/prefer-schema-tagged-error',
 						'effect/no-option-constructor',
 						'effect/prefer-top-level-rcmap'

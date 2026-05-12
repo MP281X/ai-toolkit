@@ -13,6 +13,7 @@ import {OpencodeDark} from './ui/svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './ui/svgs/openrouterDark.tsx'
 import {ReactDark} from './ui/svgs/reactDark.tsx'
 
+// biome-ignore lint/performance/noBarrelFile: re-export lucide
 export * from 'lucide-react'
 
 export function AgentIcon(props: {readonly layer: 'codex' | 'effect'; readonly className?: string}) {

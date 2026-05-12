@@ -124,10 +124,6 @@
 		{
 			"includes": ["**/components/ui/**"],
 			"linter": { "enabled": false }
-		},
-		{
-			"includes": ["packages/components/src/components/icons.tsx"],
-			"linter": { "rules": { "performance": { "noBarrelFile": "off" } } }
 		}
 	]
 }
