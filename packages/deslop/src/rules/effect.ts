@@ -203,6 +203,15 @@ export const effectRules = [
 			})
 		}
 	}),
+	rule('prefer-yield-property-access', (node, context) => {
+		if (!ts.isPropertyAccessExpression(node)) return
+		const yieldExpression = yieldedReceiver(node.expression)
+		if (!(yieldExpression?.expression && yieldExpression.asteriskToken)) return
+		context.report(node.name, 'prefer-yield-property-access', {
+			description: `Yielded Effect property access "${normalizedText(node)}" hides an Effect.map.`,
+			fix: 'Map the yielded value through pipe(..., Effect.map(...)).'
+		})
+	}),
 	rule('no-single-operation-pipe', (node, context) => {
 		if (!isPipeCall(node)) return
 		if (node.arguments.length === 1) {
@@ -328,8 +337,14 @@ function hasRequiredEffectCallbackAncestor(node: ts.Node): boolean {
 
 function hasEffectGeneratorAncestor(node: ts.Node): boolean {
 	if (ts.isSourceFile(node)) return false
+	if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) {
+		return isEffectGeneratorFunction(node)
+	}
+	return hasEffectGeneratorAncestor(node.parent)
+}
+
+function isEffectGeneratorFunction(node: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression) {
 	if (
-		(ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) &&
 		node.asteriskToken &&
 		ts.isCallExpression(node.parent) &&
 		((ts.isPropertyAccessExpression(node.parent.expression) &&
@@ -340,7 +355,12 @@ function hasEffectGeneratorAncestor(node: ts.Node): boolean {
 	) {
 		return true
 	}
-	return hasEffectGeneratorAncestor(node.parent)
+	return false
+}
+
+function yieldedReceiver(node: ts.Expression): ts.YieldExpression | undefined {
+	if (ts.isYieldExpression(node)) return node
+	if (ts.isParenthesizedExpression(node)) return yieldedReceiver(node.expression)
 }
 
 function hasEffectTryPromiseCallbackAncestor(node: ts.Node): boolean {

@@ -1,6 +1,22 @@
 import {test} from 'bun:test'
 import {expectNoRule, expectRule} from './test-utils.ts'
 
+test('no-explicit-default-value reports false intrinsic boolean props', () => {
+	return expectRule({
+		rule: 'no-explicit-default-value',
+		filePath: 'sample.tsx',
+		source: 'function View() { return <button disabled={false} /> }\n'
+	})
+})
+
+test('no-explicit-default-value allows component false boolean props', () => {
+	return expectNoRule({
+		rule: 'no-explicit-default-value',
+		filePath: 'sample.tsx',
+		source: 'function View() { return <Button disabled={false} /> }\n'
+	})
+})
+
 test('prefer-function-declaration reports named arrow functions', () => {
 	return expectRule({
 		rule: 'prefer-function-declaration',

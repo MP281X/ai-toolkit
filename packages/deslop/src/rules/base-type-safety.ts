@@ -42,16 +42,14 @@ export const baseTypeSafetyRules = [
 				fix: `Remove "<${normalizedText(node.type)}>" and make "${normalizedText(node.expression)}" produce that type.`
 			})
 		}
-		if (ts.isNonNullExpression(node)) {
+		if (
+			ts.isNonNullExpression(node) &&
+			context.checker &&
+			!typeIncludesNullish(context.checker.getTypeAtLocation(node.expression))
+		) {
 			context.report(node, 'no-type-assertion-except-as-const', {
-				description: 'Non-null assertion bypasses narrowing.',
-				fix: `Remove "!" from "${normalizedText(node.expression)}" and prove non-null with control flow before this use.`
-			})
-		}
-		if (ts.isPropertyDeclaration(node) && node.exclamationToken) {
-			context.report(node.name, 'no-type-assertion-except-as-const', {
-				description: `Property "${node.name.getText(context.sourceFile)}" skips definite assignment.`,
-				fix: 'Remove "!" and initialize it with a proven value.'
+				description: 'Non-null assertion repeats a non-nullish type.',
+				fix: `Remove "!" from "${normalizedText(node.expression)}".`
 			})
 		}
 	}),
@@ -71,6 +69,13 @@ export const baseTypeSafetyRules = [
 						ts.isCallExpression(ancestor) &&
 						isReactUseRefCall(context.checker, ancestor) &&
 						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
+					)
+				}) ||
+				ts.findAncestor(node, ancestor => {
+					return (
+						ts.isTypeReferenceNode(ancestor) &&
+						ts.isQualifiedName(ancestor.typeName) &&
+						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
 					)
 				})
 			) {
@@ -99,6 +104,13 @@ export const baseTypeSafetyRules = [
 						ts.isCallExpression(ancestor) &&
 						isReactUseRefCall(context.checker, ancestor) &&
 						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
+					)
+				}) ||
+				ts.findAncestor(node, ancestor => {
+					return (
+						ts.isTypeReferenceNode(ancestor) &&
+						ts.isQualifiedName(ancestor.typeName) &&
+						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
 					)
 				})
 			) {
@@ -218,18 +230,8 @@ export const baseTypeSafetyRules = [
 			return
 		}
 		if (node.arguments.length === 0) return
-		if (isReactUseStateCall(context.checker, node)) return
-		if (isReactUseRefCall(context.checker, node)) {
-			for (const argument of node.arguments) {
-				if (
-					argument.kind === ts.SyntaxKind.NullKeyword ||
-					(ts.isIdentifier(argument) && argument.text === 'undefined')
-				) {
-					return
-				}
-				break
-			}
-		}
+		if (!ts.isIdentifier(node.expression)) return
+		if (isReactUseStateCall(context.checker, node) || isReactUseRefCall(context.checker, node)) return
 		if (!context.checker.getResolvedSignature(node)) return
 		context.report(node.typeArguments[0] ?? node, 'no-redundant-type-syntax', {
 			description: `Generic arguments on "${normalizedText(node.expression)}" should infer from arguments.`,

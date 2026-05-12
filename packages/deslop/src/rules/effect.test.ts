@@ -139,6 +139,22 @@ test('prefer-effect-try reports await inside Effect generators', () => {
 	})
 })
 
+test('prefer-effect-try allows await inside nested async callbacks', () => {
+	return expectNoRule({
+		rule: 'prefer-effect-try',
+		source:
+			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { return Effect.promise(async () => await fetch("/")) })\n'
+	})
+})
+
+test('prefer-yield-property-access reports yielded property access', () => {
+	return expectRule({
+		rule: 'prefer-yield-property-access',
+		source:
+			'import {Effect} from "effect"\nconst program = Effect.gen(function* () { return (yield* loadUser()).name })\n'
+	})
+})
+
 test('prefer-effect-try allows awaits inside Effect.tryPromise callbacks', () => {
 	return expectNoRule({
 		rule: 'prefer-effect-try',
