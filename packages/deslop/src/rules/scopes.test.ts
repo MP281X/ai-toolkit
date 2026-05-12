@@ -34,13 +34,15 @@ test('effect scope emits public planned rule ids', () => {
 })
 
 test('scopes are explicit allowlists', () => {
-	const diagnostics = analyzeText(
-		'sample.tsx',
-		'import {Option} from "effect"\nfunction View(props: { readonly value: string }) { const { value } = props; const option = Option.fromNullable("value"); return <Input {...props} /> }\n',
-		['base'],
-		true
+	const rules = Array.map(
+		analyzeText(
+			'sample.tsx',
+			'import {Option} from "effect"\nfunction View(props: { readonly value: string }) { const { value } = props; const option = Option.fromNullable("value"); return <Input {...props} /> }\n',
+			['base'],
+			true
+		),
+		diagnostic => diagnostic.rule
 	)
-	const rules = Array.map(diagnostics, diagnostic => diagnostic.rule)
 	expect(Array.some(rules, String.startsWith('base/'))).toBe(true)
 	expect(Array.some(rules, String.startsWith('react/'))).toBe(false)
 	expect(Array.some(rules, String.startsWith('effect/'))).toBe(false)

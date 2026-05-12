@@ -16,7 +16,7 @@ export const Route = createFileRoute('/(home)/$worktree/terminal')({
 const terminalEventsAtom = Atom.family((cwd: string) => {
 	return RpcClient.runtime.atom(
 		pipe(
-			RpcClient.asEffect(),
+			RpcClient,
 			Effect.map(client => {
 				return client('terminal.events', {cwd})
 			}),

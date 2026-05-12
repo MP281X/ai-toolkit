@@ -23,11 +23,27 @@ test('no-single-use-local-binding reports one-use aliases', () => {
 	})
 })
 
+test('no-single-use-local-binding reports common names by local scope', () => {
+	return expectRule({
+		rule: 'no-single-use-local-binding',
+		source:
+			'import {Effect, Terminal} from "effect"\nconst other = terminal => terminal\nconst program = Effect.gen(function* () { const terminal = yield* Terminal.Terminal; yield* terminal.display("ready") })\n'
+	})
+})
+
 test('no-single-use-local-binding allows hook results to stay named', () => {
 	return expectNoRule({
 		rule: 'no-single-use-local-binding',
 		filePath: 'sample.tsx',
 		source: 'import {useState} from "react"\nfunction View() { const state = useState("Ada"); return state[0] }\n'
+	})
+})
+
+test('no-pipe-method reports property pipe calls', () => {
+	return expectRule({
+		rule: 'no-pipe-method',
+		source:
+			'declare const program: { pipe: (f: (value: string) => number) => number }\nconst value = program.pipe(value => value.length)\n'
 	})
 })
 

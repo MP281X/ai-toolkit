@@ -73,12 +73,20 @@ export const baseIndirectionRules = [
 				fix: 'Replace all uses with that expression and delete this const.'
 			})
 		}
-		if ((context.references.get(node.name.text) ?? 0) === 1 && isConstVariable(node)) {
+		if (localIdentifierUseCount(context.checker, node) === 1 && isConstVariable(node)) {
 			context.report(node.name, 'no-single-use-local-binding', {
 				description: `"${node.name.text}" has one use.`,
 				fix: `Inline "${normalizedText(node.initializer)}" at that use and delete this const.`
 			})
 		}
+	}),
+	rule('no-pipe-method', (node, context) => {
+		if (!(ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression))) return
+		if (node.expression.name.text !== 'pipe') return
+		context.report(node.expression.name, 'no-pipe-method', {
+			description: `Method pipe call "${normalizedText(node.expression)}" hides the subject.`,
+			fix: 'Use a direct module call for one operation, or the pipe(...) function for multi-step composition.'
+		})
 	}),
 	rule('no-simple-local-binding', (node, context) => {
 		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
@@ -254,8 +262,9 @@ export const baseIndirectionRules = [
 	rule('no-vacuous-abstraction', (node, context) => {
 		if (!isNamedFunctionLike(node)) return
 		const constant = Array.findFirst(node.parameters, parameter => {
-			const name = parameter.name.getText(context.sourceFile)
-			return context.references.get(name) === 1 && parameter.initializer !== undefined
+			return (
+				context.references.get(parameter.name.getText(context.sourceFile)) === 1 && parameter.initializer !== undefined
+			)
 		})
 		if (constant._tag === 'Some') {
 			context.report(constant.value.name, 'no-vacuous-abstraction', {
@@ -319,4 +328,28 @@ function isSmallMapOrSetConstructor(node: ts.Expression, referenceCount: number)
 	return (
 		ts.isArrayLiteralExpression(node.arguments[0]) && (node.arguments[0].elements.length <= 5 || referenceCount <= 1)
 	)
+}
+
+function localIdentifierUseCount(checker: ts.TypeChecker | undefined, node: ts.VariableDeclaration) {
+	if (!ts.isIdentifier(node.name)) return 0
+	let count = 0
+	const symbol = checker?.getSymbolAtLocation(node.name)
+	function visit(child: ts.Node, name: string) {
+		if (
+			child !== node.name &&
+			ts.isIdentifier(child) &&
+			child.text === name &&
+			(!symbol || checker?.getSymbolAtLocation(child) === symbol)
+		) {
+			count += 1
+		}
+		ts.forEachChild(child, nested => visit(nested, name))
+	}
+	visit(localScope(node), node.name.text)
+	return count
+}
+
+function localScope(node: ts.Node): ts.Node {
+	if (ts.isSourceFile(node.parent) || ts.isBlock(node.parent) || ts.isModuleBlock(node.parent)) return node.parent
+	return localScope(node.parent)
 }

@@ -350,21 +350,20 @@ export function linearVariableChain(
 		declaration: ts.VariableDeclaration & {readonly name: ts.Identifier; readonly initializer: ts.Expression}
 	) => boolean
 ) {
-	const declarations = pipe(
-		block.statements,
-		Array.filter(ts.isVariableStatement),
-		Array.flatMap(statement => statement.declarationList.declarations),
-		Array.filter(
-			(
-				declaration
-			): declaration is ts.VariableDeclaration & {
-				readonly name: ts.Identifier
-				readonly initializer: ts.Expression
-			} => ts.isIdentifier(declaration.name) && !!declaration.initializer
-		)
-	)
 	return Array.reduce(
-		declarations,
+		pipe(
+			block.statements,
+			Array.filter(ts.isVariableStatement),
+			Array.flatMap(statement => statement.declarationList.declarations),
+			Array.filter(
+				(
+					declaration
+				): declaration is ts.VariableDeclaration & {
+					readonly name: ts.Identifier
+					readonly initializer: ts.Expression
+				} => ts.isIdentifier(declaration.name) && !!declaration.initializer
+			)
+		),
 		Array.empty<
 			ts.VariableDeclaration & {
 				readonly name: ts.Identifier
@@ -472,8 +471,7 @@ export function nameNodeForDeclaration(node: ts.Node) {
 
 export function isReactRefCurrent(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!(checker && ts.isPropertyAccessExpression(node) && node.name.text === 'current')) return false
-	const type = checker.getTypeAtLocation(node.expression)
-	return String.includes('RefObject<')(checker.typeToString(type))
+	return String.includes('RefObject<')(checker.typeToString(checker.getTypeAtLocation(node.expression)))
 }
 
 export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {

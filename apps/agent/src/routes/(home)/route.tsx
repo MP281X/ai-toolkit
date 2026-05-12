@@ -58,14 +58,11 @@ const projectAccentClassNames = [
 const branchesAtom = Atom.family((cwd: string) => {
 	return Atom.keepAlive(
 		RpcClient.runtime.atom(
-			pipe(
-				RpcClient.asEffect(),
-				Effect.flatMap(client => {
-					return String.isNonEmpty(cwd)
-						? client('projects.branches', {cwd})
-						: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
-				})
-			),
+			Effect.flatMap(RpcClient, client => {
+				return String.isNonEmpty(cwd)
+					? client('projects.branches', {cwd})
+					: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
+			}),
 			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
 		)
 	)

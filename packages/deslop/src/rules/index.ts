@@ -46,6 +46,7 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'base/no-unnecessary-named-type',
 						'base/no-destructuring',
 						'base/no-single-use-local-binding',
+						'base/no-pipe-method',
 						'base/no-simple-local-binding',
 						'base/prefer-flow-for-pipe-callback',
 						'base/no-vacuous-abstraction',

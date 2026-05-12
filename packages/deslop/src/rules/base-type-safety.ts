@@ -161,19 +161,20 @@ export const baseTypeSafetyRules = [
 		if (
 			ts.isParameter(node) &&
 			node.type &&
-			(ts.isArrowFunction(node.parent) || ts.isFunctionExpression(node.parent)) &&
-			ts.isCallExpression(node.parent.parent)
+			(ts.isArrowFunction(node.parent) || ts.isFunctionExpression(node.parent))
 		) {
+			const callArgument = containingCallArgument(node.parent)
 			if (
 				context.checker &&
 				(hasUnknownOrAnyContextualParameterType(context.checker, node) ||
 					isEffectFnParameterNeedingAnnotation(context.checker, node) ||
-					hasGenericCallbackParameterType(
-						context.checker,
-						node.parent.parent,
-						argumentIndex(node.parent),
-						parameterIndex(node)
-					))
+					(callArgument &&
+						hasGenericCallbackParameterType(
+							context.checker,
+							callArgument.call,
+							callArgument.argument,
+							parameterIndex(node)
+						)))
 			) {
 				return
 			}
@@ -460,4 +461,13 @@ function argumentIndex(node: ts.Expression) {
 		index += 1
 	}
 	return -1
+}
+
+function containingCallArgument(
+	node: ts.Node
+): {readonly call: ts.CallExpression; readonly argument: number} | undefined {
+	if (ts.isSourceFile(node)) return
+	if (ts.isExpression(node) && ts.isCallExpression(node.parent))
+		return {call: node.parent, argument: argumentIndex(node)}
+	return containingCallArgument(node.parent)
 }
