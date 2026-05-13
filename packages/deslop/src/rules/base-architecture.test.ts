@@ -31,13 +31,6 @@ test('no-deprecated-api reports JSDoc deprecated symbols', () => {
 	})
 })
 
-test('prefer-regexp-constructor reports regular expression literals', () => {
-	return expectRule({
-		rule: 'prefer-regexp-constructor',
-		source: 'const letters = /^[a-z]+$/\n'
-	})
-})
-
 test('no-plain-class reports classes without framework semantics', () => {
 	return expectRule({
 		rule: 'no-plain-class',

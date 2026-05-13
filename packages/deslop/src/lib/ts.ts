@@ -22,7 +22,7 @@ export function callName(node: ts.CallExpression) {
 }
 
 export function isHookCall(node: ts.Node): node is ts.CallExpression {
-	return ts.isCallExpression(node) && String.match(RegExp('^use[A-Z0-9]'))(callName(node))._tag === 'Some'
+	return ts.isCallExpression(node) && String.match(/^use[A-Z0-9]/)(callName(node))._tag === 'Some'
 }
 
 export function isEffectCall(
@@ -249,5 +249,5 @@ export function isTerminalStatement(node: ts.Statement) {
 }
 
 export function normalizedText(node: ts.Node) {
-	return pipe(node.getText(node.getSourceFile()), String.replace(RegExp('\\s+', 'g'), ' '), String.trim)
+	return pipe(node.getText(node.getSourceFile()), String.replace(/\s+/g, ' '), String.trim)
 }

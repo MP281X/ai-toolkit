@@ -64,7 +64,7 @@ export const standardPrototypeMethods = new Map([
 ])
 
 export function shouldRunRule(ruleId: string, filePath: string) {
-	if (!RegExp('\\.config\\.[cm]?tsx?$').test(filePath)) return true
+	if (!/\.config\.[cm]?tsx?$/.test(filePath)) return true
 	return (
 		!Array.contains(['no-vacuous-abstraction', 'no-plain-class'] as const, ruleId) ||
 		new Set([
@@ -88,7 +88,7 @@ export function rule(id: string, run: Rule['run']) {
 export function isTailwindStringLiteral(node: ts.Expression) {
 	return (
 		ts.isStringLiteral(node) &&
-		RegExp('(^|\\s)(flex|grid|block|inline|hidden|p-|m-|w-|h-|text-|bg-|border|rounded)').test(node.text)
+		/(^|\s)(flex|grid|block|inline|hidden|p-|m-|w-|h-|text-|bg-|border|rounded)/.test(node.text)
 	)
 }
 

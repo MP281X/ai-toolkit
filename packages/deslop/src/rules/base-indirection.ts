@@ -285,7 +285,7 @@ export const baseIndirectionRules = [
 			return
 		}
 		if (
-			RegExp('^[A-Z]').test(node.name.text) &&
+			/^[A-Z]/.test(node.name.text) &&
 			Array.every(node.initializer.properties, property => {
 				return (
 					ts.isShorthandPropertyAssignment(property) ||

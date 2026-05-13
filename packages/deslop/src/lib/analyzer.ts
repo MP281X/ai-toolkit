@@ -202,7 +202,7 @@ export function analyzeSourceFile(
 			symbol: nearestSymbol(node),
 			text: pipe(
 				node.getText(sourceFile),
-				String.replace(RegExp('\\s+', 'g'), ' '),
+				String.replace(/\s+/g, ' '),
 				String.trim,
 				String.slice(0, 120),
 				String.replaceAll('"', '\\"')
@@ -478,7 +478,7 @@ function isExcluded(filePath: string) {
 
 const normalizePath = flow(
 	String.replaceAll('\\', '/'),
-	String.replace(RegExp('/+$'), ''),
+	String.replace(/\/+$/, ''),
 	path => (String.startsWith('./')(path) ? String.slice(2)(path) : path),
 	path => (path === '' ? '.' : path)
 )

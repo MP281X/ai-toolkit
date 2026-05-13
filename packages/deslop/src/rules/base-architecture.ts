@@ -44,17 +44,10 @@ export const baseArchitectureRules = [
 		) {
 			return
 		}
-		if (RegExp('\\.config\\.[cm]?tsx?$').test(context.filePath)) return
+		if (/\.config\.[cm]?tsx?$/.test(context.filePath)) return
 		context.report(node, 'no-default-export-except-config', {
 			description: `Default export is banned in "${context.filePath}".`,
 			fix: 'Convert it to a named export; default exports are only allowed in *.config.* files.'
-		})
-	}),
-	rule('prefer-regexp-constructor', (node, context) => {
-		if (!ts.isRegularExpressionLiteral(node)) return
-		context.report(node, 'prefer-regexp-constructor', {
-			description: `Regex literal ${node.getText(context.sourceFile)} is banned here.`,
-			fix: 'Rewrite as RegExp("pattern", "flags") so escaping is explicit.'
 		})
 	}),
 	rule('no-plain-class', (node, context) => {

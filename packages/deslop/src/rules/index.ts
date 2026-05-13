@@ -55,7 +55,6 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'base/no-local-namespace-import',
 						'base/no-default-export-except-config',
 						'base/no-deprecated-api',
-						'base/prefer-regexp-constructor',
 						'base/no-plain-class',
 						'react/no-jsx-props-object',
 						'react/no-tailwind-class-indirection',

@@ -14,12 +14,6 @@ import {createPortal} from 'react-dom'
 import {Command, CommandItem, CommandList} from '#components/ui/command.tsx'
 import {cn} from '#lib/utils.ts'
 
-type SerializedTokenNode = Lexical.SerializedTextNode & {
-	readonly id: string
-	readonly kind: 'entry' | 'file'
-	readonly type: 'input-token'
-}
-
 class TokenNode extends Lexical.TextNode {
 	__id: string
 	__kind: 'entry' | 'file'
@@ -32,11 +26,17 @@ class TokenNode extends Lexical.TextNode {
 		return new TokenNode(node.__text, node.__id, node.__kind, node.__key)
 	}
 
-	static override importJSON(node: SerializedTokenNode) {
+	static override importJSON(
+		node: Lexical.SerializedTextNode & {
+			readonly id: string
+			readonly kind: 'entry' | 'file'
+			readonly type: 'input-token'
+		}
+	) {
 		return new TokenNode(node.text, node.id, node.kind).updateFromJSON(node)
 	}
 
-	override exportJSON(): SerializedTokenNode {
+	override exportJSON() {
 		return {...super.exportJSON(), type: 'input-token', id: this.__id, kind: this.__kind}
 	}
 
@@ -46,7 +46,7 @@ class TokenNode extends Lexical.TextNode {
 		this.__kind = kind
 	}
 
-	override isTextEntity(): true {
+	override isTextEntity() {
 		return true
 	}
 
@@ -76,8 +76,8 @@ function snapshot<TValue extends RichTextArea.Value>(
 
 	const editorState = editor.getEditorState().toJSON()
 	const ids = new Set<string>()
-	const tokens = Array.empty<TextAreaToken<TValue>>()
 	const text = editor.getEditorState().read(() => {
+		const tokens = Array.empty<TextAreaToken<TValue>>()
 		for (const node of Lexical.$getRoot().getAllTextNodes()) {
 			if (!(node instanceof TokenNode)) continue
 
@@ -87,14 +87,14 @@ function snapshot<TValue extends RichTextArea.Value>(
 			if (value) tokens.push(value)
 		}
 
-		return String.trim(Lexical.$getRoot().getTextContent())
+		return {text: String.trim(Lexical.$getRoot().getTextContent()), tokens}
 	})
 
 	for (const id of tokensMap.keys()) {
 		if (!ids.has(id)) tokensMap.delete(id)
 	}
 
-	return {text, editorState, tokens}
+	return {text: text.text, editorState, tokens: text.tokens}
 }
 
 function restore<TValue extends RichTextArea.Value>(
@@ -164,10 +164,10 @@ function match(text: string, triggers: readonly string[]) {
 		const index = text.lastIndexOf(trigger)
 		if (index < 0) continue
 
-		if (index > 0 && text[index - 1] !== '(' && !RegExp('\\s').test(text[index - 1] ?? '')) continue
+		if (index > 0 && text[index - 1] !== '(' && !/\s/.test(text[index - 1] ?? '')) continue
 
 		const query = String.slice(index + String.length(trigger))(text)
-		if (String.length(query) > 32 || RegExp('\\s').test(query)) continue
+		if (String.length(query) > 32 || /\s/.test(query)) continue
 
 		return {
 			trigger,
@@ -215,16 +215,15 @@ function continueList(event: KeyboardEvent | undefined) {
 	const current = currentTextNodeSelection()
 	if (!current) return false
 
-	const text = current.node.getTextContent()
-	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
-	if (RegExp('^(\\s*)[-*+]\\s*$').exec(currentLine.line) || RegExp('^(\\s*)\\d+\\.\\s*$').exec(currentLine.line)) {
+	const currentLine = lineBeforeCursor(current.node.getTextContent(), current.selection.anchor.offset)
+	if (/^(\s*)[-*+]\s*$/.exec(currentLine.line) || /^(\s*)\d+\.\s*$/.exec(currentLine.line)) {
 		event.preventDefault()
 		current.node.spliceText(currentLine.start, String.length(currentLine.line), '', true)
 		return true
 	}
 
-	const unordered = RegExp('^(\\s*)([-*+])\\s+\\S').exec(currentLine.line)
-	const ordered = RegExp('^(\\s*)(\\d+)\\.\\s+\\S').exec(currentLine.line)
+	const unordered = /^(\s*)([-*+])\s+\S/.exec(currentLine.line)
+	const ordered = /^(\s*)(\d+)\.\s+\S/.exec(currentLine.line)
 	if (!(unordered || ordered)) return false
 
 	event.preventDefault()
@@ -241,9 +240,8 @@ function closeXmlTag(event: KeyboardEvent) {
 	const current = currentTextNodeSelection()
 	if (!current) return false
 
-	const text = current.node.getTextContent()
-	const currentLine = lineBeforeCursor(text, current.selection.anchor.offset)
-	const tag = RegExp('<([A-Za-z][A-Za-z0-9:_-]*)$').exec(currentLine.line)
+	const currentLine = lineBeforeCursor(current.node.getTextContent(), current.selection.anchor.offset)
+	const tag = /<([A-Za-z][A-Za-z0-9:_-]*)$/.exec(currentLine.line)
 	if (!tag) return false
 
 	event.preventDefault()
@@ -353,19 +351,6 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 }) {
 	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>(undefined)
 
-	const triggers = pipe(
-		props.options ?? {},
-		Record.keys,
-		Array.sortWith(
-			String.length,
-			Order.make((left, right) => {
-				if (left > right) return -1
-				if (left < right) return 1
-				return 0
-			})
-		)
-	)
-
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
@@ -378,7 +363,21 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				props.menuRef.current = false
 			}}
 			triggerFn={text => {
-				const next = match(text, triggers)
+				const next = match(
+					text,
+					pipe(
+						props.options ?? {},
+						Record.keys,
+						Array.sortWith(
+							String.length,
+							Order.make((left, right) => {
+								if (left > right) return -1
+								if (left < right) return 1
+								return 0
+							})
+						)
+					)
+				)
 
 				setSearch(current => {
 					const value = next ? {trigger: next.trigger, query: next.query} : undefined
@@ -496,7 +495,7 @@ export declare namespace RichTextArea {
 
 function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
 	_tokensMap?: Map<string, TextAreaToken<TValue>>
-): RichTextArea.Snapshot<TValue> {
+) {
 	const editorState = JSON.parse(
 		'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
 	)

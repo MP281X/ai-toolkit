@@ -56,6 +56,10 @@ export const plugin = (async context => {
 					{
 						name: 'effect-lsp',
 						url: 'https://github.com/Effect-TS/language-service'
+					},
+					{
+						name: 'codex',
+						url: 'https://github.com/openai/codex'
 					}
 				] as const,
 				Effect.fnUntraced(function* (resource) {

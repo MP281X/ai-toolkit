@@ -11,13 +11,16 @@ import {makeLayerCodex} from './agents/codex.ts'
 import {makeLayerEffect} from './agents/effect.ts'
 import type {AgentId, ModelId, ProviderId} from './catalog.ts'
 
+export type AgentStatus = {
+	readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
+	readonly updatedAt: DateTime.Utc
+}
+
 export class Agent extends Context.Service<
 	Agent,
 	{
-		readonly status: SubscriptionRef.SubscriptionRef<{
-			readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
-			readonly updatedAt: DateTime.Utc
-		}>
+		readonly status: SubscriptionRef.SubscriptionRef<AgentStatus>
+		readonly history: Effect.Effect<readonly Prompt.Message[]>
 		readonly streamText: (input: {
 			readonly provider: ProviderId
 			readonly model: ModelId
