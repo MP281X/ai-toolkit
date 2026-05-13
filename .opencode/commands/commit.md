@@ -1,5 +1,6 @@
 ---
 description: Generate commit message from staged changes. Commit and push.
+subtask: true
 ---
 
 <repo_status>

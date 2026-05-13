@@ -21,7 +21,8 @@
 	"dependencies": {
 		"effect": "^4.0.0-beta",
 		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-bun": "^4.0.0-beta"
+		"@effect/platform-bun": "^4.0.0-beta",
+		"@effect/openapi-generator": "^4.0.0-beta"
 	},
 
 	"devDependencies": {

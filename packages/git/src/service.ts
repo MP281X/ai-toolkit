@@ -66,7 +66,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		const getDefaultBranch = Effect.fnUntraced(function* (cwd: string) {
 			return yield* pipe(
 				git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
-				Effect.map(flow(String.trim, String.replace(RegExp('^origin/'), ''))),
+				Effect.map(flow(String.trim, String.replace(/^origin\//, ''))),
 				Effect.catchTag('GitError', () => {
 					return pipe(
 						git.string(cwd, ['rev-parse', '--verify', 'main']),
@@ -80,20 +80,18 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		const getWorktreeStatus = Effect.fnUntraced(function* (cwd: string, branch?: string) {
 			const counts = yield* pipe(
 				git.string(cwd, ['rev-list', '--left-right', '--count', `origin/${branch ?? ''}...HEAD`]),
-				Effect.map(flow(String.trim, String.split(RegExp('\\s+')))),
+				Effect.map(flow(String.trim, String.split(/\s+/))),
 				Effect.orElseSucceed(() => ['0', '0'])
 			)
-			const ahead = Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0)
-
 			return new GitWorktreeStatus({
-				ahead,
+				ahead: Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0),
 				behind: Option.getOrElse(Number.parse(counts[0]), () => 0),
 				dirtyTracked: yield* pipe(
 					git.lines(cwd, ['status', '--porcelain', '--untracked-files=no']),
 					Effect.map(lines => !Array.isReadonlyArrayEmpty(lines)),
 					Effect.orElseSucceed(() => false)
 				),
-				unpushedCommits: ahead > 0,
+				unpushedCommits: Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0) > 0,
 				untracked: yield* pipe(
 					git.lines(cwd, ['ls-files', '--others', '--exclude-standard']),
 					Effect.map(lines => !Array.isReadonlyArrayEmpty(lines)),
@@ -157,10 +155,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 			}
 		)
 		const listWorktrees = Effect.fnUntraced(function* (cwd: string) {
-			const lines = yield* git.lines(cwd, ['worktree', 'list', '--porcelain'])
-
 			return yield* pipe(
-				lines,
+				yield* git.lines(cwd, ['worktree', 'list', '--porcelain']),
 				Array.reduce(
 					{
 						currentBranch: '',
@@ -172,7 +168,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 						if (String.startsWith('worktree ')(line)) {
 							return {
 								currentBranch: '',
-								currentRoot: String.replace(RegExp('^worktree\\s+'), '')(line),
+								currentRoot: String.replace(/^worktree\s+/, '')(line),
 								hasCurrentCommit: false,
 								worktrees:
 									String.isNonEmpty(state.currentRoot) && state.hasCurrentCommit
@@ -192,7 +188,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 
 						if (String.startsWith('branch refs/heads/')(line)) {
 							return {
-								currentBranch: String.replace(RegExp('^branch\\s+refs/heads/'), '')(line),
+								currentBranch: String.replace(/^branch\s+refs\/heads\//, '')(line),
 								currentRoot: state.currentRoot,
 								hasCurrentCommit: state.hasCurrentCommit,
 								worktrees: state.worktrees
@@ -345,7 +341,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					process.env['HOME'] ?? input.cwd,
 					'.ai-toolkit',
 					'worktrees',
-					`${String.replace(RegExp('[^a-zA-Z0-9._-]+', 'g'), '-')(path.basename(input.cwd))}-${String.replace(RegExp('[^a-zA-Z0-9._-]+', 'g'), '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`
+					`${String.replace(/[^a-zA-Z0-9._-]+/g, '-')(path.basename(input.cwd))}-${String.replace(/[^a-zA-Z0-9._-]+/g, '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`
 				)
 
 				yield* pipe(fs.makeDirectory(path.dirname(targetDirectory), {recursive: true}), Effect.ignore)
@@ -388,12 +384,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 										return {
 											branch: state.branch,
 											currentBranch: '',
-											currentRoot: String.replace(RegExp('^worktree\\s+'), '')(line),
+											currentRoot: String.replace(/^worktree\s+/, '')(line),
 											found: state.found,
-											mainRoot:
-												state.mainRoot === input.cwd
-													? String.replace(RegExp('^worktree\\s+'), '')(line)
-													: state.mainRoot
+											mainRoot: state.mainRoot === input.cwd ? String.replace(/^worktree\s+/, '')(line) : state.mainRoot
 										}
 									}
 
@@ -401,9 +394,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 										return {
 											branch:
 												state.currentRoot === input.cwd
-													? String.replace(RegExp('^branch\\s+refs/heads/'), '')(line)
+													? String.replace(/^branch\s+refs\/heads\//, '')(line)
 													: state.branch,
-											currentBranch: String.replace(RegExp('^branch\\s+refs/heads/'), '')(line),
+											currentBranch: String.replace(/^branch\s+refs\/heads\//, '')(line),
 											currentRoot: state.currentRoot,
 											found: state.currentRoot === input.cwd,
 											mainRoot: state.mainRoot
@@ -497,15 +490,13 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 							fs.readFileString(path.join(config.cwd, filePath)),
 							Effect.orElseSucceed(() => ''),
 							Effect.map(content => {
-								const lines = pipe(
-									String.split('\n')(content),
-									Array.map(line => `+${line}`),
-									Array.join('\n')
-								)
-
 								return new GitDiff({
 									filePath,
-									patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${lines}`,
+									patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+										String.split('\n')(content),
+										Array.map(line => `+${line}`),
+										Array.join('\n')
+									)}`,
 									status: 'added'
 								})
 							})

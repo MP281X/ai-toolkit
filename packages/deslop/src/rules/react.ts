@@ -108,7 +108,7 @@ export const reactRules = [
 		}
 	}),
 	rule('prefer-hook-variable', (node, context) => {
-		if (!RegExp('\\.tsx$').test(context.filePath)) return
+		if (!/\.tsx$/.test(context.filePath)) return
 		if (!isHookCall(node)) return
 		if (ts.isExpressionStatement(node.parent)) return
 		if (
@@ -142,7 +142,7 @@ export const reactRules = [
 			!(
 				ts.isPropertyAccessExpression(node.left) &&
 				ts.isIdentifier(node.left.expression) &&
-				RegExp('^[A-Z]').test(node.left.name.text) &&
+				/^[A-Z]/.test(node.left.name.text) &&
 				isComponentValue(context.checker, node.left.expression) &&
 				(ts.isArrowFunction(node.right) ||
 					ts.isFunctionExpression(node.right) ||

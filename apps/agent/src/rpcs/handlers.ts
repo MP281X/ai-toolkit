@@ -1,4 +1,4 @@
-import {Array, Cause, Duration, Effect, FiberHandle, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
+import {Array, Cause, Context, Duration, Effect, FiberHandle, Layer, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
 
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import type {AgentEvent} from '@ai-toolkit/ai/schema'
@@ -13,61 +13,63 @@ import {RpcContracts} from '#rpcs/contracts.ts'
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: (cwd: string) => {
-		return Terminal.make({cwd})
-	}
+	lookup: Effect.fnUntraced(function* (cwd: string) {
+		const context = yield* Layer.buildWithScope(Terminal.layer({cwd}), yield* Effect.scope)
+
+		return Context.get(context, Terminal)
+	})
 })
 
 const GitWorktreeSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(5),
-	lookup: (cwd: string) => {
-		return GitWorktree.make({cwd})
-	}
+	lookup: Effect.fnUntraced(function* (cwd: string) {
+		const context = yield* Layer.buildWithScope(GitWorktree.layer({cwd}), yield* Effect.scope)
+
+		return Context.get(context, GitWorktree)
+	})
 })
 
 const systemPrompt = Prompt.makeMessage('system', {content: 'You are a coding agent running inside AI Toolkit.'})
 const AgentSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(10),
-	lookup: (key: AgentKey) => {
-		return Effect.gen(function* () {
-			const agent = yield* pipe(
-				Effect.service(Agent),
-				Effect.provide(Agent.layer({agent: key.agent, cwd: key.cwd, systemPrompt})),
-				Effect.catchTag('ConfigError', Effect.die)
-			)
-			const handle = yield* FiberHandle.make<void, never>()
-			const stream = yield* makeResumableStream<AgentEvent>()
-			const prompt = Effect.fnUntraced(function* (input: {
-				readonly model: ModelId
-				readonly prompt: string
-				readonly provider: ProviderId
-			}) {
-				yield* stream.append({prompt: input.prompt, type: 'user-message'})
+	lookup: Effect.fnUntraced(function* (key: AgentKey) {
+		const context = yield* pipe(
+			Layer.buildWithScope(Agent.layer({agent: key.agent, cwd: key.cwd, systemPrompt}), yield* Effect.scope),
+			Effect.catchTag('ConfigError', Effect.die)
+		)
+		const agent = Context.get(context, Agent)
+		const handle = yield* FiberHandle.make<void, never>()
+		const stream = yield* makeResumableStream<AgentEvent>()
+		const prompt = Effect.fnUntraced(function* (input: {
+			readonly model: ModelId
+			readonly prompt: string
+			readonly provider: ProviderId
+		}) {
+			yield* stream.append({prompt: input.prompt, type: 'user-message'})
 
-				yield* FiberHandle.run(
-					handle,
-					pipe(
-						agent.streamText({
-							messages: [Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: input.prompt})]})],
-							model: input.model,
-							provider: input.provider
-						}),
-						Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
-						Stream.map(part => ({part, type: 'agent-part'}) satisfies AgentEvent),
-						Stream.tap(stream.append),
-						Stream.runDrain
-					)
+			yield* FiberHandle.run(
+				handle,
+				pipe(
+					agent.streamText({
+						messages: [Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: input.prompt})]})],
+						model: input.model,
+						provider: input.provider
+					}),
+					Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
+					Stream.map(part => ({part, type: 'agent-part'}) satisfies AgentEvent),
+					Stream.tap(stream.append),
+					Stream.runDrain
 				)
-			})
-
-			return {
-				events: stream.stream,
-				prompt,
-				status: agent.status,
-				stop: FiberHandle.clear(handle)
-			} as const
+			)
 		})
-	}
+
+		return {
+			events: stream.stream,
+			prompt,
+			status: agent.status,
+			stop: FiberHandle.clear(handle)
+		} as const
+	})
 })
 const agentSessionStore = Effect.gen(function* () {
 	const sessions = yield* AgentSessions
@@ -165,14 +167,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			},
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
-				const session = yield* agents.get(payload.key)
-
-				yield* session.prompt(payload)
+				yield* pipe(
+					agents.get(payload.key),
+					Effect.flatMap(session => session.prompt(payload))
+				)
 			}),
 			'agent.stop': Effect.fnUntraced(function* (payload) {
-				const session = yield* agents.get(payload.key)
-
-				yield* session.stop
+				yield* pipe(
+					agents.get(payload.key),
+					Effect.flatMap(session => session.stop)
+				)
 			}),
 			'agent.delete': Effect.fnUntraced(function* (payload) {
 				yield* agents.delete(payload.key)
