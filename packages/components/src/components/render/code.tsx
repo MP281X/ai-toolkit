@@ -5,7 +5,6 @@ export function Code(props: {readonly children: string; readonly lang: string; r
 	return (
 		<div
 			data-code-block
-			// oxlint-disable-next-line react/no-danger -- Shiki returns highlighted HTML for code rendering.
 			dangerouslySetInnerHTML={{__html: highlightCode(props.children, resolveLanguage(props.lang))}}
 			className={cn('bg-muted/30 overflow-hidden text-sm leading-relaxed select-text', props.className)}
 		/>

@@ -537,6 +537,7 @@ function Section(input: {
 	return (
 		<section
 			ref={node => {
+				// oxlint-disable-next-line no-param-reassign
 				input.sectionRefs.current[input.id] = node
 			}}
 			data-section={input.id}

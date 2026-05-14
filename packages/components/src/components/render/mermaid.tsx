@@ -35,7 +35,6 @@ export function Mermaid(props: {readonly children: string; readonly className?: 
 
 	return (
 		<div
-			// oxlint-disable-next-line react/no-danger -- Mermaid returns sanitized SVG markup for rendering diagrams.
 			dangerouslySetInnerHTML={{__html: result.value.svg}}
 			className={cn(
 				'bg-muted/30 overflow-hidden p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full',

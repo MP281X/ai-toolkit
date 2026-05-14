@@ -22,8 +22,12 @@ declare module '@tanstack/react-router' {
 	}
 }
 
-createRoot(document.querySelector('#root')!).render(
-	<StrictMode>
-		<RouterProvider router={router} />
-	</StrictMode>
-)
+const root = document.querySelector('#root')
+
+if (root) {
+	createRoot(root).render(
+		<StrictMode>
+			<RouterProvider router={router} />
+		</StrictMode>
+	)
+}

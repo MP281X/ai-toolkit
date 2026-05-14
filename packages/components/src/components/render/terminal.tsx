@@ -62,7 +62,7 @@ export function Terminal(input: {
 	}, [])
 	useEffect(() => {
 		input.write(data => terminalRef.current?.write(data))
-	}, [input.write])
+	}, [input.write, input])
 
 	return (
 		<div

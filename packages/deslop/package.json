@@ -16,7 +16,7 @@
 		"build": "bun build --target=bun ./src/index.ts --outfile ./dist/deslop.js",
 
 		"test": "bun test --concurrent",
-		"fix": "oxfmt .",
+		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
 		"check": "oxfmt --check ."
 	}
 }

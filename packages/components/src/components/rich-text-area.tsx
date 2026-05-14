@@ -7,7 +7,6 @@ import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary'
 import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin'
 import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {LexicalTypeaheadMenuPlugin, MenuOption} from '@lexical/react/LexicalTypeaheadMenuPlugin'
-// oxlint-disable-next-line import/no-namespace -- Lexical's public API is intentionally consumed as a namespace.
 import * as Lexical from 'lexical'
 import {useEffect, useImperativeHandle, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
@@ -73,7 +72,6 @@ function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
 	_tokensMap?: Map<string, TextAreaToken<TValue>>
 ) {
 	return {
-		// oxlint-disable-next-line typescript/no-unsafe-assignment -- Lexical consumes serialized editor state JSON.
 		editorState: JSON.parse(
 			'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
 		),
@@ -281,9 +279,11 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	const initializedRef = useRef(false)
 
 	useEffect(() => {
+		// oxlint-disable-next-line no-param-reassign
 		props.editorRef.current = editor
 
 		return () => {
+			// oxlint-disable-next-line no-param-reassign
 			props.editorRef.current = null
 		}
 	}, [editor, props.editorRef])
@@ -373,9 +373,11 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
 			onOpen={() => {
+				// oxlint-disable-next-line no-param-reassign
 				props.menuRef.current = true
 			}}
 			onClose={() => {
+				// oxlint-disable-next-line no-param-reassign
 				props.menuRef.current = false
 			}}
 			triggerFn={text => {

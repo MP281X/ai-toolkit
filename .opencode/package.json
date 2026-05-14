@@ -3,7 +3,7 @@
   "sideEffects": false,
   "name": "@ai-toolkit/.opencode",
   "scripts": {
-    "fix": "(oxlint --fix --fix-suggestions . || true) && oxfmt .",
+    "fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
     "check": "oxfmt --check . && oxlint ."
   },
   "dependencies": {

@@ -19,7 +19,6 @@ export function Conversation<T extends {readonly id: string}>(props: {
 			estimatedItemSize={240}
 			keyExtractor={item => item.id}
 			initialScrollIndex={Array.length(props.items) - 1}
-			// oxlint-disable-next-line require-await -- LegendList accepts async row renderers for virtualization.
 			renderItem={async input => props.children(input.item, input.index)}
 			ListHeaderComponent={<div className="h-2" />}
 			ListFooterComponent={<div className="h-2" />}

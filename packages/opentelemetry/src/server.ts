@@ -1,4 +1,3 @@
-// oxlint-disable-next-line import/no-namespace -- Effect exposes this SDK module as a namespace-style service surface.
 import * as NodeSdk from '@effect/opentelemetry/NodeSdk'
 
 import {Config, Effect, Layer, Option} from 'effect'

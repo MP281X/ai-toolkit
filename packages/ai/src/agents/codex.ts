@@ -45,37 +45,47 @@ const JsonRpcNotification = Schema.Struct({
 	params: Schema.optional(Schema.Defect)
 })
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
 
-const isJsonRpcRequest = (value: unknown) => isRecord(value) && typeof value['method'] === 'string' && 'id' in value
+function isJsonRpcRequest(value: unknown) {
+	return isRecord(value) && typeof value['method'] === 'string' && 'id' in value
+}
 
-const isJsonRpcNotification = (value: unknown) =>
-	isRecord(value) && typeof value['method'] === 'string' && !('id' in value)
+function isJsonRpcNotification(value: unknown) {
+	return isRecord(value) && typeof value['method'] === 'string' && !('id' in value)
+}
 
-const isJsonRpcResponse = (value: unknown) => isRecord(value) && 'id' in value && !('method' in value)
+function isJsonRpcResponse(value: unknown) {
+	return isRecord(value) && 'id' in value && !('method' in value)
+}
 
 type ClientRequestMethod = CodexRpc.ClientRequestMethod
 type ClientRequestPayload<M extends ClientRequestMethod> = CodexRpc.ClientRequestParamsByMethod[M]
 type ClientRequestResponse<M extends ClientRequestMethod> = CodexRpc.ClientRequestResponsesByMethod[M]
 
-const getClientRequestParamSchema = <M extends ClientRequestMethod>(method: M) => CodexRpc.CLIENT_REQUEST_PARAMS[method]
+function getClientRequestParamSchema<M extends ClientRequestMethod>(method: M) {
+	return CodexRpc.CLIENT_REQUEST_PARAMS[method]
+}
 
-const getClientRequestResponseSchema = <M extends ClientRequestMethod>(method: M) =>
-	CodexRpc.CLIENT_REQUEST_RESPONSES[method]
+function getClientRequestResponseSchema<M extends ClientRequestMethod>(method: M) {
+	return CodexRpc.CLIENT_REQUEST_RESPONSES[method]
+}
 
-const encodeClientPayload = <M extends ClientRequestMethod>(method: M, payload: ClientRequestPayload<M>) => {
+function encodeClientPayload<M extends ClientRequestMethod>(method: M, payload: ClientRequestPayload<M>) {
 	const schema = getClientRequestParamSchema(method)
 	return schema ? Schema.encodeUnknownSync(schema as never)(payload) : payload
 }
 
-const decodeClientResponse = <M extends ClientRequestMethod>(method: M, payload: unknown) => {
+function decodeClientResponse<M extends ClientRequestMethod>(method: M, payload: unknown) {
 	const schema = getClientRequestResponseSchema(method)
 	return schema
 		? (Schema.decodeUnknownSync(schema as never)(payload) as ClientRequestResponse<M>)
 		: (payload as ClientRequestResponse<M>)
 }
 
-const decodeServerNotification = <M extends CodexRpc.ServerNotificationMethod>(method: M, payload: unknown) => {
+function decodeServerNotification<M extends CodexRpc.ServerNotificationMethod>(method: M, payload: unknown) {
 	const schema = CodexRpc.SERVER_NOTIFICATION_PARAMS[method]
 	return Schema.decodeUnknownOption(schema as never)(payload) as Option.Option<
 		CodexRpc.ServerNotificationParamsByMethod[M]

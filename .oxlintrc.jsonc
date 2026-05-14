@@ -1,0 +1,68 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"ignorePatterns": ["**/*.gen.ts", "**/components/ui/**", "**/generated/**"],
+
+	"settings": {"react": {"version": "19.0"}},
+	"env": {"browser": true, "builtin": true, "node": true},
+	"options": {"typeAware": true, "typeCheck": true, "denyWarnings": true, "reportUnusedDisableDirectives": "deny"},
+
+	"plugins": ["eslint", "typescript", "oxc", "import", "react", "unicorn"],
+
+	"categories": {
+		"perf": "off",
+		"style": "off",
+		"nursery": "off",
+		"pedantic": "off",
+		"suspicious": "off",
+		"restriction": "off",
+		"correctness": "off"
+	},
+	"rules": {
+		"func-style": ["error", "declaration"],
+		"arrow-body-style": ["error", "as-needed"],
+		"curly": ["error", "multi-line", "consistent"],
+		"no-param-reassign": ["error", {"props": true}],
+		"no-empty-function": ["error", {"allow": ["arrowFunctions"]}],
+		"func-names": ["error", "as-needed", {"generators": "never"}],
+		"@typescript-eslint/array-type": ["error", {"default": "array"}],
+		"@typescript-eslint/consistent-type-definitions": ["error", "type"],
+		"@typescript-eslint/no-namespace": ["error", {"allowDeclarations": true}],
+		"@typescript-eslint/no-inferrable-types": ["error", {"ignoreParameters": true}],
+		"@typescript-eslint/no-misused-promises": ["error", {"checksVoidReturn": false}],
+		"sort-keys": ["error", "asc", {"allowLineSeparatedGroups": true, "natural": true}],
+		"@typescript-eslint/consistent-type-imports": [
+			"error",
+			{"fixStyle": "separate-type-imports", "prefer": "type-imports"}
+		]
+
+		// "use-isnan": "error",
+		// "no-console": "error",
+		// "no-lonely-if": "error",
+		// "no-else-return": "error",
+		// "react/jsx-key": "error",
+		// "no-nested-ternary": "error",
+		// "default-param-last": "warn",
+		// "no-useless-concat": "error",
+		// "import/extensions": "error",
+		// "oxc/no-barrel-file": "error",
+		// "react/rules-of-hooks": "error",
+		// "prefer-regex-literals": "error",
+		// "unicorn/no-useless-undefined": "error",
+		// "unicorn/prefer-number-properties": "warn",
+		// "@typescript-eslint/no-explicit-any": "error",
+		// "@typescript-eslint/prefer-as-const": "warn",
+		// "@typescript-eslint/no-floating-promises": "error",
+		// "@typescript-eslint/parameter-properties": "error",
+		// "@typescript-eslint/prefer-enum-initializers": "warn",
+		// "@typescript-eslint/consistent-type-exports": "error",
+		// "unicorn/prefer-logical-operator-over-ternary": "error",
+		// "@typescript-eslint/no-unnecessary-template-expression": "error"
+	},
+
+	"overrides": [
+		{
+			"files": ["**/*.config.ts"],
+			"rules": {"import/no-default-export": "off"}
+		}
+	]
+}

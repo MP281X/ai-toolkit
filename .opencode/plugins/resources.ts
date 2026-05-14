@@ -6,7 +6,6 @@ import type {Plugin} from '@opencode-ai/plugin'
 
 import {GitWorkspace} from '@ai-toolkit/git/service'
 
-// oxlint-disable-next-line require-await -- opencode plugin hooks may be async even when work is intentionally fire-and-forget.
 export const plugin = (async context => {
 	void Effect.runPromise(
 		pipe(

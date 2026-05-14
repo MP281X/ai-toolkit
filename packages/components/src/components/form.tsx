@@ -1,6 +1,5 @@
 import {Array, Number, Option, pipe} from 'effect'
 
-// oxlint-disable-next-line import/no-namespace -- TanStack Form exposes form-hook factories as a namespace-style API.
 import * as tanstackForm from '@tanstack/react-form'
 import {useState} from 'react'
 
