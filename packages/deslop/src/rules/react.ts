@@ -5,18 +5,9 @@ import ts from 'typescript'
 import type {Rule} from './helpers.ts'
 import {isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, isTailwindStringLiteral, rule} from './helpers.ts'
 
-import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
+import {isHookCall, normalizedText} from '#lib/ts.ts'
 
 export const reactRules = [
-	rule('no-explicit-default-value', (node, context) => {
-		if (!ts.isJsxAttribute(node)) return
-		if (isIntrinsicFalseBooleanAttribute(node)) {
-			context.report(node.name, 'no-explicit-default-value', {
-				description: `JSX prop "${node.name.getText(context.sourceFile)}" explicitly passes its default value.`,
-				fix: 'Delete this prop and rely on the default.'
-			})
-		}
-	}),
 	rule('no-jsx-props-object', (node, context) => {
 		if (!ts.isJsxSpreadAttribute(node)) return
 		context.report(node, 'no-jsx-props-object', {
@@ -42,20 +33,6 @@ export const reactRules = [
 				fix: `Inline "${normalizedText(node.initializer)}" into className and delete this binding.`
 			})
 		}
-	}),
-	rule('prefer-arrow-callback', (node, context) => {
-		if (!(ts.isFunctionExpression(node) && ts.isCallExpression(node.parent)) || node.asteriskToken) return
-		if (
-			node.name &&
-			node.body &&
-			containsNode(node.body, child => ts.isIdentifier(child) && child.text === node.name?.text)
-		) {
-			return
-		}
-		context.report(node, 'prefer-arrow-callback', {
-			description: `Callback passed to "${normalizedText(node.parent.expression)}" uses function syntax.`,
-			fix: 'Rewrite as an arrow callback; keep function* generators unchanged.'
-		})
 	}),
 	rule('no-manual-memoization', (node, context) => {
 		if (
@@ -152,22 +129,6 @@ export const reactRules = [
 		}
 	})
 ] as const satisfies readonly Rule[]
-
-function isIntrinsicFalseBooleanAttribute(node: ts.JsxAttribute) {
-	const element =
-		ts.isJsxOpeningElement(node.parent.parent) || ts.isJsxSelfClosingElement(node.parent.parent)
-			? node.parent.parent
-			: undefined
-	if (!element) return false
-	if (!ts.isIdentifier(element.tagName) || element.tagName.text !== String.toLowerCase(element.tagName.text)) {
-		return false
-	}
-	return !!(
-		node.initializer &&
-		ts.isJsxExpression(node.initializer) &&
-		node.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword
-	)
-}
 
 function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!checker) return false

@@ -24,12 +24,15 @@
 		"no-param-reassign": ["error", {"props": true}],
 		"no-empty-function": ["error", {"allow": ["arrowFunctions"]}],
 		"func-names": ["error", "as-needed", {"generators": "never"}],
+		"sort-keys": ["error", "asc", {"allowLineSeparatedGroups": true, "natural": true}],
+
+		"@typescript-eslint/prefer-readonly": "error",
+		"@typescript-eslint/prefer-readonly-parameter-types": "error",
 		"@typescript-eslint/array-type": ["error", {"default": "array"}],
 		"@typescript-eslint/consistent-type-definitions": ["error", "type"],
 		"@typescript-eslint/no-namespace": ["error", {"allowDeclarations": true}],
 		"@typescript-eslint/no-inferrable-types": ["error", {"ignoreParameters": true}],
 		"@typescript-eslint/no-misused-promises": ["error", {"checksVoidReturn": false}],
-		"sort-keys": ["error", "asc", {"allowLineSeparatedGroups": true, "natural": true}],
 		"@typescript-eslint/consistent-type-imports": [
 			"error",
 			{"fixStyle": "separate-type-imports", "prefer": "type-imports"}

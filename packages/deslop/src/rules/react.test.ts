@@ -2,32 +2,6 @@ import {test} from 'bun:test'
 
 import {expectNoRule, expectRule} from './test-utils.ts'
 
-test('no-explicit-default-value reports false intrinsic boolean props', () =>
-	expectRule({
-		filePath: 'sample.tsx',
-		rule: 'no-explicit-default-value',
-		source: 'function View() { return <button disabled={false} /> }\n'
-	}))
-
-test('no-explicit-default-value allows component false boolean props', () =>
-	expectNoRule({
-		filePath: 'sample.tsx',
-		rule: 'no-explicit-default-value',
-		source: 'function View() { return <Button disabled={false} /> }\n'
-	}))
-
-test('prefer-arrow-callback reports function callbacks', () =>
-	expectRule({
-		rule: 'prefer-arrow-callback',
-		source: 'declare const names: readonly string[]\nnames.map(function (name) { return name.trim() })\n'
-	}))
-
-test('prefer-arrow-callback allows recursive named callbacks', () =>
-	expectNoRule({
-		rule: 'prefer-arrow-callback',
-		source: 'declare function schedule(callback: () => void): void\nschedule(function tick() { schedule(tick) })\n'
-	}))
-
 test('no-jsx-props-object reports JSX spread props', () =>
 	expectRule({
 		filePath: 'sample.tsx',
