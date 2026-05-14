@@ -1,11 +1,12 @@
 import {Array, Option, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
-import {Children, useState} from 'react'
+import {useState} from 'react'
 
 import {Button} from '#components/ui/button.tsx'
 import {cn} from '#lib/utils.ts'
 
+// oxlint-disable-next-line typescript/no-namespace -- DevTools exposes related debug helpers under a single component namespace.
 export namespace DevTools {
 	export function Navigation<const Route extends string>(props: {
 		readonly routes: readonly [Route, ...(readonly Route[])]
@@ -62,12 +63,11 @@ export namespace DevTools {
 		)
 	}
 
-	export function Variants(props: {readonly children: React.ReactNode}) {
-		const children = Children.toArray(props.children)
+	export function Variants(props: {readonly children: readonly React.ReactNode[]}) {
 		const [value, setValue] = useState(0)
 
 		function move(delta: number) {
-			setValue(prev => (prev + delta + Array.length(children)) % Array.length(children))
+			setValue(prev => (prev + delta + Array.length(props.children)) % Array.length(props.children))
 		}
 
 		useHotkey('ArrowLeft', () => {
@@ -79,12 +79,12 @@ export namespace DevTools {
 
 		return (
 			<>
-				{children[value] ?? children[0]}
+				{props.children[value] ?? props.children[0]}
 				<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
 					<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5 font-mono text-xs">
-						{Array.map(children, (child, index) => (
+						{Array.map(props.children, (_child, index) => (
 							<Button
-								key={`${index}:${child}`}
+								key={index}
 								type="button"
 								variant="ghost"
 								size="icon-xs"

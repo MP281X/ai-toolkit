@@ -38,9 +38,13 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 										cols,
 										data: (_terminal, data) => {
 											const text = decoder.decode(data, {stream: true})
-											screenParsed = new Promise(resolve => {
-												screen.write(text, resolve)
-											})
+											screenParsed = Effect.runPromise(
+												Effect.callback<undefined>(resume => {
+													screen.write(text, () => {
+														resume(Effect.succeed(undefined))
+													})
+												})
+											)
 											for (const subscriber of subscribers) {
 												if (readySubscribers.has(subscriber)) {
 													Queue.offerUnsafe(subscriber, {data: text, type: 'data'})

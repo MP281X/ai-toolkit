@@ -1,4 +1,4 @@
-import {Array, Number, Option, Order, Record, String, pipe} from 'effect'
+import {Array, Number, Option, Order, Predicate, Record, String, pipe} from 'effect'
 
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
@@ -66,6 +66,19 @@ class Item<TValue extends RichTextArea.Value> extends MenuOption {
 	public constructor(entry: TextAreaEntry<TValue>, key: string) {
 		super(key)
 		this.entry = entry
+	}
+}
+
+function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
+	_tokensMap?: Map<string, TextAreaToken<TValue>>
+) {
+	return {
+		// oxlint-disable-next-line typescript/no-unsafe-assignment -- Lexical consumes serialized editor state JSON.
+		editorState: JSON.parse(
+			'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
+		),
+		text: '',
+		tokens: Array.empty<TextAreaToken<TValue>>()
 	}
 }
 
@@ -166,10 +179,10 @@ function match(text: string, triggers: readonly string[]) {
 		const index = text.lastIndexOf(trigger)
 		if (index === -1) continue
 
-		if (index > 0 && text[index - 1] !== '(' && !/\s/.test(text[index - 1] ?? '')) continue
+		if (index > 0 && text[index - 1] !== '(' && !/\s/u.test(text[index - 1] ?? '')) continue
 
 		const query = String.slice(index + String.length(trigger))(text)
-		if (String.length(query) > 32 || /\s/.test(query)) continue
+		if (String.length(query) > 32 || /\s/u.test(query)) continue
 
 		return {
 			leadOffset: index,
@@ -212,20 +225,20 @@ function lineBeforeCursor(text: string, offset: number) {
 }
 
 function continueList(event: KeyboardEvent | undefined) {
-	if (!event?.shiftKey) return false
+	if (event?.shiftKey !== true) return false
 
 	const current = currentTextNodeSelection()
 	if (!current) return false
 
 	const currentLine = lineBeforeCursor(current.node.getTextContent(), current.selection.anchor.offset)
-	if (/^(\s*)[-*+]\s*$/.exec(currentLine.line) || /^(\s*)\d+\.\s*$/.exec(currentLine.line)) {
+	if (/^(\s*)[-*+]\s*$/u.exec(currentLine.line) || /^(\s*)\d+\.\s*$/u.exec(currentLine.line)) {
 		event.preventDefault()
 		current.node.spliceText(currentLine.start, String.length(currentLine.line), '', true)
 		return true
 	}
 
-	const unordered = /^(\s*)([-*+])\s+\S/.exec(currentLine.line)
-	const ordered = /^(\s*)(\d+)\.\s+\S/.exec(currentLine.line)
+	const unordered = /^(\s*)([-*+])\s+\S/u.exec(currentLine.line)
+	const ordered = /^(\s*)(\d+)\.\s+\S/u.exec(currentLine.line)
 	if (!(unordered || ordered)) return false
 
 	event.preventDefault()
@@ -243,7 +256,7 @@ function closeXmlTag(event: KeyboardEvent) {
 	if (!current) return false
 
 	const currentLine = lineBeforeCursor(current.node.getTextContent(), current.selection.anchor.offset)
-	const tag = /<([A-Za-z][A-Za-z0-9:_-]*)$/.exec(currentLine.line)
+	const tag = /<([A-Za-z][A-Za-z0-9:_-]*)$/u.exec(currentLine.line)
 	if (!tag) return false
 
 	event.preventDefault()
@@ -279,7 +292,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 		if (initializedRef.current) return
 		initializedRef.current = true
 
-		if (props.initialSnapshot) restore(editor, props.initialSnapshot, props.tokensRef.current)
+		if (Predicate.isNotUndefined(props.initialSnapshot)) restore(editor, props.initialSnapshot, props.tokensRef.current)
 	}, [editor, props.initialSnapshot, props.tokensRef])
 
 	useEffect(
@@ -288,7 +301,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 				Lexical.KEY_ENTER_COMMAND,
 				event => {
 					if (continueList(event ?? undefined)) return true
-					if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
+					if (event?.shiftKey === true || props.menuRef.current || Predicate.isUndefined(props.onSubmit)) return false
 
 					event?.preventDefault()
 					props.onSubmit(snapshot(editor, props.tokensRef.current))
@@ -430,7 +443,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 						aria-label="Autocomplete suggestions"
 						className="border-input bg-card text-foreground h-auto w-full border-b"
 					>
-						<CommandList className="max-h-48" role="listbox">
+						<CommandList className="max-h-48">
 							{Array.map(menuProps.options, (option, index) => (
 								<CommandItem
 									tabIndex={0}
@@ -438,7 +451,6 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 									id={`typeahead-item-${index}`}
 									ref={option.setRefElement}
 									value={option.key}
-									role="option"
 									aria-selected={menuProps.selectedIndex === index}
 									className={cn('px-3', menuProps.selectedIndex === index && 'bg-muted')}
 									onMouseDown={event => {
@@ -500,20 +512,6 @@ export declare namespace RichTextArea {
 		readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
 		readonly placeholder?: string
 		readonly className?: string
-	}
-}
-
-function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
-	_tokensMap?: Map<string, TextAreaToken<TValue>>
-) {
-	const editorState = JSON.parse(
-		'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
-	)
-
-	return {
-		editorState,
-		text: '',
-		tokens: Array.empty<TextAreaToken<TValue>>()
 	}
 }
 
@@ -583,13 +581,9 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 					onSubmit={props.onSubmit}
 					tokensRef={tokensRef}
 				/>
-				<TypeaheadPlugin
-					children={props.children}
-					menuBoxRef={menuBoxRef}
-					menuRef={menuRef}
-					options={props.options}
-					tokensRef={tokensRef}
-				/>
+				<TypeaheadPlugin menuBoxRef={menuBoxRef} menuRef={menuRef} options={props.options} tokensRef={tokensRef}>
+					{props.children}
+				</TypeaheadPlugin>
 			</LexicalComposer>
 		</div>
 	)

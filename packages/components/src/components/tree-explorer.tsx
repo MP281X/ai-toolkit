@@ -1,3 +1,5 @@
+import {Predicate} from 'effect'
+
 import {cn} from '#lib/utils.ts'
 
 export function TreeExplorer(props: {readonly className?: string; readonly children: React.ReactNode}) {
@@ -11,7 +13,7 @@ export function TreeExplorerSection(props: {
 }) {
 	return (
 		<section className={cn('flex flex-col gap-1.5', props.className)}>
-			{props.label && (
+			{Predicate.isNotUndefined(props.label) && (
 				<div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 text-[11px] font-semibold tracking-wide uppercase">
 					{props.label}
 				</div>
@@ -30,20 +32,22 @@ export function TreeExplorerRow(props: {
 }) {
 	const className = cn(
 		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-xs',
-		props.selected &&
+		props.selected === true &&
 			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
 	)
 	const label = (
 		<span className="flex min-w-0 flex-1 items-center gap-1.5">
-			{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
+			{Predicate.isNotUndefined(props.icon) && (
+				<span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>
+			)}
 			<span className="min-w-0 flex-1 truncate">{props.children}</span>
 		</span>
 	)
 
-	if (props.onClick && props.actions) {
+	if (Predicate.isNotUndefined(props.onClick) && Predicate.isNotUndefined(props.actions)) {
 		return (
 			<div
-				aria-current={props.selected ? 'page' : undefined}
+				aria-current={props.selected === true ? 'page' : undefined}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}
 			>
@@ -59,11 +63,11 @@ export function TreeExplorerRow(props: {
 		)
 	}
 
-	if (props.onClick) {
+	if (Predicate.isNotUndefined(props.onClick)) {
 		return (
 			<button
 				type="button"
-				aria-current={props.selected ? 'page' : undefined}
+				aria-current={props.selected === true ? 'page' : undefined}
 				onClick={props.onClick}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}

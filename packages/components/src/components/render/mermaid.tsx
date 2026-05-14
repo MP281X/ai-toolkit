@@ -11,7 +11,8 @@ const mermaidAtom = Atom.family((source: string) =>
 	Atom.make(
 		Effect.tryPromise(async () => {
 			mermaid.initialize({securityLevel: 'loose', startOnLoad: false})
-			return mermaid.render(`mermaid_${Hash.string(source)}`, source)
+			const result = await mermaid.render(`mermaid_${Hash.string(source)}`, source)
+			return result
 		})
 	)
 )

@@ -61,7 +61,7 @@ function CommentAnnotation(props: {
 
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
-			if (props.isDraft) {
+			if (props.isDraft === true) {
 				props.onCloseDraft?.()
 				return
 			}
@@ -97,7 +97,7 @@ function CommentAnnotation(props: {
 							event.preventDefault()
 
 							if (String.isEmpty(String.trim(body))) {
-								if (!props.isDraft) props.onDeleteComment?.({...props.comment, body})
+								if (props.isDraft !== true) props.onDeleteComment?.({...props.comment, body})
 								props.onCloseDraft?.()
 								return
 							}

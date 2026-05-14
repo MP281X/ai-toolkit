@@ -267,7 +267,6 @@ function ComboboxField<TOption extends {readonly id: string}>(props: {
 					render={
 						<Button
 							variant="outline"
-							role="combobox"
 							className={cn('w-full justify-between', !field.state.value && 'text-muted-foreground')}
 						/>
 					}

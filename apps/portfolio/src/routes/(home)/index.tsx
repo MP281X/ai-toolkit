@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Number, Option, Stream, String, pipe} from 'effect'
+import {Array, Effect, Match, Number, Option, Predicate, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -50,7 +50,9 @@ function getIdentity() {
 	const existingId = globalThis.sessionStorage.getItem('portfolio.id')
 	const existingName = globalThis.sessionStorage.getItem('portfolio.name')
 
-	if (existingId && existingName) return {color: pickRandomCursorColor(), id: existingId, name: existingName}
+	if (Predicate.isNotNullish(existingId) && Predicate.isNotNullish(existingName)) {
+		return {color: pickRandomCursorColor(), id: existingId, name: existingName}
+	}
 
 	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
 
@@ -158,7 +160,7 @@ type CursorMotion = {
 	viewportHeight: number
 }
 
-let localPointer: {x: number; y: number; updatedAt: number} | undefined
+let localPointer: {x: number; y: number; updatedAt: number} | undefined = undefined
 const SUMMARY_LINES = [
 	"I'm a full-stack TypeScript developer with production experience building real-time, type-safe web applications using React, Node.js, and PostgreSQL.",
 	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
@@ -375,7 +377,7 @@ function useViewport() {
 
 	return {
 		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0),
-		width: Option.getOrElse(Number.parse(width ?? '0'), () => 0)
+		width: Option.getOrElse(Number.parse(width), () => 0)
 	} satisfies Viewport
 }
 
@@ -397,199 +399,6 @@ function Panel(input: {readonly className?: string; readonly children: React.Rea
 export const Route = createFileRoute('/(home)/')({
 	component: PortfolioRoute
 })
-
-function PortfolioRoute() {
-	const viewport = useViewport()
-	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
-	const currentSectionRef = useRef(0)
-	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
-	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | undefined>()
-	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>()
-	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [showShortcuts, setShowShortcuts] = useState(false)
-
-	useEffect(
-		() => () => {
-			if (pointerFrameRef.current) cancelAnimationFrame(pointerFrameRef.current)
-		},
-		[]
-	)
-
-	function scrollTo(index: number) {
-		const target = sectionRefs.current[index]
-		if (!target) return
-
-		target.scrollIntoView({behavior: 'smooth', block: 'start'})
-		currentSectionRef.current = index
-	}
-
-	function updateColor() {
-		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
-
-		identity.color = nextColor
-		setIdentityColor(nextColor)
-		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
-
-		moveRpc({
-			payload: {
-				color: nextColor,
-				id: identity.id,
-				x: currentPointer.x,
-				y: currentPointer.y
-			}
-		})
-	}
-
-	useHotkey('J', () => {
-		scrollTo(Math.min(currentSectionRef.current + 1, 5))
-	})
-	useHotkey('K', () => {
-		scrollTo(Math.max(currentSectionRef.current - 1, 0))
-	})
-	useHotkey('1', () => {
-		scrollTo(0)
-	})
-	useHotkey('2', () => {
-		scrollTo(1)
-	})
-	useHotkey('3', () => {
-		scrollTo(2)
-	})
-	useHotkey('4', () => {
-		scrollTo(3)
-	})
-	useHotkey('5', () => {
-		scrollTo(4)
-	})
-	useHotkey('6', () => {
-		scrollTo(5)
-	})
-	useHotkey('R', updateColor)
-	useHotkey({key: '?', shift: true}, () => {
-		setShowShortcuts(show => !show)
-	})
-	useHotkey(
-		'Escape',
-		() => {
-			setShowShortcuts(false)
-		},
-		{enabled: showShortcuts}
-	)
-
-	return (
-		<div
-			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
-			onPointerMove={event => {
-				if (!(viewport.width && viewport.height)) return
-
-				const nextPointer = {
-					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
-					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
-				}
-
-				localPointer = {updatedAt: performance.now(), x: nextPointer.x, y: nextPointer.y}
-				queuedPointerRef.current = nextPointer
-
-				if (pointerFrameRef.current) return
-
-				pointerFrameRef.current = requestAnimationFrame(() => {
-					pointerFrameRef.current = 0
-
-					if (!queuedPointerRef.current) return
-
-					const now = performance.now()
-
-					if (lastSentPointerRef.current) {
-						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
-						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
-
-						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-							queuedPointerRef.current = undefined
-							return
-						}
-					}
-
-					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
-
-					lastSentPointerRef.current = {
-						sentAt: now,
-						x: queuedPointerRef.current.x,
-						y: queuedPointerRef.current.y
-					}
-
-					moveRpc({
-						payload: {
-							color: identityColor,
-							id: identity.id,
-							x: queuedPointerRef.current.x,
-							y: queuedPointerRef.current.y
-						}
-					})
-
-					queuedPointerRef.current = undefined
-				})
-			}}
-			onScroll={event => {
-				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
-			}}
-		>
-			<HeroSection sectionRefs={sectionRefs} />
-			<AboutSection sectionRefs={sectionRefs} />
-			<SkillsSection sectionRefs={sectionRefs} />
-			<ExperienceSection sectionRefs={sectionRefs} />
-			<EducationSection sectionRefs={sectionRefs} />
-			<ContactSection sectionRefs={sectionRefs} />
-
-			<Suspense fallback={null}>
-				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
-			</Suspense>
-
-			<button
-				type="button"
-				aria-expanded={showShortcuts}
-				aria-haspopup="dialog"
-				aria-label="Toggle keyboard shortcuts"
-				onClick={() => {
-					setShowShortcuts(show => !show)
-				}}
-				className="border-border/70 bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-primary fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border font-mono text-xs backdrop-blur-sm transition-colors sm:right-4 sm:bottom-4"
-			>
-				?
-			</button>
-
-			{showShortcuts && (
-				<ShortcutsOverlay
-					onClose={() => {
-						setShowShortcuts(false)
-					}}
-				/>
-			)}
-		</div>
-	)
-}
-
-function RealtimeLayer(input: {readonly identityColor: string; readonly viewport: Viewport}) {
-	const {value: state} = useAtomSuspense(portfolioAtom)
-
-	return (
-		<>
-			<GridOverlay />
-			<TrailCanvas trails={state.trails} viewport={input.viewport} />
-
-			{Array.map(state.visitors, cursor => (
-				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
-			))}
-
-			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
-				<span className="size-2" style={{backgroundColor: input.identityColor}} />
-				<span className="text-primary">{state.visitors.length}</span>
-				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
-			</div>
-		</>
-	)
-}
 
 function GridOverlay() {
 	return (
@@ -922,7 +731,12 @@ function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLEleme
 
 function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 	return (
-		<Dialog open onOpenChange={open => !open && input.onClose()}>
+		<Dialog
+			open
+			onOpenChange={open => {
+				if (!open) input.onClose()
+			}}
+		>
 			<DialogContent className="border-border/70 bg-background p-6 font-mono sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle className="text-foreground font-mono text-sm tracking-[0.2em] uppercase">
@@ -943,5 +757,198 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 				</div>
 			</DialogContent>
 		</Dialog>
+	)
+}
+
+function RealtimeLayer(input: {readonly identityColor: string; readonly viewport: Viewport}) {
+	const {value: state} = useAtomSuspense(portfolioAtom)
+
+	return (
+		<>
+			<GridOverlay />
+			<TrailCanvas trails={state.trails} viewport={input.viewport} />
+
+			{Array.map(state.visitors, cursor => (
+				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
+			))}
+
+			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
+				<span className="size-2" style={{backgroundColor: input.identityColor}} />
+				<span className="text-primary">{state.visitors.length}</span>
+				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
+			</div>
+		</>
+	)
+}
+
+function PortfolioRoute() {
+	const viewport = useViewport()
+	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
+	const currentSectionRef = useRef(0)
+	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
+	const pointerFrameRef = useRef(0)
+	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(undefined)
+	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>(undefined)
+	const [identityColor, setIdentityColor] = useState(identity.color)
+	const [showShortcuts, setShowShortcuts] = useState(false)
+
+	useEffect(
+		() => () => {
+			if (pointerFrameRef.current) cancelAnimationFrame(pointerFrameRef.current)
+		},
+		[]
+	)
+
+	function scrollTo(index: number) {
+		const target = sectionRefs.current[index]
+		if (!target) return
+
+		target.scrollIntoView({behavior: 'smooth', block: 'start'})
+		currentSectionRef.current = index
+	}
+
+	function updateColor() {
+		const nextColor = pickNextCursorColor(identityColor)
+		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
+
+		identity.color = nextColor
+		setIdentityColor(nextColor)
+		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
+
+		moveRpc({
+			payload: {
+				color: nextColor,
+				id: identity.id,
+				x: currentPointer.x,
+				y: currentPointer.y
+			}
+		})
+	}
+
+	useHotkey('J', () => {
+		scrollTo(Math.min(currentSectionRef.current + 1, 5))
+	})
+	useHotkey('K', () => {
+		scrollTo(Math.max(currentSectionRef.current - 1, 0))
+	})
+	useHotkey('1', () => {
+		scrollTo(0)
+	})
+	useHotkey('2', () => {
+		scrollTo(1)
+	})
+	useHotkey('3', () => {
+		scrollTo(2)
+	})
+	useHotkey('4', () => {
+		scrollTo(3)
+	})
+	useHotkey('5', () => {
+		scrollTo(4)
+	})
+	useHotkey('6', () => {
+		scrollTo(5)
+	})
+	useHotkey('R', updateColor)
+	useHotkey({key: '?', shift: true}, () => {
+		setShowShortcuts(show => !show)
+	})
+	useHotkey(
+		'Escape',
+		() => {
+			setShowShortcuts(false)
+		},
+		{enabled: showShortcuts}
+	)
+
+	return (
+		<div
+			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
+			onPointerMove={event => {
+				if (!(viewport.width && viewport.height)) return
+
+				const nextPointer = {
+					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
+					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
+				}
+
+				localPointer = {updatedAt: performance.now(), x: nextPointer.x, y: nextPointer.y}
+				queuedPointerRef.current = nextPointer
+
+				if (pointerFrameRef.current) return
+
+				pointerFrameRef.current = requestAnimationFrame(() => {
+					pointerFrameRef.current = 0
+
+					if (!queuedPointerRef.current) return
+
+					const now = performance.now()
+
+					if (lastSentPointerRef.current) {
+						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
+						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
+
+						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
+							queuedPointerRef.current = undefined
+							return
+						}
+					}
+
+					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
+
+					lastSentPointerRef.current = {
+						sentAt: now,
+						x: queuedPointerRef.current.x,
+						y: queuedPointerRef.current.y
+					}
+
+					moveRpc({
+						payload: {
+							color: identityColor,
+							id: identity.id,
+							x: queuedPointerRef.current.x,
+							y: queuedPointerRef.current.y
+						}
+					})
+
+					queuedPointerRef.current = undefined
+				})
+			}}
+			onScroll={event => {
+				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
+			}}
+		>
+			<HeroSection sectionRefs={sectionRefs} />
+			<AboutSection sectionRefs={sectionRefs} />
+			<SkillsSection sectionRefs={sectionRefs} />
+			<ExperienceSection sectionRefs={sectionRefs} />
+			<EducationSection sectionRefs={sectionRefs} />
+			<ContactSection sectionRefs={sectionRefs} />
+
+			<Suspense fallback={null}>
+				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
+			</Suspense>
+
+			<button
+				type="button"
+				aria-expanded={showShortcuts}
+				aria-haspopup="dialog"
+				aria-label="Toggle keyboard shortcuts"
+				onClick={() => {
+					setShowShortcuts(show => !show)
+				}}
+				className="border-border/70 bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-primary fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border font-mono text-xs backdrop-blur-sm transition-colors sm:right-4 sm:bottom-4"
+			>
+				?
+			</button>
+
+			{showShortcuts && (
+				<ShortcutsOverlay
+					onClose={() => {
+						setShowShortcuts(false)
+					}}
+				/>
+			)}
+		</div>
 	)
 }

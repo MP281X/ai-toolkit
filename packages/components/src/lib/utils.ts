@@ -45,8 +45,8 @@ export function formatNumber(number: number) {
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,
-		String.replaceAll(/[-_]+/g, ' '),
-		String.replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2'),
+		String.replaceAll(/[-_]+/gu, ' '),
+		String.replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2'),
 		String.trim,
 		String.toLowerCase,
 		String.capitalize

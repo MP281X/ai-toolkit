@@ -17,6 +17,7 @@ export function Markdown(props: {readonly children: string; readonly className?:
 				if (token.type === 'html') return
 
 				if (token.type !== 'code') {
+					// oxlint-disable-next-line react/no-danger -- Marked renders markdown to HTML; raw HTML tokens are skipped above.
 					return <div key={index} dangerouslySetInnerHTML={{__html: marked.parse(token.raw)}} />
 				}
 
@@ -29,6 +30,7 @@ export function Markdown(props: {readonly children: string; readonly className?:
 				}
 
 				return (
+					// oxlint-disable-next-line typescript/no-unsafe-assignment -- Marked exposes code token lang as an untyped field.
 					<Code key={index} className="border-border border" lang={token.lang}>
 						{token.text}
 					</Code>

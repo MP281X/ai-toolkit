@@ -4,7 +4,7 @@ import {LegendList} from '@legendapp/list/react'
 
 import {cn} from '#lib/utils.ts'
 
-export function Conversation<T extends {readonly id: unknown}>(props: {
+export function Conversation<T extends {readonly id: string}>(props: {
 	readonly items: readonly T[]
 	readonly children: (item: T, index: number) => React.ReactNode
 	readonly className?: string
@@ -17,8 +17,9 @@ export function Conversation<T extends {readonly id: unknown}>(props: {
 			data={props.items}
 			recycleItems
 			estimatedItemSize={240}
-			keyExtractor={item => `${item.id}`}
+			keyExtractor={item => item.id}
 			initialScrollIndex={Array.length(props.items) - 1}
+			// oxlint-disable-next-line require-await -- LegendList accepts async row renderers for virtualization.
 			renderItem={async input => props.children(input.item, input.index)}
 			ListHeaderComponent={<div className="h-2" />}
 			ListFooterComponent={<div className="h-2" />}

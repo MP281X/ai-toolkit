@@ -281,7 +281,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		)
 
 		return {
-			branches: Effect.fnUntraced(function* (cwd) {
+			branches: Effect.fnUntraced(function* (cwd: string) {
 				return new GitBranchesSnapshot({
 					branches: yield* pipe(
 						git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
@@ -311,7 +311,11 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					defaultBranch: yield* getDefaultBranch(cwd)
 				})
 			}),
-			clone: Effect.fnUntraced(function* (input) {
+			clone: Effect.fnUntraced(function* (input: {
+				readonly cwd: string
+				readonly directory: string
+				readonly url: string
+			}) {
 				const targetDirectory = path.isAbsolute(input.directory)
 					? input.directory
 					: path.join(input.cwd, input.directory)
@@ -336,7 +340,12 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					)
 				)
 			}),
-			createWorktree: Effect.fnUntraced(function* (input) {
+			createWorktree: Effect.fnUntraced(function* (input: {
+				readonly baseBranch: string
+				readonly branch: string
+				readonly cwd: string
+				readonly mode: 'existing-local' | 'existing-remote' | 'new-local'
+			}) {
 				const targetDirectory = path.join(
 					Bun.env['HOME'] ?? input.cwd,
 					'.ai-toolkit',
@@ -369,7 +378,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 				yield* refreshProjects()
 				return targetDirectory
 			}),
-			deleteWorktree: Effect.fnUntraced(function* (input) {
+			deleteWorktree: Effect.fnUntraced(function* (input: {readonly cwd: string; readonly force: boolean}) {
 				const worktree = yield* pipe(
 					git.lines(input.cwd, ['worktree', 'list', '--porcelain']),
 					Effect.map(lines =>
@@ -417,7 +426,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					Effect.asVoid
 				)
 
-				if (worktree.branch) {
+				if (Predicate.isNotUndefined(worktree.branch)) {
 					yield* pipe(git.string(worktree.mainRoot, ['branch', '-D', worktree.branch]), Effect.ignore)
 				}
 				yield* refreshProjects()
@@ -433,7 +442,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 }
 
 export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git/service/GitWorktree', {
-	make: Effect.fnUntraced(function* (config) {
+	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		const git = yield* makeGitExecutor
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
