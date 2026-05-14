@@ -6,34 +6,31 @@ import {expectRule} from './test-utils.ts'
 
 import {analyzeText} from '#lib/analyzer.ts'
 
-test('base scope emits public planned rule ids', () => {
+test('base scope emits public planned rule ids', () =>
 	expectRule({
 		rule: 'base/no-destructuring',
 		scoped: true,
 		scopes: ['base'],
 		source:
 			'function view(props: { readonly user: { readonly name: string } }) { const { user } = props; return user.name }\n'
-	})
-})
+	}))
 
-test('react scope emits public planned rule ids', () => {
+test('react scope emits public planned rule ids', () =>
 	expectRule({
+		rule: 'react/no-jsx-props-object',
 		filePath: 'sample.tsx',
-		rule: 'react/no-tailwind-class-indirection',
 		scoped: true,
 		scopes: ['react'],
-		source: 'const classes = "flex items-center"\nfunction View() { return <Input className={classes} /> }\n'
-	})
-})
+		source: 'function View(props: { readonly value: string }) { return <Input {...props} /> }\n'
+	}))
 
-test('effect scope emits public planned rule ids', () => {
+test('effect scope emits public planned rule ids', () =>
 	expectRule({
 		rule: 'effect/no-option-constructor',
 		scoped: true,
 		scopes: ['effect'],
 		source: 'import {Option} from "effect"\nconst value = Option.fromNullable(input)\n'
-	})
-})
+	}))
 
 test('scopes are explicit allowlists', () => {
 	const rules = Array.map(

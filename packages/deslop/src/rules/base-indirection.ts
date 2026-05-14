@@ -344,9 +344,7 @@ function localIdentifierUseCount(checker: ts.TypeChecker | undefined, node: ts.V
 		) {
 			count += 1
 		}
-		ts.forEachChild(child, nested => {
-			visit(nested, name)
-		})
+		ts.forEachChild(child, nested => visit(nested, name))
 	}
 	visit(localScope(node), node.name.text)
 	return count

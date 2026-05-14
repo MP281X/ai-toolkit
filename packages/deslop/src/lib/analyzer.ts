@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import {Array, Effect, Option, Order, String, flow, pipe} from 'effect'
+import {Array, Effect, flow, Option, Order, pipe, String} from 'effect'
 
 import ts from 'typescript'
 
@@ -53,7 +53,7 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 				true
 			)
 		),
-		Array.toSorted(compareDiagnosticPosition)
+		Array.sort(compareDiagnosticPosition)
 	)
 
 	return {diagnostics, files}
@@ -151,10 +151,9 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 
 					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
 						fileDiagnostics.diagnostics,
-						Array.map(
-							diagnostic =>
-								`${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
-						),
+						Array.map(diagnostic => {
+							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
+						}),
 						Array.join('\n\n')
 					)}`
 				}),
@@ -164,15 +163,15 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 }
 
 const colors = {
-	code: ['\u001B[2m', '\u001B[22m'],
-	count: ['\u001B[2m', '\u001B[22m'],
-	file: ['\u001B[1;35m', '\u001B[0m'],
-	help: ['\u001B[36m', '\u001B[39m'],
-	label: ['\u001B[2m', '\u001B[22m'],
-	line: ['\u001B[33m', '\u001B[39m'],
-	problem: ['\u001B[31m', '\u001B[39m'],
-	rule: ['\u001B[2m', '\u001B[22m'],
-	symbol: ['\u001B[36m', '\u001B[39m']
+	code: ['\u001b[2m', '\u001b[22m'],
+	count: ['\u001b[2m', '\u001b[22m'],
+	file: ['\u001b[1;35m', '\u001b[0m'],
+	help: ['\u001b[36m', '\u001b[39m'],
+	label: ['\u001b[2m', '\u001b[22m'],
+	line: ['\u001b[33m', '\u001b[39m'],
+	problem: ['\u001b[31m', '\u001b[39m'],
+	rule: ['\u001b[2m', '\u001b[22m'],
+	symbol: ['\u001b[36m', '\u001b[39m']
 } as const
 
 export function analyzeSourceFile(
@@ -200,10 +199,10 @@ export function analyzeSourceFile(
 			symbol: nearestSymbol(node),
 			text: pipe(
 				node.getText(sourceFile),
-				String.replaceAll(/\s+/g, ' '),
+				String.replace(/\s+/g, ' '),
 				String.trim,
 				String.slice(0, 120),
-				String.replaceAll('"', String.raw`\"`)
+				String.replaceAll('"', '\\"')
 			)
 		})
 	}
@@ -217,9 +216,8 @@ export function analyzeSourceFile(
 					program,
 					referenceFiles,
 					references,
-					report: (node, ruleId, diagnostic) => {
-						report(node, useScopedRuleIds ? scopedRuleId(rule.scope, ruleId) : ruleId, diagnostic)
-					},
+					report: (node, ruleId, diagnostic) =>
+						report(node, useScopedRuleIds ? scopedRuleId(rule.scope, ruleId) : ruleId, diagnostic),
 					sourceFile
 				})
 			}
@@ -251,7 +249,7 @@ const collectFiles = Effect.fnUntraced(function* (options: {
 		Array.filter(
 			filePath => Array.contains(['.ts', '.tsx'] as const, extensionName(filePath)) && !isExcluded(filePath)
 		),
-		Array.toSorted(String.Order)
+		Array.sort(String.Order)
 	)
 })
 
@@ -265,9 +263,9 @@ const collectSelectedPaths = Effect.fnUntraced(function* (options: {
 	const gitPaths = yield* runGitDiff(options.cwd, options.mode)
 	if (!options.paths) return gitPaths
 	return Array.filter(gitPaths, filePath =>
-		Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope =>
-			pathMatchesScope(normalizePath(filePath), scope)
-		)
+		Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope => {
+			return pathMatchesScope(normalizePath(filePath), scope)
+		})
 	)
 })
 
@@ -283,15 +281,15 @@ const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
 			: ['git', 'diff', '--name-only', '--diff-filter=ACMR'],
 		{cwd, stderr: 'pipe', stdout: 'pipe'}
 	)
-	if ((yield* Effect.promise(async () => process.exited)) !== 0) {
+	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
-			Effect.promise(async () => new Response(process.stderr).text()),
+			Effect.promise(() => new Response(process.stderr).text()),
 			Effect.map(String.trim),
 			Effect.flatMap(Effect.fail)
 		)
 	}
 	return pipe(
-		yield* Effect.promise(async () => new Response(process.stdout).text()),
+		yield* Effect.promise(() => new Response(process.stdout).text()),
 		String.split('\n'),
 		Array.filter(String.isNonEmpty)
 	)
@@ -332,14 +330,14 @@ const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selected
 
 const runGitString = Effect.fnUntraced(function* (cwd: string, command: readonly string[]) {
 	const process = Bun.spawn(Array.fromIterable(command), {cwd, stderr: 'pipe', stdout: 'pipe'})
-	if ((yield* Effect.promise(async () => process.exited)) !== 0) {
+	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
-			Effect.promise(async () => new Response(process.stderr).text()),
+			Effect.promise(() => new Response(process.stderr).text()),
 			Effect.map(String.trim),
 			Effect.flatMap(Effect.fail)
 		)
 	}
-	return yield* Effect.promise(async () => new Response(process.stdout).text())
+	return yield* Effect.promise(() => new Response(process.stdout).text())
 })
 
 function compareDiagnosticPosition(
@@ -435,13 +433,9 @@ export function collectReferenceFiles(sourceFiles: readonly ts.SourceFile[]) {
 		) {
 			record(node.text, normalizePath(sourceFile.fileName))
 		}
-		ts.forEachChild(node, child => {
-			visit(sourceFile, child)
-		})
+		ts.forEachChild(node, child => visit(sourceFile, child))
 	}
-	Array.forEach(sourceFiles, sourceFile => {
-		visit(sourceFile, sourceFile)
-	})
+	Array.forEach(sourceFiles, sourceFile => visit(sourceFile, sourceFile))
 	return referenceFiles
 }
 

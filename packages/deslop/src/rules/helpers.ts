@@ -1,4 +1,4 @@
-import {Array, Option, String, pipe} from 'effect'
+import {Array, Option, pipe, String} from 'effect'
 
 import ts from 'typescript'
 
@@ -11,9 +11,11 @@ import {
 	isCheapExpression,
 	isEffectCall,
 	isEffectConstructorCall,
+	isEffectGenLikeCall,
 	isFlowCall,
 	isHookCall,
 	isImportedIdentifier,
+	isMatchCall,
 	isRcMapConstructorCall,
 	isSchemaExpression,
 	normalizedText,
@@ -214,7 +216,7 @@ export function isExemptNamedValue(checker: ts.TypeChecker | undefined, node: ts
 export function isRecursiveFunction(node: ts.FunctionLikeDeclaration) {
 	const name = functionLikeName(node)
 	if (name === '<anonymous>') return false
-	return Boolean(node.body) && containsNode(node.body, child => ts.isIdentifier(child) && child.text === name)
+	return !!node.body && containsNode(node.body, child => ts.isIdentifier(child) && child.text === name)
 }
 
 export function countIdentifierUses(node: ts.Node, name: string) {
@@ -273,9 +275,17 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 	return containsNode(node, child => ts.isIdentifier(child) && child.text === node.name.text && child !== node.name)
 }
 
+export function isAllowedCallableValue(node: ts.Expression) {
+	return (
+		(ts.isCallExpression(node) &&
+			(isFlowCall(node) || isEffectGenLikeCall(node) || isMatchCall(node) || isSchemaExpression(node))) ||
+		(ts.isArrowFunction(node) && ts.isCallExpression(node.body) && isSchemaExpression(node.body))
+	)
+}
+
 export function isNamedFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
 	return (
-		(ts.isFunctionDeclaration(node) && Boolean(node.name)) ||
+		(ts.isFunctionDeclaration(node) && !!node.name) ||
 		((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
 			ts.isVariableDeclaration(node.parent) &&
 			ts.isIdentifier(node.parent.name))
@@ -352,7 +362,7 @@ export function linearVariableChain(
 				): declaration is ts.VariableDeclaration & {
 					readonly name: ts.Identifier
 					readonly initializer: ts.Expression
-				} => ts.isIdentifier(declaration.name) && Boolean(declaration.initializer)
+				} => ts.isIdentifier(declaration.name) && !!declaration.initializer
 			)
 		),
 		Array.empty<
@@ -466,14 +476,12 @@ export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {
 	return (
 		ts.isIdentifier(node.name) &&
 		node.name.text === 'current' &&
-		Boolean(
-			ts.findAncestor(
-				node,
-				ancestor =>
-					ts.isTypeReferenceNode(ancestor) &&
-					ts.isQualifiedName(ancestor.typeName) &&
-					ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-			)
+		!!ts.findAncestor(
+			node,
+			ancestor =>
+				ts.isTypeReferenceNode(ancestor) &&
+				ts.isQualifiedName(ancestor.typeName) &&
+				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
 		)
 	)
 }

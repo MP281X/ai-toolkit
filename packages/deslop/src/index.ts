@@ -2,7 +2,7 @@
 
 import {BunRuntime, BunServices} from '@effect/platform-bun'
 
-import {Array, Effect, Match, Option, Runtime, Schema, String, Terminal, pipe} from 'effect'
+import {Array, Effect, Match, Option, pipe, Runtime, Schema, String, Terminal} from 'effect'
 
 import {Argument, Command, Flag} from 'effect/unstable/cli'
 
@@ -10,8 +10,8 @@ import {renderText, runDeslop} from '#lib/analyzer.ts'
 import type {RuleScope} from '#rules/helpers.ts'
 
 class LintFailure extends Schema.TaggedErrorClass<LintFailure>()('LintFailure', {}) {
-	public override readonly [Runtime.errorExitCode] = 1
-	public override readonly [Runtime.errorReported] = false
+	override readonly [Runtime.errorExitCode] = 1
+	override readonly [Runtime.errorReported] = false
 }
 
 const runAndRender = Effect.fnUntraced(function* (options: {

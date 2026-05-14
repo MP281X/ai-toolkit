@@ -17,6 +17,6 @@
 
 		"test": "bun test --concurrent",
 		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check ."
+		"check": "oxfmt --check . && oxlint ."
 	}
 }

@@ -152,9 +152,7 @@ export const effectRules = [
 			})
 			return
 		}
-		if (
-			!Array.some(unionMembers(channels.error), member => Boolean(context.checker?.getPropertyOfType(member, '_tag')))
-		) {
+		if (!Array.some(unionMembers(channels.error), member => !!context.checker?.getPropertyOfType(member, '_tag'))) {
 			return
 		}
 		context.report(node.expression, 'prefer-effect-catch-tag', {
@@ -324,7 +322,7 @@ function rootRcMapConstructorDeclaration(node: ts.Node) {
 	return Option.getOrUndefined(
 		Array.findFirst(
 			statement.declarationList.declarations,
-			declaration => Boolean(declaration.initializer) && containsNode(declaration.initializer, child => child === node)
+			declaration => !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
 		)
 	)
 }
@@ -450,7 +448,7 @@ function effectChannels(checker: ts.TypeChecker, node: ts.Node) {
 	const typeId = checker.getPropertyOfType(checker.getTypeAtLocation(node), '~effect/Effect')
 	if (typeId) {
 		const error = varianceReturnType(checker, checker.getTypeOfSymbolAtLocation(typeId, node), '_E', node)
-		return error ? {error} : undefined
+		return error ? {error: error} : undefined
 	}
 }
 
@@ -499,7 +497,7 @@ function isUnnecessaryEffectGen(checker: ts.TypeChecker | undefined, node: ts.Ca
 	if (!(expression && ts.isYieldExpression(expression) && expression.asteriskToken && expression.expression)) {
 		return false
 	}
-	return Boolean(effectChannels(checker, expression.expression))
+	return !!effectChannels(checker, expression.expression)
 }
 
 function effectGenYieldedMapping(checker: ts.TypeChecker | undefined, node: ts.Node) {
