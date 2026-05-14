@@ -5,7 +5,8 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#tools/*": "./src/tools/*"
+		"#tools/*": "./src/tools/*",
+		"#codegen/*": "./codegen/*"
 	},
 
 	"exports": {
@@ -17,6 +18,8 @@
 	},
 
 	"scripts": {
+		"codegen:codex-app-server": "bun run codegen/codex-app-server.ts",
+
 		"test": "bun test --concurrent",
 		"fix": "biome check --write --unsafe || true",
 		"check": "tsgo --noEmit && biome check"

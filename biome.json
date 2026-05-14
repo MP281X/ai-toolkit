@@ -124,6 +124,10 @@
 		{
 			"includes": ["**/components/ui/**"],
 			"linter": { "enabled": false }
+		},
+		{
+			"includes": ["**/generated/**"],
+			"linter": { "enabled": false }
 		}
 	]
 }

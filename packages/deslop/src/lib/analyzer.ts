@@ -469,10 +469,8 @@ function isExcluded(filePath: string) {
 	return (
 		String.includes('/components/ui/')(normalized) ||
 		String.startsWith('components/ui/')(normalized) ||
-		String.endsWith('/routeTree.gen.ts')(normalized) ||
-		String.endsWith('/routeTree.gen.tsx')(normalized) ||
-		normalized === 'routeTree.gen.ts' ||
-		normalized === 'routeTree.gen.tsx'
+		String.endsWith('.gen.ts')(normalized) ||
+		String.endsWith('.gen.tsx')(normalized)
 	)
 }
 
