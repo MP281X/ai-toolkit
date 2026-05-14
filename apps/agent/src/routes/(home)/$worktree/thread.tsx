@@ -1,6 +1,13 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+
 import {Array, Effect, Option, Predicate, pipe, Stream, String} from 'effect'
 
+import {createFileRoute, Navigate} from '@tanstack/react-router'
+import {Atom} from 'effect/unstable/reactivity'
+import {useEffect, useRef, useState} from 'react'
+
+import {RpcClient} from '#lib/atomRuntime.ts'
+import {activeHomeAtom, selectedAgentAtom} from '#lib/state.ts'
 import type {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {models} from '@ai-toolkit/ai/catalog'
 import type {AgentEvent, AgentKey, AgentStatus} from '@ai-toolkit/ai/schema'
@@ -24,12 +31,6 @@ import {Button} from '@ai-toolkit/components/ui/button'
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/components/ui/collapsible'
 import {Select, SelectContent, SelectItem, SelectTrigger} from '@ai-toolkit/components/ui/select'
 import {formatError, formatNumber} from '@ai-toolkit/components/utils'
-import {createFileRoute, Navigate} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
-import {useEffect, useRef, useState} from 'react'
-
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, selectedAgentAtom} from '#lib/state.ts'
 
 export const Route = createFileRoute('/(home)/$worktree/thread')({
 	component: ThreadPage
@@ -143,9 +144,9 @@ function AgentResponse(input: {readonly parts: readonly AgentEvent[]}) {
 		<div className="flex flex-col gap-3">
 			{Array.map(reasoningParts, (part, index) => (
 				<article key={index} className="flex gap-2">
-					<div className="w-0.5 shrink-0 bg-muted-foreground/40" />
-					<div className="min-w-0 flex-1 border border-muted-foreground/25 bg-muted/20 px-3 text-muted-foreground text-xs leading-5">
-						<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] leading-none">
+					<div className="bg-muted-foreground/40 w-0.5 shrink-0" />
+					<div className="border-muted-foreground/25 bg-muted/20 text-muted-foreground min-w-0 flex-1 border px-3 text-xs leading-5">
+						<div className="border-border/60 flex items-center gap-1.5 border-b py-2 font-mono text-[11px] leading-none">
 							<Brain className="size-3.5 shrink-0" />
 							<span>reasoning</span>
 							{finish?.type === 'finish' && (
@@ -161,7 +162,7 @@ function AgentResponse(input: {readonly parts: readonly AgentEvent[]}) {
 			<article className="flex gap-2">
 				<div className="w-0.5 shrink-0 bg-blue-500/30" />
 				<div className="min-w-0 flex-1 border-2 border-blue-500/12 bg-blue-500/[0.003] px-3">
-					<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
+					<div className="border-border/60 text-muted-foreground flex items-center gap-1.5 border-b py-2 font-mono text-[11px] leading-none">
 						<SparklesIcon className="size-3 shrink-0" />
 						<span className="min-w-0 truncate">
 							{metadata?.type === 'response-metadata' ? metadata.modelId : 'thread'}
@@ -241,13 +242,13 @@ function ToolPart(input: {
 	if (input.resultPart) state = input.resultPart.isFailure ? 'failed' : 'done'
 
 	return (
-		<Collapsible className="group border bg-muted/10">
-			<CollapsibleTrigger className="flex min-h-6 w-full items-center gap-1.5 px-1.5 py-0.5 text-left font-mono text-[10px] text-muted-foreground">
+		<Collapsible className="group bg-muted/10 border">
+			<CollapsibleTrigger className="text-muted-foreground flex min-h-6 w-full items-center gap-1.5 px-1.5 py-0.5 text-left font-mono text-[10px]">
 				<Wrench className="size-3 shrink-0" />
-				<span className="border px-1 text-foreground leading-none">{part.name}</span>
+				<span className="text-foreground border px-1 leading-none">{part.name}</span>
 				<span>{state}</span>
 				{input.resultPart?.preliminary && <span>preliminary</span>}
-				<span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
+				<span className="text-foreground/80 min-w-0 flex-1 truncate">{summary}</span>
 				<ChevronRight className="size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
 			</CollapsibleTrigger>
 			<CollapsibleContent>
@@ -316,7 +317,7 @@ function ToolField(input: {readonly label: string; readonly value: unknown}) {
 	return (
 		<div className="grid grid-cols-[4rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
 			<div className="text-muted-foreground">{input.label}</div>
-			<div className="min-w-0 truncate text-foreground">{String.String(input.value)}</div>
+			<div className="text-foreground min-w-0 truncate">{String.String(input.value)}</div>
 		</div>
 	)
 }
@@ -327,7 +328,7 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 			<>
 				<ToolField label="error" value={getErrorText(payload)} />
 				{getStringToolField(payload, inputPayload, 'output') && (
-					<pre className="max-h-48 overflow-auto border bg-background p-1.5 text-foreground">
+					<pre className="bg-background text-foreground max-h-48 overflow-auto border p-1.5">
 						{getStringField(payload, 'output')}
 					</pre>
 				)}
@@ -344,16 +345,16 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 				<div className="grid gap-1">
 					{Array.map(getArrayToolField(payload, inputPayload, 'results'), (result, index) => (
 						<div key={index} className="border px-1.5 py-1">
-							<div className="truncate text-foreground">
+							<div className="text-foreground truncate">
 								{getStringField(result, 'title') ?? getStringField(result, 'url')}
 							</div>
-							<div className="truncate text-muted-foreground">{getStringField(result, 'url')}</div>
+							<div className="text-muted-foreground truncate">{getStringField(result, 'url')}</div>
 							{Array.map(getArrayField(result, 'highlights'), (highlight, index) => (
-								<div key={index} className="line-clamp-2 whitespace-pre-wrap text-foreground">
+								<div key={index} className="text-foreground line-clamp-2 whitespace-pre-wrap">
 									{String.String(highlight)}
 								</div>
 							))}
-							<div className="line-clamp-2 whitespace-pre-wrap text-muted-foreground">
+							<div className="text-muted-foreground line-clamp-2 whitespace-pre-wrap">
 								{getStringField(result, 'text')}
 							</div>
 						</div>
@@ -371,7 +372,7 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 					{Array.map(getArrayToolField(payload, inputPayload, 'changes'), (change, index) => (
 						<div key={index} className="grid grid-cols-[4rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
 							<span className="text-muted-foreground">{getStringField(change, 'kind')}</span>
-							<span className="truncate text-foreground">{getStringField(change, 'path')}</span>
+							<span className="text-foreground truncate">{getStringField(change, 'path')}</span>
 						</div>
 					))}
 				</div>
@@ -396,7 +397,7 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 				{Array.map(getArrayToolField(payload, inputPayload, 'items'), (item, index) => (
 					<div key={index} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-1 border px-1.5 py-0.5">
 						<span className="text-muted-foreground">{getBooleanField(item, 'completed') ? 'x' : ''}</span>
-						<span className="truncate text-foreground">{getStringField(item, 'text')}</span>
+						<span className="text-foreground truncate">{getStringField(item, 'text')}</span>
 					</div>
 				))}
 			</div>
@@ -487,9 +488,9 @@ function AgentPanel(input: {
 	}, [input.agentKey.id])
 
 	return (
-		<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
+		<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
 			{Array.isReadonlyArrayEmpty(runs) ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center p-4 text-muted-foreground text-sm">
+				<div className="text-muted-foreground flex min-h-0 flex-1 items-center justify-center p-4 text-sm">
 					Send a message to start the thread.
 				</div>
 			) : (
@@ -499,7 +500,7 @@ function AgentPanel(input: {
 							<article className="flex gap-2">
 								<div className="w-0.5 shrink-0 bg-orange-500/50" />
 								<div className="min-w-0 flex-1 border-2 border-orange-500/20 bg-orange-500/[0.003] px-3">
-									<div className="flex items-center gap-1.5 border-border/60 border-b py-2 font-mono text-[11px] text-muted-foreground leading-none">
+									<div className="border-border/60 text-muted-foreground flex items-center gap-1.5 border-b py-2 font-mono text-[11px] leading-none">
 										<UserIcon className="size-3 shrink-0 text-orange-500" />
 										<span>prompt</span>
 									</div>
@@ -517,7 +518,7 @@ function AgentPanel(input: {
 				<div className="relative mx-auto max-w-4xl">
 					{!Array.isReadonlyArrayEmpty(stashedPrompts) && (
 						<RichTextArea.Actions>
-							<div className="flex items-center gap-2 border-input border-b px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+							<div className="border-input text-muted-foreground flex items-center gap-2 border-b px-2 py-1.5 font-mono text-[11px]">
 								<Archive className="size-3.5" />
 								<span>{formatNumber(stashedPrompts.length)} stashed</span>
 							</div>
@@ -525,7 +526,7 @@ function AgentPanel(input: {
 								{Array.map(stashedPrompts, prompt => (
 									<div
 										key={prompt.id}
-										className="flex min-w-0 items-center gap-2 border-input border-b px-2 py-1.5 last:border-b-0 hover:bg-muted/70"
+										className="border-input hover:bg-muted/70 flex min-w-0 items-center gap-2 border-b px-2 py-1.5 last:border-b-0"
 									>
 										<button
 											type="button"
@@ -541,8 +542,8 @@ function AgentPanel(input: {
 												input.setModel(`${prompt.provider}:${prompt.model}`)
 											}}
 										>
-											<div className="truncate text-[12px] text-muted-foreground">{prompt.text}</div>
-											<div className="truncate font-mono text-[10px] text-muted-foreground/70">
+											<div className="text-muted-foreground truncate text-[12px]">{prompt.text}</div>
+											<div className="text-muted-foreground/70 truncate font-mono text-[10px]">
 												{prompt.provider}/{prompt.model}
 											</div>
 										</button>

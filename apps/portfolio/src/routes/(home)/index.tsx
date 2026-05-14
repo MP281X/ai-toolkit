@@ -1,9 +1,7 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+
 import {Array, Effect, Match, Number, Option, pipe, Stream, String} from 'effect'
 
-import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
-import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
-import {cn} from '@ai-toolkit/components/utils'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
@@ -12,6 +10,9 @@ import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
 import {PortfolioState} from '#rpcs/contracts.ts'
+import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
+import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
+import {cn} from '@ai-toolkit/components/utils'
 
 const cursorPalette = [
 	'oklch(0.74 0.19 118)',
@@ -371,8 +372,8 @@ function useViewport() {
 	const [width = '0', height = '0'] = pipe(snapshot, String.split(':'))
 
 	return {
-		width: Option.getOrElse(Number.parse(width), () => 0),
-		height: Option.getOrElse(Number.parse(height), () => 0)
+		width: Option.getOrElse(Number.parse(width ?? '0'), () => 0),
+		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0)
 	} satisfies Viewport
 }
 
@@ -385,7 +386,7 @@ function getTrailCell(trail: PortfolioTrail, viewport: Viewport) {
 
 function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
 	return (
-		<div className={cn('border border-border/70 bg-background/88 backdrop-blur-sm', input.className)}>
+		<div className={cn('border-border/70 bg-background/88 border backdrop-blur-sm', input.className)}>
 			{input.children}
 		</div>
 	)
@@ -525,7 +526,7 @@ function PortfolioRoute() {
 				aria-haspopup="dialog"
 				aria-label="Toggle keyboard shortcuts"
 				onClick={() => setShowShortcuts(show => !show)}
-				className="fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border border-border/70 bg-background/95 font-mono text-muted-foreground text-xs backdrop-blur-sm transition-colors hover:border-primary/50 hover:text-primary sm:right-4 sm:bottom-4"
+				className="border-border/70 bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-primary fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border font-mono text-xs backdrop-blur-sm transition-colors sm:right-4 sm:bottom-4"
 			>
 				?
 			</button>
@@ -547,7 +548,7 @@ function RealtimeLayer(input: {readonly identityColor: string; readonly viewport
 				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
 			))}
 
-			<div className="pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border border-border/70 bg-background/95 px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
+			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
 				<span className="size-2" style={{backgroundColor: input.identityColor}} />
 				<span className="text-primary">{state.visitors.length}</span>
 				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
@@ -673,7 +674,7 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 			<div className="flex items-center gap-1">
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
 				<span
-					className="whitespace-nowrap border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
+					className="bg-background text-foreground border px-1.5 py-1 font-mono text-[10px] whitespace-nowrap"
 					style={{borderColor: input.cursor.color}}
 				>
 					{input.cursor.name}
@@ -709,11 +710,11 @@ function Section(input: {
 function SectionLabel(input: {readonly title: string}) {
 	return (
 		<div className="mb-8 flex w-full max-w-5xl items-center gap-4 sm:mb-10">
-			<div className="h-px flex-1 bg-primary/25" />
-			<h2 className="border border-primary/30 bg-background/88 px-5 py-2 font-bold font-mono text-primary text-xs uppercase tracking-[0.35em] backdrop-blur-sm sm:text-sm">
+			<div className="bg-primary/25 h-px flex-1" />
+			<h2 className="border-primary/30 bg-background/88 text-primary border px-5 py-2 font-mono text-xs font-bold tracking-[0.35em] uppercase backdrop-blur-sm sm:text-sm">
 				{input.title}
 			</h2>
-			<div className="h-px flex-1 bg-primary/25" />
+			<div className="bg-primary/25 h-px flex-1" />
 		</div>
 	)
 }
@@ -723,27 +724,27 @@ function HeroSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement 
 		<Section id={0} sectionRefs={input.sectionRefs}>
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
 				<div className="space-y-1 text-center">
-					<h1 className="font-black font-mono text-4xl text-foreground uppercase tracking-[0.15em] sm:text-5xl md:text-6xl">
+					<h1 className="text-foreground font-mono text-4xl font-black tracking-[0.15em] uppercase sm:text-5xl md:text-6xl">
 						Matteo
 					</h1>
-					<h2 className="font-mono text-2xl text-foreground/50 uppercase tracking-[0.25em] sm:text-3xl md:text-4xl">
+					<h2 className="text-foreground/50 font-mono text-2xl tracking-[0.25em] uppercase sm:text-3xl md:text-4xl">
 						Paludgnach
 					</h2>
 				</div>
 
-				<p className="text-center font-mono text-foreground/70 text-xs uppercase tracking-[0.25em] sm:text-sm sm:tracking-[0.3em]">
+				<p className="text-foreground/70 text-center font-mono text-xs tracking-[0.25em] uppercase sm:text-sm sm:tracking-[0.3em]">
 					Full-Stack TypeScript Developer
 				</p>
 
-				<div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-[10px] text-muted-foreground/60 sm:text-[11px]">
+				<div className="text-muted-foreground/60 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-[10px] sm:text-[11px]">
 					<span>Moimacco (UD), Italy</span>
 					<span className="text-border/60">|</span>
 					<span>React · TypeScript · Effect · Real-time</span>
 				</div>
 			</Panel>
 
-			<div className="absolute bottom-8 flex flex-col items-center gap-1 text-muted-foreground/35">
-				<span className="font-mono text-[10px] uppercase tracking-[0.3em]">scroll</span>
+			<div className="text-muted-foreground/35 absolute bottom-8 flex flex-col items-center gap-1">
+				<span className="font-mono text-[10px] tracking-[0.3em] uppercase">scroll</span>
 				<span className="text-[12px]">↓</span>
 			</div>
 		</Section>
@@ -758,7 +759,7 @@ function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement
 				<Panel className="p-5 sm:p-6">
 					<div className="flex flex-col gap-4">
 						{Array.map(SUMMARY_LINES, line => (
-							<p key={line} className="font-mono text-foreground/90 text-sm leading-7 sm:text-base">
+							<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
 								{line}
 							</p>
 						))}
@@ -777,12 +778,12 @@ function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElemen
 				{Array.map(TECHNICAL_SKILLS, skill => (
 					<Panel key={skill.area} className="p-4 sm:p-5">
 						<div className="mb-3 flex items-center gap-3">
-							<skill.icon className="size-4 text-primary" />
-							<h3 className="font-mono font-semibold text-foreground text-sm uppercase tracking-[0.18em]">
+							<skill.icon className="text-primary size-4" />
+							<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
 								{skill.area}
 							</h3>
 						</div>
-						<p className="font-mono text-muted-foreground text-xs leading-6 sm:text-sm">{skill.items}</p>
+						<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
 					</Panel>
 				))}
 			</div>
@@ -799,15 +800,15 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 					<Panel key={job.company} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 							<div className="space-y-1">
-								<p className="font-mono font-semibold text-foreground text-sm uppercase tracking-[0.08em]">
+								<p className="text-foreground font-mono text-sm font-semibold tracking-[0.08em] uppercase">
 									{job.company}
 								</p>
-								<div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-muted-foreground text-xs sm:text-sm">
+								<div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs sm:text-sm">
 									<span>{job.role}</span>
 									{job.note && <span className="text-muted-foreground/80">· {job.note}</span>}
 								</div>
 							</div>
-							<p className="font-mono text-[11px] text-muted-foreground sm:text-right">
+							<p className="text-muted-foreground font-mono text-[11px] sm:text-right">
 								{job.period} · {job.location}
 							</p>
 						</div>
@@ -815,9 +816,9 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 							{Array.map(job.highlights, highlight => (
 								<li
 									key={highlight}
-									className="flex items-start gap-2 font-mono text-foreground/85 text-xs leading-6 sm:text-sm"
+									className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
 								>
-									<span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-foreground/50" aria-hidden="true" />
+									<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
 									<span>{highlight}</span>
 								</li>
 							))}
@@ -838,20 +839,20 @@ function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLEle
 					<Panel key={entry.school} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 							<div className="flex flex-wrap items-baseline gap-x-3">
-								<span className="font-mono font-semibold text-foreground text-sm">{entry.school}</span>
-								<span className="font-mono text-muted-foreground text-xs sm:text-sm">{entry.degree}</span>
-								{entry.grade && <span className="font-mono text-[10px] text-muted-foreground/80">({entry.grade})</span>}
+								<span className="text-foreground font-mono text-sm font-semibold">{entry.school}</span>
+								<span className="text-muted-foreground font-mono text-xs sm:text-sm">{entry.degree}</span>
+								{entry.grade && <span className="text-muted-foreground/80 font-mono text-[10px]">({entry.grade})</span>}
 							</div>
-							<span className="font-mono text-[10px] text-muted-foreground/80">{entry.period}</span>
+							<span className="text-muted-foreground/80 font-mono text-[10px]">{entry.period}</span>
 						</div>
-						<p className="mt-2 font-mono text-foreground/85 text-xs leading-6 sm:text-sm">{entry.description}</p>
+						<p className="text-foreground/85 mt-2 font-mono text-xs leading-6 sm:text-sm">{entry.description}</p>
 					</Panel>
 				))}
 				<div className="grid gap-3 sm:grid-cols-3">
 					{Array.map(LANGUAGES_DATA, lang => (
 						<Panel key={lang.language} className="px-4 py-3">
-							<span className="font-mono font-semibold text-foreground text-xs">{lang.language}</span>
-							<span className="ml-2 font-mono text-[10px] text-muted-foreground/80">{lang.level}</span>
+							<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
+							<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
 						</Panel>
 					))}
 				</div>
@@ -869,16 +870,16 @@ function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLEleme
 					<a
 						key={item.label}
 						href={item.href}
-						className="flex flex-col gap-2 border border-border/70 bg-background/90 px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors hover:border-primary/50 hover:text-primary sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+						className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
-						<span className="text-[10px] text-muted-foreground uppercase tracking-[0.15em]">{item.label}</span>
-						<span className="break-all text-foreground">{item.value}</span>
+						<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
+						<span className="text-foreground break-all">{item.value}</span>
 					</a>
 				))}
 			</div>
-			<p className="mt-6 font-mono text-[10px] text-muted-foreground/70">
+			<p className="text-muted-foreground/70 mt-6 font-mono text-[10px]">
 				© 2026 Matteo Paludgnach · Moimacco (UD), Italy
 			</p>
 		</Section>
@@ -890,11 +891,11 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 		<Dialog open onOpenChange={open => !open && input.onClose()}>
 			<DialogContent className="border-border/70 bg-background p-6 font-mono sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle className="font-mono text-foreground text-sm uppercase tracking-[0.2em]">
+					<DialogTitle className="text-foreground font-mono text-sm tracking-[0.2em] uppercase">
 						Keyboard Shortcuts
 					</DialogTitle>
 				</DialogHeader>
-				<div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-muted-foreground text-xs sm:gap-x-8">
+				<div className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-xs sm:gap-x-8">
 					<span className="text-foreground">j / k</span>
 					<span>next / prev section</span>
 					<span className="text-foreground">1 – 6</span>

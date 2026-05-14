@@ -2,16 +2,10 @@ import {Array, String} from 'effect'
 
 import ts from 'typescript'
 
-import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
-import {
-	isAllowedCallableValue,
-	isAssignmentOperator,
-	isReactRefCurrent,
-	isReactUseStateCall,
-	isTailwindStringLiteral,
-	rule
-} from './helpers.ts'
+import {isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, isTailwindStringLiteral, rule} from './helpers.ts'
+
+import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
 
 export const reactRules = [
 	rule('no-explicit-default-value', (node, context) => {
@@ -22,13 +16,6 @@ export const reactRules = [
 				fix: 'Delete this prop and rely on the default.'
 			})
 		}
-	}),
-	rule('no-jsx-props-object', (node, context) => {
-		if (!ts.isJsxSpreadAttribute(node)) return
-		context.report(node, 'no-jsx-props-object', {
-			description: `JSX spread "${normalizedText(node.expression)}" hides rendered props.`,
-			fix: 'Replace the spread with explicit JSX attributes for each prop.'
-		})
 	}),
 	rule('no-tailwind-class-indirection', (node, context) => {
 		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'cva') {
@@ -48,15 +35,6 @@ export const reactRules = [
 				fix: `Inline "${normalizedText(node.initializer)}" into className and delete this binding.`
 			})
 		}
-	}),
-	rule('prefer-function-declaration', (node, context) => {
-		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
-		if (!(ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) return
-		if (isAllowedCallableValue(node.initializer)) return
-		context.report(node.name, 'prefer-function-declaration', {
-			description: `"${node.name.text}" is a named ${ts.isArrowFunction(node.initializer) ? 'arrow' : 'function'} value.`,
-			fix: `Rewrite it as "function ${node.name.text}(...)"; keep arrows for inline callbacks.`
-		})
 	}),
 	rule('prefer-arrow-callback', (node, context) => {
 		if (!(ts.isFunctionExpression(node) && ts.isCallExpression(node.parent)) || node.asteriskToken) return
@@ -108,7 +86,7 @@ export const reactRules = [
 		}
 	}),
 	rule('prefer-hook-variable', (node, context) => {
-		if (!/\.tsx$/.test(context.filePath)) return
+		if (!context.filePath.endsWith('.tsx')) return
 		if (!isHookCall(node)) return
 		if (ts.isExpressionStatement(node.parent)) return
 		if (

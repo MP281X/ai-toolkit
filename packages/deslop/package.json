@@ -16,7 +16,7 @@
 		"build": "bun build --target=bun ./src/index.ts --outfile ./dist/deslop.js",
 
 		"test": "bun test --concurrent",
-		"fix": "biome check --write --unsafe || true",
-		"check": "tsgo --noEmit && biome check"
+		"fix": "(oxlint --fix --fix-suggestions . || true) && oxfmt .",
+		"check": "oxfmt --check . && oxlint ."
 	}
 }

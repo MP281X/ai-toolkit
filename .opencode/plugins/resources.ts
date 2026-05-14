@@ -1,8 +1,10 @@
 import {BunServices} from '@effect/platform-bun'
+
 import {Effect, pipe} from 'effect'
 
-import {GitWorkspace} from '@ai-toolkit/git/service'
 import type {Plugin} from '@opencode-ai/plugin'
+
+import {GitWorkspace} from '@ai-toolkit/git/service'
 
 export const plugin = (async context => {
 	void Effect.runPromise(
@@ -66,20 +68,22 @@ export const plugin = (async context => {
 					yield* GitWorkspace.use(git => {
 						return git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
 					})
-					yield* Effect.sync(() => {
-						context.client.tui.showToast({body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}})
+					yield* Effect.promise(async () => {
+						await context.client.tui.showToast({
+							body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}
+						})
 					})
 				}),
 				{concurrency: 'unbounded'}
 			),
 			Effect.tapDefect(message => {
-				return Effect.sync(() => {
-					context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
+				return Effect.promise(async () => {
+					await context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
 			}),
 			Effect.tapError(message => {
-				return Effect.sync(() => {
-					context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
+				return Effect.promise(async () => {
+					await context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
 			}),
 			Effect.provide(GitWorkspace.layer),

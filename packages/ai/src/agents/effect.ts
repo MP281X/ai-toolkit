@@ -4,11 +4,12 @@ import {Cause, DateTime, Effect, flow, Option, pipe, Queue, Ref, Stream, Subscri
 import {Chat, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
 
+import {Agent} from '../service.ts'
+
 import {resolveLanguageModel} from '#lib/language-model.ts'
 import {partsStreamSanitizer} from '#lib/utils.ts'
 import {WebFetchToolKit, WebSearchToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
-import {Agent} from '../service.ts'
 
 export const makeLayerEffect = Effect.fnUntraced(
 	function* (config: {readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {

@@ -13,7 +13,7 @@
 	},
 
 	"scripts": {
-		"fix": "biome check --write --unsafe || true",
-		"check": "tsgo --noEmit && biome check"
+		"fix": "(oxlint --fix --fix-suggestions . || true) && oxfmt .",
+		"check": "oxfmt --check . && oxlint ."
 	}
 }

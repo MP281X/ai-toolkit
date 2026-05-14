@@ -1,6 +1,14 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+
 import {Array, Effect, Match, Option, Predicate, pipe, Stream} from 'effect'
 
+import {useHotkey} from '@tanstack/react-hotkeys'
+import {createFileRoute} from '@tanstack/react-router'
+import {Atom} from 'effect/unstable/reactivity'
+import {useState} from 'react'
+
+import {RpcClient} from '#lib/atomRuntime.ts'
+import {activeHomeAtom} from '#lib/state.ts'
 import {ClipboardCopyIcon, FileIcon, TrashIcon} from '@ai-toolkit/components/icons'
 import {PatchDiff} from '@ai-toolkit/components/render/diff'
 import {TreeExplorer, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
@@ -9,13 +17,6 @@ import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/comp
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import {cn} from '@ai-toolkit/components/utils'
 import type {GitDiff} from '@ai-toolkit/git/schema'
-import {useHotkey} from '@tanstack/react-hotkeys'
-import {createFileRoute} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
-import {useState} from 'react'
-
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom} from '#lib/state.ts'
 
 export const Route = createFileRoute('/(home)/$worktree/diff')({
 	component: DiffPage
@@ -125,7 +126,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		setReviewSelection(selection)
 	}
 	const moveReviewSelectionAtom = Atom.fn(
-		Effect.fnUntraced(function* (selectionInput, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (
+			selectionInput: {
+				readonly cwd: string
+				readonly offset: number
+			},
+			get: Atom.FnContext
+		) {
 			const panel = yield* get.result(reviewPanelAtom(selectionInput.cwd))
 			if (!panel.selectedEntry) return
 			const nextEntry = Array.get(
@@ -158,7 +165,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const moveReviewSelection = useAtomSet(moveReviewSelectionAtom, {mode: 'promise'})
 	void moveReviewSelectionAtom
 	const toggleStageReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(cwd))
 			if (!panel.selectedEntry) return
 
@@ -182,7 +189,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const toggleStageReviewEntry = useAtomSet(toggleStageReviewEntryAtom, {mode: 'promise'})
 	void toggleStageReviewEntryAtom
 	const discardReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd, get: Atom.FnContext) {
+		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(cwd))
 			if (!panel.selectedEntry) return
 
@@ -351,7 +358,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				</ResizablePanel>
 				<ResizableHandle />
 				<ResizablePanel defaultSize="76%" minSize="36%">
-					<div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
+					<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
 						<header className="flex min-h-8 items-center justify-between gap-2 border-b px-2">
 							<div className="flex min-w-0 items-center gap-1 overflow-hidden">
 								{Array.map(groupCommentsByFile(comments), group => (
@@ -396,7 +403,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						</header>
 						<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 							{!reviewPanel.value.selectedEntry && (
-								<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+								<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 									No changed files.
 								</div>
 							)}
@@ -484,7 +491,7 @@ function DiffListEntries(input: {
 }) {
 	if (Array.isReadonlyArrayEmpty(input.diffs)) {
 		return (
-			<li className="flex flex-1 items-center justify-center px-2 py-2 text-muted-foreground text-xs">{input.empty}</li>
+			<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2 text-xs">{input.empty}</li>
 		)
 	}
 
@@ -502,7 +509,7 @@ function DiffListEntries(input: {
 					}
 					onClick={() => input.selectReviewEntry({filePath: diff.filePath, scope: input.scope})}
 					className={cn(
-						'grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground',
+						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-xs',
 						Predicate.isNotUndefined(input.selectedEntry) &&
 							input.selectedEntry.scope === input.scope &&
 							input.selectedEntry.diff.filePath === diff.filePath &&
@@ -512,16 +519,16 @@ function DiffListEntries(input: {
 					{pipe(
 						Match.value(diff.status),
 						Match.when('added', () => (
-							<span className="text-center font-semibold text-[10px] text-emerald-600 dark:text-emerald-400">A</span>
+							<span className="text-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
 						)),
 						Match.when('deleted', () => (
-							<span className="text-center font-semibold text-[10px] text-red-600 dark:text-red-400">D</span>
+							<span className="text-center text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>
 						)),
 						Match.when('renamed', () => (
-							<span className="text-center font-semibold text-[10px] text-sky-600 dark:text-sky-400">R</span>
+							<span className="text-center text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>
 						)),
 						Match.when('modified', () => (
-							<span className="text-center font-semibold text-[10px] text-amber-600 dark:text-amber-400">M</span>
+							<span className="text-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>
 						)),
 						Match.exhaustive
 					)}

@@ -1,9 +1,7 @@
-import {Match, pipe} from 'effect'
+import {Function, Match, pipe} from 'effect'
 
 import {Braces, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
-import {resolveLanguage} from '#lib/shiki.ts'
-import {cn} from '#lib/utils.ts'
 import {BashDark} from './ui/svgs/bashDark.tsx'
 import {CodexDark} from './ui/svgs/codexDark.tsx'
 import {EffectDark} from './ui/svgs/effectDark.tsx'
@@ -13,7 +11,9 @@ import {OpencodeDark} from './ui/svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './ui/svgs/openrouterDark.tsx'
 import {ReactDark} from './ui/svgs/reactDark.tsx'
 
-// biome-ignore lint/performance/noBarrelFile: re-export lucide
+import {resolveLanguage} from '#lib/shiki.ts'
+import {cn} from '#lib/utils.ts'
+
 export * from 'lucide-react'
 
 export function AgentIcon(props: {readonly layer: 'codex' | 'effect'; readonly className?: string}) {
@@ -31,9 +31,9 @@ export function StatusIcon(props: {
 }) {
 	return pipe(
 		Match.value(props.state),
-		Match.when('idle', () => undefined),
+		Match.when('idle', Function.constUndefined),
 		Match.when('running', () => <Loader2Icon className={cn('size-3 animate-spin text-blue-500', props.className)} />),
-		Match.when('error', () => <OctagonXIcon className={cn('size-3 text-destructive', props.className)} />),
+		Match.when('error', () => <OctagonXIcon className={cn('text-destructive size-3', props.className)} />),
 		Match.orElse(() => <TriangleAlertIcon className={cn('size-3 text-amber-500', props.className)} />)
 	)
 }
@@ -58,7 +58,7 @@ export function FileIcon(props: {readonly filePath: string; readonly className?:
 		Match.when('markdown', () => <MarkdownDark className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.when('tsx', () => <ReactDark className={cn('size-3.5 shrink-0 text-sky-400', props.className)} />),
 		Match.when('jsonc', () => <Braces className={cn('size-3.5 shrink-0 text-amber-500', props.className)} />),
-		Match.when('text', () => <File className={cn('size-3.5 shrink-0 text-muted-foreground', props.className)} />),
+		Match.when('text', () => <File className={cn('text-muted-foreground size-3.5 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }

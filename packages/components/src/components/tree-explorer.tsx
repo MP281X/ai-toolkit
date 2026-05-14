@@ -12,7 +12,7 @@ export function TreeExplorerSection(props: {
 	return (
 		<section className={cn('flex flex-col gap-1.5', props.className)}>
 			{props.label && (
-				<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
+				<div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 text-[11px] font-semibold tracking-wide uppercase">
 					{props.label}
 				</div>
 			)}
@@ -29,9 +29,9 @@ export function TreeExplorerRow(props: {
 	readonly children: React.ReactNode
 }) {
 	const className = cn(
-		'grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-muted-foreground text-xs hover:bg-muted/60 hover:text-foreground',
+		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-xs',
 		props.selected &&
-			'bg-muted text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))] hover:bg-muted hover:text-foreground'
+			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
 	)
 	const label = (
 		<span className="flex min-w-0 flex-1 items-center gap-1.5">

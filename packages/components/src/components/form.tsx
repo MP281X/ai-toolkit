@@ -21,7 +21,7 @@ export const useFormContext = formContexts.useFormContext
 function FieldWrapper(props: {
 	readonly name: string
 	readonly isInvalid: boolean
-	readonly errors: ReadonlyArray<{readonly message?: string}>
+	readonly errors: readonly {readonly message?: string}[]
 	readonly children: React.ReactNode
 }) {
 	return (

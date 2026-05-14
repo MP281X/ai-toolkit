@@ -15,7 +15,7 @@ export function Conversation<T extends {readonly id: unknown}>(props: {
 			maintainScrollAtEnd
 			maintainVisibleContentPosition
 			data={props.items}
-			recycleItems={true}
+			recycleItems
 			estimatedItemSize={240}
 			keyExtractor={item => `${item.id}`}
 			initialScrollIndex={Array.length(props.items) - 1}

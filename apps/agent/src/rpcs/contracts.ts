@@ -1,10 +1,11 @@
 import {Schema} from 'effect'
 
+import {Rpc, RpcGroup} from 'effect/unstable/rpc'
+
 import {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {AgentEvent, AgentKey, AgentStatus} from '@ai-toolkit/ai/schema'
 import {GitBranchesSnapshot, GitDiff, GitDiffScope, GitError, GitProject} from '@ai-toolkit/git/schema'
 import {TerminalError, TerminalEvent} from '@ai-toolkit/terminal/schema'
-import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.watch', {

@@ -28,5 +28,8 @@ description: Type inference rules and functional data transformation with pipe, 
 const names = users.map(user => user.name.trim())
 
 // Good
-const names = pipe(users, Array.map(user => pipe(user.name, String.trim)))
+const names = pipe(
+	users,
+	Array.map(user => pipe(user.name, String.trim))
+)
 ```

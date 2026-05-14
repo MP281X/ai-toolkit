@@ -2,15 +2,6 @@ import {Array} from 'effect'
 
 import ts from 'typescript'
 
-import {
-	containsNode,
-	hasModifier,
-	isConstAssertion,
-	isImportedIdentifier,
-	normalizedText,
-	typeIncludesNullish,
-	typeLooksReadonlyArray
-} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {
 	isAllowedNamedType,
@@ -27,32 +18,16 @@ import {
 	rule
 } from './helpers.ts'
 
+import {
+	containsNode,
+	hasModifier,
+	isImportedIdentifier,
+	normalizedText,
+	typeIncludesNullish,
+	typeLooksReadonlyArray
+} from '#lib/ts.ts'
+
 export const baseTypeSafetyRules = [
-	rule('no-type-assertion-except-as-const', (node, context) => {
-		if (ts.isAsExpression(node)) {
-			if (isConstAssertion(node)) return
-			context.report(node, 'no-type-assertion-except-as-const', {
-				description: 'Assertion hides the real type.',
-				fix: `Remove "as ${normalizedText(node.type)}" and make "${normalizedText(node.expression)}" produce that type, or decode/refine at the boundary.`
-			})
-		}
-		if (ts.isTypeAssertionExpression(node)) {
-			context.report(node, 'no-type-assertion-except-as-const', {
-				description: 'Assertion hides the real type.',
-				fix: `Remove "<${normalizedText(node.type)}>" and make "${normalizedText(node.expression)}" produce that type.`
-			})
-		}
-		if (
-			ts.isNonNullExpression(node) &&
-			context.checker &&
-			!typeIncludesNullish(context.checker.getTypeAtLocation(node.expression))
-		) {
-			context.report(node, 'no-type-assertion-except-as-const', {
-				description: 'Non-null assertion repeats a non-nullish type.',
-				fix: `Remove "!" from "${normalizedText(node.expression)}".`
-			})
-		}
-	}),
 	rule('prefer-readonly-types', (node, context) => {
 		if (ts.isPropertySignature(node) && !hasModifier(node, ts.SyntaxKind.ReadonlyKeyword)) {
 			if (ts.isIdentifier(node.name) && node.name.text === 'current') return

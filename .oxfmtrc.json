@@ -1,0 +1,39 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"printWidth": 120,
+	"useTabs": true,
+	"singleQuote": true,
+	"bracketSpacing": false,
+	"semi": false,
+	"trailingComma": "none",
+	"arrowParens": "avoid",
+	"sortImports": {
+		"internalPattern": ["@/", "~/", "#", "@ai-toolkit/"],
+		"customGroups": [
+			{"groupName": "effectPackages", "elementNamePattern": ["@effect/**"], "selector": "external"},
+			{"groupName": "effect", "elementNamePattern": ["effect"], "selector": "external"},
+			{"groupName": "aiToolkit", "elementNamePattern": ["@ai-toolkit/**"], "selector": "external"},
+			{"groupName": "aliases", "elementNamePattern": ["@/**", "#*", "~/**"], "selector": "internal"}
+		],
+		"groups": [
+			["side_effect", "side_effect_style"],
+			{"newlinesBetween": true},
+			"builtin",
+			{"newlinesBetween": true},
+			"effectPackages",
+			"effect",
+			{"newlinesBetween": true},
+			"external",
+			{"newlinesBetween": true},
+			"aiToolkit",
+			{"newlinesBetween": true},
+			"aliases",
+			{"newlinesBetween": true},
+			"parent",
+			"sibling",
+			"index"
+		]
+	},
+	"sortTailwindcss": {"functions": ["cn"]},
+	"ignorePatterns": ["**/*.gen.ts", "**/generated/**", "**/components/ui/**", "**/package.json"]
+}

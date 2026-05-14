@@ -1,4 +1,5 @@
 import {test} from 'bun:test'
+
 import {expectNoRule, expectRule} from './test-utils.ts'
 
 test('prefer-effect-fn-untraced reports parameterized functions returning Effect', () => {

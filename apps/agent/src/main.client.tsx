@@ -1,9 +1,10 @@
-import {Error, Loading, NotFound} from '@ai-toolkit/components/fallbacks'
 import {createRouter, RouterProvider} from '@tanstack/react-router'
 import {StrictMode} from 'react'
 import {createRoot} from 'react-dom/client'
 
 import {routeTree} from './routeTree.gen.ts'
+
+import {Error, Loading, NotFound} from '@ai-toolkit/components/fallbacks'
 
 const router = createRouter({
 	routeTree,
@@ -15,7 +16,6 @@ const router = createRouter({
 })
 
 declare module '@tanstack/react-router' {
-	// biome-ignore lint/style/useConsistentTypeDefinitions: tanstack
 	interface Register {
 		router: typeof router
 	}

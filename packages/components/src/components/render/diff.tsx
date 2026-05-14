@@ -79,12 +79,12 @@ function CommentAnnotation(props: {
 
 	if (editing) {
 		return (
-			<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
+			<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
 				<textarea
 					ref={inputRef}
 					value={body}
 					placeholder="Add comment"
-					className="block min-h-16 w-full resize-y border-0 bg-transparent p-0 font-inherit text-inherit outline-none"
+					className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
 					onChange={event => {
 						setBody(event.currentTarget.value)
 						props.onChangeComment?.({...props.comment, body: event.currentTarget.value})
@@ -114,10 +114,10 @@ function CommentAnnotation(props: {
 	}
 
 	return (
-		<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
+		<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
 			<button
 				type="button"
-				className="block w-full whitespace-pre-wrap bg-transparent p-0 text-left leading-relaxed"
+				className="block w-full bg-transparent p-0 text-left leading-relaxed whitespace-pre-wrap"
 				onClick={event => {
 					event.stopPropagation()
 					setEditing(true)
@@ -202,7 +202,7 @@ export function PatchDiff(props: {
 				ref={containerRef}
 				tabIndex={-1}
 				aria-label="Diff viewer"
-				className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+				className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
 				onPointerDownCapture={event => {
 					if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
 						event.currentTarget.focus()
@@ -277,7 +277,7 @@ export function PatchDiff(props: {
 			ref={containerRef}
 			tabIndex={-1}
 			aria-label="Diff viewer"
-			className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
 			onPointerDownCapture={event => {
 				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
 					event.currentTarget.focus()

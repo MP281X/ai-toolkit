@@ -1,35 +1,6 @@
 import {test} from 'bun:test'
+
 import {expectNoRule, expectRule} from './test-utils.ts'
-
-test('no-type-assertion-except-as-const reports unsafe assertions', () => {
-	return expectRule({
-		rule: 'no-type-assertion-except-as-const',
-		source: 'declare const value: unknown\nconst user = value as { readonly name: string }\n'
-	})
-})
-
-test('no-type-assertion-except-as-const allows const assertions', () => {
-	return expectNoRule({
-		rule: 'no-type-assertion-except-as-const',
-		source: 'const status = "ready" as const\n'
-	})
-})
-
-test('no-type-assertion-except-as-const reports redundant non-null assertions', () => {
-	return expectRule({
-		rule: 'no-type-assertion-except-as-const',
-		typed: true,
-		source: 'declare const root: HTMLElement\nconst value = root!\n'
-	})
-})
-
-test('no-type-assertion-except-as-const allows narrowing non-null assertions', () => {
-	return expectNoRule({
-		rule: 'no-type-assertion-except-as-const',
-		typed: true,
-		source: 'declare const root: HTMLElement | null\nconst value = root!\n'
-	})
-})
 
 test('prefer-readonly-types reports mutable object and array types', () => {
 	return expectRule({

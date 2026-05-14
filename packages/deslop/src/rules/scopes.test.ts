@@ -1,8 +1,10 @@
+import {expect, test} from 'bun:test'
+
 import {Array, String} from 'effect'
 
-import {expect, test} from 'bun:test'
-import {analyzeText} from '#lib/analyzer.ts'
 import {expectRule} from './test-utils.ts'
+
+import {analyzeText} from '#lib/analyzer.ts'
 
 test('base scope emits public planned rule ids', () => {
 	return expectRule({
@@ -16,11 +18,11 @@ test('base scope emits public planned rule ids', () => {
 
 test('react scope emits public planned rule ids', () => {
 	return expectRule({
-		rule: 'react/no-jsx-props-object',
+		rule: 'react/no-tailwind-class-indirection',
 		filePath: 'sample.tsx',
 		scoped: true,
 		scopes: ['react'],
-		source: 'function View(props: { readonly value: string }) { return <Input {...props} /> }\n'
+		source: 'const classes = "flex items-center"\nfunction View() { return <Input className={classes} /> }\n'
 	})
 })
 

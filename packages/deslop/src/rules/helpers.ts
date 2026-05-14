@@ -11,11 +11,9 @@ import {
 	isCheapExpression,
 	isEffectCall,
 	isEffectConstructorCall,
-	isEffectGenLikeCall,
 	isFlowCall,
 	isHookCall,
 	isImportedIdentifier,
-	isMatchCall,
 	isRcMapConstructorCall,
 	isSchemaExpression,
 	normalizedText,
@@ -272,14 +270,6 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 		return true
 	}
 	return containsNode(node, child => ts.isIdentifier(child) && child.text === node.name.text && child !== node.name)
-}
-
-export function isAllowedCallableValue(node: ts.Expression) {
-	return (
-		(ts.isCallExpression(node) &&
-			(isFlowCall(node) || isEffectGenLikeCall(node) || isMatchCall(node) || isSchemaExpression(node))) ||
-		(ts.isArrowFunction(node) && ts.isCallExpression(node.body) && isSchemaExpression(node.body))
-	)
 }
 
 export function isNamedFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {

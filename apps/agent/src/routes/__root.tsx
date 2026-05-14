@@ -1,8 +1,8 @@
+import './styles.css'
+
 import {Function} from 'effect'
 
 import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
-
-import './styles.css'
 
 export const Route = createRootRoute({
 	head: Function.constant({

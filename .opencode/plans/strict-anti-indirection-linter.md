@@ -188,10 +188,12 @@ Needed for deterministic structural rules that oxlint JS plugins alone cannot ha
 The CLI should expose one internal Effect entrypoint:
 
 ```ts
-const result = yield* runDeslop({
-	mode: 'staged',
-	cwd,
-})
+const result =
+	yield *
+	runDeslop({
+		mode: 'staged',
+		cwd
+	})
 ```
 
 Return shape should stay simple first:
@@ -432,11 +434,7 @@ function createUser(input: CreateUserInput) {
 Expected refactor:
 
 ```ts
-function createUser(input: {
-	name: string
-	email: string
-	role: 'admin' | 'user'
-}) {
+function createUser(input: {name: string; email: string; role: 'admin' | 'user'}) {
 	return User.create(input)
 }
 ```
@@ -446,23 +444,19 @@ Forbidden callback aliases:
 ```ts
 type OnSubmit = (value: string) => void
 
-function Form(props: {
-	onSubmit: OnSubmit
-}) {}
+function Form(props: {onSubmit: OnSubmit}) {}
 ```
 
 Expected refactor:
 
 ```ts
-function Form(props: {
-	onSubmit: (value: string) => void
-}) {}
+function Form(props: {onSubmit: (value: string) => void}) {}
 ```
 
 Forbidden return/variable annotations:
 
 ```ts
-const user: User = yield* getUser()
+const user: User = yield * getUser()
 
 const getUser = (): Effect.Effect<User, UserError> => User.find()
 ```
@@ -470,7 +464,7 @@ const getUser = (): Effect.Effect<User, UserError> => User.find()
 Expected refactor:
 
 ```ts
-const user = yield* getUser()
+const user = yield * getUser()
 
 const getUser = () => User.find()
 ```
@@ -508,11 +502,7 @@ export function Button(props: ButtonProps) {
 Expected refactor:
 
 ```tsx
-export function Button(props: {
-	label: string
-	disabled?: boolean
-	onClick: () => void
-}) {
+export function Button(props: {label: string; disabled?: boolean; onClick: () => void}) {
 	return <button disabled={props.disabled}>{props.label}</button>
 }
 ```
@@ -533,10 +523,7 @@ export namespace RichTextArea {
 Expected refactor:
 
 ```tsx
-export function RichTextArea(props: {
-	value: string
-	onChange: (value: string) => void
-}) {}
+export function RichTextArea(props: {value: string; onChange: (value: string) => void}) {}
 ```
 
 Rules:
@@ -557,9 +544,7 @@ Allowed only when both are true:
 Potentially valid:
 
 ```tsx
-export function RichTextArea(props: {
-	ref?: Ref<RichTextArea.Handle>
-}) {}
+export function RichTextArea(props: {ref?: Ref<RichTextArea.Handle>}) {}
 
 export namespace RichTextArea {
 	export interface Handle {

@@ -19,7 +19,7 @@ export function NotFound() {
 export function Loading() {
 	return (
 		<div className="flex flex-1 items-center justify-center">
-			<div className="animation-duration-[2.5s] size-8 animate-spin border-2 border-muted-foreground/50" />
+			<div className="animation-duration-[2.5s] border-muted-foreground/50 size-8 animate-spin border-2" />
 		</div>
 	)
 }
@@ -31,10 +31,10 @@ export function Error(props: {readonly error: Error; readonly reset: () => void}
 		<Button
 			variant="ghost"
 			onClick={() => {
-				navigator.clipboard.writeText(message)
+				void navigator.clipboard.writeText(message)
 				props.reset()
 			}}
-			className="flex h-full w-full cursor-pointer select-text items-center justify-center p-4"
+			className="flex h-full w-full cursor-pointer items-center justify-center p-4 select-text"
 		>
 			<Alert variant="destructive" className="w-full max-w-lg">
 				<OctagonAlert />

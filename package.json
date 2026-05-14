@@ -27,11 +27,15 @@
 
 	"devDependencies": {
 		"turbo": "latest",
-		"@biomejs/biome": "latest",
 		"@effect/language-service": "latest",
 
 		"typescript": "latest",
 		"@typescript/native-preview": "latest",
+
+		"oxfmt": "latest",
+		"oxlint": "latest",
+		"oxlint-tsgolint": "latest",
+		"eslint-plugin-react-hooks": "latest",
 
 		"@types/bun": "latest",
 		"@types/react": "^19",

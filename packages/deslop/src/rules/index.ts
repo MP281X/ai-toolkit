@@ -36,7 +36,6 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 				new Set(scopes).has(rule.scope) &&
 				(!plannedOnly ||
 					new Set([
-						'base/no-type-assertion-except-as-const',
 						'base/prefer-readonly-types',
 						'base/prefer-undefined-over-null',
 						'base/prefer-optional-property',
@@ -50,13 +49,9 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'base/no-simple-local-binding',
 						'base/prefer-flow-for-pipe-callback',
 						'base/no-vacuous-abstraction',
-						'base/prefer-function-declaration',
 						'base/prefer-arrow-callback',
 						'base/no-local-namespace-import',
-						'base/no-default-export-except-config',
-						'base/no-deprecated-api',
 						'base/no-plain-class',
-						'react/no-jsx-props-object',
 						'react/no-tailwind-class-indirection',
 						'react/no-manual-memoization',
 						'react/no-forward-ref',

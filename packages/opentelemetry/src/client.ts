@@ -1,4 +1,5 @@
 import * as WebSdk from '@effect/opentelemetry/WebSdk'
+
 import {Config, Effect, Layer, Option} from 'effect'
 
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'

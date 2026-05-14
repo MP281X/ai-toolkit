@@ -1,10 +1,12 @@
+import {describe, expect, test} from 'bun:test'
+
 import {Array, DateTime, Effect, pipe, Schema, Stream} from 'effect'
 
 import {Prompt, Response} from 'effect/unstable/ai'
 
-import {describe, expect, test} from 'bun:test'
-import {AgentToolKit} from '#tools/contracts.ts'
 import {compactAiParts, makeResumableStream, partsStreamSanitizer, serializeAiPartToMarkdown} from './utils.ts'
+
+import {AgentToolKit} from '#tools/contracts.ts'
 
 describe('serializeAiPartToMarkdown', () => {
 	test('serializes runtime prompt messages into markdown', () => {

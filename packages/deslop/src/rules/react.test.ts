@@ -1,4 +1,5 @@
 import {test} from 'bun:test'
+
 import {expectNoRule, expectRule} from './test-utils.ts'
 
 test('no-explicit-default-value reports false intrinsic boolean props', () => {
@@ -17,13 +18,6 @@ test('no-explicit-default-value allows component false boolean props', () => {
 	})
 })
 
-test('prefer-function-declaration reports named arrow functions', () => {
-	return expectRule({
-		rule: 'prefer-function-declaration',
-		source: 'const trimName = (name: string) => name.trim()\n'
-	})
-})
-
 test('prefer-arrow-callback reports function callbacks', () => {
 	return expectRule({
 		rule: 'prefer-arrow-callback',
@@ -35,14 +29,6 @@ test('prefer-arrow-callback allows recursive named callbacks', () => {
 	return expectNoRule({
 		rule: 'prefer-arrow-callback',
 		source: 'declare function schedule(callback: () => void): void\nschedule(function tick() { schedule(tick) })\n'
-	})
-})
-
-test('no-jsx-props-object reports JSX spread props', () => {
-	return expectRule({
-		rule: 'no-jsx-props-object',
-		filePath: 'sample.tsx',
-		source: 'function View(props: { readonly disabled: boolean }) { return <Button {...props} /> }\n'
 	})
 })
 

@@ -74,7 +74,7 @@ Only exclude:
 **/routeTree.gen.tsx
 ```
 
-The TanStack Router generated file in this repo is imported as `routeTree.gen.ts`, so both `.ts` and `.tsx` should be ignored. 
+The TanStack Router generated file in this repo is imported as `routeTree.gen.ts`, so both `.ts` and `.tsx` should be ignored.
 
 ---
 
@@ -138,7 +138,7 @@ input.id
 
 ```ts
 class User {
-  name!: string
+	name!: string
 }
 ```
 
@@ -146,7 +146,7 @@ to:
 
 ```ts
 class User {
-  name: string
+	name: string
 }
 ```
 
@@ -166,9 +166,9 @@ Mutable type shapes are banned. Add readonly to object properties and use readon
 
 ```ts
 type User = {
-  name: string
-  tags: string[]
-  coordinates: [number, number]
+	name: string
+	tags: string[]
+	coordinates: [number, number]
 }
 ```
 
@@ -176,9 +176,9 @@ type User = {
 
 ```ts
 type User = {
-  readonly name: string
-  readonly tags: readonly string[]
-  readonly coordinates: readonly [number, number]
+	readonly name: string
+	readonly tags: readonly string[]
+	readonly coordinates: readonly [number, number]
 }
 ```
 
@@ -209,13 +209,13 @@ readonly string[]
 ```
 
 ```ts
-[number, number]
+;[number, number]
 ```
 
 to:
 
 ```ts
-readonly [number, number]
+readonly[(number, number)]
 ```
 
 ---
@@ -234,7 +234,7 @@ Use undefined for absence. Replace null with undefined or omit the optional valu
 const value = null
 
 type State = {
-  readonly user: User | null
+	readonly user: User | null
 }
 ```
 
@@ -244,7 +244,7 @@ type State = {
 const value = undefined
 
 type State = {
-  readonly user?: User
+	readonly user?: User
 }
 ```
 
@@ -290,7 +290,7 @@ Use an optional property instead of a property unioned with undefined.
 
 ```ts
 type Props = {
-  readonly title: string | undefined
+	readonly title: string | undefined
 }
 ```
 
@@ -298,7 +298,7 @@ type Props = {
 
 ```ts
 type Props = {
-  readonly title?: string
+	readonly title?: string
 }
 ```
 
@@ -334,13 +334,13 @@ This type syntax repeats what TypeScript already knows. Remove the annotation, g
 const name: string = 'Matteo'
 
 function getName(): string {
-  return 'Matteo'
+	return 'Matteo'
 }
 
 parse<string>('value')
 
 type Box<T extends unknown> = {
-  readonly value: T
+	readonly value: T
 }
 ```
 
@@ -350,13 +350,13 @@ type Box<T extends unknown> = {
 const name = 'Matteo'
 
 function getName() {
-  return 'Matteo'
+	return 'Matteo'
 }
 
 parse('value')
 
 type Box<T> = {
-  readonly value: T
+	readonly value: T
 }
 ```
 
@@ -378,7 +378,7 @@ const value = 'x'
 
 ```ts
 function value(): string {
-  return 'x'
+	return 'x'
 }
 ```
 
@@ -386,7 +386,7 @@ to:
 
 ```ts
 function value() {
-  return 'x'
+	return 'x'
 }
 ```
 
@@ -428,11 +428,11 @@ const name = user?.name
 const count = value ?? 0
 
 if (user !== undefined) {
-  return user.name
+	return user.name
 }
 
 if (Array.isArray(items)) {
-  return items.length
+	return items.length
 }
 ```
 
@@ -513,10 +513,8 @@ function Card(props: Props) {
 **Good**
 
 ```tsx
-function Card(props: {
-  readonly title: string
-}) {
-  return <div>{props.title}</div>
+function Card(props: {readonly title: string}) {
+	return <div>{props.title}</div>
 }
 ```
 
@@ -540,7 +538,7 @@ Fixable:
 
 ```ts
 type Props = {
-  readonly title: string
+	readonly title: string
 }
 
 function Card(props: Props) {}
@@ -549,9 +547,7 @@ function Card(props: Props) {}
 to:
 
 ```ts
-function Card(props: {
-  readonly title: string
-}) {}
+function Card(props: {readonly title: string}) {}
 ```
 
 Fix single-use aliases, then delete the alias. Leave exported/runtime-contract cases for remaining diagnostics if not clearly fixable.
@@ -597,7 +593,7 @@ const setValue = state[1]
 
 ```tsx
 function Card({title}: {readonly title: string}) {
-  return <div>{title}</div>
+	return <div>{title}</div>
 }
 ```
 
@@ -605,7 +601,7 @@ function Card({title}: {readonly title: string}) {
 
 ```tsx
 function Card(props: {readonly title: string}) {
-  return <div>{props.title}</div>
+	return <div>{props.title}</div>
 }
 ```
 
@@ -625,7 +621,7 @@ Fixable:
 
 ```ts
 function Card({title}: Props) {
-  return title
+	return title
 }
 ```
 
@@ -633,7 +629,7 @@ to:
 
 ```ts
 function Card(props: Props) {
-  return props.title
+	return props.title
 }
 ```
 
@@ -667,9 +663,9 @@ const next = {...user, name}
 
 ```ts
 const next = {
-  id: user.id,
-  email: user.email,
-  name
+	id: user.id,
+	email: user.email,
+	name
 }
 ```
 
@@ -811,8 +807,8 @@ if (props.status === 'ready') start()
 
 ```ts
 const options = {
-  enabled: true,
-  retry: 3
+	enabled: true,
+	retry: 3
 }
 
 run(options)
@@ -822,8 +818,8 @@ run(options)
 
 ```ts
 run({
-  enabled: true,
-  retry: 3
+	enabled: true,
+	retry: 3
 })
 ```
 
@@ -872,7 +868,7 @@ This abstraction does not add behavior. Inline the target expression or call the
 
 ```ts
 function getUserName(user: User) {
-  return user.name
+	return user.name
 }
 
 return getUserName(user)
@@ -888,8 +884,8 @@ return user.name
 
 ```ts
 const UserApi = {
-  loadUser,
-  saveUser
+	loadUser,
+	saveUser
 }
 
 UserApi.loadUser(id)
@@ -905,7 +901,7 @@ loadUser(id)
 
 ```ts
 function parseUser(input: unknown) {
-  return Schema.decodeUnknown(User)(input)
+	return Schema.decodeUnknown(User)(input)
 }
 ```
 
@@ -946,7 +942,7 @@ Use a function declaration for named functions. Keep arrow functions for callbac
 
 ```ts
 const parseUser = (input: unknown) => {
-  return decodeUser(input)
+	return decodeUser(input)
 }
 ```
 
@@ -954,7 +950,7 @@ const parseUser = (input: unknown) => {
 
 ```ts
 function parseUser(input: unknown) {
-  return decodeUser(input)
+	return decodeUser(input)
 }
 ```
 
@@ -962,7 +958,7 @@ function parseUser(input: unknown) {
 
 ```tsx
 const Button = (props: {readonly children: React.ReactNode}) => {
-  return <button>{props.children}</button>
+	return <button>{props.children}</button>
 }
 ```
 
@@ -970,7 +966,7 @@ const Button = (props: {readonly children: React.ReactNode}) => {
 
 ```tsx
 function Button(props: {readonly children: React.ReactNode}) {
-  return <button>{props.children}</button>
+	return <button>{props.children}</button>
 }
 ```
 
@@ -1007,7 +1003,7 @@ Use an arrow function for callbacks. Function expressions are only allowed for r
 
 ```ts
 items.map(function (item) {
-  return item.name
+	return item.name
 })
 ```
 
@@ -1015,7 +1011,7 @@ items.map(function (item) {
 
 ```ts
 items.map(item => {
-  return item.name
+	return item.name
 })
 ```
 
@@ -1023,7 +1019,7 @@ items.map(item => {
 
 ```ts
 Effect.gen(function* () {
-  return yield* program
+	return yield* program
 })
 ```
 
@@ -1035,7 +1031,7 @@ Fixable non-generator callback function expressions:
 
 ```ts
 fn(function (value) {
-  return value.id
+	return value.id
 })
 ```
 
@@ -1043,7 +1039,7 @@ to:
 
 ```ts
 fn(value => {
-  return value.id
+	return value.id
 })
 ```
 
@@ -1248,7 +1244,7 @@ class TokenNode extends lexical.TextNode {}
 
 ```ts
 class User extends Schema.Class<User>()('User', {
-  name: Schema.String
+	name: Schema.String
 }) {}
 ```
 
@@ -1274,9 +1270,9 @@ JSX props objects are banned. Inline every prop on the JSX element.
 
 ```tsx
 const buttonProps = {
-  type: 'button',
-  disabled: props.disabled,
-  onClick: props.onClick
+	type: 'button',
+	disabled: props.disabled,
+	onClick: props.onClick
 }
 
 return <Button {...buttonProps} />
@@ -1300,13 +1296,13 @@ return <Input {...inputProps} />
 
 ```tsx
 return (
-  <Input
-    id={field.name}
-    name={field.name}
-    value={field.state.value}
-    onBlur={field.handleBlur}
-    onChange={event => field.handleChange(event.currentTarget.value)}
-  />
+	<Input
+		id={field.name}
+		name={field.name}
+		value={field.state.value}
+		onBlur={field.handleBlur}
+		onChange={event => field.handleChange(event.currentTarget.value)}
+	/>
 )
 ```
 
@@ -1372,8 +1368,8 @@ return <button className={cn('flex', active && 'text-primary')} />
 
 ```tsx
 const styles = {
-  root: 'flex items-center',
-  icon: 'size-4'
+	root: 'flex items-center',
+	icon: 'size-4'
 }
 
 return <div className={styles.root} />
@@ -1460,7 +1456,7 @@ useCallback(() => body, deps)
 to:
 
 ```tsx
-() => body
+;() => body
 ```
 
 ```tsx
@@ -1487,7 +1483,7 @@ forwardRef is banned. Accept ref as a normal prop.
 
 ```tsx
 const Input = forwardRef<HTMLInputElement, Props>(function Input(props, ref) {
-  return <input ref={ref} />
+	return <input ref={ref} />
 })
 ```
 
@@ -1495,7 +1491,7 @@ const Input = forwardRef<HTMLInputElement, Props>(function Input(props, ref) {
 
 ```tsx
 function Input(props: Props & {readonly ref?: React.Ref<HTMLInputElement>}) {
-  return <input ref={props.ref} />
+	return <input ref={props.ref} />
 }
 ```
 
@@ -1547,7 +1543,7 @@ useState(value)
 
 ```tsx
 useState(function () {
-  return value
+	return value
 })
 ```
 
@@ -1624,8 +1620,8 @@ map.set(key, value)
 
 ```ts
 const nextUser = {
-  id: props.user.id,
-  name
+	id: props.user.id,
+	name
 }
 ```
 
@@ -1692,8 +1688,8 @@ For visible object construction:
 
 ```ts
 const next = {
-  id: user.id,
-  name: user.name
+	id: user.id,
+	name: user.name
 }
 ```
 
@@ -1789,9 +1785,9 @@ users.map(user => user.name).filter(String.isNonEmpty)
 
 ```ts
 pipe(
-  users,
-  Array.map(user => user.name),
-  Array.filter(String.isNonEmpty)
+	users,
+	Array.map(user => user.name),
+	Array.filter(String.isNonEmpty)
 )
 ```
 
@@ -1836,7 +1832,10 @@ Do not use pipe for a single operation. Call the module function directly.
 **Bad**
 
 ```ts
-const names = pipe(users, Array.map(user => user.name))
+const names = pipe(
+	users,
+	Array.map(user => user.name)
+)
 ```
 
 **Good**
@@ -1876,16 +1875,19 @@ Use pipe for multi-step composition. Keep every transformation step visible in o
 **Bad**
 
 ```ts
-const names = Array.filter(Array.map(users, user => user.name), String.isNonEmpty)
+const names = Array.filter(
+	Array.map(users, user => user.name),
+	String.isNonEmpty
+)
 ```
 
 **Good**
 
 ```ts
 const names = pipe(
-  users,
-  Array.map(user => user.name),
-  Array.filter(String.isNonEmpty)
+	users,
+	Array.map(user => user.name),
+	Array.filter(String.isNonEmpty)
 )
 ```
 
@@ -1898,11 +1900,7 @@ const value = String.toLowerCase(String.trim(input))
 **Good**
 
 ```ts
-const value = pipe(
-  input,
-  String.trim,
-  String.toLowerCase
-)
+const value = pipe(input, String.trim, String.toLowerCase)
 ```
 
 **Auto-fix**
@@ -1927,9 +1925,9 @@ Functions with arguments that return Effect must use Effect.fnUntraced.
 
 ```ts
 function loadUser(id: string) {
-  return Effect.gen(function* () {
-    return yield* getUser(id)
-  })
+	return Effect.gen(function* () {
+		return yield* getUser(id)
+	})
 }
 ```
 
@@ -1937,7 +1935,7 @@ function loadUser(id: string) {
 
 ```ts
 const loadUser = Effect.fnUntraced(function* (id: string) {
-  return yield* getUser(id)
+	return yield* getUser(id)
 })
 ```
 
@@ -1945,10 +1943,10 @@ const loadUser = Effect.fnUntraced(function* (id: string) {
 
 ```ts
 const loadUser = (id: string) => {
-  return pipe(
-    getUser(id),
-    Effect.map(user => user.name)
-  )
+	return pipe(
+		getUser(id),
+		Effect.map(user => user.name)
+	)
 }
 ```
 
@@ -1956,8 +1954,8 @@ const loadUser = (id: string) => {
 
 ```ts
 const loadUser = Effect.fnUntraced(function* (id: string) {
-  const user = yield* getUser(id)
-  return user.name
+	const user = yield* getUser(id)
+	return user.name
 })
 ```
 
@@ -1983,9 +1981,9 @@ No-argument functions that return Effect must be Effect values.
 
 ```ts
 function program() {
-  return Effect.gen(function* () {
-    return yield* load()
-  })
+	return Effect.gen(function* () {
+		return yield* load()
+	})
 }
 ```
 
@@ -1993,7 +1991,7 @@ function program() {
 
 ```ts
 const program = Effect.gen(function* () {
-  return yield* load()
+	return yield* load()
 })
 ```
 
@@ -2025,8 +2023,8 @@ inside an Effect generator.
 **Good**
 
 ```ts
-yield* Effect.log('saved')
-yield* saveUser(user)
+yield * Effect.log('saved')
+yield * saveUser(user)
 ```
 
 **Auto-fix**
@@ -2042,7 +2040,7 @@ program
 to:
 
 ```ts
-yield* program
+yield * program
 ```
 
 Fixable at final statement of an Effect-returning function:
@@ -2110,7 +2108,7 @@ Effect.sync(() => 'ready')
 
 ```ts
 1
-'ready'
+;('ready')
 ```
 
 **Auto-fix**
@@ -2167,7 +2165,7 @@ Better when possible:
 
 ```ts
 const get = Effect.fnUntraced(function* (id: string) {
-  return yield* loadUser(id)
+	return yield* loadUser(id)
 })
 ```
 
@@ -2199,7 +2197,7 @@ type Program = Effect.Effect<User, UserError>
 
 ```ts
 const program = Effect.gen(function* () {
-  return yield* loadUser
+	return yield* loadUser
 })
 ```
 
@@ -2213,7 +2211,7 @@ type LoadUser = (id: string) => Effect.Effect<User, UserError>
 
 ```ts
 const loadUser = Effect.fnUntraced(function* (id: string) {
-  return yield* getUser(id)
+	return yield* getUser(id)
 })
 ```
 
@@ -2239,9 +2237,9 @@ Use Effect.try or Effect.tryPromise for throwing or Promise-producing code. Map 
 
 ```ts
 try {
-  return JSON.parse(input)
+	return JSON.parse(input)
 } catch (error) {
-  return new ParseError({cause: error})
+	return new ParseError({cause: error})
 }
 ```
 
@@ -2249,8 +2247,8 @@ try {
 
 ```ts
 return Effect.try({
-  try: () => JSON.parse(input),
-  catch: error => new ParseError({cause: error})
+	try: () => JSON.parse(input),
+	catch: error => new ParseError({cause: error})
 })
 ```
 
@@ -2265,10 +2263,12 @@ inside Effect code.
 **Good**
 
 ```ts
-const response = yield* Effect.tryPromise({
-  try: () => fetch(url),
-  catch: error => new FetchError({cause: error})
-})
+const response =
+	yield *
+	Effect.tryPromise({
+		try: () => fetch(url),
+		catch: error => new FetchError({cause: error})
+	})
 ```
 
 **Auto-fix**
@@ -2295,8 +2295,8 @@ Broad Effect catch handlers are banned. Use catchTag or catchTags for specific t
 
 ```ts
 pipe(
-  program,
-  Effect.catch(error => recover(error))
+	program,
+	Effect.catch(error => recover(error))
 )
 ```
 
@@ -2304,8 +2304,8 @@ pipe(
 
 ```ts
 pipe(
-  program,
-  Effect.catchTag('UserNotFound', error => recover(error))
+	program,
+	Effect.catchTag('UserNotFound', error => recover(error))
 )
 ```
 
@@ -2313,11 +2313,11 @@ pipe(
 
 ```ts
 pipe(
-  program,
-  Effect.catchTags({
-    UserNotFound: error => recoverMissingUser(error),
-    PermissionDenied: error => recoverPermission(error)
-  })
+	program,
+	Effect.catchTags({
+		UserNotFound: error => recoverMissingUser(error),
+		PermissionDenied: error => recoverPermission(error)
+	})
 )
 ```
 
@@ -2341,7 +2341,7 @@ Use Schema.TaggedErrorClass for Effect errors.
 
 ```ts
 class UserError extends Data.TaggedError('UserError')<{
-  readonly message: string
+	readonly message: string
 }> {}
 ```
 
@@ -2349,7 +2349,7 @@ class UserError extends Data.TaggedError('UserError')<{
 
 ```ts
 class UserError extends Schema.TaggedErrorClass<UserError>()('UserError', {
-  message: Schema.String
+	message: Schema.String
 }) {}
 ```
 
@@ -2362,7 +2362,7 @@ Effect.fail(new UserError({message}))
 **Good**
 
 ```ts
-yield* new UserError({message})
+yield * new UserError({message})
 ```
 
 **Auto-fix**
@@ -2378,7 +2378,7 @@ Effect.fail(new ErrorClass(args))
 to:
 
 ```ts
-yield* new ErrorClass(args)
+yield * new ErrorClass(args)
 ```
 
 Class migrations are mostly manual, but simple `Data.TaggedError` shapes can be rewritten into `Schema.TaggedErrorClass` if fields are obvious.
@@ -2551,19 +2551,19 @@ effect/prefer-effect-catch-tag
 
 ## Enable Biome regex literal rule
 
-Your Biome config currently has `complexity.useRegexLiterals` set to `off`. 
+Your Biome config currently has `complexity.useRegexLiterals` set to `off`.
 
 Change it to:
 
 ```json
 {
-  "linter": {
-    "rules": {
-      "complexity": {
-        "useRegexLiterals": "error"
-      }
-    }
-  }
+	"linter": {
+		"rules": {
+			"complexity": {
+				"useRegexLiterals": "error"
+			}
+		}
+	}
 }
 ```
 
@@ -2575,7 +2575,7 @@ deslop should not own regex literal style. Biome already has the correct generic
 
 ## Remove Biome restricted globals
 
-Your current Biome config uses `style.noRestrictedGlobals` to ban globals like `Array`, `String`, `Object`, `Boolean`, etc. with custom messages. 
+Your current Biome config uses `style.noRestrictedGlobals` to ban globals like `Array`, `String`, `Object`, `Boolean`, etc. with custom messages.
 
 Remove this block from Biome and let `deslop` own it through:
 
@@ -2597,16 +2597,16 @@ Keep:
 
 ```json
 {
-  "nursery": {
-    "useSortedClasses": {
-      "level": "error",
-      "fix": "safe"
-    }
-  }
+	"nursery": {
+		"useSortedClasses": {
+			"level": "error",
+			"fix": "safe"
+		}
+	}
 }
 ```
 
-Your current config already has this. 
+Your current config already has this.
 
 Reason:
 
@@ -2622,13 +2622,13 @@ Keep:
 
 ```json
 {
-  "suspicious": {
-    "noExplicitAny": "error"
-  }
+	"suspicious": {
+		"noExplicitAny": "error"
+	}
 }
 ```
 
-Your current config already has it. 
+Your current config already has it.
 
 Reason:
 
@@ -2642,13 +2642,13 @@ Keep:
 
 ```json
 {
-  "style": {
-    "noUselessElse": "error"
-  }
+	"style": {
+		"noUselessElse": "error"
+	}
 }
 ```
 
-Your current config already has it. 
+Your current config already has it.
 
 Reason:
 
@@ -2666,19 +2666,19 @@ Biome rule:
 performance/noBarrelFile
 ```
 
-Biome’s rule flags `export * from`, `export {x} from`, and `export {default as x} from`, while ignoring `.d.ts` and type-only exports. 
+Biome’s rule flags `export * from`, `export {x} from`, and `export {default as x} from`, while ignoring `.d.ts` and type-only exports.
 
 Add:
 
 ```json
 {
-  "linter": {
-    "rules": {
-      "performance": {
-        "noBarrelFile": "error"
-      }
-    }
-  }
+	"linter": {
+		"rules": {
+			"performance": {
+				"noBarrelFile": "error"
+			}
+		}
+	}
 }
 ```
 
@@ -2694,24 +2694,24 @@ Your `tsconfig.json` currently includes:
 
 ```json
 {
-  "plugins": [
-    {
-      "name": "@effect/language-service",
-      "diagnosticSeverity": {
-        "anyUnknownInErrorContext": "error",
-        "deterministicKeys": "error",
-        "extendsNativeError": "error",
-        "instanceOfSchema": "error",
-        "missedPipeableOpportunity": "error",
-        "nodeBuiltinImport": "error",
-        "serviceNotAsClass": "error"
-      }
-    }
-  ]
+	"plugins": [
+		{
+			"name": "@effect/language-service",
+			"diagnosticSeverity": {
+				"anyUnknownInErrorContext": "error",
+				"deterministicKeys": "error",
+				"extendsNativeError": "error",
+				"instanceOfSchema": "error",
+				"missedPipeableOpportunity": "error",
+				"nodeBuiltinImport": "error",
+				"serviceNotAsClass": "error"
+			}
+		}
+	]
 }
 ```
 
-Remove the plugin if you are not using the Effect LSP CLI anymore. 
+Remove the plugin if you are not using the Effect LSP CLI anymore.
 
 Do not migrate all of those diagnostics into `deslop`.
 
@@ -2736,4 +2736,4 @@ isolatedModules
 verbatimModuleSyntax
 ```
 
-They are still useful and do not overlap badly with `deslop`. 
+They are still useful and do not overlap badly with `deslop`.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import {BunRuntime, BunServices} from '@effect/platform-bun'
+
 import {Array, Effect, Match, Option, pipe, Runtime, Schema, String, Terminal} from 'effect'
 
 import {Argument, Command, Flag} from 'effect/unstable/cli'

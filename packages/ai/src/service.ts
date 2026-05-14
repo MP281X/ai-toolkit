@@ -4,12 +4,13 @@ import {Context, Effect, flow, Layer, Match, pipe} from 'effect'
 import type {Response, Toolkit} from 'effect/unstable/ai'
 import {LanguageModel, Prompt} from 'effect/unstable/ai'
 
-import {resolveLanguageModel} from '#lib/language-model.ts'
-import {serializeAiPartToMarkdown} from '#lib/utils.ts'
-import type {AgentToolKit} from '#tools/contracts.ts'
 import {makeLayerCodex} from './agents/codex.ts'
 import {makeLayerEffect} from './agents/effect.ts'
 import type {AgentId, ModelId, ProviderId} from './catalog.ts'
+
+import {resolveLanguageModel} from '#lib/language-model.ts'
+import {serializeAiPartToMarkdown} from '#lib/utils.ts'
+import type {AgentToolKit} from '#tools/contracts.ts'
 
 export type AgentStatus = {
 	readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'

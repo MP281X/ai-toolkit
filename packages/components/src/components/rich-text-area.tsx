@@ -266,11 +266,9 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	const initializedRef = useRef(false)
 
 	useEffect(() => {
-		// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
 		props.editorRef.current = editor
 
 		return () => {
-			// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
 			props.editorRef.current = null
 		}
 	}, [editor, props.editorRef])
@@ -349,17 +347,15 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
 	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
 }) {
-	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>(undefined)
+	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>()
 
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
 			onOpen={() => {
-				// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
 				props.menuRef.current = true
 			}}
 			onClose={() => {
-				// biome-ignore lint/style/noParameterAssign: refs are the mutable handoff API here
 				props.menuRef.current = false
 			}}
 			triggerFn={text => {
@@ -425,11 +421,12 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				return createPortal(
 					<Command
 						aria-label="Autocomplete suggestions"
-						className="h-auto w-full border-input border-b bg-card text-foreground"
+						className="border-input bg-card text-foreground h-auto w-full border-b"
 					>
 						<CommandList className="max-h-48" role="listbox">
 							{Array.map(menuProps.options, (option, index) => (
 								<CommandItem
+									tabIndex={0}
 									key={option.key}
 									id={`typeahead-item-${index}`}
 									ref={option.setRefElement}
@@ -478,7 +475,7 @@ export declare namespace RichTextArea {
 
 	export type Snapshot<TValue extends Value = Value> = {
 		readonly text: string
-		readonly editorState: Lexical.SerializedEditorState<Lexical.SerializedLexicalNode>
+		readonly editorState: Lexical.SerializedEditorState
 		readonly tokens: readonly TextAreaToken<TValue>[]
 	}
 
@@ -548,16 +545,16 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 					}
 				}}
 			>
-				<div className="relative flex w-full flex-col border border-input bg-input/30">
+				<div className="border-input bg-input/30 relative flex w-full flex-col border">
 					<div ref={menuBoxRef} className="absolute inset-x-0 bottom-full z-50" />
 
 					<div className="relative max-h-90 min-h-24 overflow-y-auto">
 						<PlainTextPlugin
 							contentEditable={
-								<ContentEditable className="wrap-break-word block min-h-24 w-full whitespace-pre-wrap p-2 text-[13px] leading-relaxed outline-none" />
+								<ContentEditable className="block min-h-24 w-full p-2 text-[13px] leading-relaxed wrap-break-word whitespace-pre-wrap outline-none" />
 							}
 							placeholder={
-								<div className="pointer-events-none absolute inset-x-2 top-2 select-none text-[13px] text-muted-foreground">
+								<div className="text-muted-foreground pointer-events-none absolute inset-x-2 top-2 text-[13px] select-none">
 									{props.placeholder ?? 'Write something...'}
 								</div>
 							}
@@ -589,7 +586,7 @@ RichTextArea.Actions = (props: {readonly children: React.ReactNode; readonly cla
 	return (
 		<div
 			className={cn(
-				'absolute inset-x-0 bottom-full z-40 border border-input border-b-0 bg-card shadow-lg',
+				'border-input bg-card absolute inset-x-0 bottom-full z-40 border border-b-0 shadow-lg',
 				props.className
 			)}
 		>
@@ -602,7 +599,7 @@ RichTextArea.ToolBar = (props: {readonly children: React.ReactNode; readonly cla
 	return (
 		<div
 			className={cn(
-				'flex w-full flex-row items-center justify-between border border-input border-t-0 bg-input/30 p-2',
+				'border-input bg-input/30 flex w-full flex-row items-center justify-between border border-t-0 p-2',
 				props.className
 			)}
 		>

@@ -174,12 +174,12 @@ const fetchDirectoryEntries = Effect.fn('fetchDirectoryEntries')(function* (path
 	return yield* decodeGithubContentEntries(raw)
 })
 
-function collectSchemaEntries(chunk: string): ReadonlyArray<{readonly name: string; readonly code: string}> {
+function collectSchemaEntries(chunk: string): readonly {readonly name: string; readonly code: string}[] {
 	const lines = chunk
 		.split('\n')
 		.map(line => line.trim())
 		.filter(line => line.length > 0 && !line.startsWith('//'))
-	const entries: Array<{name: string; code: string}> = []
+	const entries: {name: string; code: string}[] = []
 
 	for (let index = 0; index < lines.length; index += 1) {
 		const typeLine = lines[index]

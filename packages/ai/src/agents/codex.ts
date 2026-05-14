@@ -17,10 +17,11 @@ import {
 import type {Prompt} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import * as CodexRpc from '#codegen/codex-app-server/meta.gen.ts'
-import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 import type {AgentStatus} from '../service.ts'
 import {Agent} from '../service.ts'
+
+import * as CodexRpc from '#codegen/codex-app-server/meta.gen.ts'
+import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 
 class CodexProtocolError extends Schema.TaggedErrorClass<CodexProtocolError>()('CodexProtocolError', {
 	cause: Schema.optional(Schema.Defect),
@@ -216,7 +217,7 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 
 const readLines = Effect.fnUntraced(function* (
 	stream: ReadableStream<Uint8Array>,
-	onLine: (line: string) => Effect.Effect<void, never>
+	onLine: (line: string) => Effect.Effect<void>
 ) {
 	yield* Effect.callback<void>(resume => {
 		let remainder = ''

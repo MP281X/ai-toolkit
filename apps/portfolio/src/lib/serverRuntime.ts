@@ -1,9 +1,9 @@
 import {Layer, pipe} from 'effect'
 
-import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
+import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
 export const LiveLayers = pipe(
 	Layer.empty,

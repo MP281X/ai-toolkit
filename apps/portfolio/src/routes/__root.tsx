@@ -1,9 +1,10 @@
+import './styles.css'
+
 import {Function} from 'effect'
 
-import {Toaster} from '@ai-toolkit/components/ui/sonner'
 import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
 
-import './styles.css'
+import {Toaster} from '@ai-toolkit/components/ui/sonner'
 
 export const Route = createRootRoute({
 	head: Function.constant({

@@ -27,7 +27,7 @@ export namespace DevTools {
 
 		return (
 			<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
-				<div className="flex items-center gap-1 border border-border bg-background px-1.5 py-1.5 font-mono text-xs">
+				<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5 font-mono text-xs">
 					{Array.map(props.routes, (route, index) => (
 						<Button
 							key={route}
@@ -71,7 +71,7 @@ export namespace DevTools {
 			<>
 				{children[value] ?? children[0]}
 				<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
-					<div className="flex items-center gap-1 border border-border bg-background px-1.5 py-1.5 font-mono text-xs">
+					<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5 font-mono text-xs">
 						{Array.map(children, (child, index) => (
 							<Button
 								key={`${index}:${child}`}

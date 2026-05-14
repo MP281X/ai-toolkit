@@ -2,18 +2,6 @@ import {Array} from 'effect'
 
 import ts from 'typescript'
 
-import {
-	bindingNames,
-	callName,
-	containsNode,
-	isBooleanExpression,
-	isConstAssertion,
-	isHookCall,
-	isPipeCall,
-	isReactHookTupleCall,
-	normalizedText,
-	returnedExpression
-} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {
 	countIdentifierUses,
@@ -31,6 +19,19 @@ import {
 	rule,
 	unwrapAwait
 } from './helpers.ts'
+
+import {
+	bindingNames,
+	callName,
+	containsNode,
+	isBooleanExpression,
+	isConstAssertion,
+	isHookCall,
+	isPipeCall,
+	isReactHookTupleCall,
+	normalizedText,
+	returnedExpression
+} from '#lib/ts.ts'
 
 export const baseIndirectionRules = [
 	rule('no-destructuring', (node, context) => {

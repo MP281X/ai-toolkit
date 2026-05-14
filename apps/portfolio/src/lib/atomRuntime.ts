@@ -1,12 +1,12 @@
 import {ConfigProvider, Layer, pipe} from 'effect'
 
-import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 import {FetchHttpClient} from 'effect/unstable/http'
 import {AtomRpc} from 'effect/unstable/reactivity'
 import * as Rpc from 'effect/unstable/rpc'
 import {Socket} from 'effect/unstable/socket'
 
 import {RpcContracts} from '#rpcs/contracts.ts'
+import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 
 export const LiveLayers = pipe(
 	Layer.empty,

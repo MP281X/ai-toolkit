@@ -2,18 +2,6 @@ import {Array, Option, String} from 'effect'
 
 import ts from 'typescript'
 
-import {
-	callName,
-	containsNode,
-	isEffectCall,
-	isLiteral,
-	isMatchCall,
-	isPipeCall,
-	isRcMapConstructorCall,
-	normalizedText,
-	returnedExpression,
-	typeLooksEffect
-} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {
 	functionLikeName,
@@ -26,6 +14,19 @@ import {
 	rule,
 	standardPrototypeMethods
 } from './helpers.ts'
+
+import {
+	callName,
+	containsNode,
+	isEffectCall,
+	isLiteral,
+	isMatchCall,
+	isPipeCall,
+	isRcMapConstructorCall,
+	normalizedText,
+	returnedExpression,
+	typeLooksEffect
+} from '#lib/ts.ts'
 
 export const effectRules = [
 	rule('prefer-effect-fn-untraced', (node, context) => {

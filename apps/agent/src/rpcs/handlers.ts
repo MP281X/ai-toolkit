@@ -1,5 +1,8 @@
 import {Array, Cause, Context, Duration, Effect, FiberHandle, Layer, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
 
+import {Prompt, Response} from 'effect/unstable/ai'
+
+import {RpcContracts} from '#rpcs/contracts.ts'
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import type {AgentEvent} from '@ai-toolkit/ai/schema'
 import {AgentKey} from '@ai-toolkit/ai/schema'
@@ -7,9 +10,6 @@ import {Agent} from '@ai-toolkit/ai/service'
 import {makeResumableStream} from '@ai-toolkit/ai/utils'
 import {GitWorkspace, GitWorktree} from '@ai-toolkit/git/service'
 import {Terminal} from '@ai-toolkit/terminal/service'
-import {Prompt, Response} from 'effect/unstable/ai'
-
-import {RpcContracts} from '#rpcs/contracts.ts'
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,

@@ -1,6 +1,13 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+
 import {Array, Effect, Hash, Match, Option, Predicate, pipe, Schema, String} from 'effect'
 
+import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
+import {Atom} from 'effect/unstable/reactivity'
+import {startTransition, useEffect, useState} from 'react'
+
+import {RpcClient} from '#lib/atomRuntime.ts'
+import {activeHomeAtom, agentsAtom, draftAgentsAtom, projectsAtom} from '#lib/state.ts'
 import {AgentId} from '@ai-toolkit/ai/catalog'
 import type {AgentKey} from '@ai-toolkit/ai/schema'
 import {
@@ -30,12 +37,6 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
 import type {GitProject} from '@ai-toolkit/git/schema'
 import {GitBranchesSnapshot} from '@ai-toolkit/git/schema'
-import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useState} from 'react'
-
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, draftAgentsAtom, projectsAtom} from '#lib/state.ts'
 
 export const Route = createFileRoute('/(home)')({
 	validateSearch: Schema.toStandardSchemaV1(
@@ -90,7 +91,7 @@ function HomeLayout() {
 	const agentsSnapshot = useAtomSuspense(agentsAtom)
 
 	return (
-		<div className="h-full min-h-0 flex-1 overflow-hidden bg-background font-mono">
+		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden font-mono">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
 					<WorktreeManager
@@ -102,12 +103,15 @@ function HomeLayout() {
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
 							return startTransition(() => {
-								navigate({to: '/$worktree/diff', params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}})
+								void navigate({
+									to: '/$worktree/diff',
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}
+								})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
 							return startTransition(() => {
-								navigate({
+								void navigate({
 									to: '/$worktree/thread',
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
 									search: {
@@ -118,7 +122,7 @@ function HomeLayout() {
 						}}
 						selectTerminal={worktreeRoot => {
 							return startTransition(() => {
-								navigate({
+								void navigate({
 									to: '/$worktree/terminal',
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}
 								})
@@ -277,7 +281,7 @@ function WorktreeManager(input: {
 			<div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center border-b">
 				<button
 					type="button"
-					className="flex h-full min-w-0 items-center px-3 text-left text-muted-foreground hover:text-foreground"
+					className="text-muted-foreground hover:text-foreground flex h-full min-w-0 items-center px-3 text-left"
 					onClick={() => {
 						if (input.activeWorktree) void navigator.clipboard.writeText(input.activeWorktree.root)
 					}}
@@ -289,7 +293,7 @@ function WorktreeManager(input: {
 				{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
 					<button
 						type="button"
-						className="flex h-8 w-8 items-center justify-center text-destructive hover:bg-muted hover:text-destructive"
+						className="text-destructive hover:bg-muted hover:text-destructive flex h-8 w-8 items-center justify-center"
 						onClick={async () => {
 							if (!input.activeWorktree) return
 							if (
@@ -358,7 +362,7 @@ function WorktreeManager(input: {
 									>
 										<AgentIcon layer={agent.agent} className="size-3.5" />
 										<span className="min-w-0 truncate">thread</span>
-										<CommandShortcut className="max-w-64 truncate normal-case tracking-normal">
+										<CommandShortcut className="max-w-64 truncate tracking-normal normal-case">
 											{worktreeLabel}
 										</CommandShortcut>
 									</CommandItem>
@@ -463,7 +467,7 @@ function WorktreeManager(input: {
 						return (
 							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
 								<div
-									className={`grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left font-semibold text-foreground text-xs hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
+									className={`text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left text-xs font-semibold hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
 								>
 									<span className="flex min-w-0 flex-1 items-center gap-1.5">
 										<span className="flex size-3.5 shrink-0 items-center justify-center">
@@ -497,7 +501,7 @@ function WorktreeManager(input: {
 										<GitBranchPlus className="size-3" />
 									</Button>
 								</div>
-								<ul className="flex flex-col gap-px border-muted-foreground/20 border-l" style={{marginLeft: 15}}>
+								<ul className="border-muted-foreground/20 flex flex-col gap-px border-l" style={{marginLeft: 15}}>
 									{Array.map(project.worktrees, worktree => {
 										const worktreeAgents = Array.filter(input.agents, agent => agent.cwd === worktree.root)
 										return (
@@ -539,7 +543,7 @@ function WorktreeManager(input: {
 													{worktree.branch ?? pathLabel(worktree.root)}
 												</TreeExplorerRow>
 												<ul
-													className="flex flex-col gap-px border-muted-foreground/20 border-l"
+													className="border-muted-foreground/20 flex flex-col gap-px border-l"
 													style={{marginLeft: 15}}
 												>
 													<li className="w-full min-w-0">
@@ -554,7 +558,7 @@ function WorktreeManager(input: {
 												</ul>
 												{!Array.isReadonlyArrayEmpty(worktreeAgents) && (
 													<ul
-														className="flex flex-col gap-px border-muted-foreground/20 border-l"
+														className="border-muted-foreground/20 flex flex-col gap-px border-l"
 														style={{marginLeft: 15}}
 													>
 														{Array.map(worktreeAgents, agent => (
