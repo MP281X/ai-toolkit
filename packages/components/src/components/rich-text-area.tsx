@@ -22,16 +22,19 @@ class TokenNode extends Lexical.TextNode {
 		return 'input-token'
 	}
 
+	// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 	public static override clone(node: TokenNode) {
 		return new TokenNode(node.__text, node.__id, node.__kind, node.__key)
 	}
 
 	public static override importJSON(
-		node: Lexical.SerializedTextNode & {
-			readonly id: string
-			readonly kind: 'entry' | 'file'
-			readonly type: 'input-token'
-		}
+		node: Readonly<
+			Lexical.SerializedTextNode & {
+				readonly id: string
+				readonly kind: 'entry' | 'file'
+				readonly type: 'input-token'
+			}
+		>
 	) {
 		return new TokenNode(node.text, node.id, node.kind).updateFromJSON(node)
 	}
@@ -111,7 +114,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 
 function restore<TValue extends RichTextArea.Value>(
 	editor: Lexical.LexicalEditor | undefined,
-	snapshot: RichTextArea.Snapshot<TValue>,
+	snapshot: Readonly<RichTextArea.Snapshot<TValue>>,
 	tokensMap: Map<string, TextAreaToken<TValue>>
 ) {
 	if (!editor) return
@@ -268,12 +271,13 @@ function closeXmlTag(event: KeyboardEvent) {
 	return true
 }
 
+// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly editorRef: {current: Lexical.LexicalEditor | null}
 	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
-	readonly initialSnapshot?: RichTextArea.Snapshot<TValue>
+	readonly initialSnapshot?: Readonly<RichTextArea.Snapshot<TValue>>
 	readonly menuRef: {current: boolean}
-	readonly onSubmit?: (snapshot: RichTextArea.Snapshot<TValue>) => void
+	readonly onSubmit?: (snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void
 }) {
 	const [editor] = useLexicalComposerContext()
 	const initializedRef = useRef(false)
@@ -360,6 +364,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	return <HistoryPlugin />
 }
 
+// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
@@ -495,7 +500,7 @@ export declare namespace RichTextArea {
 
 	export type Handle<TValue extends Value = Value> = {
 		readonly getSnapshot: () => Snapshot<TValue>
-		readonly restore: (snapshot: Snapshot<TValue>) => void
+		readonly restore: (snapshot: Readonly<Snapshot<TValue>>) => void
 		readonly clear: () => void
 		readonly focus: () => void
 	}
@@ -509,8 +514,8 @@ export declare namespace RichTextArea {
 	export type Props<TValue extends Value = Value> = {
 		readonly ref?: React.Ref<Handle<TValue>>
 		readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
-		readonly onSubmit?: (snapshot: Snapshot<TValue>) => void
-		readonly initialSnapshot?: Snapshot<TValue>
+		readonly onSubmit?: (snapshot: Readonly<Snapshot<TValue>>) => void
+		readonly initialSnapshot?: Readonly<Snapshot<TValue>>
 		readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
 		readonly placeholder?: string
 		readonly className?: string

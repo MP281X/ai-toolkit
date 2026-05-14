@@ -254,6 +254,7 @@ const readLines = Effect.fnUntraced(function* (
 	})
 })
 
+// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 const writeJson = Effect.fnUntraced(function* (process: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, message: unknown) {
 	yield* Effect.promise(async () => process.stdin.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`)))
 })

@@ -333,7 +333,8 @@ export function isEffectModuleReceiver(checker: ts.TypeChecker | undefined, node
 export function linearVariableChain(
 	block: ts.Block,
 	shouldChain: (
-		declaration: ts.VariableDeclaration & {readonly name: ts.Identifier; readonly initializer: ts.Expression}
+		// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+		declaration: Readonly<ts.VariableDeclaration> & {readonly name: ts.Identifier; readonly initializer: ts.Expression}
 	) => boolean
 ) {
 	return Array.reduce(

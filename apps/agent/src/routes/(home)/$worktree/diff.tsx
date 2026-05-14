@@ -294,7 +294,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		)
 	}
 
-	function deleteFileComments(group: ReturnType<typeof groupCommentsByFile>[number]) {
+	function deleteFileComments(group: Readonly<ReturnType<typeof groupCommentsByFile>[number]>) {
 		setComments(current =>
 			Array.filter(current, comment => comment.scope !== group.scope || comment.filePath !== group.filePath)
 		)

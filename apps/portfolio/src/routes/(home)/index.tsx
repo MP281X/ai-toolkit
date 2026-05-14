@@ -146,18 +146,23 @@ const frameListeners = new Set<(now: number) => void>()
 let frameId = 0
 
 type Viewport = {
-	width: number
-	height: number
+	readonly width: number
+	readonly height: number
 }
 
 type CursorMotion = {
-	x: number
-	y: number
-	targetX: number
-	targetY: number
-	lastFrameAt: number
-	viewportWidth: number
-	viewportHeight: number
+	readonly x: number
+	readonly y: number
+	readonly targetX: number
+	readonly targetY: number
+	readonly lastFrameAt: number
+	readonly viewportWidth: number
+	readonly viewportHeight: number
+}
+
+type Point = {
+	readonly x: number
+	readonly y: number
 }
 
 let localPointer: {x: number; y: number; updatedAt: number} | undefined = undefined
@@ -290,7 +295,7 @@ function subscribeFrame(listener: (now: number) => void) {
 	}
 }
 
-function getDisplayCursorTarget(cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+function getDisplayCursorTarget(cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
 	if (isMe && localPointer) {
 		return {
 			x: localPointer.x * viewport.width,
@@ -308,7 +313,7 @@ function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
 	Reflect.set(node.style, 'transform', `translate3d(${x}px, ${y}px, 0)`)
 }
 
-function createCursorMotion(target: {x: number; y: number}, viewport: Viewport) {
+function createCursorMotion(target: Point, viewport: Viewport) {
 	return {
 		lastFrameAt: 0,
 		targetX: target.x,
@@ -320,7 +325,7 @@ function createCursorMotion(target: {x: number; y: number}, viewport: Viewport) 
 	} satisfies CursorMotion
 }
 
-function updateCursorMotion(motion: CursorMotion, target: {x: number; y: number}) {
+function updateCursorMotion(motion: CursorMotion, target: Point) {
 	return {
 		...motion,
 		targetX: target.x,
@@ -344,7 +349,7 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 	}
 }
 
-function syncCursorMotion(motion: CursorMotion, cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+function syncCursorMotion(motion: CursorMotion, cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
 	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
@@ -381,7 +386,7 @@ function useViewport() {
 	} satisfies Viewport
 }
 
-function getTrailCell(trail: PortfolioTrail, viewport: Viewport) {
+function getTrailCell(trail: Readonly<PortfolioTrail>, viewport: Viewport) {
 	return {
 		col: Math.floor((trail.x * viewport.width) / 26),
 		row: Math.floor((trail.y * viewport.height) / 26)

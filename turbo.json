@@ -3,7 +3,7 @@
 	"$schema": "https://turbo.build/schema.json",
 
 	"globalEnv": ["NODE_*", "VITE_*"],
-	"globalDependencies": ["bun.lock", ".oxfmtrc.json", ".oxlintrc.json", "tsconfig.json"],
+	"globalDependencies": ["bun.lock", ".oxfmtrc.jsonc", ".oxlintrc.jsonc", "tsconfig.json"],
 
 	"tasks": {
 		"dev:client": {"cache": false, "persistent": true},

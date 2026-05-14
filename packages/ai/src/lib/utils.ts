@@ -87,6 +87,7 @@ export function compactAiParts<T extends Record<string, Tool.Any>>(input: readon
 }
 
 export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
+	// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 	input: readonly (Prompt.Message | Response.StreamPart<T>)[]
 ) {
 	let files = Array.empty<File>()

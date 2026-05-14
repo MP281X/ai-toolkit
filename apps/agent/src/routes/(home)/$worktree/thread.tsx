@@ -89,7 +89,7 @@ function ThreadView(props: {readonly threadId: string}) {
 	return <ThreadAgentPanel selectedAgent={selectedAgent} />
 }
 
-function ThreadAgentPanel(input: {selectedAgent: AgentKey}) {
+function ThreadAgentPanel(input: {readonly selectedAgent: AgentKey}) {
 	const status = useAtomSuspense(agentStatusAtom(input.selectedAgent)).value
 	const availableModels = Array.filter(models, model => pipe(model.agents, Array.contains(input.selectedAgent.agent)))
 	const [agentModel, setAgentModel] = useState(`${availableModels[0]?.provider}:${availableModels[0]?.model}`)
@@ -408,13 +408,14 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 	}
 }
 
+// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function AgentPanel(input: {
 	readonly agent: AgentId
-	readonly agentKey: AgentKey
+	readonly agentKey: Readonly<AgentKey>
 	readonly model: ModelId
 	readonly provider: ProviderId
 	readonly setModel: (model: string) => void
-	readonly status: AgentStatus
+	readonly status: Readonly<AgentStatus>
 }) {
 	const inputRef = useRef<RichTextArea.Handle<{label: string}>>(null)
 	const events = useAtomSuspense(agentEventsAtom(input.agentKey)).value

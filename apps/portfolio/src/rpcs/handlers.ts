@@ -67,7 +67,10 @@ function appendTrail(trails: PortfolioState['trails'], trail: PortfolioTrail) {
 	return allTrails.length > 180 ? Array.drop(allTrails, allTrails.length - 180) : allTrails
 }
 
-function hasMeaningfulMove(current: {x: number; y: number}, next: {x: number; y: number}) {
+function hasMeaningfulMove(
+	current: {readonly x: number; readonly y: number},
+	next: {readonly x: number; readonly y: number}
+) {
 	const deltaX = next.x - current.x
 	const deltaY = next.y - current.y
 
