@@ -11,11 +11,9 @@ import {
 	isCheapExpression,
 	isEffectCall,
 	isEffectConstructorCall,
-	isEffectGenLikeCall,
 	isFlowCall,
 	isHookCall,
 	isImportedIdentifier,
-	isMatchCall,
 	isRcMapConstructorCall,
 	isSchemaExpression,
 	normalizedText,
@@ -69,7 +67,6 @@ export function shouldRunRule(ruleId: string, filePath: string) {
 		!Array.contains(['no-vacuous-abstraction', 'no-plain-class'] as const, ruleId) ||
 		new Set([
 			'no-type-assertion-except-as-const',
-			'prefer-readonly-types',
 			'prefer-undefined-over-null',
 			'no-redundant-type-system-check',
 			'no-redundant-type-syntax'
@@ -109,10 +106,6 @@ export function isMutated(name: string, sourceFile: ts.SourceFile) {
 
 export function isAssignmentOperator(kind: ts.SyntaxKind) {
 	return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment
-}
-
-export function isInsideTypeName(node: ts.Identifier) {
-	return ts.isTypeReferenceNode(node.parent) && node.parent.typeName === node
 }
 
 export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: ts.Node) {
@@ -273,14 +266,6 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 		return true
 	}
 	return containsNode(node, child => ts.isIdentifier(child) && child.text === node.name.text && child !== node.name)
-}
-
-export function isAllowedCallableValue(node: ts.Expression) {
-	return (
-		(ts.isCallExpression(node) &&
-			(isFlowCall(node) || isEffectGenLikeCall(node) || isMatchCall(node) || isSchemaExpression(node))) ||
-		(ts.isArrowFunction(node) && ts.isCallExpression(node.body) && isSchemaExpression(node.body))
-	)
 }
 
 export function isNamedFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
@@ -470,20 +455,6 @@ export function nameNodeForDeclaration(node: ts.Node) {
 export function isReactRefCurrent(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!(checker && ts.isPropertyAccessExpression(node) && node.name.text === 'current')) return false
 	return String.includes('RefObject<')(checker.typeToString(checker.getTypeAtLocation(node.expression)))
-}
-
-export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {
-	return (
-		ts.isIdentifier(node.name) &&
-		node.name.text === 'current' &&
-		!!ts.findAncestor(
-			node,
-			ancestor =>
-				ts.isTypeReferenceNode(ancestor) &&
-				ts.isQualifiedName(ancestor.typeName) &&
-				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-		)
-	)
 }
 
 export function previousFunctionWithSameBody(node: ts.FunctionDeclaration) {

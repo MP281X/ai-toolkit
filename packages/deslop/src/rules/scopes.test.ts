@@ -8,17 +8,16 @@ import {analyzeText} from '#lib/analyzer.ts'
 
 test('base scope emits public planned rule ids', () =>
 	expectRule({
-		rule: 'base/no-destructuring',
+		rule: 'base/no-simple-local-binding',
 		scoped: true,
 		scopes: ['base'],
-		source:
-			'function view(props: { readonly user: { readonly name: string } }) { const { user } = props; return user.name }\n'
+		source: 'function view(props: { readonly value: string }) { const ready = props.value === "ready"; return ready }\n'
 	}))
 
 test('react scope emits public planned rule ids', () =>
 	expectRule({
-		rule: 'react/no-jsx-props-object',
 		filePath: 'sample.tsx',
+		rule: 'react/no-jsx-props-object',
 		scoped: true,
 		scopes: ['react'],
 		source: 'function View(props: { readonly value: string }) { return <Input {...props} /> }\n'
@@ -36,7 +35,7 @@ test('scopes are explicit allowlists', () => {
 	const rules = Array.map(
 		analyzeText(
 			'sample.tsx',
-			'import {Option} from "effect"\nfunction View(props: { readonly value: string }) { const { value } = props; const option = Option.fromNullable("value"); return <Input {...props} /> }\n',
+			'import {Option} from "effect"\nfunction View(props: { readonly value: string }) { const ready = props.value === "ready"; const option = Option.fromNullable("value"); return <Input {...props} ready={ready} /> }\n',
 			['base'],
 			true
 		),

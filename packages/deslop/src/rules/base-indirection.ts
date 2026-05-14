@@ -21,47 +21,17 @@ import {
 } from './helpers.ts'
 
 import {
-	bindingNames,
 	callName,
 	containsNode,
 	isBooleanExpression,
 	isConstAssertion,
 	isHookCall,
 	isPipeCall,
-	isReactHookTupleCall,
 	normalizedText,
 	returnedExpression
 } from '#lib/ts.ts'
 
 export const baseIndirectionRules = [
-	rule('no-destructuring', (node, context) => {
-		if (
-			ts.isVariableDeclaration(node) &&
-			(ts.isObjectBindingPattern(node.name) || ts.isArrayBindingPattern(node.name))
-		) {
-			if (ts.isArrayBindingPattern(node.name) && node.initializer && isReactHookTupleCall(node.initializer)) return
-			if (
-				ts.isArrayBindingPattern(node.name) &&
-				node.initializer &&
-				context.checker?.isTupleType(context.checker.getTypeAtLocation(node.initializer))
-			) {
-				return
-			}
-			context.report(node.name, 'no-destructuring', {
-				description: `Destructuring hides source "${node.initializer ? normalizedText(node.initializer) : '<unknown>'}".`,
-				fix: `Replace ${Array.join(
-					Array.map(bindingNames(node.name), name => name.text),
-					', '
-				)} with direct source property/index access, then delete the binding.`
-			})
-		}
-		if (ts.isParameter(node) && (ts.isObjectBindingPattern(node.name) || ts.isArrayBindingPattern(node.name))) {
-			context.report(node.name, 'no-destructuring', {
-				description: 'Parameter destructuring hides the argument object.',
-				fix: `Name the parameter (for example props), then read ${normalizedText(node.name)} fields directly from it.`
-			})
-		}
-	}),
 	rule('no-single-use-local-binding', (node, context) => {
 		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
 		if (isExemptNamedValue(context.checker, node)) return

@@ -126,10 +126,6 @@ export function isSchemaExpression(node: ts.Node) {
 	)
 }
 
-export function isReactHookTupleCall(node: ts.Node) {
-	return isHookCall(node)
-}
-
 export function isLiteral(node: ts.Node) {
 	return (
 		ts.isStringLiteralLike(node) ||
@@ -208,11 +204,6 @@ export function typeLooksEffect(checker: ts.TypeChecker | undefined, node: ts.No
 
 export function typeLooksReadonlyArray(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	return checker ? String.includes('ReadonlyArray<')(checker.typeToString(checker.getTypeAtLocation(node))) : false
-}
-
-export function bindingNames(name: ts.BindingName): readonly ts.Identifier[] {
-	if (ts.isIdentifier(name)) return [name]
-	return Array.flatMap(name.elements, element => (ts.isOmittedExpression(element) ? [] : bindingNames(element.name)))
 }
 
 export function declarationName(node: ts.Node) {

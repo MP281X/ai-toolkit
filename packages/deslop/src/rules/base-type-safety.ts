@@ -8,9 +8,7 @@ import {
 	isAllowedNullLiteral,
 	isArrayIsArrayCall,
 	isExportedDeclaration,
-	isInsideTypeName,
 	isNullishComparison,
-	isReactRefCurrentPropertySignature,
 	isReactUseRefCall,
 	isReactUseStateCall,
 	isRecursiveFunction,
@@ -51,75 +49,6 @@ export const baseTypeSafetyRules = [
 			context.report(node, 'no-type-assertion-except-as-const', {
 				description: 'Non-null assertion repeats a non-nullish type.',
 				fix: `Remove "!" from "${normalizedText(node.expression)}".`
-			})
-		}
-	}),
-	rule('prefer-readonly-types', (node, context) => {
-		if (ts.isPropertySignature(node) && !hasModifier(node, ts.SyntaxKind.ReadonlyKeyword)) {
-			if (ts.isIdentifier(node.name) && node.name.text === 'current') return
-			if (isReactRefCurrentPropertySignature(node)) return
-			context.report(node.name, 'prefer-readonly-types', {
-				description: `Property "${node.name.getText(context.sourceFile)}" is mutable in a type shape.`,
-				fix: 'Add readonly to this property signature.'
-			})
-		}
-		if (ts.isArrayTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			if (
-				ts.findAncestor(
-					node,
-					ancestor =>
-						ts.isCallExpression(ancestor) &&
-						isReactUseRefCall(context.checker, ancestor) &&
-						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-				) ||
-				ts.findAncestor(
-					node,
-					ancestor =>
-						ts.isTypeReferenceNode(ancestor) &&
-						ts.isQualifiedName(ancestor.typeName) &&
-						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-				)
-			) {
-				return
-			}
-			context.report(node, 'prefer-readonly-types', {
-				description: `Array type "${normalizedText(node)}" is mutable.`,
-				fix: `Use readonly ${normalizedText(node)} or ReadonlyArray<${normalizedText(node.elementType)}> with the same element type.`
-			})
-		}
-		if (
-			ts.isTypeReferenceNode(node) &&
-			ts.isIdentifier(node.typeName) &&
-			node.typeName.text === 'Array' &&
-			!isInsideTypeName(node.typeName)
-		) {
-			context.report(node.typeName, 'prefer-readonly-types', {
-				description: 'Array<T> is mutable.',
-				fix: 'Replace it with ReadonlyArray<T>.'
-			})
-		}
-		if (ts.isTupleTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			if (
-				ts.findAncestor(
-					node,
-					ancestor =>
-						ts.isCallExpression(ancestor) &&
-						isReactUseRefCall(context.checker, ancestor) &&
-						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-				) ||
-				ts.findAncestor(
-					node,
-					ancestor =>
-						ts.isTypeReferenceNode(ancestor) &&
-						ts.isQualifiedName(ancestor.typeName) &&
-						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-				)
-			) {
-				return
-			}
-			context.report(node, 'prefer-readonly-types', {
-				description: `Tuple type "${normalizedText(node)}" is mutable.`,
-				fix: 'Prefix it with readonly.'
 			})
 		}
 	}),
@@ -473,7 +402,7 @@ function containingCallArgument(
 ): {readonly call: ts.CallExpression; readonly argument: number} | undefined {
 	if (ts.isSourceFile(node)) return
 	if (ts.isExpression(node) && ts.isCallExpression(node.parent)) {
-		return {call: node.parent, argument: argumentIndex(node)}
+		return {argument: argumentIndex(node), call: node.parent}
 	}
 	return containingCallArgument(node.parent)
 }

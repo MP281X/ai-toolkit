@@ -16,16 +16,16 @@ test('no-default-export-except-config reports default exports in source files', 
 
 test('no-default-export-except-config allows config file defaults', () =>
 	expectNoRule({
-		rule: 'no-default-export-except-config',
 		filePath: 'tool.config.ts',
+		rule: 'no-default-export-except-config',
 		source: 'export default { name: "tool" }\n'
 	}))
 
 test('no-deprecated-api reports JSDoc deprecated symbols', () =>
 	expectRule({
 		rule: 'no-deprecated-api',
-		typed: true,
-		source: '/** @deprecated use readNew */\nfunction readOld() { return 1 }\nconst value = readOld()\n'
+		source: '/** @deprecated use readNew */\nfunction readOld() { return 1 }\nconst value = readOld()\n',
+		typed: true
 	}))
 
 test('no-plain-class reports classes without framework semantics', () =>

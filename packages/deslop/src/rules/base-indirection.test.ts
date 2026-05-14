@@ -2,19 +2,6 @@ import {test} from 'bun:test'
 
 import {expectNoRule, expectRule} from './test-utils.ts'
 
-test('no-destructuring reports object binding aliases', () =>
-	expectRule({
-		rule: 'no-destructuring',
-		source: 'function greet(user: { readonly name: string }) { const { name } = user; return name }\n'
-	}))
-
-test('no-destructuring allows tuple binding', () =>
-	expectNoRule({
-		rule: 'no-destructuring',
-		typed: true,
-		source: 'const pair: readonly [string, number] = ["Ada", 1]\nconst [name, count] = pair\n'
-	}))
-
 test('no-single-use-local-binding reports one-use aliases', () =>
 	expectRule({
 		rule: 'no-single-use-local-binding',
@@ -30,8 +17,8 @@ test('no-single-use-local-binding reports common names by local scope', () =>
 
 test('no-single-use-local-binding allows hook results to stay named', () =>
 	expectNoRule({
-		rule: 'no-single-use-local-binding',
 		filePath: 'sample.tsx',
+		rule: 'no-single-use-local-binding',
 		source: 'import {useState} from "react"\nfunction View() { const state = useState("Ada"); return state[0] }\n'
 	}))
 

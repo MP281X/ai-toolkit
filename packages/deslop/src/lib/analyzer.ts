@@ -151,9 +151,10 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 
 					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
 						fileDiagnostics.diagnostics,
-						Array.map(diagnostic => {
-							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
-						}),
+						Array.map(
+							diagnostic =>
+								`${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
+						),
 						Array.join('\n\n')
 					)}`
 				}),
@@ -263,9 +264,9 @@ const collectSelectedPaths = Effect.fnUntraced(function* (options: {
 	const gitPaths = yield* runGitDiff(options.cwd, options.mode)
 	if (!options.paths) return gitPaths
 	return Array.filter(gitPaths, filePath =>
-		Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope => {
-			return pathMatchesScope(normalizePath(filePath), scope)
-		})
+		Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope =>
+			pathMatchesScope(normalizePath(filePath), scope)
+		)
 	)
 })
 

@@ -4,22 +4,16 @@ import {expectNoRule, expectRule} from './test-utils.ts'
 
 test('no-explicit-default-value reports false intrinsic boolean props', () =>
 	expectRule({
-		rule: 'no-explicit-default-value',
 		filePath: 'sample.tsx',
+		rule: 'no-explicit-default-value',
 		source: 'function View() { return <button disabled={false} /> }\n'
 	}))
 
 test('no-explicit-default-value allows component false boolean props', () =>
 	expectNoRule({
-		rule: 'no-explicit-default-value',
 		filePath: 'sample.tsx',
+		rule: 'no-explicit-default-value',
 		source: 'function View() { return <Button disabled={false} /> }\n'
-	}))
-
-test('prefer-function-declaration reports named arrow functions', () =>
-	expectRule({
-		rule: 'prefer-function-declaration',
-		source: 'const trimName = (name: string) => name.trim()\n'
 	}))
 
 test('prefer-arrow-callback reports function callbacks', () =>
@@ -36,68 +30,69 @@ test('prefer-arrow-callback allows recursive named callbacks', () =>
 
 test('no-jsx-props-object reports JSX spread props', () =>
 	expectRule({
-		rule: 'no-jsx-props-object',
 		filePath: 'sample.tsx',
+		rule: 'no-jsx-props-object',
 		source: 'function View(props: { readonly disabled: boolean }) { return <Button {...props} /> }\n'
 	}))
 
 test('no-tailwind-class-indirection reports class string variables', () =>
 	expectRule({
-		rule: 'no-tailwind-class-indirection',
 		filePath: 'sample.tsx',
+		rule: 'no-tailwind-class-indirection',
 		source:
 			'const buttonClass = "flex items-center gap-2"\nfunction Button() { return <button className={buttonClass} /> }\n'
 	}))
 
 test('no-manual-memoization reports React memo helpers', () =>
 	expectRule({
-		rule: 'no-manual-memoization',
 		filePath: 'sample.tsx',
+		rule: 'no-manual-memoization',
 		source:
 			'declare function useMemo<T>(callback: () => T, deps: readonly unknown[]): T\nconst value = useMemo(() => 1, [])\n'
 	}))
 
 test('no-forward-ref reports forwardRef wrappers', () =>
 	expectRule({
-		rule: 'no-forward-ref',
 		filePath: 'sample.tsx',
+		rule: 'no-forward-ref',
 		source: 'declare function forwardRef(value: unknown): unknown\nconst Input = forwardRef(() => null)\n'
 	}))
 
 test('no-use-state-lazy-initializer reports lazy useState callbacks', () =>
 	expectRule({
-		rule: 'no-use-state-lazy-initializer',
 		filePath: 'sample.tsx',
-		typed: true,
-		source: 'import {useState} from "react"\nfunction View() { const state = useState(() => "Ada"); return state[0] }\n'
+		rule: 'no-use-state-lazy-initializer',
+		source:
+			'import {useState} from "react"\nfunction View() { const state = useState(() => "Ada"); return state[0] }\n',
+		typed: true
 	}))
 
 test('prefer-hook-variable reports inline hook calls', () =>
 	expectRule({
-		rule: 'prefer-hook-variable',
 		filePath: 'sample.tsx',
+		rule: 'prefer-hook-variable',
 		source: 'declare function useUser(): string\nfunction View() { return <Provider value={useUser()} /> }\n'
 	}))
 
 test('no-jsx-variable reports JSX stored in locals', () =>
 	expectRule({
-		rule: 'no-jsx-variable',
 		filePath: 'sample.tsx',
+		rule: 'no-jsx-variable',
 		source: 'function View() { const content = <Content />; return content }\n'
 	}))
 
 test('no-property-mutation-outside-ref-current reports property writes', () =>
 	expectRule({
-		rule: 'no-property-mutation-outside-ref-current',
 		filePath: 'sample.tsx',
+		rule: 'no-property-mutation-outside-ref-current',
 		source: 'function rename(user: { name: string }) { user.name = "Ada" }\n'
 	}))
 
 test('no-property-mutation-outside-ref-current allows ref.current writes', () =>
 	expectNoRule({
-		rule: 'no-property-mutation-outside-ref-current',
 		filePath: 'sample.tsx',
-		typed: true,
+		rule: 'no-property-mutation-outside-ref-current',
 		source:
-			'import {useRef} from "react"\nfunction View() { const nameRef = useRef("Grace"); nameRef.current = "Ada"; return nameRef.current }\n'
+			'import {useRef} from "react"\nfunction View() { const nameRef = useRef("Grace"); nameRef.current = "Ada"; return nameRef.current }\n',
+		typed: true
 	}))

@@ -3,14 +3,7 @@ import {Array, String} from 'effect'
 import ts from 'typescript'
 
 import type {Rule} from './helpers.ts'
-import {
-	isAllowedCallableValue,
-	isAssignmentOperator,
-	isReactRefCurrent,
-	isReactUseStateCall,
-	isTailwindStringLiteral,
-	rule
-} from './helpers.ts'
+import {isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, isTailwindStringLiteral, rule} from './helpers.ts'
 
 import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
 
@@ -49,15 +42,6 @@ export const reactRules = [
 				fix: `Inline "${normalizedText(node.initializer)}" into className and delete this binding.`
 			})
 		}
-	}),
-	rule('prefer-function-declaration', (node, context) => {
-		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
-		if (!(ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) return
-		if (isAllowedCallableValue(node.initializer)) return
-		context.report(node.name, 'prefer-function-declaration', {
-			description: `"${node.name.text}" is a named ${ts.isArrowFunction(node.initializer) ? 'arrow' : 'function'} value.`,
-			fix: `Rewrite it as "function ${node.name.text}(...)"; keep arrows for inline callbacks.`
-		})
 	}),
 	rule('prefer-arrow-callback', (node, context) => {
 		if (!(ts.isFunctionExpression(node) && ts.isCallExpression(node.parent)) || node.asteriskToken) return
