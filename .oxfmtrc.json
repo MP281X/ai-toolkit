@@ -3,8 +3,8 @@
 	"printWidth": 120,
 	"useTabs": true,
 	"singleQuote": true,
-	"bracketSpacing": false,
 	"semi": false,
+	"bracketSpacing": false,
 	"trailingComma": "none",
 	"arrowParens": "avoid",
 	"sortImports": {
@@ -35,5 +35,5 @@
 		]
 	},
 	"sortTailwindcss": {"functions": ["cn"]},
-	"ignorePatterns": ["**/*.gen.ts", "**/generated/**", "**/components/ui/**", "**/package.json"]
+	"ignorePatterns": ["**/*.gen.ts", "**/package.json"]
 }
