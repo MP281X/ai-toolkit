@@ -149,12 +149,12 @@ export const baseIndirectionRules = [
 		if (
 			ts.isObjectLiteralExpression(initializer) &&
 			(initializer.properties.length <= 5 ||
-				Array.every(initializer.properties, property => {
-					return (
+				Array.every(
+					initializer.properties,
+					property =>
 						ts.isShorthandPropertyAssignment(property) ||
 						(ts.isPropertyAssignment(property) && ts.isIdentifier(property.initializer))
-					)
-				}))
+				))
 		) {
 			context.report(node.name, 'no-simple-local-binding', {
 				description: `"${node.name.text}" only names a ${initializer.properties.length}-property object.`,
@@ -204,13 +204,13 @@ export const baseIndirectionRules = [
 			ts.isCallExpression(call) &&
 			callName(call) !== functionLikeName(node) &&
 			call.arguments.length === node.parameters.length &&
-			Array.every(call.arguments, (argument, index) => {
-				return (
+			Array.every(
+				call.arguments,
+				(argument, index) =>
 					node.parameters[index] !== undefined &&
 					ts.isIdentifier(argument) &&
 					argument.text === node.parameters[index].name.getText(context.sourceFile)
-				)
-			})
+			)
 		) {
 			context.report(nameNode(node), 'no-vacuous-abstraction', {
 				description: `"${functionLikeName(node)}" only forwards to "${normalizedText(call)}".`,
@@ -262,11 +262,11 @@ export const baseIndirectionRules = [
 	}),
 	rule('no-vacuous-abstraction', (node, context) => {
 		if (!isNamedFunctionLike(node)) return
-		const constant = Array.findFirst(node.parameters, parameter => {
-			return (
+		const constant = Array.findFirst(
+			node.parameters,
+			parameter =>
 				context.references.get(parameter.name.getText(context.sourceFile)) === 1 && parameter.initializer !== undefined
-			)
-		})
+		)
 		if (constant._tag === 'Some') {
 			context.report(constant.value.name, 'no-vacuous-abstraction', {
 				description: `Parameter "${constant.value.name.getText(context.sourceFile)}" has a default but no real variation.`,
@@ -287,12 +287,12 @@ export const baseIndirectionRules = [
 		}
 		if (
 			/^[A-Z]/.test(node.name.text) &&
-			Array.every(node.initializer.properties, property => {
-				return (
+			Array.every(
+				node.initializer.properties,
+				property =>
 					ts.isShorthandPropertyAssignment(property) ||
 					(ts.isPropertyAssignment(property) && ts.isIdentifier(property.initializer))
-				)
-			})
+			)
 		) {
 			context.report(node.name, 'no-vacuous-abstraction', {
 				description: `"${node.name.text}" is a facade over existing symbols.`,
@@ -344,7 +344,9 @@ function localIdentifierUseCount(checker: ts.TypeChecker | undefined, node: ts.V
 		) {
 			count += 1
 		}
-		ts.forEachChild(child, nested => visit(nested, name))
+		ts.forEachChild(child, nested => {
+			visit(nested, name)
+		})
 	}
 	visit(localScope(node), node.name.text)
 	return count

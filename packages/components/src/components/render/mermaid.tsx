@@ -7,14 +7,14 @@ import mermaid from 'mermaid'
 
 import {cn} from '#lib/utils.ts'
 
-const mermaidAtom = Atom.family((source: string) => {
-	return Atom.make(
-		Effect.tryPromise(() => {
-			mermaid.initialize({startOnLoad: false, securityLevel: 'loose'})
+const mermaidAtom = Atom.family((source: string) =>
+	Atom.make(
+		Effect.tryPromise(async () => {
+			mermaid.initialize({securityLevel: 'loose', startOnLoad: false})
 			return mermaid.render(`mermaid_${Hash.string(source)}`, source)
 		})
 	)
-})
+)
 
 export function Mermaid(props: {readonly children: string; readonly className?: string}) {
 	const result = useAtomSuspense(mermaidAtom(props.children), {includeFailure: true})
@@ -34,6 +34,7 @@ export function Mermaid(props: {readonly children: string; readonly className?: 
 
 	return (
 		<div
+			// oxlint-disable-next-line react/no-danger -- Mermaid returns sanitized SVG markup for rendering diagrams.
 			dangerouslySetInnerHTML={{__html: result.value.svg}}
 			className={cn(
 				'bg-muted/30 overflow-hidden p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full',

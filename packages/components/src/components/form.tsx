@@ -1,5 +1,6 @@
 import {Array, Number, Option, pipe} from 'effect'
 
+// oxlint-disable-next-line import/no-namespace -- TanStack Form exposes form-hook factories as a namespace-style API.
 import * as tanstackForm from '@tanstack/react-form'
 import {useState} from 'react'
 
@@ -39,8 +40,8 @@ function SubmitButton(props: {readonly children: React.ReactNode}) {
 	return (
 		<form.Subscribe
 			selector={state => ({
-				isSubmitting: state.isSubmitting,
-				canSubmit: state.canSubmit
+				canSubmit: state.canSubmit,
+				isSubmitting: state.isSubmitting
 			})}
 		>
 			{state => (
@@ -90,7 +91,9 @@ function TextField() {
 				name={field.name}
 				value={field.state.value}
 				onBlur={field.handleBlur}
-				onChange={event => field.handleChange(event.target.value)}
+				onChange={event => {
+					field.handleChange(event.target.value)
+				}}
 				autoComplete="off"
 				aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 			/>
@@ -113,7 +116,9 @@ function EmailField() {
 				name={field.name}
 				value={field.state.value}
 				onBlur={field.handleBlur}
-				onChange={event => field.handleChange(event.target.value)}
+				onChange={event => {
+					field.handleChange(event.target.value)
+				}}
 				autoComplete="off"
 				aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 			/>
@@ -136,7 +141,9 @@ function PasswordField() {
 				name={field.name}
 				value={field.state.value}
 				onBlur={field.handleBlur}
-				onChange={event => field.handleChange(event.target.value)}
+				onChange={event => {
+					field.handleChange(event.target.value)
+				}}
 				autoComplete="off"
 				aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 			/>
@@ -158,7 +165,9 @@ function TextAreaField() {
 				name={field.name}
 				value={field.state.value}
 				onBlur={field.handleBlur}
-				onChange={event => field.handleChange(event.target.value)}
+				onChange={event => {
+					field.handleChange(event.target.value)
+				}}
 				autoComplete="off"
 				aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 			/>
@@ -203,7 +212,9 @@ function CheckboxField() {
 					id={field.name}
 					checked={field.state.value}
 					onBlur={field.handleBlur}
-					onCheckedChange={value => field.handleChange(value === true)}
+					onCheckedChange={value => {
+						field.handleChange(value)
+					}}
 					aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 				/>
 			</div>
@@ -291,19 +302,19 @@ function ComboboxField<TOption extends {readonly id: string}>(props: {
 }
 
 const formHook = tanstackForm.createFormHook({
-	fieldContext: formContexts.fieldContext,
-	formContext: formContexts.formContext,
 	fieldComponents: {
-		TextField,
-		TextAreaField,
-		EmailField,
-		PasswordField,
-		NumberField,
 		CheckboxField,
+		ComboboxField,
+		EmailField,
 		FileField,
-		ComboboxField
+		NumberField,
+		PasswordField,
+		TextAreaField,
+		TextField
 	},
-	formComponents: {SubmitButton, CancelButton}
+	fieldContext: formContexts.fieldContext,
+	formComponents: {CancelButton, SubmitButton},
+	formContext: formContexts.formContext
 })
 
 export const useForm = formHook.useAppForm

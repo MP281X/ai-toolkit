@@ -24,15 +24,15 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 			{rules: reactRules, scope: 'react'},
 			{rules: effectRules, scope: 'effect'}
 		] as const satisfies readonly {readonly rules: readonly Rule[]; readonly scope: RuleScope}[],
-		Array.flatMap(group => {
-			return Array.map(group.rules, rule => ({
+		Array.flatMap(group =>
+			Array.map(group.rules, rule => ({
 				id: rule.id,
 				run: rule.run,
 				scope: group.scope
 			}))
-		}),
-		Array.filter(rule => {
-			return (
+		),
+		Array.filter(
+			rule =>
 				new Set(scopes).has(rule.scope) &&
 				(!plannedOnly ||
 					new Set([
@@ -75,7 +75,6 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'effect/no-option-constructor',
 						'effect/prefer-top-level-rcmap'
 					]).has(scopedRuleId(rule.scope, rule.id)))
-			)
-		})
+		)
 	)
 }

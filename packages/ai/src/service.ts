@@ -1,5 +1,5 @@
 import type {DateTime, Stream, SubscriptionRef} from 'effect'
-import {Context, Effect, flow, Layer, Match, pipe} from 'effect'
+import {Context, Effect, Layer, Match, flow, pipe} from 'effect'
 
 import type {Response, Toolkit} from 'effect/unstable/ai'
 import {LanguageModel, Prompt} from 'effect/unstable/ai'
@@ -29,7 +29,11 @@ export class Agent extends Context.Service<
 		}) => Stream.Stream<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>>
 	}
 >()('@ai-toolkit/ai/service/Agent') {
-	static layer(config: {readonly agent: AgentId; readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {
+	public static layer(config: {
+		readonly agent: AgentId
+		readonly cwd: string
+		readonly systemPrompt: Prompt.SystemMessage
+	}) {
 		return pipe(
 			Match.value(config),
 			Match.when({agent: 'codex'}, input => Agent.layerCodex({cwd: input.cwd, systemPrompt: input.systemPrompt})),
@@ -38,15 +42,15 @@ export class Agent extends Context.Service<
 		)
 	}
 
-	static layerEffect = flow(makeLayerEffect, Layer.effect(this))
-	static layerCodex = flow(makeLayerCodex, Layer.effect(this))
+	public static layerEffect = flow(makeLayerEffect, Layer.effect(this))
+	public static layerCodex = flow(makeLayerCodex, Layer.effect(this))
 }
 
 export class Compaction extends Context.Service<Compaction>()('@ai-toolkit/ai/service/Compaction', {
 	make: Effect.fnUntraced(function* (config: {readonly model: ModelId; readonly provider: ProviderId}) {
 		return {
-			compact: (input: {readonly intent: string; readonly messages: readonly Prompt.Message[]}) => {
-				return pipe(
+			compact: (input: {readonly intent: string; readonly messages: readonly Prompt.Message[]}) =>
+				pipe(
 					LanguageModel.generateText({
 						prompt: Prompt.fromMessages([
 							Prompt.makeMessage('system', {
@@ -63,11 +67,10 @@ export class Compaction extends Context.Service<Compaction>()('@ai-toolkit/ai/se
 						])
 					}),
 					Effect.map(response => Prompt.makeMessage('system', {content: response.text})),
-					Effect.provide(resolveLanguageModel({provider: config.provider, model: config.model}))
+					Effect.provide(resolveLanguageModel({model: config.model, provider: config.provider}))
 				)
-			}
 		}
 	})
 }) {
-	static layer = flow(this.make, Layer.effect(this))
+	public static layer = flow(this.make, Layer.effect(this))
 }

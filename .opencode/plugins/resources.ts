@@ -6,6 +6,7 @@ import type {Plugin} from '@opencode-ai/plugin'
 
 import {GitWorkspace} from '@ai-toolkit/git/service'
 
+// oxlint-disable-next-line require-await -- opencode plugin hooks may be async even when work is intentionally fire-and-forget.
 export const plugin = (async context => {
 	void Effect.runPromise(
 		pipe(
@@ -65,9 +66,9 @@ export const plugin = (async context => {
 					}
 				] as const,
 				Effect.fnUntraced(function* (resource) {
-					yield* GitWorkspace.use(git => {
-						return git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
-					})
+					yield* GitWorkspace.use(git =>
+						git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
+					)
 					yield* Effect.promise(async () => {
 						await context.client.tui.showToast({
 							body: {message: JSON.stringify(`cloned ${resource.name}`), variant: 'info'}
@@ -76,16 +77,16 @@ export const plugin = (async context => {
 				}),
 				{concurrency: 'unbounded'}
 			),
-			Effect.tapDefect(message => {
-				return Effect.promise(async () => {
+			Effect.tapDefect(message =>
+				Effect.promise(async () => {
 					await context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
-			}),
-			Effect.tapError(message => {
-				return Effect.promise(async () => {
+			),
+			Effect.tapError(message =>
+				Effect.promise(async () => {
 					await context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
-			}),
+			),
 			Effect.provide(GitWorkspace.layer),
 			Effect.provide(BunServices.layer)
 		)

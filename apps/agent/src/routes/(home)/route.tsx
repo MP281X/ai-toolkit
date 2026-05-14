@@ -1,8 +1,8 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Hash, Match, Option, Predicate, pipe, Schema, String} from 'effect'
+import {Array, Effect, Hash, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
-import {createFileRoute, Outlet, useRouterState} from '@tanstack/react-router'
+import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useEffect, useState} from 'react'
 
@@ -39,12 +39,12 @@ import type {GitProject} from '@ai-toolkit/git/schema'
 import {GitBranchesSnapshot} from '@ai-toolkit/git/schema'
 
 export const Route = createFileRoute('/(home)')({
+	component: HomeLayout,
 	validateSearch: Schema.toStandardSchemaV1(
 		Schema.Struct({
 			threadId: Schema.optional(Schema.String)
 		})
-	),
-	component: HomeLayout
+	)
 })
 
 const projectAccentClassNames = [
@@ -56,18 +56,18 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
 ] as const
 
-const branchesAtom = Atom.family((cwd: string) => {
-	return Atom.keepAlive(
+const branchesAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
 		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client => {
-				return String.isNonEmpty(cwd)
+			Effect.flatMap(RpcClient, client =>
+				String.isNonEmpty(cwd)
 					? client('projects.branches', {cwd})
 					: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
-			}),
+			),
 			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
 		)
 	)
-})
+)
 
 function HomeLayout() {
 	const navigate = Route.useNavigate()
@@ -102,29 +102,29 @@ function HomeLayout() {
 						activeView={homeRouteState.activeView}
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
-							return startTransition(() => {
+							startTransition(() => {
 								void navigate({
-									to: '/$worktree/diff',
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									to: '/$worktree/diff'
 								})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
-							return startTransition(() => {
+							startTransition(() => {
 								void navigate({
-									to: '/$worktree/thread',
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
 									search: {
 										threadId: agentId
-									}
+									},
+									to: '/$worktree/thread'
 								})
 							})
 						}}
 						selectTerminal={worktreeRoot => {
-							return startTransition(() => {
+							startTransition(() => {
 								void navigate({
-									to: '/$worktree/terminal',
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)}
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									to: '/$worktree/terminal'
 								})
 							})
 						}}
@@ -146,7 +146,7 @@ function HomeLayout() {
 function pathLabel(value: string) {
 	const segments = String.split('/')(value)
 
-	for (let index = segments.length - 1; index >= 0; index--) {
+	for (let index = segments.length - 1; index >= 0; index -= 1) {
 		if (String.isNonEmpty(segments[index] ?? '') && segments[index] !== '.') return segments[index] ?? value
 	}
 
@@ -207,14 +207,15 @@ function WorktreeManager(input: {
 		branchSnapshot.value.branches,
 		Array.filter(candidate => String.isNonEmpty(candidate.name)),
 		Array.dedupeWith((left, right) => left.name === right.name),
-		Array.filter(candidate => {
-			return !pipe(
-				createWorktreeProject?.worktrees ?? [],
-				Array.map(worktree => worktree.branch ?? ''),
-				Array.filter(String.isNonEmpty),
-				Array.contains(candidate.name)
-			)
-		})
+		Array.filter(
+			candidate =>
+				!pipe(
+					createWorktreeProject?.worktrees ?? [],
+					Array.map(worktree => worktree.branch ?? ''),
+					Array.filter(String.isNonEmpty),
+					Array.contains(candidate.name)
+				)
+		)
 	)
 	useEffect(() => {
 		function openThreadSearch(event: KeyboardEvent) {
@@ -226,10 +227,10 @@ function WorktreeManager(input: {
 			setSwitcherOpen(open => !open)
 		}
 
-		window.addEventListener('keydown', openThreadSearch)
+		globalThis.addEventListener('keydown', openThreadSearch)
 
 		return () => {
-			window.removeEventListener('keydown', openThreadSearch)
+			globalThis.removeEventListener('keydown', openThreadSearch)
 		}
 	}, [])
 
@@ -297,7 +298,7 @@ function WorktreeManager(input: {
 						onClick={async () => {
 							if (!input.activeWorktree) return
 							if (
-								!window.confirm(
+								!globalThis.confirm(
 									`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`
 								)
 							) {
@@ -333,19 +334,17 @@ function WorktreeManager(input: {
 					value={switcherValue}
 					onValueChange={setSwitcherValue}
 				>
-					<CommandInput autoFocus placeholder="Go to thread..." />
+					<CommandInput placeholder="Go to thread..." />
 					<CommandList>
 						<CommandEmpty>No thread found.</CommandEmpty>
 						<CommandGroup>
 							{Array.map(input.agents, agent => {
 								const worktreeLabel = pipe(
 									input.projects,
-									Array.findFirst(project => {
-										return Array.some(project.worktrees, worktree => worktree.root === agent.cwd)
-									}),
-									Option.flatMap(project => {
-										return Array.findFirst(project.worktrees, candidate => candidate.root === agent.cwd)
-									}),
+									Array.findFirst(project => Array.some(project.worktrees, worktree => worktree.root === agent.cwd)),
+									Option.flatMap(project =>
+										Array.findFirst(project.worktrees, candidate => candidate.root === agent.cwd)
+									),
 									Option.map(worktree => worktree.branch ?? pathLabel(agent.cwd)),
 									Option.getOrElse(() => pathLabel(agent.cwd))
 								)
@@ -510,14 +509,12 @@ function WorktreeManager(input: {
 													key={worktree.root}
 													icon={
 														<WorktreeIcon
-															dirty={
-																!!(
-																	worktree.status?.dirtyTracked ||
-																	worktree.status?.untracked ||
-																	worktree.status?.unpushedCommits ||
-																	worktree.status?.behind
-																)
-															}
+															dirty={Boolean(
+																worktree.status?.dirtyTracked ??
+																worktree.status?.untracked ??
+																worktree.status?.unpushedCommits ??
+																worktree.status?.behind
+															)}
 															root={worktree.root === project.repository.root}
 														/>
 													}
@@ -538,7 +535,9 @@ function WorktreeManager(input: {
 															<SparklesIcon className="size-3" />
 														</Button>
 													}
-													onClick={() => input.selectWorktree(worktree.root)}
+													onClick={() => {
+														input.selectWorktree(worktree.root)
+													}}
 												>
 													{worktree.branch ?? pathLabel(worktree.root)}
 												</TreeExplorerRow>
@@ -550,7 +549,9 @@ function WorktreeManager(input: {
 														<TreeExplorerRow
 															icon={<TerminalIcon className="size-3.5" />}
 															selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
-															onClick={() => input.selectTerminal(worktree.root)}
+															onClick={() => {
+																input.selectTerminal(worktree.root)
+															}}
 														>
 															terminal
 														</TreeExplorerRow>
@@ -581,7 +582,7 @@ function WorktreeManager(input: {
 																						Option.match({
 																							onNone: () => undefined,
 																							onSome: nextAgent => {
-																								return input.selectAgent(nextAgent.cwd, nextAgent.id)
+																								input.selectAgent(nextAgent.cwd, nextAgent.id)
 																							}
 																						})
 																					)
@@ -592,7 +593,9 @@ function WorktreeManager(input: {
 																		</div>
 																	}
 																	selected={input.activeAgentId === agent.id}
-																	onClick={() => input.selectAgent(worktree.root, agent.id)}
+																	onClick={() => {
+																		input.selectAgent(worktree.root, agent.id)
+																	}}
 																>
 																	<span className="min-w-0 flex-1 truncate">thread</span>
 																</TreeExplorerRow>

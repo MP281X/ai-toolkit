@@ -2,7 +2,7 @@
 
 import {BunRuntime, BunServices} from '@effect/platform-bun'
 
-import {Array, Effect, Match, Option, pipe, Runtime, Schema, String, Terminal} from 'effect'
+import {Array, Effect, Match, Option, Runtime, Schema, String, Terminal, pipe} from 'effect'
 
 import {Argument, Command, Flag} from 'effect/unstable/cli'
 
@@ -10,8 +10,8 @@ import {renderText, runDeslop} from '#lib/analyzer.ts'
 import type {RuleScope} from '#rules/helpers.ts'
 
 class LintFailure extends Schema.TaggedErrorClass<LintFailure>()('LintFailure', {}) {
-	override readonly [Runtime.errorExitCode] = 1
-	override readonly [Runtime.errorReported] = false
+	public override readonly [Runtime.errorExitCode] = 1
+	public override readonly [Runtime.errorReported] = false
 }
 
 const runAndRender = Effect.fnUntraced(function* (options: {
@@ -32,19 +32,19 @@ BunRuntime.runMain(
 				Command.make(
 					'deslop',
 					{
-						unstaged: Flag.withDescription(Flag.boolean('unstaged'), 'Lint unstaged source files.'),
 						changed: Flag.withDescription(Flag.boolean('changed'), 'Lint source files changed from HEAD.'),
 						full: Flag.withDescription(Flag.boolean('full'), 'Lint every tracked source file.'),
+						paths: pipe(
+							Argument.string('path'),
+							Argument.withDescription('File or directory to lint.'),
+							Argument.variadic({min: 0})
+						),
 						scopes: pipe(
 							Flag.string('scopes'),
 							Flag.withDescription('Comma-separated rule scopes to run: base,react,effect.'),
 							Flag.optional
 						),
-						paths: pipe(
-							Argument.string('path'),
-							Argument.withDescription('File or directory to lint.'),
-							Argument.variadic({min: 0})
-						)
+						unstaged: Flag.withDescription(Flag.boolean('unstaged'), 'Lint unstaged source files.')
 					},
 					config => {
 						if ((config.unstaged ? 1 : 0) + (config.changed ? 1 : 0) + (config.full ? 1 : 0) > 1) {
@@ -61,15 +61,15 @@ BunRuntime.runMain(
 								Match.when({unstaged: true}, () => 'unstaged' as const),
 								Match.when({changed: true}, () => 'changed' as const),
 								Match.when({full: true}, () => 'full' as const),
-								Match.orElse(() => {
-									return Array.isReadonlyArrayEmpty(config.paths) ? ('changed' as const) : ('paths' as const)
-								})
+								Match.orElse(() =>
+									Array.isReadonlyArrayEmpty(config.paths) ? ('changed' as const) : ('paths' as const)
+								)
 							),
 							paths: Array.isReadonlyArrayEmpty(config.paths) ? undefined : Array.fromIterable(config.paths),
 							scopes: Option.match(config.scopes, {
 								onNone: () => undefined,
-								onSome: value => {
-									return pipe(
+								onSome: value =>
+									pipe(
 										String.split(value, ','),
 										Array.map(String.trim),
 										Array.filter(String.isNonEmpty),
@@ -78,7 +78,6 @@ BunRuntime.runMain(
 											throw new Error(`Invalid --scopes value "${value}". Use base, react, effect.`)
 										})
 									)
-								}
 							})
 						})
 					}
@@ -89,20 +88,18 @@ BunRuntime.runMain(
 		)(Array.drop(Bun.argv, 2)),
 		Effect.provide(BunServices.layer),
 		Effect.catchTags({
-			LintFailure: error => {
-				return Effect.sync(() => {
+			LintFailure: error =>
+				Effect.sync(() => {
 					process.exit(Runtime.getErrorExitCode(error))
 				})
-			}
 		}),
 		Effect.catchIf(
 			(error): error is string => typeof error === 'string',
-			error => {
-				return Effect.sync(() => {
+			error =>
+				Effect.sync(() => {
 					process.stderr.write(`${error}\n`)
 					process.exit(1)
 				})
-			}
 		)
 	)
 )

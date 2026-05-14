@@ -1,4 +1,4 @@
-import {Array, pipe, String} from 'effect'
+import {Array, String, pipe} from 'effect'
 
 import ts from 'typescript'
 
@@ -194,7 +194,7 @@ export function isBooleanExpression(node: ts.Expression) {
 }
 
 export function containsNode(node: ts.Node, predicate: (node: ts.Node) => boolean): boolean {
-	return predicate(node) || !!ts.forEachChild(node, child => (containsNode(child, predicate) ? true : undefined))
+	return predicate(node) || Boolean(ts.forEachChild(node, child => (containsNode(child, predicate) ? true : undefined)))
 }
 
 export function typeIncludesNullish(type: ts.Type) {
@@ -249,5 +249,5 @@ export function isTerminalStatement(node: ts.Statement) {
 }
 
 export function normalizedText(node: ts.Node) {
-	return pipe(node.getText(node.getSourceFile()), String.replace(/\s+/g, ' '), String.trim)
+	return pipe(node.getText(node.getSourceFile()), String.replaceAll(/\s+/g, ' '), String.trim)
 }

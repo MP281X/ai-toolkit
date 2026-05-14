@@ -1,4 +1,4 @@
-import {Array, Option, pipe, String} from 'effect'
+import {Array, Option, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {Children, useState} from 'react'
@@ -22,8 +22,12 @@ export namespace DevTools {
 			select((value + delta + Array.length(props.routes)) % Array.length(props.routes))
 		}
 
-		useHotkey('ArrowLeft', () => move(-1))
-		useHotkey('ArrowRight', () => move(1))
+		useHotkey('ArrowLeft', () => {
+			move(-1)
+		})
+		useHotkey('ArrowRight', () => {
+			move(1)
+		})
 
 		return (
 			<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
@@ -35,7 +39,9 @@ export namespace DevTools {
 							variant="ghost"
 							size="icon-xs"
 							aria-current={index === value ? 'page' : undefined}
-							onClick={() => select(index)}
+							onClick={() => {
+								select(index)
+							}}
 							className={cn(
 								'h-7 w-auto min-w-7 px-2 text-xs',
 								index === value && 'bg-primary/15 text-primary',
@@ -64,8 +70,12 @@ export namespace DevTools {
 			setValue(prev => (prev + delta + Array.length(children)) % Array.length(children))
 		}
 
-		useHotkey('ArrowLeft', () => move(-1))
-		useHotkey('ArrowRight', () => move(1))
+		useHotkey('ArrowLeft', () => {
+			move(-1)
+		})
+		useHotkey('ArrowRight', () => {
+			move(1)
+		})
 
 		return (
 			<>
@@ -79,7 +89,9 @@ export namespace DevTools {
 								variant="ghost"
 								size="icon-xs"
 								aria-current={index === value ? 'page' : undefined}
-								onClick={() => setValue(index)}
+								onClick={() => {
+									setValue(index)
+								}}
 								className={cn(
 									'h-7 w-auto min-w-7 px-2 text-xs',
 									index === value && 'bg-primary/15 text-primary',

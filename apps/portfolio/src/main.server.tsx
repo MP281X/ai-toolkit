@@ -13,14 +13,14 @@ BunRuntime.runMain(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				RpcServer.layerHttp({
+					group: RpcGroup.make().merge(RpcContracts),
 					path: '/api/rpc',
-					protocol: 'websocket',
-					group: RpcGroup.make().merge(RpcContracts)
+					protocol: 'websocket'
 				}),
 				HttpStaticServer.layer({
-					spa: true,
+					index: 'index.html',
 					root: './dist/client',
-					index: 'index.html'
+					spa: true
 				}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)

@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'bun:test'
 
-import {Array, DateTime, Effect, pipe, Schema, Stream} from 'effect'
+import {Array, DateTime, Effect, Schema, Stream, pipe} from 'effect'
 
 import {Prompt, Response} from 'effect/unstable/ai'
 

@@ -14,6 +14,7 @@ import {ReactDark} from './ui/svgs/reactDark.tsx'
 import {resolveLanguage} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
 
+// oxlint-disable-next-line oxc/no-barrel-file import/export -- icon exports are intentionally centralized for app imports.
 export * from 'lucide-react'
 
 export function AgentIcon(props: {readonly layer: 'codex' | 'effect'; readonly className?: string}) {

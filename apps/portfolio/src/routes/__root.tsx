@@ -2,15 +2,15 @@ import './styles.css'
 
 import {Function} from 'effect'
 
-import {createRootRoute, HeadContent, Scripts} from '@tanstack/react-router'
+import {HeadContent, Scripts, createRootRoute} from '@tanstack/react-router'
 
 import {Toaster} from '@ai-toolkit/components/ui/sonner'
 
 export const Route = createRootRoute({
 	head: Function.constant({
 		scripts: [
-			import.meta.env['DEV'] ? {src: 'https://unpkg.com/react-scan/dist/auto.global.js'} : undefined,
-			import.meta.env['DEV'] ? {src: 'https://unpkg.com/react-grab/dist/index.global.js'} : undefined
+			import.meta.env.DEV ? {src: 'https://unpkg.com/react-scan/dist/auto.global.js'} : undefined,
+			import.meta.env.DEV ? {src: 'https://unpkg.com/react-grab/dist/index.global.js'} : undefined
 		]
 	}),
 	shellComponent: props => (

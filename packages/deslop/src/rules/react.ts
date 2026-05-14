@@ -41,9 +41,7 @@ export const reactRules = [
 		if (
 			node.name &&
 			node.body &&
-			containsNode(node.body, child => {
-				return ts.isIdentifier(child) && child.text === node.name?.text
-			})
+			containsNode(node.body, child => ts.isIdentifier(child) && child.text === node.name?.text)
 		) {
 			return
 		}
@@ -157,7 +155,7 @@ function isIntrinsicFalseBooleanAttribute(node: ts.JsxAttribute) {
 	if (!ts.isIdentifier(element.tagName) || element.tagName.text !== String.toLowerCase(element.tagName.text)) {
 		return false
 	}
-	return !!(
+	return Boolean(
 		node.initializer &&
 		ts.isJsxExpression(node.initializer) &&
 		node.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword
@@ -166,17 +164,17 @@ function isIntrinsicFalseBooleanAttribute(node: ts.JsxAttribute) {
 
 function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!checker) return false
-	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
-		return (
+	return Array.some(
+		checker.getSymbolAtLocation(node)?.declarations ?? [],
+		declaration =>
 			ts.isFunctionDeclaration(declaration) ||
 			ts.isClassDeclaration(declaration) ||
 			(ts.isVariableDeclaration(declaration) &&
-				!!declaration.initializer &&
+				Boolean(declaration.initializer) &&
 				(ts.isArrowFunction(declaration.initializer) ||
 					ts.isFunctionExpression(declaration.initializer) ||
 					ts.isClassExpression(declaration.initializer)))
-		)
-	})
+	)
 }
 
 function isJsxValue(node: ts.Expression): boolean {

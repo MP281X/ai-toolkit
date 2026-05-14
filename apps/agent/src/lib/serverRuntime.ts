@@ -9,11 +9,11 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
 export const LiveLayers = pipe(
 	Layer.empty,
-	// rpc handlers
+	// Rpc handlers
 	Layer.provideMerge(RpcHandlers),
-	// application layers
+	// Application layers
 	Layer.provideMerge(GitWorkspace.layer),
-	// base layers
+	// Base layers
 	Layer.provideMerge(OtelLayer('agent-server')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(RpcSerialization.layerMsgPack)

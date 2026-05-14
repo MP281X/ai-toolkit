@@ -39,20 +39,20 @@ export const baseTypeSafetyRules = [
 		}
 		if (ts.isArrayTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
 			if (
-				ts.findAncestor(node, ancestor => {
-					return (
+				ts.findAncestor(
+					node,
+					ancestor =>
 						ts.isCallExpression(ancestor) &&
 						isReactUseRefCall(context.checker, ancestor) &&
 						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-					)
-				}) ||
-				ts.findAncestor(node, ancestor => {
-					return (
+				) ||
+				ts.findAncestor(
+					node,
+					ancestor =>
 						ts.isTypeReferenceNode(ancestor) &&
 						ts.isQualifiedName(ancestor.typeName) &&
 						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-					)
-				})
+				)
 			) {
 				return
 			}
@@ -74,20 +74,20 @@ export const baseTypeSafetyRules = [
 		}
 		if (ts.isTupleTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
 			if (
-				ts.findAncestor(node, ancestor => {
-					return (
+				ts.findAncestor(
+					node,
+					ancestor =>
 						ts.isCallExpression(ancestor) &&
 						isReactUseRefCall(context.checker, ancestor) &&
 						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-					)
-				}) ||
-				ts.findAncestor(node, ancestor => {
-					return (
+				) ||
+				ts.findAncestor(
+					node,
+					ancestor =>
 						ts.isTypeReferenceNode(ancestor) &&
 						ts.isQualifiedName(ancestor.typeName) &&
 						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-					)
-				})
+				)
 			) {
 				return
 			}
@@ -237,9 +237,10 @@ export const baseTypeSafetyRules = [
 		if (!ts.isTypeAliasDeclaration(node)) return
 		if (!containsAccessorType(node.type)) return
 		if (
-			containsNode(node.type, child => {
-				return ts.isTypeQueryNode(child) && entityNameRoot(child.exprName) === node.name.text
-			}) &&
+			containsNode(
+				node.type,
+				child => ts.isTypeQueryNode(child) && entityNameRoot(child.exprName) === node.name.text
+			) &&
 			containsAccessorType(node.type)
 		) {
 			return
@@ -264,14 +265,14 @@ export const baseTypeSafetyRules = [
 		if (ts.isBinaryExpression(node)) {
 			if (
 				node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
-				!containsNode(node.left, child => {
-					return (
+				!containsNode(
+					node.left,
+					child =>
 						(ts.isPropertyAccessExpression(child) ||
 							ts.isElementAccessExpression(child) ||
 							ts.isCallExpression(child)) &&
 						child.questionDotToken !== undefined
-					)
-				}) &&
+				) &&
 				!typeIncludesNullish(context.checker.getTypeAtLocation(node.left))
 			) {
 				context.report(node.operatorToken, 'no-redundant-type-system-check', {
@@ -382,9 +383,10 @@ function isEffectFnParameterNeedingAnnotation(checker: ts.TypeChecker, node: ts.
 		ts.isIdentifier(node.parent.parent.expression.expression) &&
 		node.parent.parent.expression.expression.text === 'Effect' &&
 		Array.contains(['fn', 'fnUntraced'] as const, node.parent.parent.expression.name.text) &&
-		!Array.some(checker.getContextualType(node.parent.parent)?.getCallSignatures() ?? [], signature => {
-			return signature.getParameters().length > 0
-		})
+		!Array.some(
+			checker.getContextualType(node.parent.parent)?.getCallSignatures() ?? [],
+			signature => signature.getParameters().length > 0
+		)
 	)
 }
 
@@ -395,9 +397,11 @@ function hasGenericCallbackParameterType(
 	parameter: number
 ) {
 	if (argument < 0 || parameter < 0) return false
-	return Array.some(checker.getResolvedSignature(call)?.getDeclaration()?.parameters ?? [], (declaration, index) => {
-		return index === argument && callbackParameterTypeNeedsAnnotation(checker, declaration.type, parameter)
-	})
+	return Array.some(
+		checker.getResolvedSignature(call)?.getDeclaration()?.parameters ?? [],
+		(declaration, index) =>
+			index === argument && callbackParameterTypeNeedsAnnotation(checker, declaration.type, parameter)
+	)
 }
 
 function callbackParameterTypeNeedsAnnotation(
@@ -442,7 +446,8 @@ function containingCallArgument(
 	node: ts.Node
 ): {readonly call: ts.CallExpression; readonly argument: number} | undefined {
 	if (ts.isSourceFile(node)) return
-	if (ts.isExpression(node) && ts.isCallExpression(node.parent))
-		return {call: node.parent, argument: argumentIndex(node)}
+	if (ts.isExpression(node) && ts.isCallExpression(node.parent)) {
+		return {argument: argumentIndex(node), call: node.parent}
+	}
 	return containingCallArgument(node.parent)
 }

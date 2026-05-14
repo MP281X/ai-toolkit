@@ -7,7 +7,7 @@ import {expectRule} from './test-utils.ts'
 import {analyzeText} from '#lib/analyzer.ts'
 
 test('base scope emits public planned rule ids', () => {
-	return expectRule({
+	expectRule({
 		rule: 'base/no-destructuring',
 		scoped: true,
 		scopes: ['base'],
@@ -17,9 +17,9 @@ test('base scope emits public planned rule ids', () => {
 })
 
 test('react scope emits public planned rule ids', () => {
-	return expectRule({
-		rule: 'react/no-tailwind-class-indirection',
+	expectRule({
 		filePath: 'sample.tsx',
+		rule: 'react/no-tailwind-class-indirection',
 		scoped: true,
 		scopes: ['react'],
 		source: 'const classes = "flex items-center"\nfunction View() { return <Input className={classes} /> }\n'
@@ -27,7 +27,7 @@ test('react scope emits public planned rule ids', () => {
 })
 
 test('effect scope emits public planned rule ids', () => {
-	return expectRule({
+	expectRule({
 		rule: 'effect/no-option-constructor',
 		scoped: true,
 		scopes: ['effect'],

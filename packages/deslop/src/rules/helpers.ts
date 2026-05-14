@@ -1,4 +1,4 @@
-import {Array, Option, pipe, String} from 'effect'
+import {Array, Option, String, pipe} from 'effect'
 
 import ts from 'typescript'
 
@@ -95,14 +95,14 @@ export function isConstVariable(node: ts.VariableDeclaration) {
 }
 
 export function isMutated(name: string, sourceFile: ts.SourceFile) {
-	return containsNode(sourceFile, node => {
-		return (
+	return containsNode(
+		sourceFile,
+		node =>
 			ts.isBinaryExpression(node) &&
 			ts.isIdentifier(node.left) &&
 			node.left.text === name &&
 			isAssignmentOperator(node.operatorToken.kind)
-		)
-	})
+	)
 }
 
 export function isAssignmentOperator(kind: ts.SyntaxKind) {
@@ -125,24 +125,24 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isCallExpression(ancestor) &&
 				isReactUseRefCall(checker, ancestor) &&
 				Array.some(ancestor.arguments, argument => containsNode(argument, child => child === node))
-			)
-		})
+		)
 	) {
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isCallExpression(ancestor) &&
 				isReactUseRefCall(checker, ancestor) &&
 				Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-			)
-		}) ||
+		) ||
 		(ts.isBinaryExpression(node.parent) &&
 			isAssignmentOperator(node.parent.operatorToken.kind) &&
 			ts.isPropertyAccessExpression(node.parent.left) &&
@@ -151,16 +151,17 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isTypeReferenceNode(ancestor) &&
 				ts.isQualifiedName(ancestor.typeName) &&
 				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-			)
-		}) ||
-		ts.findAncestor(node, ancestor => {
-			return ts.isPropertySignature(ancestor) && ts.isIdentifier(ancestor.name) && ancestor.name.text === 'current'
-		})
+		) ||
+		ts.findAncestor(
+			node,
+			ancestor => ts.isPropertySignature(ancestor) && ts.isIdentifier(ancestor.name) && ancestor.name.text === 'current'
+		)
 	) {
 		return true
 	}
@@ -213,7 +214,7 @@ export function isExemptNamedValue(checker: ts.TypeChecker | undefined, node: ts
 export function isRecursiveFunction(node: ts.FunctionLikeDeclaration) {
 	const name = functionLikeName(node)
 	if (name === '<anonymous>') return false
-	return !!node.body && containsNode(node.body, child => ts.isIdentifier(child) && child.text === name)
+	return Boolean(node.body) && containsNode(node.body, child => ts.isIdentifier(child) && child.text === name)
 }
 
 export function countIdentifierUses(node: ts.Node, name: string) {
@@ -274,7 +275,7 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 
 export function isNamedFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
 	return (
-		(ts.isFunctionDeclaration(node) && !!node.name) ||
+		(ts.isFunctionDeclaration(node) && Boolean(node.name)) ||
 		((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
 			ts.isVariableDeclaration(node.parent) &&
 			ts.isIdentifier(node.parent.name))
@@ -351,7 +352,7 @@ export function linearVariableChain(
 				): declaration is ts.VariableDeclaration & {
 					readonly name: ts.Identifier
 					readonly initializer: ts.Expression
-				} => ts.isIdentifier(declaration.name) && !!declaration.initializer
+				} => ts.isIdentifier(declaration.name) && Boolean(declaration.initializer)
 			)
 		),
 		Array.empty<
@@ -367,12 +368,9 @@ export function linearVariableChain(
 			return pipe(
 				Array.get(chain, Array.length(chain) - 1),
 				Option.filter(shouldChain),
-				Option.filter(previous => {
-					return containsNode(
-						declaration.initializer,
-						node => ts.isIdentifier(node) && node.text === previous.name.text
-					)
-				}),
+				Option.filter(previous =>
+					containsNode(declaration.initializer, node => ts.isIdentifier(node) && node.text === previous.name.text)
+				),
 				Option.match({
 					onNone: () => chain,
 					onSome: () => Array.append(chain, declaration)
@@ -468,13 +466,15 @@ export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {
 	return (
 		ts.isIdentifier(node.name) &&
 		node.name.text === 'current' &&
-		!!ts.findAncestor(node, ancestor => {
-			return (
-				ts.isTypeReferenceNode(ancestor) &&
-				ts.isQualifiedName(ancestor.typeName) &&
-				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
+		Boolean(
+			ts.findAncestor(
+				node,
+				ancestor =>
+					ts.isTypeReferenceNode(ancestor) &&
+					ts.isQualifiedName(ancestor.typeName) &&
+					ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
 			)
-		})
+		)
 	)
 }
 

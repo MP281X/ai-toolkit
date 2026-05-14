@@ -10,11 +10,11 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 
 export const LiveLayers = pipe(
 	Layer.empty,
-	// base layers
+	// Base layers
 	Layer.provideMerge(OtelLayer('agent-client')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
-	// envs
+	// Envs
 	Layer.provideMerge(
 		ConfigProvider.layer(
 			ConfigProvider.fromUnknown({
@@ -28,7 +28,7 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 	group: Rpc.RpcGroup.make().merge(RpcContracts),
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
-		Layer.provideMerge(Socket.layerWebSocket(`${window.origin}/api/rpc`)),
+		Layer.provideMerge(Socket.layerWebSocket(`${globalThis.origin}/api/rpc`)),
 		Layer.provideMerge(Socket.layerWebSocketConstructorGlobal),
 		Layer.provideMerge(LiveLayers)
 	)

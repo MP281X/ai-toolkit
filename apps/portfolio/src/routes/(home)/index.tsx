@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Number, Option, pipe, Stream, String} from 'effect'
+import {Array, Effect, Match, Number, Option, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -47,22 +47,22 @@ function pickNextCursorColor(currentColor: string) {
 }
 
 function getIdentity() {
-	const existingId = window.sessionStorage.getItem('portfolio.id')
-	const existingName = window.sessionStorage.getItem('portfolio.name')
+	const existingId = globalThis.sessionStorage.getItem('portfolio.id')
+	const existingName = globalThis.sessionStorage.getItem('portfolio.name')
 
-	if (existingId && existingName) return {id: existingId, name: existingName, color: pickRandomCursorColor()}
+	if (existingId && existingName) return {color: pickRandomCursorColor(), id: existingId, name: existingName}
 
 	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
 
 	const next = {
+		color: pickRandomCursorColor(),
 		id: `v-${seed}`,
-		name: `Guest-${pipe(seed, String.slice(0, 3))}`,
-		color: pickRandomCursorColor()
+		name: `Guest-${pipe(seed, String.slice(0, 3))}`
 	}
 
-	window.sessionStorage.setItem('portfolio.id', next.id)
-	window.sessionStorage.setItem('portfolio.name', next.name)
-	window.sessionStorage.removeItem('portfolio.color')
+	globalThis.sessionStorage.setItem('portfolio.id', next.id)
+	globalThis.sessionStorage.setItem('portfolio.name', next.name)
+	globalThis.sessionStorage.removeItem('portfolio.color')
 
 	return next
 }
@@ -70,7 +70,7 @@ function getIdentity() {
 const identity = getIdentity()
 
 function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
-	for (let index = 0; index < visitors.length; index++) {
+	for (let index = 0; index < visitors.length; index += 1) {
 		if (visitors[index]?.id !== visitor.id) continue
 
 		const nextVisitors = Array.copy(visitors)
@@ -100,29 +100,29 @@ function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
 function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 	return pipe(
 		Match.value(event),
-		Match.tag('snapshot', next => new PortfolioState({visitors: next.visitors, trails: next.trails})),
+		Match.tag('snapshot', next => new PortfolioState({trails: next.trails, visitors: next.visitors})),
 		Match.tag(
 			'visitor-upserted',
 			next =>
 				new PortfolioState({
-					visitors: upsertVisitor(state.visitors, next.visitor),
-					trails: state.trails
+					trails: state.trails,
+					visitors: upsertVisitor(state.visitors, next.visitor)
 				})
 		),
 		Match.tag(
 			'visitor-removed',
 			next =>
 				new PortfolioState({
-					visitors: removeVisitor(state.visitors, next.id),
-					trails: state.trails
+					trails: state.trails,
+					visitors: removeVisitor(state.visitors, next.id)
 				})
 		),
 		Match.tag(
 			'trail-added',
 			next =>
 				new PortfolioState({
-					visitors: state.visitors,
-					trails: appendTrail(state.trails, next.trail)
+					trails: appendTrail(state.trails, next.trail),
+					visitors: state.visitors
 				})
 		),
 		Match.exhaustive
@@ -133,7 +133,7 @@ const portfolioAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('portfolio.join', {id: identity.id, name: identity.name, color: identity.color})),
+			Effect.map(client => client('portfolio.join', {color: identity.color, id: identity.id, name: identity.name})),
 			Stream.unwrap,
 			Stream.scan(new PortfolioState({}), applyPortfolioEvent)
 		)
@@ -185,10 +185,6 @@ const TECHNICAL_SKILLS = [
 const WORK_EXPERIENCE = [
 	{
 		company: 'Tinexta Cyber',
-		role: 'Full-Stack Developer',
-		period: 'Oct 2024 – Present',
-		location: 'Udine, Italy',
-		note: '',
 		highlights: [
 			'Developed a real-time network inventory application for a major telecommunications company',
 			'Built the real-time frontend in React with ElectricSQL for live updates across all users',
@@ -196,50 +192,54 @@ const WORK_EXPERIENCE = [
 			'Gathered requirements directly from end users and iterated through feedback rounds',
 			'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
 			'Used AI coding agents daily with project-specific guidelines for development'
-		]
+		],
+		location: 'Udine, Italy',
+		note: '',
+		period: 'Oct 2024 – Present',
+		role: 'Full-Stack Developer'
 	},
 	{
 		company: 'Altitudo',
-		role: 'Frontend Developer',
-		period: 'Jan 2024 – Mar 2024',
-		location: 'Salzburg, Austria',
-		note: 'Erasmus Internship',
 		highlights: [
 			'Migrated the build system from Create React App to Vite',
 			'Improved rendering performance by adding proper memoization',
 			'Migrated legacy class components to modern functional components using React hooks',
 			'Recreated and restyled multiple pages using React and Tailwind CSS'
-		]
+		],
+		location: 'Salzburg, Austria',
+		note: 'Erasmus Internship',
+		period: 'Jan 2024 – Mar 2024',
+		role: 'Frontend Developer'
 	},
 	{
 		company: 'BizAway',
-		role: 'Backend Developer',
-		period: 'Jun 2023 – Aug 2023',
-		location: 'Spilimbergo, Italy',
-		note: 'Internship',
 		highlights: [
 			'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
 			'Built a type-safe email template framework using TSX-style components',
 			'Migrated API endpoints from the old OpenAPI version to the new specification',
 			'Built and updated multiple Angular components and features'
-		]
+		],
+		location: 'Spilimbergo, Italy',
+		note: 'Internship',
+		period: 'Jun 2023 – Aug 2023',
+		role: 'Backend Developer'
 	}
 ]
 
 const EDUCATION_DATA = [
 	{
-		school: 'ITS Alto Adriatico',
 		degree: 'Cloud Developer Diploma',
+		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
 		grade: '95/100',
 		period: '2022 – 2024',
-		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.'
+		school: 'ITS Alto Adriatico'
 	},
 	{
-		school: 'ISIS A. Malignani',
 		degree: 'High School Diploma – IT and Telecommunications',
+		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
 		grade: '',
 		period: '2017 – 2022',
-		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.'
+		school: 'ISIS A. Malignani'
 	}
 ]
 
@@ -250,15 +250,15 @@ const LANGUAGES_DATA = [
 ]
 
 const CONTACT_ITEMS = [
-	{label: 'Email', value: 'paludgnachmatteo.dev@gmail.com', href: 'mailto:paludgnachmatteo.dev@gmail.com'},
-	{label: 'Phone', value: '+39 351 885 3376', href: 'tel:+393518853376'},
-	{label: 'GitHub', value: 'github.com/MP281X', href: 'https://github.com/MP281X'}
+	{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
+	{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
+	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
 ]
 
 function getViewport() {
 	return {
-		width: window.innerWidth,
-		height: window.innerHeight
+		height: window.innerHeight,
+		width: window.innerWidth
 	} satisfies Viewport
 }
 
@@ -308,13 +308,13 @@ function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
 
 function createCursorMotion(target: {x: number; y: number}, viewport: Viewport) {
 	return {
-		x: target.x,
-		y: target.y,
+		lastFrameAt: 0,
 		targetX: target.x,
 		targetY: target.y,
-		lastFrameAt: 0,
+		viewportHeight: viewport.height,
 		viewportWidth: viewport.width,
-		viewportHeight: viewport.height
+		x: target.x,
+		y: target.y
 	} satisfies CursorMotion
 }
 
@@ -336,9 +336,9 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 
 	return {
 		...motion,
+		lastFrameAt: now,
 		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Math.max(0, Math.min(motion.viewportWidth, nextX)),
-		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY)),
-		lastFrameAt: now
+		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY))
 	}
 }
 
@@ -363,17 +363,19 @@ function useViewport() {
 	const snapshot = useSyncExternalStore(
 		onStoreChange => {
 			window.addEventListener('resize', onStoreChange)
-			return () => window.removeEventListener('resize', onStoreChange)
+			return () => {
+				window.removeEventListener('resize', onStoreChange)
+			}
 		},
 		getViewportSnapshot,
 		getViewportSnapshot
 	)
 
-	const [width = '0', height = '0'] = pipe(snapshot, String.split(':'))
+	const [width, height] = pipe(snapshot, String.split(':'))
 
 	return {
-		width: Option.getOrElse(Number.parse(width ?? '0'), () => 0),
-		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0)
+		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0),
+		width: Option.getOrElse(Number.parse(width ?? '0'), () => 0)
 	} satisfies Viewport
 }
 
@@ -402,8 +404,8 @@ function PortfolioRoute() {
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(undefined)
-	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>(undefined)
+	const queuedPointerRef = useRef<{x: number; y: number} | undefined>()
+	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>()
 	const [identityColor, setIdentityColor] = useState(identity.color)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
@@ -418,7 +420,7 @@ function PortfolioRoute() {
 		const target = sectionRefs.current[index]
 		if (!target) return
 
-		target.scrollIntoView({block: 'start', behavior: 'smooth'})
+		target.scrollIntoView({behavior: 'smooth', block: 'start'})
 		currentSectionRef.current = index
 	}
 
@@ -428,29 +430,53 @@ function PortfolioRoute() {
 
 		identity.color = nextColor
 		setIdentityColor(nextColor)
-		lastSentPointerRef.current = {x: currentPointer.x, y: currentPointer.y, sentAt: performance.now()}
+		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
 
 		moveRpc({
 			payload: {
+				color: nextColor,
 				id: identity.id,
 				x: currentPointer.x,
-				y: currentPointer.y,
-				color: nextColor
+				y: currentPointer.y
 			}
 		})
 	}
 
-	useHotkey('J', () => scrollTo(Math.min(currentSectionRef.current + 1, 5)))
-	useHotkey('K', () => scrollTo(Math.max(currentSectionRef.current - 1, 0)))
-	useHotkey('1', () => scrollTo(0))
-	useHotkey('2', () => scrollTo(1))
-	useHotkey('3', () => scrollTo(2))
-	useHotkey('4', () => scrollTo(3))
-	useHotkey('5', () => scrollTo(4))
-	useHotkey('6', () => scrollTo(5))
+	useHotkey('J', () => {
+		scrollTo(Math.min(currentSectionRef.current + 1, 5))
+	})
+	useHotkey('K', () => {
+		scrollTo(Math.max(currentSectionRef.current - 1, 0))
+	})
+	useHotkey('1', () => {
+		scrollTo(0)
+	})
+	useHotkey('2', () => {
+		scrollTo(1)
+	})
+	useHotkey('3', () => {
+		scrollTo(2)
+	})
+	useHotkey('4', () => {
+		scrollTo(3)
+	})
+	useHotkey('5', () => {
+		scrollTo(4)
+	})
+	useHotkey('6', () => {
+		scrollTo(5)
+	})
 	useHotkey('R', updateColor)
-	useHotkey({key: '?', shift: true}, () => setShowShortcuts(show => !show))
-	useHotkey('Escape', () => setShowShortcuts(false), {enabled: showShortcuts})
+	useHotkey({key: '?', shift: true}, () => {
+		setShowShortcuts(show => !show)
+	})
+	useHotkey(
+		'Escape',
+		() => {
+			setShowShortcuts(false)
+		},
+		{enabled: showShortcuts}
+	)
 
 	return (
 		<div
@@ -459,11 +485,11 @@ function PortfolioRoute() {
 				if (!(viewport.width && viewport.height)) return
 
 				const nextPointer = {
-					x: Math.max(0, Math.min(0.999999, event.clientX / viewport.width)),
-					y: Math.max(0, Math.min(0.999999, event.clientY / viewport.height))
+					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
+					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
 				}
 
-				localPointer = {x: nextPointer.x, y: nextPointer.y, updatedAt: performance.now()}
+				localPointer = {updatedAt: performance.now(), x: nextPointer.x, y: nextPointer.y}
 				queuedPointerRef.current = nextPointer
 
 				if (pointerFrameRef.current) return
@@ -488,17 +514,17 @@ function PortfolioRoute() {
 					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
 
 					lastSentPointerRef.current = {
+						sentAt: now,
 						x: queuedPointerRef.current.x,
-						y: queuedPointerRef.current.y,
-						sentAt: now
+						y: queuedPointerRef.current.y
 					}
 
 					moveRpc({
 						payload: {
+							color: identityColor,
 							id: identity.id,
 							x: queuedPointerRef.current.x,
-							y: queuedPointerRef.current.y,
-							color: identityColor
+							y: queuedPointerRef.current.y
 						}
 					})
 
@@ -525,13 +551,21 @@ function PortfolioRoute() {
 				aria-expanded={showShortcuts}
 				aria-haspopup="dialog"
 				aria-label="Toggle keyboard shortcuts"
-				onClick={() => setShowShortcuts(show => !show)}
+				onClick={() => {
+					setShowShortcuts(show => !show)
+				}}
 				className="border-border/70 bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-primary fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border font-mono text-xs backdrop-blur-sm transition-colors sm:right-4 sm:bottom-4"
 			>
 				?
 			</button>
 
-			{showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}
+			{showShortcuts && (
+				<ShortcutsOverlay
+					onClose={() => {
+						setShowShortcuts(false)
+					}}
+				/>
+			)}
 		</div>
 	)
 }
@@ -609,7 +643,7 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 
 			const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
 
-			for (let step = 0; step <= stepCount; step++) {
+			for (let step = 0; step <= stepCount; step += 1) {
 				const progress = stepCount === 0 ? 1 : step / stepCount
 				const col = Math.round(previous.col + (current.col - previous.col) * progress)
 				const row = Math.round(previous.row + (current.row - previous.row) * progress)

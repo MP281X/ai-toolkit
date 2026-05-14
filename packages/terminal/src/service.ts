@@ -1,4 +1,4 @@
-import {Context, Effect, flow, Layer, pipe, Queue, Stream} from 'effect'
+import {Context, Effect, Layer, Queue, Stream, flow, pipe} from 'effect'
 
 import {SerializeAddon} from '@xterm/addon-serialize'
 import {Terminal as HeadlessTerminal} from '@xterm/headless'
@@ -10,7 +10,7 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		let cols = 120
 		let rows = 32
-		let processHandle: ReturnType<typeof Bun.spawn> | undefined
+		let processHandle: ReturnType<typeof Bun.spawn> | undefined = undefined
 		const decoder = new TextDecoder()
 		let screenParsed = Promise.resolve()
 		const readySubscribers = new WeakSet<Queue.Queue<TerminalEvent>>()
@@ -18,13 +18,10 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 		const screen = new HeadlessTerminal({allowProposedApi: true, cols, rows, scrollback: 10_000})
 		const serialize = new SerializeAddon()
 		screen.loadAddon(serialize)
-		const waitForScreen = Effect.promise(async () => {
-			let parsed: Promise<void>
-			while (true) {
-				parsed = screenParsed
-				await parsed
-				if (parsed === screenParsed) return
-			}
+		const waitForScreen = Effect.promise(async function wait(): Promise<void> {
+			const parsed = screenParsed
+			await parsed
+			if (parsed !== screenParsed) return wait()
 		})
 
 		yield* Effect.forkScoped(
@@ -32,10 +29,11 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 				Effect.gen(function* () {
 					const subprocess = yield* Effect.acquireRelease(
 						Effect.try({
+							catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 							try: () => {
-								const subprocess = Bun.spawn([process.env['SHELL'] ?? 'bash'], {
+								const subprocess = Bun.spawn([Bun.env['SHELL'] ?? 'bash'], {
 									cwd: config.cwd,
-									env: {...process.env, TERM: 'xterm-256color'},
+									env: {...Bun.env, TERM: 'xterm-256color'},
 									terminal: {
 										cols,
 										data: (_terminal, data) => {
@@ -54,18 +52,18 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 								})
 								processHandle = subprocess
 								return subprocess
-							},
-							catch: cause => new TerminalError({message: `failed to spawn terminal in ${config.cwd}`, cause})
+							}
 						}),
-						subprocess => {
-							return Effect.sync(() => {
+						subprocess =>
+							Effect.sync(() => {
 								if (processHandle === subprocess) processHandle = undefined
 								subprocess.kill()
 							})
-						}
 					)
 
-					yield* Effect.promise(() => subprocess.exited)
+					yield* Effect.promise(async () => {
+						await subprocess.exited
+					})
 					yield* Effect.sleep('250 millis')
 				})
 			)
@@ -91,8 +89,8 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 									return queue
 								})
 							),
-							subscriber => {
-								return Effect.all(
+							subscriber =>
+								Effect.all(
 									[
 										Effect.sync(() => {
 											subscribers.delete(subscriber)
@@ -101,24 +99,22 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 									],
 									{discard: true}
 								)
-							}
 						),
 						Effect.map(Stream.fromQueue)
 					)
 				)
 			),
-			resize: (nextSize: {readonly cols: number; readonly rows: number}) => {
-				return Effect.sync(() => {
+			resize: (nextSize: {readonly cols: number; readonly rows: number}) =>
+				Effect.sync(() => {
 					if (nextSize.cols === cols && nextSize.rows === rows) return
 					cols = nextSize.cols
 					rows = nextSize.rows
 					screen.resize(cols, rows)
-					processHandle?.terminal?.resize?.(cols, rows)
-				})
-			},
+					processHandle?.terminal?.resize(cols, rows)
+				}),
 			write: (data: string) => Effect.sync(() => processHandle?.terminal?.write(data))
 		}
 	})
 }) {
-	static layer = flow(this.make, Layer.effect(this))
+	public static layer = flow(this.make, Layer.effect(this))
 }

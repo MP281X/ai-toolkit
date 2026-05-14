@@ -4,7 +4,6 @@ import {
 	Duration,
 	Effect,
 	FileSystem,
-	flow,
 	Layer,
 	Match,
 	Number,
@@ -12,12 +11,13 @@ import {
 	Order,
 	Path,
 	Predicate,
-	pipe,
 	Random,
 	Result,
 	Stream,
 	String,
-	SubscriptionRef
+	SubscriptionRef,
+	flow,
+	pipe
 } from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
@@ -66,21 +66,21 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		const getDefaultBranch = Effect.fnUntraced(function* (cwd: string) {
 			return yield* pipe(
 				git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
-				Effect.map(flow(String.trim, String.replace(/^origin\//, ''))),
-				Effect.catchTag('GitError', () => {
-					return pipe(
+				Effect.map(flow(String.trim, String.replace(/^origin\//u, ''))),
+				Effect.catchTag('GitError', () =>
+					pipe(
 						git.string(cwd, ['rev-parse', '--verify', 'main']),
 						Effect.as('main'),
 						Effect.catchTag('GitError', () => Effect.succeed('master'))
 					)
-				})
+				)
 			)
 		})
 
 		const getWorktreeStatus = Effect.fnUntraced(function* (cwd: string, branch?: string) {
 			const counts = yield* pipe(
 				git.string(cwd, ['rev-list', '--left-right', '--count', `origin/${branch ?? ''}...HEAD`]),
-				Effect.map(flow(String.trim, String.split(/\s+/))),
+				Effect.map(flow(String.trim, String.split(/\s+/u))),
 				Effect.orElseSucceed(() => ['0', '0'])
 			)
 			return new GitWorktreeStatus({
@@ -107,8 +107,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 			function* (roots, repositories) {
 				return yield* Array.match(roots, {
 					onEmpty: () => Effect.succeed(repositories),
-					onNonEmpty: roots => {
-						return pipe(
+					onNonEmpty: roots =>
+						pipe(
 							fs.readDirectory(roots[0]),
 							Effect.orElseSucceed(() => Array.empty<string>()),
 							Effect.flatMap(entries => {
@@ -118,39 +118,39 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 										Effect.map(String.trim),
 										Effect.map(gitDirectory => Result.succeed(new GitRepository({gitDirectory, root: roots[0]}))),
 										Effect.orElseSucceed(() => Result.failVoid),
-										Effect.flatMap(repository => {
-											return collectRepositoriesFromRoots(Array.drop(roots, 1), Array.append(repositories, repository))
-										})
+										Effect.flatMap(repository =>
+											collectRepositoriesFromRoots(Array.drop(roots, 1), Array.append(repositories, repository))
+										)
 									)
 								}
 
 								return pipe(
 									entries,
-									Array.filter(entry => {
-										return !(
-											new Set<string>(['.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules']).has(
-												entry
-											) ||
-											(String.startsWith('.')(entry) && entry !== '.git')
-										)
-									}),
-									Effect.forEach(entry => {
-										return pipe(
+									Array.filter(
+										entry =>
+											!(
+												new Set<string>(['.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules']).has(
+													entry
+												) ||
+												(String.startsWith('.')(entry) && entry !== '.git')
+											)
+									),
+									Effect.forEach(entry =>
+										pipe(
 											fs.stat(path.join(roots[0], entry)),
 											Effect.map(info => (info.type === 'Directory' ? path.join(roots[0], entry) : '')),
 											Effect.orElseSucceed(() => '')
 										)
-									}),
-									Effect.flatMap(nextRoots => {
-										return collectRepositoriesFromRoots(
+									),
+									Effect.flatMap(nextRoots =>
+										collectRepositoriesFromRoots(
 											pipe(nextRoots, Array.filter(String.isNonEmpty), Array.appendAll(Array.drop(roots, 1))),
 											repositories
 										)
-									})
+									)
 								)
 							})
 						)
-					}
 				})
 			}
 		)
@@ -168,7 +168,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 						if (String.startsWith('worktree ')(line)) {
 							return {
 								currentBranch: '',
-								currentRoot: String.replace(/^worktree\s+/, '')(line),
+								currentRoot: String.replace(/^worktree\s+/u, '')(line),
 								hasCurrentCommit: false,
 								worktrees:
 									String.isNonEmpty(state.currentRoot) && state.hasCurrentCommit
@@ -188,7 +188,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 
 						if (String.startsWith('branch refs/heads/')(line)) {
 							return {
-								currentBranch: String.replace(/^branch\s+refs\/heads\//, '')(line),
+								currentBranch: String.replace(/^branch\s+refs\/heads\//u, '')(line),
 								currentRoot: state.currentRoot,
 								hasCurrentCommit: state.hasCurrentCommit,
 								worktrees: state.worktrees
@@ -198,23 +198,23 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 						return state
 					}
 				),
-				state => {
-					return String.isNonEmpty(state.currentRoot) && state.hasCurrentCommit
+				state =>
+					String.isNonEmpty(state.currentRoot) && state.hasCurrentCommit
 						? Array.append(state.worktrees, {branch: state.currentBranch, root: state.currentRoot})
-						: state.worktrees
-				},
-				Effect.forEach(worktree => {
-					return pipe(
+						: state.worktrees,
+				Effect.forEach(worktree =>
+					pipe(
 						getWorktreeStatus(worktree.root, String.isNonEmpty(worktree.branch) ? worktree.branch : undefined),
-						Effect.map(status => {
-							return new GitWorktreeSchema({
-								branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
-								root: worktree.root,
-								status
-							})
-						})
+						Effect.map(
+							status =>
+								new GitWorktreeSchema({
+									branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
+									root: worktree.root,
+									status
+								})
+						)
 					)
-				})
+				)
 			)
 		})
 
@@ -223,13 +223,13 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 				fs.realPath(cwd),
 				Effect.orElseSucceed(() => cwd),
 				Effect.flatMap(root => collectRepositoriesFromRoots([root], Array.empty())),
-				Effect.map(repositories => {
-					return pipe(
+				Effect.map(repositories =>
+					pipe(
 						repositories,
 						Array.getSuccesses,
 						Array.dedupeWith((left, right) => left.gitDirectory === right.gitDirectory)
 					)
-				})
+				)
 			)
 		})
 		const listProjectsFrom = Effect.fnUntraced(function* (cwd: string) {
@@ -238,27 +238,26 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					listRepositoriesFrom(cwd),
 					Effect.flatMap(
 						Effect.forEach(
-							repository => {
-								return pipe(
+							repository =>
+								pipe(
 									listWorktrees(repository.root),
-									Effect.map(discoveredWorktrees => {
-										return new GitProject({
-											repository: new GitRepository({
-												gitDirectory: repository.gitDirectory,
-												root: discoveredWorktrees[0]?.root ?? repository.root
-											}),
-											worktrees: Array.sortWith(
-												discoveredWorktrees,
-												worktree => {
-													return `${worktree.root === (discoveredWorktrees[0]?.root ?? repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`
-												},
-												Order.String
-											)
-										})
-									}),
+									Effect.map(
+										discoveredWorktrees =>
+											new GitProject({
+												repository: new GitRepository({
+													gitDirectory: repository.gitDirectory,
+													root: discoveredWorktrees[0]?.root ?? repository.root
+												}),
+												worktrees: Array.sortWith(
+													discoveredWorktrees,
+													worktree =>
+														`${worktree.root === (discoveredWorktrees[0]?.root ?? repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
+													Order.String
+												)
+											})
+									),
 									Effect.orElseSucceed(() => undefined)
-								)
-							},
+								),
 							{concurrency: 'unbounded'}
 						)
 					)
@@ -268,13 +267,13 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 			)
 		})
 		const refreshProjects = Effect.fnUntraced(function* () {
-			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(process.env['HOME'] ?? process.cwd()))
+			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(Bun.env['HOME'] ?? process.cwd()))
 		})
 
 		yield* refreshProjects()
 		yield* Effect.forkScoped(
 			pipe(
-				fs.watch(process.env['HOME'] ?? process.cwd()),
+				fs.watch(Bun.env['HOME'] ?? process.cwd()),
 				Stream.debounce(Duration.millis(250)),
 				Stream.tap(() => refreshProjects()),
 				Stream.runDrain
@@ -282,6 +281,36 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		)
 
 		return {
+			branches: Effect.fnUntraced(function* (cwd) {
+				return new GitBranchesSnapshot({
+					branches: yield* pipe(
+						git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
+						Effect.map(Array.map(name => new GitBranch({name, type: 'local'}))),
+						Effect.flatMap(localBranches =>
+							pipe(
+								git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes']),
+								Effect.map(lines =>
+									pipe(
+										lines,
+										Array.filter(name => !String.endsWith('/HEAD')(name)),
+										Array.map(
+											name =>
+												new GitBranch({
+													name: pipe(String.split('/')(name), Array.drop(1), Array.join('/')),
+													remote: String.split('/')(name)[0],
+													type: 'remote'
+												})
+										),
+										Array.filter(branch => String.isNonEmpty(branch.name)),
+										Array.appendAll(localBranches)
+									)
+								)
+							)
+						)
+					),
+					defaultBranch: yield* getDefaultBranch(cwd)
+				})
+			}),
 			clone: Effect.fnUntraced(function* (input) {
 				const targetDirectory = path.isAbsolute(input.directory)
 					? input.directory
@@ -296,52 +325,23 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 						})
 					),
 					Effect.asVoid,
-					Effect.catch(() => {
-						return pipe(
+					Effect.catch(() =>
+						pipe(
 							execString(ChildProcess.make('git', ['-C', targetDirectory, 'pull', '--ff-only'])),
 							Effect.asVoid,
 							Effect.mapError(
-								cause => new GitError({message: `failed to update ${targetDirectory} from ${input.url}`, cause})
+								cause => new GitError({cause, message: `failed to update ${targetDirectory} from ${input.url}`})
 							)
 						)
-					})
+					)
 				)
-			}),
-			branches: Effect.fnUntraced(function* (cwd) {
-				return new GitBranchesSnapshot({
-					branches: yield* pipe(
-						git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
-						Effect.map(Array.map(name => new GitBranch({name, type: 'local'}))),
-						Effect.flatMap(localBranches => {
-							return pipe(
-								git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes']),
-								Effect.map(lines => {
-									return pipe(
-										lines,
-										Array.filter(name => !String.endsWith('/HEAD')(name)),
-										Array.map(name => {
-											return new GitBranch({
-												name: pipe(String.split('/')(name), Array.drop(1), Array.join('/')),
-												remote: String.split('/')(name)[0],
-												type: 'remote'
-											})
-										}),
-										Array.filter(branch => String.isNonEmpty(branch.name)),
-										Array.appendAll(localBranches)
-									)
-								})
-							)
-						})
-					),
-					defaultBranch: yield* getDefaultBranch(cwd)
-				})
 			}),
 			createWorktree: Effect.fnUntraced(function* (input) {
 				const targetDirectory = path.join(
-					process.env['HOME'] ?? input.cwd,
+					Bun.env['HOME'] ?? input.cwd,
 					'.ai-toolkit',
 					'worktrees',
-					`${String.replace(/[^a-zA-Z0-9._-]+/g, '-')(path.basename(input.cwd))}-${String.replace(/[^a-zA-Z0-9._-]+/g, '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`
+					`${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(path.basename(input.cwd))}-${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`
 				)
 
 				yield* pipe(fs.makeDirectory(path.dirname(targetDirectory), {recursive: true}), Effect.ignore)
@@ -372,8 +372,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 			deleteWorktree: Effect.fnUntraced(function* (input) {
 				const worktree = yield* pipe(
 					git.lines(input.cwd, ['worktree', 'list', '--porcelain']),
-					Effect.map(lines => {
-						return pipe(
+					Effect.map(lines =>
+						pipe(
 							lines,
 							Array.reduce(
 								{branch: '', currentBranch: '', currentRoot: '', found: false, mainRoot: input.cwd},
@@ -384,9 +384,10 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 										return {
 											branch: state.branch,
 											currentBranch: '',
-											currentRoot: String.replace(/^worktree\s+/, '')(line),
+											currentRoot: String.replace(/^worktree\s+/u, '')(line),
 											found: state.found,
-											mainRoot: state.mainRoot === input.cwd ? String.replace(/^worktree\s+/, '')(line) : state.mainRoot
+											mainRoot:
+												state.mainRoot === input.cwd ? String.replace(/^worktree\s+/u, '')(line) : state.mainRoot
 										}
 									}
 
@@ -394,9 +395,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 										return {
 											branch:
 												state.currentRoot === input.cwd
-													? String.replace(/^branch\s+refs\/heads\//, '')(line)
+													? String.replace(/^branch\s+refs\/heads\//u, '')(line)
 													: state.branch,
-											currentBranch: String.replace(/^branch\s+refs\/heads\//, '')(line),
+											currentBranch: String.replace(/^branch\s+refs\/heads\//u, '')(line),
 											currentRoot: state.currentRoot,
 											found: state.currentRoot === input.cwd,
 											mainRoot: state.mainRoot
@@ -408,7 +409,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 							),
 							state => ({branch: String.isNonEmpty(state.branch) ? state.branch : undefined, mainRoot: state.mainRoot})
 						)
-					})
+					)
 				)
 
 				yield* pipe(
@@ -428,7 +429,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 		}
 	})
 }) {
-	static layer = Layer.effect(this, this.make)
+	public static layer = Layer.effect(this, this.make)
 }
 
 export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git/service/GitWorktree', {
@@ -443,8 +444,8 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 				git.lines(config.cwd, args),
 				Effect.flatMap(
 					Effect.forEach(
-						line => {
-							return pipe(
+						line =>
+							pipe(
 								git.string(
 									config.cwd,
 									pipe(
@@ -460,21 +461,21 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 										])
 									)
 								),
-								Effect.map(patch => {
-									return new GitDiff({
-										filePath: pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? '',
-										patch,
-										status: pipe(
-											Match.value(line),
-											Match.when(String.startsWith('A'), () => 'added' as const),
-											Match.when(String.startsWith('D'), () => 'deleted' as const),
-											Match.when(String.startsWith('R'), () => 'renamed' as const),
-											Match.orElse(() => 'modified' as const)
-										)
-									})
-								})
-							)
-						},
+								Effect.map(
+									patch =>
+										new GitDiff({
+											filePath: pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? '',
+											patch,
+											status: pipe(
+												Match.value(line),
+												Match.when(String.startsWith('A'), () => 'added' as const),
+												Match.when(String.startsWith('D'), () => 'deleted' as const),
+												Match.when(String.startsWith('R'), () => 'renamed' as const),
+												Match.orElse(() => 'modified' as const)
+											)
+										})
+								)
+							),
 						{concurrency: 'unbounded'}
 					)
 				)
@@ -485,23 +486,23 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 			return yield* pipe(
 				Effect.forEach(
 					yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
-					filePath => {
-						return pipe(
+					filePath =>
+						pipe(
 							fs.readFileString(path.join(config.cwd, filePath)),
 							Effect.orElseSucceed(() => ''),
-							Effect.map(content => {
-								return new GitDiff({
-									filePath,
-									patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-										String.split('\n')(content),
-										Array.map(line => `+${line}`),
-										Array.join('\n')
-									)}`,
-									status: 'added'
-								})
-							})
-						)
-					},
+							Effect.map(
+								content =>
+									new GitDiff({
+										filePath,
+										patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+											String.split('\n')(content),
+											Array.map(line => `+${line}`),
+											Array.join('\n')
+										)}`,
+										status: 'added'
+									})
+							)
+						),
 					{concurrency: 'unbounded'}
 				),
 				Effect.map(Array.appendAll(diffs))
@@ -509,45 +510,42 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 		})
 
 		return {
-			discardFile: (filePath: string) => {
-				return Effect.gen(function* () {
+			discardFile: (filePath: string) =>
+				Effect.gen(function* () {
 					yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.ignore)
 					yield* pipe(git.string(config.cwd, ['restore', '--worktree', '--source=HEAD', '--', filePath]), Effect.ignore)
 					yield* pipe(git.string(config.cwd, ['clean', '-fd', '--', filePath]), Effect.asVoid)
-				})
-			},
+				}),
 			reviewDiffs,
 			stageFile: (filePath: string) => pipe(git.string(config.cwd, ['add', '--', filePath]), Effect.asVoid),
 			unstageFile: (filePath: string) => pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.asVoid),
-			watchReviewDiffs: (scope: 'staged-to-worktree' | 'head-to-staged') => {
-				return pipe(
+			watchReviewDiffs: (scope: 'staged-to-worktree' | 'head-to-staged') =>
+				pipe(
 					fs.watch(config.cwd),
 					Stream.catch(() => Stream.empty),
 					Stream.merge(Stream.tick(Duration.millis(250))),
 					Stream.debounce(Duration.millis(50)),
-					Stream.mapEffect(() => {
-						return pipe(
+					Stream.mapEffect(() =>
+						pipe(
 							reviewDiffs(scope),
 							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
 						)
-					}),
-					Stream.changesWith((left, right) => {
-						return (
+					),
+					Stream.changesWith(
+						(left, right) =>
 							Array.length(left) === Array.length(right) &&
-							Array.every(left, (leftDiff, index) => {
-								return (
+							Array.every(
+								left,
+								(leftDiff, index) =>
 									right[index] !== undefined &&
 									leftDiff.filePath === right[index].filePath &&
 									leftDiff.status === right[index].status &&
 									leftDiff.patch === right[index].patch
-								)
-							})
-						)
-					})
+							)
+					)
 				)
-			}
 		}
 	})
 }) {
-	static layer = flow(this.make, Layer.effect(this))
+	public static layer = flow(this.make, Layer.effect(this))
 }

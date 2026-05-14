@@ -7,9 +7,9 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
 
 export const LiveLayers = pipe(
 	Layer.empty,
-	// rpc handlers
+	// Rpc handlers
 	Layer.provideMerge(RpcHandlers),
-	// base layers
+	// Base layers
 	Layer.provideMerge(OtelLayer('portfolio-server')),
 	Layer.provideMerge(RpcSerialization.layerMsgPack)
 )

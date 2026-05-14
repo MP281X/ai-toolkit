@@ -8,15 +8,15 @@ import {useEffect, useRef, useState} from 'react'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
 const DIFF_OPTIONS = {
-	overflow: 'scroll',
-	themeType: 'system',
-	diffStyle: 'unified',
-	lineDiffType: 'word-alt',
 	diffIndicators: 'bars',
+	diffStyle: 'unified',
 	disableBackground: false,
 	disableFileHeader: true,
+	disableLineNumbers: false,
+	lineDiffType: 'word-alt',
+	overflow: 'scroll',
 	theme: HIGHLIGHT_THEMES,
-	disableLineNumbers: false
+	themeType: 'system'
 } as const
 
 const DIFF_CSS = `
@@ -89,7 +89,9 @@ function CommentAnnotation(props: {
 						setBody(event.currentTarget.value)
 						props.onChangeComment?.({...props.comment, body: event.currentTarget.value})
 					}}
-					onClick={event => event.stopPropagation()}
+					onClick={event => {
+						event.stopPropagation()
+					}}
 					onKeyDown={event => {
 						if (event.key === 'Escape') {
 							event.preventDefault()
@@ -135,14 +137,14 @@ function patchResultContent(patch: string) {
 	if (fileDiff.type === 'deleted') return ''
 
 	return Array.join(
-		Array.flatMap(fileDiff.hunks, hunk => {
-			return Array.flatMap(hunk.hunkContent, part => {
-				return Array.take(
+		Array.flatMap(fileDiff.hunks, hunk =>
+			Array.flatMap(hunk.hunkContent, part =>
+				Array.take(
 					Array.drop(fileDiff.additionLines, part.additionLineIndex),
 					part.type === 'context' ? part.lines : part.additions
 				)
-			})
-		}),
+			)
+		),
 		''
 	)
 }
@@ -180,18 +182,18 @@ export function PatchDiff(props: {
 		commitDraftComment()
 
 		if (
-			!Array.some(props.comments ?? Array.empty(), current => {
-				return (
+			!Array.some(
+				props.comments ?? Array.empty(),
+				current =>
 					`${current.filePath}:${current.side === 'deletions' ? 'deletions' : 'file'}:${current.lineNumber}` ===
 					`${props.filePath}:${line.side === 'deletions' ? 'deletions' : 'file'}:${line.lineNumber}`
-				)
-			})
+			)
 		) {
 			setDraftComment({
+				body: '',
 				filePath: props.filePath,
 				lineNumber: line.lineNumber,
-				side: line.side === 'deletions' ? line.side : undefined,
-				body: ''
+				side: line.side === 'deletions' ? line.side : undefined
 			})
 		}
 	}
@@ -217,30 +219,31 @@ export function PatchDiff(props: {
 			>
 				<WorkerPoolContextProvider
 					poolOptions={{
-						workerFactory: () => {
-							return new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
-						},
 						poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
-						totalASTLRUCacheSize: 240
+						totalASTLRUCacheSize: 240,
+						workerFactory: () =>
+							new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
 					}}
-					highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+					highlighterOptions={{lineDiffType: 'word-alt', theme: HIGHLIGHT_THEMES, tokenizeMaxLineLength: 1000}}
 				>
 					<PierrePatchDiff<DiffComment>
 						key={props.patch}
 						patch={props.patch}
 						options={{
 							...DIFF_OPTIONS,
-							unsafeCSS: DIFF_CSS,
-							onLineNumberClick: line => openComment({lineNumber: line.lineNumber, side: line.annotationSide})
+							onLineNumberClick: line => {
+								openComment({lineNumber: line.lineNumber, side: line.annotationSide})
+							},
+							unsafeCSS: DIFF_CSS
 						}}
 						lineAnnotations={Array.map(
 							draftComment
 								? Array.append(props.comments ?? Array.empty(), draftComment)
 								: (props.comments ?? Array.empty()),
 							comment => ({
-								side: comment.side ?? 'additions',
 								lineNumber: comment.lineNumber,
-								metadata: comment
+								metadata: comment,
+								side: comment.side ?? 'additions'
 							})
 						)}
 						renderAnnotation={annotation => (
@@ -263,7 +266,9 @@ export function PatchDiff(props: {
 								}}
 								onSaveComment={props.onSaveComment}
 								onDeleteComment={props.onDeleteComment}
-								onCloseDraft={() => setDraftComment(undefined)}
+								onCloseDraft={() => {
+									setDraftComment(undefined)
+								}}
 							/>
 						)}
 					/>
@@ -292,27 +297,29 @@ export function PatchDiff(props: {
 		>
 			<WorkerPoolContextProvider
 				poolOptions={{
-					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
 					poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
-					totalASTLRUCacheSize: 240
+					totalASTLRUCacheSize: 240,
+					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
 				}}
-				highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+				highlighterOptions={{lineDiffType: 'word-alt', theme: HIGHLIGHT_THEMES, tokenizeMaxLineLength: 1000}}
 			>
 				<File<DiffComment>
 					key={props.patch}
 					file={{
-						name: props.filePath,
 						contents: patchResultContent(props.patch),
-						lang: resolveLanguage(props.filePath)
+						lang: resolveLanguage(props.filePath),
+						name: props.filePath
 					}}
 					options={{
-						overflow: DIFF_OPTIONS.overflow,
-						themeType: DIFF_OPTIONS.themeType,
 						disableFileHeader: DIFF_OPTIONS.disableFileHeader,
-						theme: DIFF_OPTIONS.theme,
 						disableLineNumbers: DIFF_OPTIONS.disableLineNumbers,
-						unsafeCSS: DIFF_CSS,
-						onLineNumberClick: line => openComment({lineNumber: line.lineNumber})
+						onLineNumberClick: line => {
+							openComment({lineNumber: line.lineNumber})
+						},
+						overflow: DIFF_OPTIONS.overflow,
+						theme: DIFF_OPTIONS.theme,
+						themeType: DIFF_OPTIONS.themeType,
+						unsafeCSS: DIFF_CSS
 					}}
 					lineAnnotations={Array.map(
 						Array.filter(
@@ -343,7 +350,9 @@ export function PatchDiff(props: {
 							}}
 							onSaveComment={props.onSaveComment}
 							onDeleteComment={props.onDeleteComment}
-							onCloseDraft={() => setDraftComment(undefined)}
+							onCloseDraft={() => {
+								setDraftComment(undefined)
+							}}
 						/>
 					)}
 				/>

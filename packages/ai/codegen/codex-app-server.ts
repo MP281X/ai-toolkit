@@ -17,9 +17,9 @@ const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/openai/codex/HEAD/cod
 
 const GithubContentEntries = Schema.Array(
 	Schema.Struct({
+		download_url: Schema.NullOr(Schema.String),
 		name: Schema.String,
 		path: Schema.String,
-		download_url: Schema.NullOr(Schema.String),
 		type: Schema.String
 	})
 )
@@ -54,18 +54,16 @@ type JsonSchemaFile = {
 }
 
 class GeneratorError extends Schema.TaggedErrorClass<GeneratorError>()('GeneratorError', {
-	detail: Schema.String,
-	cause: Schema.optional(Schema.Defect)
+	cause: Schema.optional(Schema.Defect),
+	detail: Schema.String
 }) {
-	override get message() {
+	public override get message() {
 		return this.detail
 	}
 }
 
 const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
 	GetAuthStatusParams: {
-		type: 'object',
-		title: 'GetAuthStatusParams',
 		properties: {
 			includeToken: {
 				anyOf: [{type: 'boolean'}, {type: 'null'}]
@@ -73,55 +71,11 @@ const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
 			refreshToken: {
 				anyOf: [{type: 'boolean'}, {type: 'null'}]
 			}
-		}
-	},
-	GetConversationSummaryParams: {
-		title: 'GetConversationSummaryParams',
-		oneOf: [
-			{
-				type: 'object',
-				properties: {
-					rolloutPath: {type: 'string'}
-				},
-				required: ['rolloutPath']
-			},
-			{
-				type: 'object',
-				properties: {
-					conversationId: {type: 'string'}
-				},
-				required: ['conversationId']
-			}
-		]
-	},
-	GetConversationSummaryResponse: {
-		type: 'object',
-		title: 'GetConversationSummaryResponse',
-		properties: {
-			summary: {}
 		},
-		required: ['summary']
-	},
-	GitDiffToRemoteParams: {
-		type: 'object',
-		title: 'GitDiffToRemoteParams',
-		properties: {
-			cwd: {type: 'string'}
-		},
-		required: ['cwd']
-	},
-	GitDiffToRemoteResponse: {
-		type: 'object',
-		title: 'GitDiffToRemoteResponse',
-		properties: {
-			sha: {type: 'string'},
-			diff: {type: 'string'}
-		},
-		required: ['sha', 'diff']
+		title: 'GetAuthStatusParams',
+		type: 'object'
 	},
 	GetAuthStatusResponse: {
-		type: 'object',
-		title: 'GetAuthStatusResponse',
 		properties: {
 			authMethod: {
 				anyOf: [{}, {type: 'null'}]
@@ -133,7 +87,53 @@ const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
 				anyOf: [{type: 'boolean'}, {type: 'null'}]
 			}
 		},
-		required: ['authMethod', 'authToken', 'requiresOpenaiAuth']
+		required: ['authMethod', 'authToken', 'requiresOpenaiAuth'],
+		title: 'GetAuthStatusResponse',
+		type: 'object'
+	},
+	GetConversationSummaryParams: {
+		oneOf: [
+			{
+				properties: {
+					rolloutPath: {type: 'string'}
+				},
+				required: ['rolloutPath'],
+				type: 'object'
+			},
+			{
+				properties: {
+					conversationId: {type: 'string'}
+				},
+				required: ['conversationId'],
+				type: 'object'
+			}
+		],
+		title: 'GetConversationSummaryParams'
+	},
+	GetConversationSummaryResponse: {
+		properties: {
+			summary: {}
+		},
+		required: ['summary'],
+		title: 'GetConversationSummaryResponse',
+		type: 'object'
+	},
+	GitDiffToRemoteParams: {
+		properties: {
+			cwd: {type: 'string'}
+		},
+		required: ['cwd'],
+		title: 'GitDiffToRemoteParams',
+		type: 'object'
+	},
+	GitDiffToRemoteResponse: {
+		properties: {
+			diff: {type: 'string'},
+			sha: {type: 'string'}
+		},
+		required: ['sha', 'diff'],
+		title: 'GitDiffToRemoteResponse',
+		type: 'object'
 	}
 }
 
@@ -142,8 +142,8 @@ const getGeneratedPaths = Effect.fn('getGeneratedPaths')(function* () {
 	const generatedDir = path.join(import.meta.dirname, 'codex-app-server')
 	return {
 		generatedDir,
-		schemaOutputPath: path.join(generatedDir, 'schema.gen.ts'),
-		metaOutputPath: path.join(generatedDir, 'meta.gen.ts')
+		metaOutputPath: path.join(generatedDir, 'meta.gen.ts'),
+		schemaOutputPath: path.join(generatedDir, 'schema.gen.ts')
 	} satisfies GeneratedPaths
 })
 
@@ -162,8 +162,8 @@ const fetchText = Effect.fn('fetchText')(function* (url: string) {
 		Effect.mapError(
 			cause =>
 				new GeneratorError({
-					detail: `Failed to fetch ${url}`,
-					cause
+					cause,
+					detail: `Failed to fetch ${url}`
 				})
 		)
 	)
@@ -198,8 +198,8 @@ function collectSchemaEntries(chunk: string): readonly {readonly name: string; r
 		}
 
 		entries.push({
-			name: match[1],
-			code: `${typeLine}\n${constLine}`
+			code: `${typeLine}\n${constLine}`,
+			name: match[1]
 		})
 		index += 1
 	}
@@ -422,17 +422,17 @@ function buildJsonSchemaFiles(entries: readonly GithubContentEntry[]): readonly 
 			const parts = relative.split('/')
 			if (parts.length > 1) {
 				return {
-					namespace: parts[0]!,
+					downloadUrl: entry.download_url!,
 					exportName: exportNameForPath(relative),
 					fileName: entry.name,
-					downloadUrl: entry.download_url!,
+					namespace: parts[0]!,
 					qualifiedName: relative.replace(/\.json$/, '')
 				} satisfies JsonSchemaFile
 			}
 			return {
+				downloadUrl: entry.download_url!,
 				exportName: exportNameForPath(relative),
 				fileName: entry.name,
-				downloadUrl: entry.download_url!,
 				qualifiedName: relative.replace(/\.json$/, '')
 			} satisfies JsonSchemaFile
 		})
@@ -512,7 +512,7 @@ const generateFiles = Effect.fn('generateFiles')(function* () {
 		const localDefinitionNames = new Map(
 			Object.keys(parsed.definitions ?? {}).map(definitionName => [
 				definitionName,
-				`${file.exportName}__${definitionName.replace(/[^A-Za-z0-9]/g, '')}`
+				`${file.exportName}__${definitionName.replaceAll(/[^A-Za-z0-9]/g, '')}`
 			])
 		)
 

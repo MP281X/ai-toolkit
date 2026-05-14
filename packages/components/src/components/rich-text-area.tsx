@@ -1,4 +1,4 @@
-import {Array, Number, Option, Order, pipe, Record, String} from 'effect'
+import {Array, Number, Option, Order, Record, String, pipe} from 'effect'
 
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
@@ -7,6 +7,7 @@ import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary'
 import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin'
 import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin'
 import {LexicalTypeaheadMenuPlugin, MenuOption} from '@lexical/react/LexicalTypeaheadMenuPlugin'
+// oxlint-disable-next-line import/no-namespace -- Lexical's public API is intentionally consumed as a namespace.
 import * as Lexical from 'lexical'
 import {useEffect, useImperativeHandle, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
@@ -15,18 +16,18 @@ import {Command, CommandItem, CommandList} from '#components/ui/command.tsx'
 import {cn} from '#lib/utils.ts'
 
 class TokenNode extends Lexical.TextNode {
-	__id: string
-	__kind: 'entry' | 'file'
+	public __id: string
+	public __kind: 'entry' | 'file'
 
-	static override getType() {
+	public static override getType() {
 		return 'input-token'
 	}
 
-	static override clone(node: TokenNode) {
+	public static override clone(node: TokenNode) {
 		return new TokenNode(node.__text, node.__id, node.__kind, node.__key)
 	}
 
-	static override importJSON(
+	public static override importJSON(
 		node: Lexical.SerializedTextNode & {
 			readonly id: string
 			readonly kind: 'entry' | 'file'
@@ -36,33 +37,33 @@ class TokenNode extends Lexical.TextNode {
 		return new TokenNode(node.text, node.id, node.kind).updateFromJSON(node)
 	}
 
-	override exportJSON() {
-		return {...super.exportJSON(), type: 'input-token', id: this.__id, kind: this.__kind}
+	public override exportJSON() {
+		return {...super.exportJSON(), id: this.__id, kind: this.__kind, type: 'input-token'}
 	}
 
-	constructor(text: string, id: string, kind: 'entry' | 'file', key?: Lexical.NodeKey) {
+	public constructor(text: string, id: string, kind: 'entry' | 'file', key?: Lexical.NodeKey) {
 		super(text, key)
 		this.__id = id
 		this.__kind = kind
 	}
 
-	override isTextEntity() {
+	public override isTextEntity() {
 		return true
 	}
 
-	override canInsertTextBefore() {
+	public override canInsertTextBefore() {
 		return false
 	}
 
-	override canInsertTextAfter() {
+	public override canInsertTextAfter() {
 		return false
 	}
 }
 
 class Item<TValue extends RichTextArea.Value> extends MenuOption {
-	readonly entry: TextAreaEntry<TValue>
+	public readonly entry: TextAreaEntry<TValue>
 
-	constructor(entry: TextAreaEntry<TValue>, key: string) {
+	public constructor(entry: TextAreaEntry<TValue>, key: string) {
 		super(key)
 		this.entry = entry
 	}
@@ -94,7 +95,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 		if (!ids.has(id)) tokensMap.delete(id)
 	}
 
-	return {text: text.text, editorState, tokens: text.tokens}
+	return {editorState, text: text.text, tokens: text.tokens}
 }
 
 function restore<TValue extends RichTextArea.Value>(
@@ -133,13 +134,13 @@ function getItems<TValue extends RichTextArea.Value>(
 			let lastMatchIndex = -1
 			const label = String.toLowerCase(value.label)
 
-			for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index++) {
+			for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index += 1) {
 				if (label[index] !== query[queryIndex]) continue
 
 				total += lastMatchIndex === index - 1 ? 8 : 1
 				if (index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_') total += 4
 				lastMatchIndex = index
-				queryIndex++
+				queryIndex += 1
 			}
 
 			return {
@@ -150,19 +151,20 @@ function getItems<TValue extends RichTextArea.Value>(
 		Array.filter(candidate => candidate.score > noMatchScore),
 		Array.sortWith(candidate => -candidate.score, Order.Number),
 		Array.take(10),
-		Array.map((value, index) => {
-			return new Item(
-				{trigger: search.trigger, value: value.value, color: group.color},
-				`${search.trigger}:${value.value.label}:${index}`
-			)
-		})
+		Array.map(
+			(value, index) =>
+				new Item(
+					{color: group.color, trigger: search.trigger, value: value.value},
+					`${search.trigger}:${value.value.label}:${index}`
+				)
+		)
 	)
 }
 
 function match(text: string, triggers: readonly string[]) {
 	for (const trigger of triggers) {
 		const index = text.lastIndexOf(trigger)
-		if (index < 0) continue
+		if (index === -1) continue
 
 		if (index > 0 && text[index - 1] !== '(' && !/\s/.test(text[index - 1] ?? '')) continue
 
@@ -170,10 +172,10 @@ function match(text: string, triggers: readonly string[]) {
 		if (String.length(query) > 32 || /\s/.test(query)) continue
 
 		return {
-			trigger,
-			query,
 			leadOffset: index,
-			replaceableString: String.slice(index)(text)
+			query,
+			replaceableString: String.slice(index)(text),
+			trigger
 		}
 	}
 }
@@ -280,62 +282,67 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 		if (props.initialSnapshot) restore(editor, props.initialSnapshot, props.tokensRef.current)
 	}, [editor, props.initialSnapshot, props.tokensRef])
 
-	useEffect(() => {
-		return editor.registerCommand(
-			Lexical.KEY_ENTER_COMMAND,
-			event => {
-				if (continueList(event ?? undefined)) return true
-				if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
+	useEffect(
+		() =>
+			editor.registerCommand(
+				Lexical.KEY_ENTER_COMMAND,
+				event => {
+					if (continueList(event ?? undefined)) return true
+					if (event?.shiftKey || props.menuRef.current || !props.onSubmit) return false
 
-				event?.preventDefault()
-				props.onSubmit(snapshot(editor, props.tokensRef.current))
-				return true
-			},
-			Lexical.COMMAND_PRIORITY_LOW
-		)
-	}, [editor, props.menuRef, props.onSubmit, props.tokensRef])
+					event?.preventDefault()
+					props.onSubmit(snapshot(editor, props.tokensRef.current))
+					return true
+				},
+				Lexical.COMMAND_PRIORITY_LOW
+			),
+		[editor, props.menuRef, props.onSubmit, props.tokensRef]
+	)
 
-	useEffect(() => {
-		return editor.registerCommand(Lexical.KEY_DOWN_COMMAND, closeXmlTag, Lexical.COMMAND_PRIORITY_HIGH)
-	}, [editor])
+	useEffect(
+		() => editor.registerCommand(Lexical.KEY_DOWN_COMMAND, closeXmlTag, Lexical.COMMAND_PRIORITY_HIGH),
+		[editor]
+	)
 
-	useEffect(() => {
-		return editor.registerCommand(
-			Lexical.PASTE_COMMAND,
-			event => {
-				const files =
-					event instanceof ClipboardEvent ? Array.fromIterable(event.clipboardData?.files ?? []) : Array.empty<File>()
-				if (Array.isReadonlyArrayEmpty(files)) return false
+	useEffect(
+		() =>
+			editor.registerCommand(
+				Lexical.PASTE_COMMAND,
+				event => {
+					const files =
+						event instanceof ClipboardEvent ? Array.fromIterable(event.clipboardData?.files ?? []) : Array.empty<File>()
+					if (Array.isReadonlyArrayEmpty(files)) return false
 
-				event.preventDefault()
+					event.preventDefault()
 
-				editor.update(() => {
-					let selection = Lexical.$getSelection()
+					editor.update(() => {
+						let selection = Lexical.$getSelection()
 
-					if (!Lexical.$isRangeSelection(selection)) {
-						Lexical.$getRoot().selectEnd()
-						selection = Lexical.$getSelection()
-						if (!Lexical.$isRangeSelection(selection)) return
-					}
+						if (!Lexical.$isRangeSelection(selection)) {
+							Lexical.$getRoot().selectEnd()
+							selection = Lexical.$getSelection()
+							if (!Lexical.$isRangeSelection(selection)) return
+						}
 
-					for (const file of files) {
-						const id = crypto.randomUUID()
-						props.tokensRef.current.set(id, {id, kind: 'file', color: '#f59e0b', file})
+						for (const file of files) {
+							const id = crypto.randomUUID()
+							props.tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
 
-						selection.insertNodes([
-							Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
-								.setMode('token')
-								.setStyle('color: #f59e0b'),
-							Lexical.$createTextNode(' ')
-						])
-					}
-				})
+							selection.insertNodes([
+								Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
+									.setMode('token')
+									.setStyle('color: #f59e0b'),
+								Lexical.$createTextNode(' ')
+							])
+						}
+					})
 
-				return true
-			},
-			Lexical.COMMAND_PRIORITY_HIGH
-		)
-	}, [editor, props.tokensRef])
+					return true
+				},
+				Lexical.COMMAND_PRIORITY_HIGH
+			),
+		[editor, props.tokensRef]
+	)
 
 	return <HistoryPlugin />
 }
@@ -376,7 +383,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				)
 
 				setSearch(current => {
-					const value = next ? {trigger: next.trigger, query: next.query} : undefined
+					const value = next ? {query: next.query, trigger: next.trigger} : undefined
 					if (current?.trigger === value?.trigger && current?.query === value?.query) return current
 					return value
 				})
@@ -434,9 +441,15 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 									role="option"
 									aria-selected={menuProps.selectedIndex === index}
 									className={cn('px-3', menuProps.selectedIndex === index && 'bg-muted')}
-									onMouseDown={event => event.preventDefault()}
-									onMouseEnter={() => menuProps.setHighlightedIndex(index)}
-									onSelect={() => menuProps.selectOptionAndCleanUp(option)}
+									onMouseDown={event => {
+										event.preventDefault()
+									}}
+									onMouseEnter={() => {
+										menuProps.setHighlightedIndex(index)
+									}}
+									onSelect={() => {
+										menuProps.selectOptionAndCleanUp(option)
+									}}
 								>
 									<div className="flex min-w-0 items-center gap-2">
 										{props.children ? (
@@ -498,8 +511,8 @@ function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
 	)
 
 	return {
-		text: '',
 		editorState,
+		text: '',
 		tokens: Array.empty<TextAreaToken<TValue>>()
 	}
 }
@@ -515,12 +528,6 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	useImperativeHandle(
 		props.ref,
 		() => ({
-			getSnapshot() {
-				return snapshot(editorRef.current ?? undefined, tokensRef.current)
-			},
-			restore(nextSnapshot) {
-				restore(editorRef.current ?? undefined, nextSnapshot, tokensRef.current)
-			},
 			clear() {
 				if (!editorRef.current) return
 				menuRef.current = false
@@ -528,6 +535,12 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 			},
 			focus() {
 				editorRef.current?.focus()
+			},
+			getSnapshot() {
+				return snapshot(editorRef.current ?? undefined, tokensRef.current)
+			},
+			restore(nextSnapshot) {
+				restore(editorRef.current ?? undefined, nextSnapshot, tokensRef.current)
 			}
 		}),
 		[]
@@ -539,10 +552,10 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				initialConfig={{
 					namespace: 'rich-text-area',
 					nodes: [TokenNode],
-					theme: {},
 					onError(error) {
 						throw error
-					}
+					},
+					theme: {}
 				}}
 			>
 				<div className="border-input bg-input/30 relative flex w-full flex-col border">
@@ -582,28 +595,24 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	)
 }
 
-RichTextArea.Actions = (props: {readonly children: React.ReactNode; readonly className?: string}) => {
-	return (
-		<div
-			className={cn(
-				'border-input bg-card absolute inset-x-0 bottom-full z-40 border border-b-0 shadow-lg',
-				props.className
-			)}
-		>
-			{props.children}
-		</div>
-	)
-}
+RichTextArea.Actions = (props: {readonly children: React.ReactNode; readonly className?: string}) => (
+	<div
+		className={cn(
+			'border-input bg-card absolute inset-x-0 bottom-full z-40 border border-b-0 shadow-lg',
+			props.className
+		)}
+	>
+		{props.children}
+	</div>
+)
 
-RichTextArea.ToolBar = (props: {readonly children: React.ReactNode; readonly className?: string}) => {
-	return (
-		<div
-			className={cn(
-				'border-input bg-input/30 flex w-full flex-row items-center justify-between border border-t-0 p-2',
-				props.className
-			)}
-		>
-			{props.children}
-		</div>
-	)
-}
+RichTextArea.ToolBar = (props: {readonly children: React.ReactNode; readonly className?: string}) => (
+	<div
+		className={cn(
+			'border-input bg-input/30 flex w-full flex-row items-center justify-between border border-t-0 p-2',
+			props.className
+		)}
+	>
+		{props.children}
+	</div>
+)

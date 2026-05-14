@@ -1,8 +1,8 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Option, Predicate, pipe, Stream, String} from 'effect'
+import {Array, Effect, Option, Predicate, Stream, String, pipe} from 'effect'
 
-import {createFileRoute, Navigate} from '@tanstack/react-router'
+import {Navigate, createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {useEffect, useRef, useState} from 'react'
 
@@ -62,8 +62,8 @@ const agentEventsAtom = Atom.family((key: AgentKey) =>
 	)
 )
 
-const agentStatusAtom = Atom.family((key: AgentKey) => {
-	return Atom.keepAlive(
+const agentStatusAtom = Atom.family((key: AgentKey) =>
+	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient,
@@ -72,7 +72,7 @@ const agentStatusAtom = Atom.family((key: AgentKey) => {
 			)
 		)
 	)
-})
+)
 
 function ThreadPage() {
 	const search = Route.useSearch()
@@ -211,8 +211,9 @@ function AgentResponse(input: {readonly parts: readonly AgentEvent[]}) {
 									),
 									Option.getOrUndefined
 								)
-								if (callPart?.type === 'tool-call')
+								if (callPart?.type === 'tool-call') {
 									return <ToolPart key={`${index}-${part.id}`} callPart={callPart} resultPart={part} />
+								}
 								return <ToolPart key={`${index}-${part.id}`} resultPart={part} />
 							}
 							if (part.type === 'response-metadata' || part.type === 'finish') return
@@ -291,15 +292,17 @@ function getArrayToolField(payload: unknown, inputPayload: unknown, key: string)
 
 function summarizeToolPayload(name: string, payload: unknown, inputPayload: unknown) {
 	if (name === 'command_execution') return getStringToolField(payload, inputPayload, 'command') ?? ''
-	if (name === 'web_search')
+	if (name === 'web_search') {
 		return (
 			getStringToolField(payload, inputPayload, 'query') ??
 			`${formatNumber(getArrayToolField(payload, inputPayload, 'results').length)} results`
 		)
+	}
 	if (name === 'web_fetch') return `${formatNumber(getArrayToolField(payload, inputPayload, 'urls').length)} urls`
 	if (name === 'file_change') return `${formatNumber(getArrayToolField(payload, inputPayload, 'changes').length)} files`
-	if (name === 'mcp_tool_call')
+	if (name === 'mcp_tool_call') {
 		return `${getStringToolField(payload, inputPayload, 'server') ?? 'mcp'} / ${getStringToolField(payload, inputPayload, 'tool') ?? 'tool'}`
+	}
 	if (name === 'todo_list') return `${formatNumber(getArrayToolField(payload, inputPayload, 'items').length)} items`
 	return ''
 }
@@ -429,8 +432,9 @@ function AgentPanel(input: {
 		events,
 		Array.empty<{readonly id: string; readonly prompt: string; readonly parts: readonly AgentEvent[]}>(),
 		(runs, event) => {
-			if (event.type === 'user-message')
+			if (event.type === 'user-message') {
 				return Array.append(runs, {id: `${Array.length(runs)}`, parts: [], prompt: event.prompt})
+			}
 			if (!Array.isArrayNonEmpty(runs)) return runs
 			const [previousRuns, currentRun] = Array.unappend(runs)
 			return [...previousRuns, {...currentRun, parts: [...currentRun.parts, event]}]
@@ -480,12 +484,13 @@ function AgentPanel(input: {
 		inputRef.current?.clear()
 	}
 
-	useEffect(() => {
-		return () => {
+	useEffect(
+		() => () => {
 			const snapshot = inputRef.current?.getSnapshot()
 			if (snapshot && String.isNonEmpty(snapshot.text)) agentInputStates.set(input.agentKey.id, snapshot)
-		}
-	}, [input.agentKey.id])
+		},
+		[input.agentKey.id]
+	)
 
 	return (
 		<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
@@ -531,7 +536,9 @@ function AgentPanel(input: {
 										<button
 											type="button"
 											className="min-w-0 flex-1 text-left"
-											onMouseDown={event => event.preventDefault()}
+											onMouseDown={event => {
+												event.preventDefault()
+											}}
 											onClick={() => {
 												const currentPrompt = savePrompt()
 												const nextPrompts = Array.filter(stashedPrompts, savedPrompt => savedPrompt.id !== prompt.id)
@@ -551,7 +558,9 @@ function AgentPanel(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="rounded-none"
-											onMouseDown={event => event.preventDefault()}
+											onMouseDown={event => {
+												event.preventDefault()
+											}}
 											onClick={event => {
 												event.stopPropagation()
 												setAgentStash(Array.filter(stashedPrompts, savedPrompt => savedPrompt.id !== prompt.id))
@@ -612,7 +621,13 @@ function AgentPanel(input: {
 								>
 									<Square className="size-3.5 fill-current" />
 								</Button>
-								<Button size="icon-xs" className="rounded-none" onClick={() => submitPrompt()}>
+								<Button
+									size="icon-xs"
+									className="rounded-none"
+									onClick={() => {
+										submitPrompt()
+									}}
+								>
 									<ArrowUpIcon className="size-3.5" />
 								</Button>
 							</div>

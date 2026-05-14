@@ -152,8 +152,11 @@ export const effectRules = [
 			})
 			return
 		}
-		if (!Array.some(unionMembers(channels.error), member => !!context.checker?.getPropertyOfType(member, '_tag')))
+		if (
+			!Array.some(unionMembers(channels.error), member => Boolean(context.checker?.getPropertyOfType(member, '_tag')))
+		) {
 			return
+		}
 		context.report(node.expression, 'prefer-effect-catch-tag', {
 			description: `Broad ${node.expression.name.text} on tagged error channel ${formatType(context.checker, channels.error, node)}.`,
 			fix: 'Use Effect.catchTag/catchTags for the specific _tag cases.'
@@ -300,14 +303,14 @@ export const effectRules = [
 
 function isStandardPrototypeMethod(checker: ts.TypeChecker | undefined, name: ts.Identifier, module: string) {
 	if (!checker) return false
-	return Array.some(checker.getSymbolAtLocation(name)?.declarations ?? [], declaration => {
-		return (
+	return Array.some(
+		checker.getSymbolAtLocation(name)?.declarations ?? [],
+		declaration =>
 			(ts.isInterfaceDeclaration(declaration.parent) || ts.isClassDeclaration(declaration.parent)) &&
 			((String.includes('Array')(module) &&
 				Array.contains(['Array', 'ReadonlyArray'] as const, declaration.parent.name?.text ?? '')) ||
 				(String.includes('String')(module) && declaration.parent.name?.text === 'String'))
-		)
-	})
+	)
 }
 
 function isGlobalObjectConstructor(checker: ts.TypeChecker | undefined, receiver: ts.Expression) {
@@ -319,9 +322,10 @@ function rootRcMapConstructorDeclaration(node: ts.Node) {
 	const statement = variableStatementContainingRcMapConstructor(node)
 	if (!(statement && ts.isSourceFile(statement.parent))) return
 	return Option.getOrUndefined(
-		Array.findFirst(statement.declarationList.declarations, declaration => {
-			return !!declaration.initializer && containsNode(declaration.initializer, child => child === node)
-		})
+		Array.findFirst(
+			statement.declarationList.declarations,
+			declaration => Boolean(declaration.initializer) && containsNode(declaration.initializer, child => child === node)
+		)
 	)
 }
 
@@ -411,25 +415,25 @@ function isCryptoRandomUuidCall(checker: ts.TypeChecker | undefined, node: ts.No
 
 function isImportedCryptoRandomUuid(checker: ts.TypeChecker | undefined, node: ts.Identifier) {
 	if (!checker) return false
-	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
-		return (
+	return Array.some(
+		checker.getSymbolAtLocation(node)?.declarations ?? [],
+		declaration =>
 			ts.isImportSpecifier(declaration) &&
 			(declaration.propertyName ?? declaration.name).text === 'randomUUID' &&
 			ts.isStringLiteral(declaration.parent.parent.parent.moduleSpecifier) &&
 			Array.contains(['crypto', 'node:crypto'] as const, declaration.parent.parent.parent.moduleSpecifier.text)
-		)
-	})
+	)
 }
 
 function isImportedCryptoNamespace(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!(checker && ts.isIdentifier(node))) return false
-	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
-		return (
+	return Array.some(
+		checker.getSymbolAtLocation(node)?.declarations ?? [],
+		declaration =>
 			ts.isNamespaceImport(declaration) &&
 			ts.isStringLiteral(declaration.parent.parent.moduleSpecifier) &&
 			Array.contains(['crypto', 'node:crypto'] as const, declaration.parent.parent.moduleSpecifier.text)
-		)
-	})
+	)
 }
 
 function effectCatchInput(checker: ts.TypeChecker, node: ts.CallExpression) {
@@ -446,7 +450,7 @@ function effectChannels(checker: ts.TypeChecker, node: ts.Node) {
 	const typeId = checker.getPropertyOfType(checker.getTypeAtLocation(node), '~effect/Effect')
 	if (typeId) {
 		const error = varianceReturnType(checker, checker.getTypeOfSymbolAtLocation(typeId, node), '_E', node)
-		return error ? {error: error} : undefined
+		return error ? {error} : undefined
 	}
 }
 
@@ -486,13 +490,16 @@ function isUnnecessaryEffectGen(checker: ts.TypeChecker | undefined, node: ts.Ca
 	if (node.arguments[0].body.statements.length !== 1) return false
 	if (!node.arguments[0].body.statements[0]) return false
 	let expression: ts.Expression | undefined
-	if (ts.isReturnStatement(node.arguments[0].body.statements[0]))
+	if (ts.isReturnStatement(node.arguments[0].body.statements[0])) {
 		expression = node.arguments[0].body.statements[0].expression
-	if (ts.isExpressionStatement(node.arguments[0].body.statements[0]))
+	}
+	if (ts.isExpressionStatement(node.arguments[0].body.statements[0])) {
 		expression = node.arguments[0].body.statements[0].expression
-	if (!(expression && ts.isYieldExpression(expression) && expression.asteriskToken && expression.expression))
+	}
+	if (!(expression && ts.isYieldExpression(expression) && expression.asteriskToken && expression.expression)) {
 		return false
-	return !!effectChannels(checker, expression.expression)
+	}
+	return Boolean(effectChannels(checker, expression.expression))
 }
 
 function effectGenYieldedMapping(checker: ts.TypeChecker | undefined, node: ts.Node) {
@@ -513,8 +520,9 @@ function effectGenYieldedMapping(checker: ts.TypeChecker | undefined, node: ts.N
 			ts.isReturnStatement(node.arguments[0].body.statements[0]) &&
 			node.arguments[0].body.statements[0].expression
 		)
-	)
+	) {
 		return
+	}
 	const yielded = singleYieldExpression(node.arguments[0].body.statements[0].expression)
 	if (!(yielded?.expression && yielded.asteriskToken)) return
 	if (node.arguments[0].body.statements[0].expression === yielded) return
@@ -538,8 +546,9 @@ function singleYieldExpression(node: ts.Node) {
 
 function effectSyncReturnedExpression(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!(checker && ts.isCallExpression(node) && isEffectCall(node) && callName(node) === 'sync')) return
-	if (!(node.arguments[0] && (ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]))))
+	if (!(node.arguments[0] && (ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0])))) {
 		return
+	}
 	const expression = returnedExpression(node.arguments[0])
 	if (!(expression && typeLooksEffect(checker, expression))) return
 	return expression
@@ -548,14 +557,16 @@ function effectSyncReturnedExpression(checker: ts.TypeChecker | undefined, node:
 function isEffectTryWithUntypedCatch(checker: ts.TypeChecker, node: ts.CallExpression) {
 	if (!(isEffectCall(node) && Array.contains(['try', 'tryPromise'] as const, callName(node)))) return false
 	if (!(node.arguments[0] && ts.isObjectLiteralExpression(node.arguments[0]))) return false
-	const catchProperty = Array.findFirst(node.arguments[0].properties, property => {
-		return ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'catch'
-	})
+	const catchProperty = Array.findFirst(
+		node.arguments[0].properties,
+		property => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'catch'
+	)
 	if (catchProperty._tag === 'None' || !ts.isPropertyAssignment(catchProperty.value)) return false
 	if (
 		!(ts.isArrowFunction(catchProperty.value.initializer) || ts.isFunctionExpression(catchProperty.value.initializer))
-	)
+	) {
 		return false
+	}
 	const signatures = checker.getSignaturesOfType(
 		checker.getTypeAtLocation(catchProperty.value.initializer),
 		ts.SignatureKind.Call

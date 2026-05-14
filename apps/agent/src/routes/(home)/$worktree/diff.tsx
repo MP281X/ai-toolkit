@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, pipe, Stream} from 'effect'
+import {Array, Effect, Match, Option, Predicate, Stream, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -22,8 +22,8 @@ export const Route = createFileRoute('/(home)/$worktree/diff')({
 	component: DiffPage
 })
 
-const changesAtom = Atom.family((cwd: string) => {
-	return Atom.keepAlive(
+const changesAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient,
@@ -32,10 +32,10 @@ const changesAtom = Atom.family((cwd: string) => {
 			)
 		)
 	)
-})
+)
 
-const stagedAtom = Atom.family((cwd: string) => {
-	return Atom.keepAlive(
+const stagedAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient,
@@ -44,16 +44,14 @@ const stagedAtom = Atom.family((cwd: string) => {
 			)
 		)
 	)
-})
+)
 
-const reviewSelectionAtom = Atom.family((_cwd: string) => {
-	return Atom.keepAlive(Atom.make({filePath: '', scope: ''}))
-})
+const reviewSelectionAtom = Atom.family((_cwd: string) => Atom.keepAlive(Atom.make({filePath: '', scope: ''})))
 
-const reviewPanelAtom = Atom.family((cwd: string) => {
-	return Atom.keepAlive(
-		Atom.make(get => {
-			return Effect.gen(function* () {
+const reviewPanelAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
+		Atom.make(get =>
+			Effect.gen(function* () {
 				const changes = yield* get.result(changesAtom(cwd))
 				const staged = yield* get.result(stagedAtom(cwd))
 				const selection = get(reviewSelectionAtom(cwd))
@@ -69,21 +67,20 @@ const reviewPanelAtom = Atom.family((cwd: string) => {
 					selectedEntry:
 						pipe(
 							entries,
-							Array.findFirst(entry => {
-								return (
+							Array.findFirst(
+								entry =>
 									selection.scope !== '' &&
 									entry.scope === selection.scope &&
 									entry.diff.filePath === selection.filePath
-								)
-							}),
+							),
 							Option.getOrUndefined
 						) ?? entries[0],
 					stagedDiffs: staged
 				}
 			})
-		})
+		)
 	)
-})
+)
 
 export type QueuedComment = {
 	readonly filePath: string
@@ -142,12 +139,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					Math.min(
 						pipe(
 							panel.entries,
-							Array.findFirstIndex(entry => {
-								return (
+							Array.findFirstIndex(
+								entry =>
 									entry.scope === panel.selectedEntry?.scope &&
 									entry.diff.filePath === panel.selectedEntry.diff.filePath
-								)
-							}),
+							),
 							Option.getOrElse(() => 0)
 						) + selectionInput.offset,
 						Array.length(panel.entries) - 1
@@ -219,27 +215,27 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		if (!reviewPanel.value.selectedEntry) return
 
 		await toggleStageReviewEntry(input.cwd)
-		setComments(current => {
-			return Array.map(current, comment => {
-				return comment.scope === reviewPanel.value.selectedEntry?.scope &&
-					comment.filePath === reviewPanel.value.selectedEntry.diff.filePath
+		setComments(current =>
+			Array.map(current, comment =>
+				comment.scope === reviewPanel.value.selectedEntry?.scope &&
+				comment.filePath === reviewPanel.value.selectedEntry.diff.filePath
 					? {
 							...comment,
 							scope:
 								reviewPanel.value.selectedEntry.scope === 'head-to-staged' ? 'staged-to-worktree' : 'head-to-staged'
 						}
 					: comment
-			})
-		})
+			)
+		)
 	}
 
 	async function discardSelectedEntry() {
 		if (!reviewPanel.value.selectedEntry) return
 
 		await discardReviewEntry(input.cwd)
-		setComments(current => {
-			return Array.filter(current, comment => comment.filePath !== reviewPanel.value.selectedEntry?.diff.filePath)
-		})
+		setComments(current =>
+			Array.filter(current, comment => comment.filePath !== reviewPanel.value.selectedEntry?.diff.filePath)
+		)
 	}
 
 	useHotkey('Enter', () => void toggleSelectedEntryStage(), {
@@ -253,48 +249,55 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		enabled: !Array.isReadonlyArrayEmpty(comments),
 		preventDefault: true
 	})
-	useHotkey({key: '?', shift: true}, () => setShortcutsOpen(true))
+	useHotkey({key: '?', shift: true}, () => {
+		setShortcutsOpen(true)
+	})
 
 	async function copyComments(commentsToCopy: readonly QueuedComment[]) {
 		await navigator.clipboard.writeText(
 			pipe(
 				groupCommentsByFile(commentsToCopy),
-				Array.map(group => {
-					return Array.join(
+				Array.map(group =>
+					Array.join(
 						[
 							`## ${group.filePath}`,
 							pipe(
 								group.comments,
-								Array.map(comment => {
-									return `- ${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
-								}),
+								Array.map(
+									comment =>
+										`- ${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
+								),
 								Array.join('\n\n')
 							)
 						],
 						'\n\n'
 					)
-				}),
+				),
 				Array.prepend('# Review comments'),
 				Array.join('\n\n')
 			)
 		)
-		setComments(current => {
-			return Array.filter(current, comment => {
-				return !new Set(
-					Array.map(commentsToCopy, commentToCopy => {
-						return `${commentToCopy.scope}:${commentToCopy.filePath}:${commentToCopy.side === 'deletions' ? 'deletions' : 'file'}:${commentToCopy.lineNumber}`
-					})
-				).has(
-					`${comment.scope}:${comment.filePath}:${comment.side === 'deletions' ? 'deletions' : 'file'}:${comment.lineNumber}`
-				)
-			})
-		})
+		setComments(current =>
+			Array.filter(
+				current,
+				comment =>
+					!new Set(
+						Array.map(
+							commentsToCopy,
+							commentToCopy =>
+								`${commentToCopy.scope}:${commentToCopy.filePath}:${commentToCopy.side === 'deletions' ? 'deletions' : 'file'}:${commentToCopy.lineNumber}`
+						)
+					).has(
+						`${comment.scope}:${comment.filePath}:${comment.side === 'deletions' ? 'deletions' : 'file'}:${comment.lineNumber}`
+					)
+			)
+		)
 	}
 
 	function deleteFileComments(group: ReturnType<typeof groupCommentsByFile>[number]) {
-		setComments(current => {
-			return Array.filter(current, comment => comment.scope !== group.scope || comment.filePath !== group.filePath)
-		})
+		setComments(current =>
+			Array.filter(current, comment => comment.scope !== group.scope || comment.filePath !== group.filePath)
+		)
 	}
 
 	return (
@@ -369,7 +372,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										size="xs"
 										aria-label={`Delete ${group.comments.length} queued comments for ${group.filePath}`}
 										title={`Delete ${group.comments.length} comments for ${group.filePath}`}
-										onClick={() => deleteFileComments(group)}
+										onClick={() => {
+											deleteFileComments(group)
+										}}
 									>
 										<FileIcon filePath={group.filePath} />
 										<span className="max-w-32 truncate">{group.filePath.split('/').at(-1) ?? group.filePath}</span>
@@ -384,7 +389,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 									aria-label="Delete all queued comments"
 									title="Delete all queued comments"
 									disabled={Array.isReadonlyArrayEmpty(comments)}
-									onClick={() => setComments(Array.empty())}
+									onClick={() => {
+										setComments(Array.empty())
+									}}
 								>
 									<TrashIcon />
 								</Button>
@@ -412,41 +419,40 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 									<PatchDiff
 										filePath={reviewPanel.value.selectedEntry.diff.filePath}
 										patch={reviewPanel.value.selectedEntry.diff.patch}
-										comments={Array.filter(comments, comment => {
-											return (
+										comments={Array.filter(
+											comments,
+											comment =>
 												comment.scope === reviewPanel.value.selectedEntry?.scope &&
 												comment.filePath === reviewPanel.value.selectedEntry.diff.filePath
-											)
-										})}
+										)}
 										onSaveComment={comment => {
-											setComments(current => {
-												return pipe(
+											setComments(current =>
+												pipe(
 													current,
-													Array.filter(currentComment => {
-														return (
+													Array.filter(
+														currentComment =>
 															currentComment.scope !== reviewPanel.value.selectedEntry?.scope ||
 															currentComment.filePath !== comment.filePath ||
 															currentComment.lineNumber !== comment.lineNumber ||
 															(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
 																(comment.side === 'deletions' ? 'deletions' : 'file')
-														)
-													}),
+													),
 													Array.append({...comment, scope: reviewPanel.value.selectedEntry?.scope ?? ''})
 												)
-											})
+											)
 										}}
 										onDeleteComment={comment => {
-											setComments(current => {
-												return Array.filter(current, currentComment => {
-													return (
+											setComments(current =>
+												Array.filter(
+													current,
+													currentComment =>
 														currentComment.scope !== reviewPanel.value.selectedEntry?.scope ||
 														currentComment.filePath !== comment.filePath ||
 														currentComment.lineNumber !== comment.lineNumber ||
 														(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
 															(comment.side === 'deletions' ? 'deletions' : 'file')
-													)
-												})
-											})
+												)
+											)
 										}}
 									/>
 								</div>
@@ -495,47 +501,47 @@ function DiffListEntries(input: {
 		)
 	}
 
-	return Array.map(input.diffs, diff => {
-		return (
-			<li key={diff.filePath} className="w-full min-w-0">
-				<button
-					type="button"
-					aria-current={
-						Predicate.isNotUndefined(input.selectedEntry) &&
+	return Array.map(input.diffs, diff => (
+		<li key={diff.filePath} className="w-full min-w-0">
+			<button
+				type="button"
+				aria-current={
+					Predicate.isNotUndefined(input.selectedEntry) &&
+					input.selectedEntry.scope === input.scope &&
+					input.selectedEntry.diff.filePath === diff.filePath
+						? 'page'
+						: undefined
+				}
+				onClick={() => {
+					input.selectReviewEntry({filePath: diff.filePath, scope: input.scope})
+				}}
+				className={cn(
+					'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-xs',
+					Predicate.isNotUndefined(input.selectedEntry) &&
 						input.selectedEntry.scope === input.scope &&
-						input.selectedEntry.diff.filePath === diff.filePath
-							? 'page'
-							: undefined
-					}
-					onClick={() => input.selectReviewEntry({filePath: diff.filePath, scope: input.scope})}
-					className={cn(
-						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-xs',
-						Predicate.isNotUndefined(input.selectedEntry) &&
-							input.selectedEntry.scope === input.scope &&
-							input.selectedEntry.diff.filePath === diff.filePath &&
-							'bg-primary/15 text-primary'
-					)}
-				>
-					{pipe(
-						Match.value(diff.status),
-						Match.when('added', () => (
-							<span className="text-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
-						)),
-						Match.when('deleted', () => (
-							<span className="text-center text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>
-						)),
-						Match.when('renamed', () => (
-							<span className="text-center text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>
-						)),
-						Match.when('modified', () => (
-							<span className="text-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>
-						)),
-						Match.exhaustive
-					)}
-					<FileIcon filePath={diff.filePath} className="size-3" />
-					<span className="min-w-0 truncate">{diff.filePath}</span>
-				</button>
-			</li>
-		)
-	})
+						input.selectedEntry.diff.filePath === diff.filePath &&
+						'bg-primary/15 text-primary'
+				)}
+			>
+				{pipe(
+					Match.value(diff.status),
+					Match.when('added', () => (
+						<span className="text-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
+					)),
+					Match.when('deleted', () => (
+						<span className="text-center text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>
+					)),
+					Match.when('renamed', () => (
+						<span className="text-center text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>
+					)),
+					Match.when('modified', () => (
+						<span className="text-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>
+					)),
+					Match.exhaustive
+				)}
+				<FileIcon filePath={diff.filePath} className="size-3" />
+				<span className="min-w-0 truncate">{diff.filePath}</span>
+			</button>
+		</li>
+	))
 }

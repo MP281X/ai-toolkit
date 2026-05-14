@@ -1,8 +1,8 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Duration, Effect, pipe, Stream} from 'effect'
+import {Array, Duration, Effect, Stream, pipe} from 'effect'
 
-import {createFileRoute, Navigate} from '@tanstack/react-router'
+import {Navigate, createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -14,19 +14,17 @@ export const Route = createFileRoute('/(home)/$worktree/terminal')({
 	component: TerminalPage
 })
 
-const terminalEventsAtom = Atom.family((cwd: string) => {
-	return RpcClient.runtime.atom(
+const terminalEventsAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => {
-				return client('terminal.events', {cwd})
-			}),
+			Effect.map(client => client('terminal.events', {cwd})),
 			Stream.unwrap,
 			Stream.groupedWithin(100, Duration.millis(16))
 		),
 		{initialValue: Array.empty<TerminalEvent>()}
 	)
-})
+)
 
 function TerminalPage() {
 	const params = Route.useParams()

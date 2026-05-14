@@ -9,40 +9,40 @@ import {providers} from '../catalog.ts'
 
 export const resolveLanguageModel = pipe(
 	Match.type<{readonly provider: ProviderId; readonly model: ModelId}>(),
-	Match.when({provider: 'openrouter'}, input => {
-		return Layer.provideMerge(
+	Match.when({provider: 'openrouter'}, input =>
+		Layer.provideMerge(
 			OpenRouterLanguageModel.layer({
-				model: input.model,
 				config: {
-					strictJsonSchema: true,
 					parallel_tool_calls: true,
 					provider: {sort: 'latency'},
-					reasoning: {effort: 'minimal', summary: 'concise'}
-				}
+					reasoning: {effort: 'minimal', summary: 'concise'},
+					strictJsonSchema: true
+				},
+				model: input.model
 			}),
 			OpenRouterClient.layerConfig(providers[input.provider])
 		)
-	}),
-	Match.when({provider: 'opencode-go', model: 'glm-5'}, input => {
-		return Layer.provideMerge(
+	),
+	Match.when({model: 'glm-5', provider: 'opencode-go'}, input =>
+		Layer.provideMerge(
 			OpenAiCompat.OpenAiLanguageModel.layer({
-				model: input.model,
-				config: {strictJsonSchema: true}
+				config: {strictJsonSchema: true},
+				model: input.model
 			}),
 			OpenAiCompat.OpenAiClient.layerConfig(providers[input.provider])
 		)
-	}),
-	Match.when({provider: 'opencode-go', model: 'deepseek-v4-flash'}, input => {
-		return Layer.provideMerge(
-			OpenAiCompat.OpenAiLanguageModel.layer({model: input.model, config: {}}),
+	),
+	Match.when({model: 'deepseek-v4-flash', provider: 'opencode-go'}, input =>
+		Layer.provideMerge(
+			OpenAiCompat.OpenAiLanguageModel.layer({config: {}, model: input.model}),
 			OpenAiCompat.OpenAiClient.layerConfig(providers[input.provider])
 		)
-	}),
-	Match.when({provider: 'openai'}, input => {
-		return Layer.provideMerge(
-			OpenAiLanguageModel.layer({model: input.model, config: {text: {verbosity: 'low'}}}),
+	),
+	Match.when({provider: 'openai'}, input =>
+		Layer.provideMerge(
+			OpenAiLanguageModel.layer({config: {text: {verbosity: 'low'}}, model: input.model}),
 			OpenAiClient.layerConfig(providers[input.provider])
 		)
-	}),
+	),
 	Match.orElseAbsurd
 )
