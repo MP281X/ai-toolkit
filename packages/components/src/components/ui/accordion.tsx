@@ -21,7 +21,7 @@ function AccordionTrigger({className, children, ...props}: AccordionPrimitive.Tr
 			<AccordionPrimitive.Trigger
 				data-slot="accordion-trigger"
 				className={cn(
-					'group/accordion-trigger relative flex flex-1 items-start justify-between rounded-none border border-transparent py-2.5 text-left font-medium text-xs outline-none transition-all hover:underline focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:after:border-ring disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground',
+					'group/accordion-trigger focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:after:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground relative flex flex-1 items-start justify-between rounded-none border border-transparent py-2.5 text-left text-xs font-medium transition-all outline-none hover:underline focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4',
 					className
 				)}
 				{...props}
@@ -44,12 +44,12 @@ function AccordionContent({className, children, ...props}: AccordionPrimitive.Pa
 	return (
 		<AccordionPrimitive.Panel
 			data-slot="accordion-content"
-			className="overflow-hidden text-xs data-closed:animate-accordion-up data-open:animate-accordion-down"
+			className="data-closed:animate-accordion-up data-open:animate-accordion-down overflow-hidden text-xs"
 			{...props}
 		>
 			<div
 				className={cn(
-					'h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4',
+					'[&_a]:hover:text-foreground h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_p:not(:last-child)]:mb-4',
 					className
 				)}
 			>

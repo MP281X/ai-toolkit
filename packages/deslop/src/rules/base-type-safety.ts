@@ -2,6 +2,20 @@ import {Array} from 'effect'
 
 import ts from 'typescript'
 
+import type {Rule} from './helpers.ts'
+import {
+	isAllowedNamedType,
+	isAllowedNullLiteral,
+	isArrayIsArrayCall,
+	isExportedDeclaration,
+	isNullishComparison,
+	isReactUseRefCall,
+	isReactUseStateCall,
+	isRecursiveFunction,
+	nullishComparedExpression,
+	rule
+} from './helpers.ts'
+
 import {
 	containsNode,
 	hasModifier,
@@ -11,21 +25,6 @@ import {
 	typeIncludesNullish,
 	typeLooksReadonlyArray
 } from '#lib/ts.ts'
-import type {Rule} from './helpers.ts'
-import {
-	isAllowedNamedType,
-	isAllowedNullLiteral,
-	isArrayIsArrayCall,
-	isExportedDeclaration,
-	isInsideTypeName,
-	isNullishComparison,
-	isReactRefCurrentPropertySignature,
-	isReactUseRefCall,
-	isReactUseStateCall,
-	isRecursiveFunction,
-	nullishComparedExpression,
-	rule
-} from './helpers.ts'
 
 export const baseTypeSafetyRules = [
 	rule('no-type-assertion-except-as-const', (node, context) => {
@@ -50,75 +49,6 @@ export const baseTypeSafetyRules = [
 			context.report(node, 'no-type-assertion-except-as-const', {
 				description: 'Non-null assertion repeats a non-nullish type.',
 				fix: `Remove "!" from "${normalizedText(node.expression)}".`
-			})
-		}
-	}),
-	rule('prefer-readonly-types', (node, context) => {
-		if (ts.isPropertySignature(node) && !hasModifier(node, ts.SyntaxKind.ReadonlyKeyword)) {
-			if (ts.isIdentifier(node.name) && node.name.text === 'current') return
-			if (isReactRefCurrentPropertySignature(node)) return
-			context.report(node.name, 'prefer-readonly-types', {
-				description: `Property "${node.name.getText(context.sourceFile)}" is mutable in a type shape.`,
-				fix: 'Add readonly to this property signature.'
-			})
-		}
-		if (ts.isArrayTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			if (
-				ts.findAncestor(node, ancestor => {
-					return (
-						ts.isCallExpression(ancestor) &&
-						isReactUseRefCall(context.checker, ancestor) &&
-						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-					)
-				}) ||
-				ts.findAncestor(node, ancestor => {
-					return (
-						ts.isTypeReferenceNode(ancestor) &&
-						ts.isQualifiedName(ancestor.typeName) &&
-						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-					)
-				})
-			) {
-				return
-			}
-			context.report(node, 'prefer-readonly-types', {
-				description: `Array type "${normalizedText(node)}" is mutable.`,
-				fix: `Use readonly ${normalizedText(node)} or ReadonlyArray<${normalizedText(node.elementType)}> with the same element type.`
-			})
-		}
-		if (
-			ts.isTypeReferenceNode(node) &&
-			ts.isIdentifier(node.typeName) &&
-			node.typeName.text === 'Array' &&
-			!isInsideTypeName(node.typeName)
-		) {
-			context.report(node.typeName, 'prefer-readonly-types', {
-				description: 'Array<T> is mutable.',
-				fix: 'Replace it with ReadonlyArray<T>.'
-			})
-		}
-		if (ts.isTupleTypeNode(node) && !ts.isTypeOperatorNode(node.parent)) {
-			if (
-				ts.findAncestor(node, ancestor => {
-					return (
-						ts.isCallExpression(ancestor) &&
-						isReactUseRefCall(context.checker, ancestor) &&
-						Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-					)
-				}) ||
-				ts.findAncestor(node, ancestor => {
-					return (
-						ts.isTypeReferenceNode(ancestor) &&
-						ts.isQualifiedName(ancestor.typeName) &&
-						ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-					)
-				})
-			) {
-				return
-			}
-			context.report(node, 'prefer-readonly-types', {
-				description: `Tuple type "${normalizedText(node)}" is mutable.`,
-				fix: 'Prefix it with readonly.'
 			})
 		}
 	}),
@@ -262,9 +192,10 @@ export const baseTypeSafetyRules = [
 		if (!ts.isTypeAliasDeclaration(node)) return
 		if (!containsAccessorType(node.type)) return
 		if (
-			containsNode(node.type, child => {
-				return ts.isTypeQueryNode(child) && entityNameRoot(child.exprName) === node.name.text
-			}) &&
+			containsNode(
+				node.type,
+				child => ts.isTypeQueryNode(child) && entityNameRoot(child.exprName) === node.name.text
+			) &&
 			containsAccessorType(node.type)
 		) {
 			return
@@ -289,14 +220,14 @@ export const baseTypeSafetyRules = [
 		if (ts.isBinaryExpression(node)) {
 			if (
 				node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
-				!containsNode(node.left, child => {
-					return (
+				!containsNode(
+					node.left,
+					child =>
 						(ts.isPropertyAccessExpression(child) ||
 							ts.isElementAccessExpression(child) ||
 							ts.isCallExpression(child)) &&
 						child.questionDotToken !== undefined
-					)
-				}) &&
+				) &&
 				!typeIncludesNullish(context.checker.getTypeAtLocation(node.left))
 			) {
 				context.report(node.operatorToken, 'no-redundant-type-system-check', {
@@ -407,9 +338,10 @@ function isEffectFnParameterNeedingAnnotation(checker: ts.TypeChecker, node: ts.
 		ts.isIdentifier(node.parent.parent.expression.expression) &&
 		node.parent.parent.expression.expression.text === 'Effect' &&
 		Array.contains(['fn', 'fnUntraced'] as const, node.parent.parent.expression.name.text) &&
-		!Array.some(checker.getContextualType(node.parent.parent)?.getCallSignatures() ?? [], signature => {
-			return signature.getParameters().length > 0
-		})
+		!Array.some(
+			checker.getContextualType(node.parent.parent)?.getCallSignatures() ?? [],
+			signature => signature.getParameters().length > 0
+		)
 	)
 }
 
@@ -420,9 +352,11 @@ function hasGenericCallbackParameterType(
 	parameter: number
 ) {
 	if (argument < 0 || parameter < 0) return false
-	return Array.some(checker.getResolvedSignature(call)?.getDeclaration()?.parameters ?? [], (declaration, index) => {
-		return index === argument && callbackParameterTypeNeedsAnnotation(checker, declaration.type, parameter)
-	})
+	return Array.some(
+		checker.getResolvedSignature(call)?.getDeclaration()?.parameters ?? [],
+		(declaration, index) =>
+			index === argument && callbackParameterTypeNeedsAnnotation(checker, declaration.type, parameter)
+	)
 }
 
 function callbackParameterTypeNeedsAnnotation(
@@ -467,7 +401,8 @@ function containingCallArgument(
 	node: ts.Node
 ): {readonly call: ts.CallExpression; readonly argument: number} | undefined {
 	if (ts.isSourceFile(node)) return
-	if (ts.isExpression(node) && ts.isCallExpression(node.parent))
-		return {call: node.parent, argument: argumentIndex(node)}
+	if (ts.isExpression(node) && ts.isCallExpression(node.parent)) {
+		return {argument: argumentIndex(node), call: node.parent}
+	}
 	return containingCallArgument(node.parent)
 }

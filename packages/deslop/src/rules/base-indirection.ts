@@ -2,18 +2,6 @@ import {Array} from 'effect'
 
 import ts from 'typescript'
 
-import {
-	bindingNames,
-	callName,
-	containsNode,
-	isBooleanExpression,
-	isConstAssertion,
-	isHookCall,
-	isPipeCall,
-	isReactHookTupleCall,
-	normalizedText,
-	returnedExpression
-} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
 import {
 	countIdentifierUses,
@@ -32,35 +20,18 @@ import {
 	unwrapAwait
 } from './helpers.ts'
 
+import {
+	callName,
+	containsNode,
+	isBooleanExpression,
+	isConstAssertion,
+	isHookCall,
+	isPipeCall,
+	normalizedText,
+	returnedExpression
+} from '#lib/ts.ts'
+
 export const baseIndirectionRules = [
-	rule('no-destructuring', (node, context) => {
-		if (
-			ts.isVariableDeclaration(node) &&
-			(ts.isObjectBindingPattern(node.name) || ts.isArrayBindingPattern(node.name))
-		) {
-			if (ts.isArrayBindingPattern(node.name) && node.initializer && isReactHookTupleCall(node.initializer)) return
-			if (
-				ts.isArrayBindingPattern(node.name) &&
-				node.initializer &&
-				context.checker?.isTupleType(context.checker.getTypeAtLocation(node.initializer))
-			) {
-				return
-			}
-			context.report(node.name, 'no-destructuring', {
-				description: `Destructuring hides source "${node.initializer ? normalizedText(node.initializer) : '<unknown>'}".`,
-				fix: `Replace ${Array.join(
-					Array.map(bindingNames(node.name), name => name.text),
-					', '
-				)} with direct source property/index access, then delete the binding.`
-			})
-		}
-		if (ts.isParameter(node) && (ts.isObjectBindingPattern(node.name) || ts.isArrayBindingPattern(node.name))) {
-			context.report(node.name, 'no-destructuring', {
-				description: 'Parameter destructuring hides the argument object.',
-				fix: `Name the parameter (for example props), then read ${normalizedText(node.name)} fields directly from it.`
-			})
-		}
-	}),
 	rule('no-single-use-local-binding', (node, context) => {
 		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
 		if (isExemptNamedValue(context.checker, node)) return
@@ -148,12 +119,12 @@ export const baseIndirectionRules = [
 		if (
 			ts.isObjectLiteralExpression(initializer) &&
 			(initializer.properties.length <= 5 ||
-				Array.every(initializer.properties, property => {
-					return (
+				Array.every(
+					initializer.properties,
+					property =>
 						ts.isShorthandPropertyAssignment(property) ||
 						(ts.isPropertyAssignment(property) && ts.isIdentifier(property.initializer))
-					)
-				}))
+				))
 		) {
 			context.report(node.name, 'no-simple-local-binding', {
 				description: `"${node.name.text}" only names a ${initializer.properties.length}-property object.`,
@@ -203,13 +174,13 @@ export const baseIndirectionRules = [
 			ts.isCallExpression(call) &&
 			callName(call) !== functionLikeName(node) &&
 			call.arguments.length === node.parameters.length &&
-			Array.every(call.arguments, (argument, index) => {
-				return (
+			Array.every(
+				call.arguments,
+				(argument, index) =>
 					node.parameters[index] !== undefined &&
 					ts.isIdentifier(argument) &&
 					argument.text === node.parameters[index].name.getText(context.sourceFile)
-				)
-			})
+			)
 		) {
 			context.report(nameNode(node), 'no-vacuous-abstraction', {
 				description: `"${functionLikeName(node)}" only forwards to "${normalizedText(call)}".`,
@@ -261,11 +232,11 @@ export const baseIndirectionRules = [
 	}),
 	rule('no-vacuous-abstraction', (node, context) => {
 		if (!isNamedFunctionLike(node)) return
-		const constant = Array.findFirst(node.parameters, parameter => {
-			return (
+		const constant = Array.findFirst(
+			node.parameters,
+			parameter =>
 				context.references.get(parameter.name.getText(context.sourceFile)) === 1 && parameter.initializer !== undefined
-			)
-		})
+		)
 		if (constant._tag === 'Some') {
 			context.report(constant.value.name, 'no-vacuous-abstraction', {
 				description: `Parameter "${constant.value.name.getText(context.sourceFile)}" has a default but no real variation.`,
@@ -286,12 +257,12 @@ export const baseIndirectionRules = [
 		}
 		if (
 			/^[A-Z]/.test(node.name.text) &&
-			Array.every(node.initializer.properties, property => {
-				return (
+			Array.every(
+				node.initializer.properties,
+				property =>
 					ts.isShorthandPropertyAssignment(property) ||
 					(ts.isPropertyAssignment(property) && ts.isIdentifier(property.initializer))
-				)
-			})
+			)
 		) {
 			context.report(node.name, 'no-vacuous-abstraction', {
 				description: `"${node.name.text}" is a facade over existing symbols.`,

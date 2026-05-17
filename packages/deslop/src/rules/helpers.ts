@@ -11,11 +11,9 @@ import {
 	isCheapExpression,
 	isEffectCall,
 	isEffectConstructorCall,
-	isEffectGenLikeCall,
 	isFlowCall,
 	isHookCall,
 	isImportedIdentifier,
-	isMatchCall,
 	isRcMapConstructorCall,
 	isSchemaExpression,
 	normalizedText,
@@ -69,7 +67,6 @@ export function shouldRunRule(ruleId: string, filePath: string) {
 		!Array.contains(['no-vacuous-abstraction', 'no-plain-class'] as const, ruleId) ||
 		new Set([
 			'no-type-assertion-except-as-const',
-			'prefer-readonly-types',
 			'prefer-undefined-over-null',
 			'no-redundant-type-system-check',
 			'no-redundant-type-syntax'
@@ -97,22 +94,18 @@ export function isConstVariable(node: ts.VariableDeclaration) {
 }
 
 export function isMutated(name: string, sourceFile: ts.SourceFile) {
-	return containsNode(sourceFile, node => {
-		return (
+	return containsNode(
+		sourceFile,
+		node =>
 			ts.isBinaryExpression(node) &&
 			ts.isIdentifier(node.left) &&
 			node.left.text === name &&
 			isAssignmentOperator(node.operatorToken.kind)
-		)
-	})
+	)
 }
 
 export function isAssignmentOperator(kind: ts.SyntaxKind) {
 	return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment
-}
-
-export function isInsideTypeName(node: ts.Identifier) {
-	return ts.isTypeReferenceNode(node.parent) && node.parent.typeName === node
 }
 
 export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: ts.Node) {
@@ -127,24 +120,24 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isCallExpression(ancestor) &&
 				isReactUseRefCall(checker, ancestor) &&
 				Array.some(ancestor.arguments, argument => containsNode(argument, child => child === node))
-			)
-		})
+		)
 	) {
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isCallExpression(ancestor) &&
 				isReactUseRefCall(checker, ancestor) &&
 				Array.some(ancestor.typeArguments ?? [], argument => containsNode(argument, child => child === node))
-			)
-		}) ||
+		) ||
 		(ts.isBinaryExpression(node.parent) &&
 			isAssignmentOperator(node.parent.operatorToken.kind) &&
 			ts.isPropertyAccessExpression(node.parent.left) &&
@@ -153,16 +146,17 @@ export function isAllowedNullLiteral(checker: ts.TypeChecker | undefined, node: 
 		return true
 	}
 	if (
-		ts.findAncestor(node, ancestor => {
-			return (
+		ts.findAncestor(
+			node,
+			ancestor =>
 				ts.isTypeReferenceNode(ancestor) &&
 				ts.isQualifiedName(ancestor.typeName) &&
 				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-			)
-		}) ||
-		ts.findAncestor(node, ancestor => {
-			return ts.isPropertySignature(ancestor) && ts.isIdentifier(ancestor.name) && ancestor.name.text === 'current'
-		})
+		) ||
+		ts.findAncestor(
+			node,
+			ancestor => ts.isPropertySignature(ancestor) && ts.isIdentifier(ancestor.name) && ancestor.name.text === 'current'
+		)
 	) {
 		return true
 	}
@@ -274,14 +268,6 @@ export function isAllowedNamedType(node: ts.TypeAliasDeclaration | ts.InterfaceD
 	return containsNode(node, child => ts.isIdentifier(child) && child.text === node.name.text && child !== node.name)
 }
 
-export function isAllowedCallableValue(node: ts.Expression) {
-	return (
-		(ts.isCallExpression(node) &&
-			(isFlowCall(node) || isEffectGenLikeCall(node) || isMatchCall(node) || isSchemaExpression(node))) ||
-		(ts.isArrowFunction(node) && ts.isCallExpression(node.body) && isSchemaExpression(node.body))
-	)
-}
-
 export function isNamedFunctionLike(node: ts.Node): node is ts.FunctionLikeDeclaration {
 	return (
 		(ts.isFunctionDeclaration(node) && !!node.name) ||
@@ -347,7 +333,8 @@ export function isEffectModuleReceiver(checker: ts.TypeChecker | undefined, node
 export function linearVariableChain(
 	block: ts.Block,
 	shouldChain: (
-		declaration: ts.VariableDeclaration & {readonly name: ts.Identifier; readonly initializer: ts.Expression}
+		// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+		declaration: Readonly<ts.VariableDeclaration> & {readonly name: ts.Identifier; readonly initializer: ts.Expression}
 	) => boolean
 ) {
 	return Array.reduce(
@@ -377,12 +364,9 @@ export function linearVariableChain(
 			return pipe(
 				Array.get(chain, Array.length(chain) - 1),
 				Option.filter(shouldChain),
-				Option.filter(previous => {
-					return containsNode(
-						declaration.initializer,
-						node => ts.isIdentifier(node) && node.text === previous.name.text
-					)
-				}),
+				Option.filter(previous =>
+					containsNode(declaration.initializer, node => ts.isIdentifier(node) && node.text === previous.name.text)
+				),
 				Option.match({
 					onNone: () => chain,
 					onSome: () => Array.append(chain, declaration)
@@ -472,20 +456,6 @@ export function nameNodeForDeclaration(node: ts.Node) {
 export function isReactRefCurrent(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!(checker && ts.isPropertyAccessExpression(node) && node.name.text === 'current')) return false
 	return String.includes('RefObject<')(checker.typeToString(checker.getTypeAtLocation(node.expression)))
-}
-
-export function isReactRefCurrentPropertySignature(node: ts.PropertySignature) {
-	return (
-		ts.isIdentifier(node.name) &&
-		node.name.text === 'current' &&
-		!!ts.findAncestor(node, ancestor => {
-			return (
-				ts.isTypeReferenceNode(ancestor) &&
-				ts.isQualifiedName(ancestor.typeName) &&
-				ancestor.typeName.getText(ancestor.getSourceFile()) === 'React.RefObject'
-			)
-		})
-	)
 }
 
 export function previousFunctionWithSameBody(node: ts.FunctionDeclaration) {

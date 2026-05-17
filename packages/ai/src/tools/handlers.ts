@@ -10,8 +10,9 @@ export const WebSearchToolKitLayer = WebSearchToolKit.toLayer(
 		const exa = new Exa(yield* Config.string('AI_EXA'))
 
 		return WebSearchToolKit.of({
-			web_search: params => {
-				return Effect.tryPromise({
+			web_search: params =>
+				Effect.tryPromise({
+					catch: cause => new AiError.UnknownError({description: `web search failed: ${String.String(cause)}`}),
 					try: async () => {
 						const response = await exa.search(params.query, {
 							contents: {highlights: true, text: true},
@@ -27,10 +28,8 @@ export const WebSearchToolKitLayer = WebSearchToolKit.toLayer(
 								url: result.url
 							}))
 						}
-					},
-					catch: cause => new AiError.UnknownError({description: `web search failed: ${String.String(cause)}`})
+					}
 				})
-			}
 		})
 	})
 )
@@ -40,11 +39,12 @@ export const WebFetchToolKitLayer = WebFetchToolKit.toLayer(
 		const exa = new Exa(yield* Config.string('AI_EXA'))
 
 		return WebFetchToolKit.of({
-			web_fetch: params => {
-				return Effect.tryPromise({
+			web_fetch: params =>
+				Effect.tryPromise({
+					catch: cause => new AiError.UnknownError({description: `web fetch failed: ${String.String(cause)}`}),
 					try: async () => {
 						const urls = Array.map(params.urls, url => url.toString())
-						const response = await exa.getContents(urls, {text: true, highlights: true})
+						const response = await exa.getContents(urls, {highlights: true, text: true})
 
 						return {
 							results: Array.map(response.results, result => ({
@@ -55,10 +55,8 @@ export const WebFetchToolKitLayer = WebFetchToolKit.toLayer(
 							})),
 							urls
 						}
-					},
-					catch: cause => new AiError.UnknownError({description: `web fetch failed: ${String.String(cause)}`})
+					}
 				})
-			}
 		})
 	})
 )

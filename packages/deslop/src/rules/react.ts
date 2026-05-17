@@ -2,27 +2,12 @@ import {Array, String} from 'effect'
 
 import ts from 'typescript'
 
-import {containsNode, isHookCall, normalizedText} from '#lib/ts.ts'
 import type {Rule} from './helpers.ts'
-import {
-	isAllowedCallableValue,
-	isAssignmentOperator,
-	isReactRefCurrent,
-	isReactUseStateCall,
-	isTailwindStringLiteral,
-	rule
-} from './helpers.ts'
+import {isAssignmentOperator, isReactRefCurrent, isReactUseStateCall, isTailwindStringLiteral, rule} from './helpers.ts'
+
+import {isHookCall, normalizedText} from '#lib/ts.ts'
 
 export const reactRules = [
-	rule('no-explicit-default-value', (node, context) => {
-		if (!ts.isJsxAttribute(node)) return
-		if (isIntrinsicFalseBooleanAttribute(node)) {
-			context.report(node.name, 'no-explicit-default-value', {
-				description: `JSX prop "${node.name.getText(context.sourceFile)}" explicitly passes its default value.`,
-				fix: 'Delete this prop and rely on the default.'
-			})
-		}
-	}),
 	rule('no-jsx-props-object', (node, context) => {
 		if (!ts.isJsxSpreadAttribute(node)) return
 		context.report(node, 'no-jsx-props-object', {
@@ -48,31 +33,6 @@ export const reactRules = [
 				fix: `Inline "${normalizedText(node.initializer)}" into className and delete this binding.`
 			})
 		}
-	}),
-	rule('prefer-function-declaration', (node, context) => {
-		if (!(ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)) return
-		if (!(ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) return
-		if (isAllowedCallableValue(node.initializer)) return
-		context.report(node.name, 'prefer-function-declaration', {
-			description: `"${node.name.text}" is a named ${ts.isArrowFunction(node.initializer) ? 'arrow' : 'function'} value.`,
-			fix: `Rewrite it as "function ${node.name.text}(...)"; keep arrows for inline callbacks.`
-		})
-	}),
-	rule('prefer-arrow-callback', (node, context) => {
-		if (!(ts.isFunctionExpression(node) && ts.isCallExpression(node.parent)) || node.asteriskToken) return
-		if (
-			node.name &&
-			node.body &&
-			containsNode(node.body, child => {
-				return ts.isIdentifier(child) && child.text === node.name?.text
-			})
-		) {
-			return
-		}
-		context.report(node, 'prefer-arrow-callback', {
-			description: `Callback passed to "${normalizedText(node.parent.expression)}" uses function syntax.`,
-			fix: 'Rewrite as an arrow callback; keep function* generators unchanged.'
-		})
 	}),
 	rule('no-manual-memoization', (node, context) => {
 		if (
@@ -170,26 +130,11 @@ export const reactRules = [
 	})
 ] as const satisfies readonly Rule[]
 
-function isIntrinsicFalseBooleanAttribute(node: ts.JsxAttribute) {
-	const element =
-		ts.isJsxOpeningElement(node.parent.parent) || ts.isJsxSelfClosingElement(node.parent.parent)
-			? node.parent.parent
-			: undefined
-	if (!element) return false
-	if (!ts.isIdentifier(element.tagName) || element.tagName.text !== String.toLowerCase(element.tagName.text)) {
-		return false
-	}
-	return !!(
-		node.initializer &&
-		ts.isJsxExpression(node.initializer) &&
-		node.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword
-	)
-}
-
 function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
 	if (!checker) return false
-	return Array.some(checker.getSymbolAtLocation(node)?.declarations ?? [], declaration => {
-		return (
+	return Array.some(
+		checker.getSymbolAtLocation(node)?.declarations ?? [],
+		declaration =>
 			ts.isFunctionDeclaration(declaration) ||
 			ts.isClassDeclaration(declaration) ||
 			(ts.isVariableDeclaration(declaration) &&
@@ -197,8 +142,7 @@ function isComponentValue(checker: ts.TypeChecker | undefined, node: ts.Node) {
 				(ts.isArrowFunction(declaration.initializer) ||
 					ts.isFunctionExpression(declaration.initializer) ||
 					ts.isClassExpression(declaration.initializer)))
-		)
-	})
+	)
 }
 
 function isJsxValue(node: ts.Expression): boolean {

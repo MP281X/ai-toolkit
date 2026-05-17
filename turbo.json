@@ -3,17 +3,17 @@
 	"$schema": "https://turbo.build/schema.json",
 
 	"globalEnv": ["NODE_*", "VITE_*"],
-	"globalDependencies": ["bun.lock", "biome.json", "tsconfig.json", "./packages/linter/src/*.grit"],
+	"globalDependencies": ["bun.lock", ".oxfmtrc.jsonc", ".oxlintrc.jsonc", "tsconfig.json"],
 
 	"tasks": {
-		"dev:client": { "cache": false, "persistent": true },
-		"dev:server": { "cache": false, "persistent": true },
+		"dev:client": {"cache": false, "persistent": true},
+		"dev:server": {"cache": false, "persistent": true},
 
-		"build:client": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
-		"build:server": { "dependsOn": ["^check"], "outputs": ["dist/**"] },
+		"build:client": {"dependsOn": ["^check"], "outputs": ["dist/**"]},
+		"build:server": {"dependsOn": ["^check"], "outputs": ["dist/**"]},
 
-		"test": { "dependsOn": ["^test"] },
-		"fix": { "dependsOn": ["^fix"] },
-		"check": { "dependsOn": ["fix", "^check"] }
+		"test": {"dependsOn": ["^test"]},
+		"fix": {"dependsOn": ["^fix"]},
+		"check": {"dependsOn": ["fix", "^check"]}
 	}
 }

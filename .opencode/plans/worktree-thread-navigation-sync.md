@@ -17,13 +17,13 @@ Make worktrees and threads the primary operational concepts.
 
 ### Concepts
 
-| Concept | Role | Navigation Weight |
-| --- | --- | --- |
-| Workspace | Grouping boundary | Low |
-| Repo | Group label and ownership boundary | Medium |
-| Worktree | Active code context | High |
-| Thread | Active agent conversation/task | Highest |
-| View | Worktree-scoped surface | High |
+| Concept   | Role                               | Navigation Weight |
+| --------- | ---------------------------------- | ----------------- |
+| Workspace | Grouping boundary                  | Low               |
+| Repo      | Group label and ownership boundary | Medium            |
+| Worktree  | Active code context                | High              |
+| Thread    | Active agent conversation/task     | Highest           |
+| View      | Worktree-scoped surface            | High              |
 
 ### Thread Lifecycle
 
@@ -61,12 +61,12 @@ Behavior:
 
 Row layout:
 
-| Position | Content |
-| --- | --- |
-| Main label | Thread title |
+| Position       | Content                                       |
+| -------------- | --------------------------------------------- |
+| Main label     | Thread title                                  |
 | Fallback label | First prompt preview or `Generating title...` |
-| Right side | Worktree name only |
-| Badge | Thread state when useful |
+| Right side     | Worktree name only                            |
+| Badge          | Thread state when useful                      |
 
 Thread states shown:
 
@@ -111,10 +111,10 @@ Purpose:
 
 Initial tabs:
 
-| Shortcut | View |
-| --- | --- |
+| Shortcut | View   |
+| -------- | ------ |
 | `Ctrl+1` | Thread |
-| `Ctrl+2` | Diff |
+| `Ctrl+2` | Diff   |
 
 Rules:
 
@@ -166,16 +166,16 @@ Thread navigation requires backend-synced metadata:
 
 ```ts
 type ThreadMetadata = {
-  threadId: string
-  repoRoot: string
-  worktreeRoot: string
-  worktreeName: string
-  agentRuntime: string
-  title: string | undefined
-  firstPromptPreview: string | undefined
-  lastActivityAt: Date
-  state: ThreadState
-  archived: boolean
+	threadId: string
+	repoRoot: string
+	worktreeRoot: string
+	worktreeName: string
+	agentRuntime: string
+	title: string | undefined
+	firstPromptPreview: string | undefined
+	lastActivityAt: Date
+	state: ThreadState
+	archived: boolean
 }
 ```
 
@@ -289,14 +289,14 @@ Every committed event should include:
 
 ```ts
 type SyncEnvelope<TPayload> = {
-  id: string
-  type: string
-  version: number
-  aggregate: string
-  aggregateId: string
-  seq: number
-  timestamp: Date
-  payload: TPayload
+	id: string
+	type: string
+	version: number
+	aggregate: string
+	aggregateId: string
+	seq: number
+	timestamp: Date
+	payload: TPayload
 }
 ```
 
@@ -377,12 +377,12 @@ Suggested normalized state:
 
 ```ts
 type SyncState = {
-  reposByRoot: Record<string, RepoEntry>
-  worktreesByRoot: Record<string, WorktreeEntry>
-  threadsById: Record<string, ThreadMetadata>
-  threadIdsByRepoRoot: Record<string, Array<string>>
-  threadIdsByWorktreeRoot: Record<string, Array<string>>
-  lastSelectedThreadIdByWorktreeRoot: Record<string, string>
+	reposByRoot: Record<string, RepoEntry>
+	worktreesByRoot: Record<string, WorktreeEntry>
+	threadsById: Record<string, ThreadMetadata>
+	threadIdsByRepoRoot: Record<string, Array<string>>
+	threadIdsByWorktreeRoot: Record<string, Array<string>>
+	lastSelectedThreadIdByWorktreeRoot: Record<string, string>
 }
 ```
 
@@ -409,10 +409,10 @@ Minimum route/search state:
 
 ```ts
 type HomeSearch = {
-  projectRoot?: string
-  worktreeRoot?: string
-  threadId?: string
-  view?: 'thread' | 'diff'
+	projectRoot?: string
+	worktreeRoot?: string
+	threadId?: string
+	view?: 'thread' | 'diff'
 }
 ```
 

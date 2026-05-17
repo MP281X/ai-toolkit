@@ -1,14 +1,15 @@
 import type {Layer} from 'effect'
-import {Cause, DateTime, Effect, flow, Option, pipe, Queue, Ref, Stream, SubscriptionRef} from 'effect'
+import {Cause, DateTime, Effect, Option, Queue, Ref, Stream, SubscriptionRef, flow, pipe} from 'effect'
 
 import {Chat, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
+
+import {Agent} from '../service.ts'
 
 import {resolveLanguageModel} from '#lib/language-model.ts'
 import {partsStreamSanitizer} from '#lib/utils.ts'
 import {WebFetchToolKit, WebSearchToolKit} from '#tools/contracts.ts'
 import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
-import {Agent} from '../service.ts'
 
 export const makeLayerEffect = Effect.fnUntraced(
 	function* (config: {readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {
@@ -23,10 +24,10 @@ export const makeLayerEffect = Effect.fnUntraced(
 		}>({state: 'idle', updatedAt: yield* DateTime.now})
 
 		return Agent.of({
-			status,
 			history: Effect.map(Ref.get(chat.history), history => history.content),
-			streamText: input => {
-				return Stream.callback(
+			status,
+			streamText: input =>
+				Stream.callback(
 					Effect.fnUntraced(function* (queue) {
 						yield* pipe(
 							DateTime.now,
@@ -39,7 +40,7 @@ export const makeLayerEffect = Effect.fnUntraced(
 								chat.streamText({prompt, toolkit}),
 								partsStreamSanitizer,
 								Stream.tap(part => Queue.offer(queue, part)),
-								Stream.provide(resolveLanguageModel({provider: input.provider, model: input.model})),
+								Stream.provide(resolveLanguageModel({model: input.model, provider: input.provider})),
 								Stream.provideContext(services),
 								Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
 								Stream.runLast
@@ -58,7 +59,6 @@ export const makeLayerEffect = Effect.fnUntraced(
 						}
 					})
 				)
-			}
 		})
 	},
 	flow(Effect.provide(WebSearchToolKitLayer), Effect.provide(WebFetchToolKitLayer))

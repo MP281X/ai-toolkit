@@ -6,7 +6,7 @@ export const Route = createFileRoute('/(home)/')({
 
 function IndexPage() {
 	return (
-		<div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+		<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 			Select a worktree from the sidebar.
 		</div>
 	)

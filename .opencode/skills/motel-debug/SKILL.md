@@ -67,12 +67,12 @@ Add the minimum instrumentation needed to confirm or reject **all** hypotheses i
 
 Tag every piece of debug instrumentation with structured attributes so you can query it later. Reuse these keys:
 
-| Key | Purpose |
-|-----|---------|
-| `debug.session` | Groups all instrumentation for this debug session |
-| `debug.hypothesis` | Links to a specific hypothesis (e.g. `"cache-miss"`, `"A"`) |
-| `debug.step` | Position in the flow (e.g. `"entry"`, `"before-write"`, `"after-read"`) |
-| `debug.label` | Human-readable description of what this point captures |
+| Key                | Purpose                                                                 |
+| ------------------ | ----------------------------------------------------------------------- |
+| `debug.session`    | Groups all instrumentation for this debug session                       |
+| `debug.hypothesis` | Links to a specific hypothesis (e.g. `"cache-miss"`, `"A"`)             |
+| `debug.step`       | Position in the flow (e.g. `"entry"`, `"before-write"`, `"after-read"`) |
+| `debug.label`      | Human-readable description of what this point captures                  |
 
 Choose log placements based on your hypotheses:
 
@@ -144,6 +144,7 @@ Wrap every temporary debug block in these exact markers:
 Use whatever the codebase already provides for tracing and logging. The markers are language-comment wrappers — adapt the comment syntax for non-JS/TS files (e.g. `# #region motel debug` for Python).
 
 **Do not:**
+
 - Log secrets, tokens, passwords, or raw PII
 - Remove instrumentation before post-fix verification succeeds
 - Use `setTimeout`, `sleep`, or artificial delays as a "fix"
@@ -153,9 +154,9 @@ Use whatever the codebase already provides for tracing and logging. The markers 
 
 Two filter prefixes for attribute search:
 
-| Prefix | Match type | Example |
-|--------|-----------|---------|
-| `attr.<key>=<value>` | Exact match | `attr.debug.hypothesis=cache-miss` |
+| Prefix                           | Match type                 | Example                                       |
+| -------------------------------- | -------------------------- | --------------------------------------------- |
+| `attr.<key>=<value>`             | Exact match                | `attr.debug.hypothesis=cache-miss`            |
 | `attrContains.<key>=<substring>` | Case-insensitive substring | `attrContains.ai.prompt.messages=hello world` |
 
 ```bash

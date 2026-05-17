@@ -24,36 +24,29 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 			{rules: reactRules, scope: 'react'},
 			{rules: effectRules, scope: 'effect'}
 		] as const satisfies readonly {readonly rules: readonly Rule[]; readonly scope: RuleScope}[],
-		Array.flatMap(group => {
-			return Array.map(group.rules, rule => ({
+		Array.flatMap(group =>
+			Array.map(group.rules, rule => ({
 				id: rule.id,
 				run: rule.run,
 				scope: group.scope
 			}))
-		}),
-		Array.filter(rule => {
-			return (
+		),
+		Array.filter(
+			rule =>
 				new Set(scopes).has(rule.scope) &&
 				(!plannedOnly ||
 					new Set([
 						'base/no-type-assertion-except-as-const',
-						'base/prefer-readonly-types',
 						'base/prefer-undefined-over-null',
 						'base/prefer-optional-property',
 						'base/no-redundant-type-syntax',
 						'base/no-redundant-type-system-check',
-						'base/no-explicit-default-value',
 						'base/no-unnecessary-named-type',
-						'base/no-destructuring',
 						'base/no-single-use-local-binding',
 						'base/no-pipe-method',
 						'base/no-simple-local-binding',
 						'base/prefer-flow-for-pipe-callback',
 						'base/no-vacuous-abstraction',
-						'base/prefer-function-declaration',
-						'base/prefer-arrow-callback',
-						'base/no-local-namespace-import',
-						'base/no-default-export-except-config',
 						'base/no-deprecated-api',
 						'base/no-plain-class',
 						'react/no-jsx-props-object',
@@ -80,7 +73,6 @@ export function rulesForScopes(scopes: readonly RuleScope[], plannedOnly: boolea
 						'effect/no-option-constructor',
 						'effect/prefer-top-level-rcmap'
 					]).has(scopedRuleId(rule.scope, rule.id)))
-			)
-		})
+		)
 	)
 }

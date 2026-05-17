@@ -1,141 +1,113 @@
 import {test} from 'bun:test'
+
 import {expectNoRule, expectRule} from './test-utils.ts'
 
-test('no-type-assertion-except-as-const reports unsafe assertions', () => {
-	return expectRule({
+test('no-type-assertion-except-as-const reports unsafe assertions', () =>
+	expectRule({
 		rule: 'no-type-assertion-except-as-const',
 		source: 'declare const value: unknown\nconst user = value as { readonly name: string }\n'
-	})
-})
+	}))
 
-test('no-type-assertion-except-as-const allows const assertions', () => {
-	return expectNoRule({
+test('no-type-assertion-except-as-const allows const assertions', () =>
+	expectNoRule({
 		rule: 'no-type-assertion-except-as-const',
 		source: 'const status = "ready" as const\n'
-	})
-})
+	}))
 
-test('no-type-assertion-except-as-const reports redundant non-null assertions', () => {
-	return expectRule({
+test('no-type-assertion-except-as-const reports redundant non-null assertions', () =>
+	expectRule({
 		rule: 'no-type-assertion-except-as-const',
-		typed: true,
-		source: 'declare const root: HTMLElement\nconst value = root!\n'
-	})
-})
+		source: 'declare const root: HTMLElement\nconst value = root!\n',
+		typed: true
+	}))
 
-test('no-type-assertion-except-as-const allows narrowing non-null assertions', () => {
-	return expectNoRule({
+test('no-type-assertion-except-as-const allows narrowing non-null assertions', () =>
+	expectNoRule({
 		rule: 'no-type-assertion-except-as-const',
-		typed: true,
-		source: 'declare const root: HTMLElement | null\nconst value = root!\n'
-	})
-})
+		source: 'declare const root: HTMLElement | null\nconst value = root!\n',
+		typed: true
+	}))
 
-test('prefer-readonly-types reports mutable object and array types', () => {
-	return expectRule({
-		rule: 'prefer-readonly-types',
-		source: 'type User = { name: string; tags: string[] }\n'
-	})
-})
-
-test('prefer-readonly-types allows mutable React RefObject values', () => {
-	return expectNoRule({
-		rule: 'prefer-readonly-types',
-		source: 'type ItemsRef = React.RefObject<string[]>\n'
-	})
-})
-
-test('prefer-undefined-over-null reports null as an absence value', () => {
-	return expectRule({
+test('prefer-undefined-over-null reports null as an absence value', () =>
+	expectRule({
 		rule: 'prefer-undefined-over-null',
 		source: 'type State = { readonly user: User | null }\n'
-	})
-})
+	}))
 
-test('prefer-undefined-over-null allows React ref null initializers', () => {
-	return expectNoRule({
-		rule: 'prefer-undefined-over-null',
+test('prefer-undefined-over-null allows React ref null initializers', () =>
+	expectNoRule({
 		filePath: 'sample.tsx',
-		typed: true,
-		source: 'import {useRef} from "react"\nconst elementRef = useRef<HTMLDivElement>(null)\n'
-	})
-})
+		rule: 'prefer-undefined-over-null',
+		source: 'import {useRef} from "react"\nconst elementRef = useRef<HTMLDivElement>(null)\n',
+		typed: true
+	}))
 
-test('prefer-optional-property reports properties unioned with undefined', () => {
-	return expectRule({
+test('prefer-optional-property reports properties unioned with undefined', () =>
+	expectRule({
 		rule: 'prefer-optional-property',
 		source: 'type Props = { readonly title: string | undefined }\n'
-	})
-})
+	}))
 
-test('no-redundant-type-syntax reports annotations TypeScript can infer', () => {
-	return expectRule({
+test('no-redundant-type-syntax reports annotations TypeScript can infer', () =>
+	expectRule({
 		rule: 'no-redundant-type-syntax',
-		typed: true,
-		source: 'const name: string = "Ada"\nfunction label(): string { return name }\n'
-	})
-})
+		source: 'const name: string = "Ada"\nfunction label(): string { return name }\n',
+		typed: true
+	}))
 
-test('no-redundant-type-syntax reports explicit generic call arguments', () => {
-	return expectRule({
+test('no-redundant-type-syntax reports explicit generic call arguments', () =>
+	expectRule({
 		rule: 'no-redundant-type-syntax',
-		typed: true,
-		source: 'function identity<T>(value: T) { return value }\nconst name = identity<string>("Ada")\n'
-	})
-})
+		source: 'function identity<T>(value: T) { return value }\nconst name = identity<string>("Ada")\n',
+		typed: true
+	}))
 
-test('no-redundant-type-syntax reports property callback parameter annotations', () => {
-	return expectRule({
+test('no-redundant-type-syntax reports property callback parameter annotations', () =>
+	expectRule({
 		rule: 'no-redundant-type-syntax',
-		typed: true,
 		source:
-			'type Handlers = { readonly LintFailure: (error: Error) => void }\ndeclare function catchTags(handlers: Handlers): void\ncatchTags({ LintFailure: (error: Error) => { console.log(error.message) } })\n'
-	})
-})
+			'type Handlers = { readonly LintFailure: (error: Error) => void }\ndeclare function catchTags(handlers: Handlers): void\ncatchTags({ LintFailure: (error: Error) => { console.log(error.message) } })\n',
+		typed: true
+	}))
 
-test('no-redundant-type-syntax allows useRef generic arguments', () => {
-	return expectNoRule({
-		rule: 'no-redundant-type-syntax',
+test('no-redundant-type-syntax allows useRef generic arguments', () =>
+	expectNoRule({
 		filePath: 'sample.tsx',
-		typed: true,
-		source: 'import {useRef} from "react"\nconst names = useRef<readonly string[]>([])\n'
-	})
-})
-
-test('no-redundant-type-syntax allows annotations needed by Effect.fnUntraced', () => {
-	return expectNoRule({
 		rule: 'no-redundant-type-syntax',
-		typed: true,
-		source: 'import {Effect} from "effect"\nconst greet = Effect.fnUntraced(function* (name: string) { return name })\n'
-	})
-})
+		source: 'import {useRef} from "react"\nconst names = useRef<readonly string[]>([])\n',
+		typed: true
+	}))
 
-test('no-redundant-type-system-check reports unreachable nullish fallbacks', () => {
-	return expectRule({
+test('no-redundant-type-syntax allows annotations needed by Effect.fnUntraced', () =>
+	expectNoRule({
+		rule: 'no-redundant-type-syntax',
+		source:
+			'import {Effect} from "effect"\nconst greet = Effect.fnUntraced(function* (name: string) { return name })\n',
+		typed: true
+	}))
+
+test('no-redundant-type-system-check reports unreachable nullish fallbacks', () =>
+	expectRule({
 		rule: 'no-redundant-type-system-check',
-		typed: true,
-		source: 'function label(name: string) { return name ?? "anonymous" }\n'
-	})
-})
+		source: 'function label(name: string) { return name ?? "anonymous" }\n',
+		typed: true
+	}))
 
-test('no-redundant-type-system-check allows optional chains that can be undefined', () => {
-	return expectNoRule({
+test('no-redundant-type-system-check allows optional chains that can be undefined', () =>
+	expectNoRule({
 		rule: 'no-redundant-type-system-check',
-		typed: true,
-		source: 'function label(user?: { readonly name: string }) { return user?.name ?? "anonymous" }\n'
-	})
-})
+		source: 'function label(user?: { readonly name: string }) { return user?.name ?? "anonymous" }\n',
+		typed: true
+	}))
 
-test('no-unnecessary-named-type reports local aliases with little reuse', () => {
-	return expectRule({
+test('no-unnecessary-named-type reports local aliases with little reuse', () =>
+	expectRule({
 		rule: 'no-unnecessary-named-type',
 		source: 'type User = { readonly name: string }\nfunction greet(user: User) { return user.name }\n'
-	})
-})
+	}))
 
-test('no-unnecessary-named-type allows same-name runtime companion aliases', () => {
-	return expectNoRule({
+test('no-unnecessary-named-type allows same-name runtime companion aliases', () =>
+	expectNoRule({
 		rule: 'no-unnecessary-named-type',
 		source: 'export type User = typeof User.Type\nexport const User = { Type: "user" }\n'
-	})
-})
+	}))

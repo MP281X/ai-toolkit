@@ -38,11 +38,15 @@ export function Terminal(input: {
 		try {
 			const webgl = new WebglAddon()
 			terminal.loadAddon(webgl)
-			webgl.onContextLoss(() => webgl.dispose())
+			webgl.onContextLoss(() => {
+				webgl.dispose()
+			})
 		} catch {
 			// Canvas renderer fallback.
 		}
-		terminal.onData(data => callbacksRef.current.onData(data))
+		terminal.onData(data => {
+			callbacksRef.current.onData(data)
+		})
 
 		const observer = new ResizeObserver(resize)
 		observer.observe(elementRef.current)
@@ -56,7 +60,9 @@ export function Terminal(input: {
 			terminal.dispose()
 		}
 	}, [])
-	useEffect(() => input.write(data => terminalRef.current?.write(data)), [input.write])
+	useEffect(() => {
+		input.write(data => terminalRef.current?.write(data))
+	}, [input.write, input])
 
 	return (
 		<div
