@@ -15,6 +15,7 @@ import {
 	Archive,
 	GitBranch,
 	GitBranchPlus,
+	GlobeIcon,
 	Layers,
 	PanelTop,
 	SparklesIcon,
@@ -78,6 +79,7 @@ function HomeLayout() {
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/thread'), () => 'thread' as const),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
+				Match.when(String.endsWith('/browser'), () => 'browser' as const),
 				Match.orElse(() => 'diff' as const)
 			)
 
@@ -128,6 +130,14 @@ function HomeLayout() {
 								})
 							})
 						}}
+						selectBrowser={worktreeRoot =>
+							startTransition(() => {
+								navigate({
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									to: '/$worktree/browser'
+								})
+							})
+						}
 					/>
 				</ResizablePanel>
 
@@ -178,11 +188,12 @@ function WorktreeManager(input: {
 	readonly activeProject?: GitProject
 	readonly activeWorktree?: GitProject['worktrees'][number]
 	readonly activeAgentId?: string
-	readonly activeView: 'thread' | 'diff' | 'terminal'
+	readonly activeView: 'thread' | 'diff' | 'terminal' | 'browser'
 	readonly projects: readonly GitProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
+	readonly selectBrowser: (worktreeRoot: string) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const setDraftAgents = useAtomSet(draftAgentsAtom)
@@ -554,6 +565,15 @@ function WorktreeManager(input: {
 															}}
 														>
 															terminal
+														</TreeExplorerRow>
+													</li>
+													<li className="w-full min-w-0">
+														<TreeExplorerRow
+															icon={<GlobeIcon className="size-3.5" />}
+															selected={input.activeView === 'browser' && input.activeWorktree?.root === worktree.root}
+															onClick={() => input.selectBrowser(worktree.root)}
+														>
+															browser
 														</TreeExplorerRow>
 													</li>
 												</ul>

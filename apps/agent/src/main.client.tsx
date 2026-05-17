@@ -10,6 +10,7 @@ const router = createRouter({
 	defaultErrorComponent: Error,
 	defaultNotFoundComponent: NotFound,
 	defaultPendingComponent: Loading,
+	defaultPendingMs: 0,
 	defaultPreload: 'intent',
 	routeTree,
 	scrollRestoration: true
@@ -18,7 +19,7 @@ const router = createRouter({
 declare module '@tanstack/react-router' {
 	// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- TanStack Router augments this interface by name.
 	interface Register {
-		router: typeof router
+		readonly router: typeof router
 	}
 }
 
