@@ -107,7 +107,7 @@ pre.shiki span[style] {
 	margin: 0.2rem 0;
 }
 
-.markdown input[type="checkbox"] {
+.markdown input[type='checkbox'] {
 	-webkit-appearance: none;
 	appearance: none;
 	background-color: var(--background);
@@ -122,7 +122,7 @@ pre.shiki span[style] {
 	width: 0.9em;
 }
 
-.markdown input[type="checkbox"]:checked {
+.markdown input[type='checkbox']:checked {
 	background-color: var(--primary);
 	background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'><path d='M20 6L9 17L4 12'/></svg>");
 	background-size: 100% 100%;

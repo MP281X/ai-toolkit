@@ -16,8 +16,8 @@
 		"build:client": "vite build",
 		"build:server": "bun build ./src/main.server.tsx --target=bun --outfile ./dist/server.js",
 
-		"fix": "biome check --write --unsafe || true",
-		"check": "tsgo --noEmit && biome check"
+		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
+		"check": "oxfmt --check . && oxlint ."
 	},
 
 	"dependencies": {

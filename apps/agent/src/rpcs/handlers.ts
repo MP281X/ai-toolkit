@@ -1,5 +1,8 @@
-import {Array, Cause, Context, Duration, Effect, FiberHandle, Layer, pipe, RcMap, Stream, SubscriptionRef} from 'effect'
+import {Array, Cause, Context, Duration, Effect, FiberHandle, Layer, RcMap, Stream, SubscriptionRef, pipe} from 'effect'
 
+import {Prompt, Response} from 'effect/unstable/ai'
+
+import {RpcContracts} from '#rpcs/contracts.ts'
 import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import type {AgentEvent} from '@ai-toolkit/ai/schema'
 import {AgentKey} from '@ai-toolkit/ai/schema'
@@ -7,9 +10,6 @@ import {Agent} from '@ai-toolkit/ai/service'
 import {makeResumableStream} from '@ai-toolkit/ai/utils'
 import {GitWorkspace, GitWorktree} from '@ai-toolkit/git/service'
 import {Terminal} from '@ai-toolkit/terminal/service'
-import {Prompt, Response} from 'effect/unstable/ai'
-
-import {RpcContracts} from '#rpcs/contracts.ts'
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
@@ -85,14 +85,10 @@ const agentSessionStore = Effect.gen(function* () {
 			return key
 		}),
 		delete: Effect.fnUntraced(function* (key: AgentKey) {
-			yield* SubscriptionRef.update(keys, agents => {
-				return Array.filter(agents, agent => agent.id !== key.id)
-			})
+			yield* SubscriptionRef.update(keys, agents => Array.filter(agents, agent => agent.id !== key.id))
 			yield* RcMap.invalidate(sessions, key)
 		}),
-		get: (key: AgentKey) => {
-			return RcMap.get(sessions, key)
-		},
+		get: (key: AgentKey) => RcMap.get(sessions, key),
 		watch: Stream.unwrap(
 			Effect.gen(function* () {
 				const agents = yield* SubscriptionRef.get(keys)
@@ -111,111 +107,93 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const agents = yield* agentSessionStore
 
 		return RpcContracts.of({
-			'projects.watch': () => {
-				return Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(git.projects),
-						Effect.map(projects => {
-							return Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects)))(Stream.make(projects))
-						})
-					)
-				)
-			},
-			'projects.branches': payload => {
-				return git.branches(payload.cwd)
-			},
-			'review.watch': payload => {
-				return Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewDiffs(payload.scope))
-					)
-				)
-			},
-			'review.stageFile': payload => {
-				return pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.stageFile(payload.filePath))
-				)
-			},
-			'review.unstageFile': payload => {
-				return pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
-				)
-			},
-			'review.discardFile': payload => {
-				return pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
-				)
-			},
-			'agents.watch': () => {
-				return agents.watch
-			},
-			'agents.create': Effect.fnUntraced(function* (payload) {
-				return yield* agents.create(payload)
+			'agent.delete': Effect.fnUntraced(function* (payload) {
+				yield* agents.delete(payload.key)
 			}),
-			'agent.status': payload => {
-				return Stream.unwrap(
-					Effect.gen(function* () {
-						const session = yield* agents.get(payload.key)
-						const status = yield* SubscriptionRef.get(session.status)
-
-						return Stream.concat(Stream.drop(1)(SubscriptionRef.changes(session.status)))(Stream.make(status))
-					})
-				)
-			},
+			'agent.events': payload =>
+				Stream.unwrap(
+					pipe(
+						agents.get(payload.key),
+						Effect.map(session => session.events)
+					)
+				),
 			'agent.prompt': Effect.fnUntraced(function* (payload) {
 				yield* pipe(
 					agents.get(payload.key),
 					Effect.flatMap(session => session.prompt(payload))
 				)
 			}),
+			'agent.status': payload =>
+				Stream.unwrap(
+					Effect.gen(function* () {
+						const session = yield* agents.get(payload.key)
+						const status = yield* SubscriptionRef.get(session.status)
+
+						return Stream.concat(Stream.drop(1)(SubscriptionRef.changes(session.status)))(Stream.make(status))
+					})
+				),
 			'agent.stop': Effect.fnUntraced(function* (payload) {
 				yield* pipe(
 					agents.get(payload.key),
 					Effect.flatMap(session => session.stop)
 				)
 			}),
-			'agent.delete': Effect.fnUntraced(function* (payload) {
-				yield* agents.delete(payload.key)
+			'agents.create': Effect.fnUntraced(function* (payload) {
+				return yield* agents.create(payload)
 			}),
-			'agent.events': payload => {
-				return Stream.unwrap(
+			'agents.watch': () => agents.watch,
+			'projects.branches': payload => git.branches(payload.cwd),
+			'projects.createWorktree': payload => git.createWorktree(payload),
+			'projects.deleteWorktree': payload => git.deleteWorktree(payload),
+			'projects.watch': () =>
+				Stream.unwrap(
 					pipe(
-						agents.get(payload.key),
-						Effect.map(session => session.events)
+						SubscriptionRef.get(git.projects),
+						Effect.map(projects =>
+							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects)))(Stream.make(projects))
+						)
 					)
-				)
-			},
-			'projects.createWorktree': payload => {
-				return git.createWorktree(payload)
-			},
-			'projects.deleteWorktree': payload => {
-				return git.deleteWorktree(payload)
-			},
-			'terminal.events': payload => {
-				return Stream.unwrap(
+				),
+			'review.discardFile': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
+				),
+			'review.stageFile': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.stageFile(payload.filePath))
+				),
+			'review.unstageFile': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
+				),
+			'review.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitWorktrees, payload.cwd),
+						Effect.map(worktree => worktree.watchReviewDiffs(payload.scope))
+					)
+				),
+			'terminal.events': payload =>
+				Stream.unwrap(
 					pipe(
 						RcMap.get(terminals, payload.cwd),
 						Effect.map(terminal => terminal.events)
 					)
-				)
-			},
-			'terminal.input': payload => {
-				return pipe(
+				),
+			'terminal.input': payload =>
+				pipe(
 					RcMap.get(terminals, payload.cwd),
 					Effect.flatMap(terminal => terminal.write(payload.data)),
 					Effect.asVoid
-				)
-			},
-			'terminal.resize': payload => {
-				return pipe(
+				),
+			'terminal.resize': payload =>
+				pipe(
 					RcMap.get(terminals, payload.cwd),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				)
-			}
 		})
 	})
 )

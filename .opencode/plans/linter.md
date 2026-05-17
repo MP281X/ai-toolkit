@@ -59,45 +59,49 @@ Line width policy:
 ---
 
 ## Rule ID:
-  `no-type-assertion-except-as-const`
+
+`no-type-assertion-except-as-const`
 
 Name:
-  Ban type assertions except useful `as const`
+Ban type assertions except useful `as const`
 
 Root cause:
-  Type-safety degradation
+Type-safety degradation
 
 Intent:
-  Prevent code from claiming a type that TypeScript did not prove.
+Prevent code from claiming a type that TypeScript did not prove.
 
 Detects:
-  - `value as T`
-  - `<T>value`
-  - `value!`
-  - `property!: T`
-  - `value as unknown as T`
-  - `value as any`
-  - `value as never`
-  - `as const` when it does not make the type stricter
+
+- `value as T`
+- `<T>value`
+- `value!`
+- `property!: T`
+- `value as unknown as T`
+- `value as any`
+- `value as never`
+- `as const` when it does not make the type stricter
 
 Does not flag:
-  - `as const` on literals when it preserves stricter literal values, readonly fields, readonly arrays, discriminants, or tuple length
-  - `as const satisfies Shape`
-  - declaration files
-  - generated files
+
+- `as const` on literals when it preserves stricter literal values, readonly fields, readonly arrays, discriminants, or tuple length
+- `as const satisfies Shape`
+- declaration files
+- generated files
 
 Bad:
+
 ```ts
 function parseUser(payload: unknown) {
-  return payload as User
+	return payload as User
 }
-````
+```
 
 Good:
 
 ```ts
 function parseUser(payload: unknown) {
-  return UserSchema.decodeUnknownSync(payload)
+	return UserSchema.decodeUnknownSync(payload)
 }
 ```
 
@@ -152,24 +156,24 @@ Preserve literal values, readonly object fields, readonly arrays, discriminants,
 
 Detects:
 
-* immutable object literals assigned to `const` where `as const` would preserve useful literal structure
-* immutable array literals assigned to `const` where `as const` would preserve tuple/readonly structure
-* broad literal annotations that should be `as const satisfies Shape`
+- immutable object literals assigned to `const` where `as const` would preserve useful literal structure
+- immutable array literals assigned to `const` where `as const` would preserve tuple/readonly structure
+- broad literal annotations that should be `as const satisfies Shape`
 
 Does not flag:
 
-* mutable builders
-* arrays intentionally appended to later
-* objects intentionally mutated later
-* external APIs that require mutable data
-* React state values where the value is replaced rather than mutated
+- mutable builders
+- arrays intentionally appended to later
+- objects intentionally mutated later
+- external APIs that require mutable data
+- React state values where the value is replaced rather than mutated
 
 Bad:
 
 ```ts
-const routes: Record<string, { readonly path: string }> = {
-  home: { path: "/" },
-  settings: { path: "/settings" },
+const routes: Record<string, {readonly path: string}> = {
+	home: {path: '/'},
+	settings: {path: '/settings'}
 }
 ```
 
@@ -177,17 +181,17 @@ Good:
 
 ```ts
 const routes = {
-  home: { path: "/" },
-  settings: { path: "/settings" },
-} as const satisfies Record<string, { readonly path: string }>
+	home: {path: '/'},
+	settings: {path: '/settings'}
+} as const satisfies Record<string, {readonly path: string}>
 ```
 
 Bad:
 
 ```ts
 const events = [
-  { _tag: "created", id: "1" },
-  { _tag: "deleted", id: "2" },
+	{_tag: 'created', id: '1'},
+	{_tag: 'deleted', id: '2'}
 ]
 ```
 
@@ -195,8 +199,8 @@ Good:
 
 ```ts
 const events = [
-  { _tag: "created", id: "1" },
-  { _tag: "deleted", id: "2" },
+	{_tag: 'created', id: '1'},
+	{_tag: 'deleted', id: '2'}
 ] as const
 ```
 
@@ -229,19 +233,19 @@ Make object and array types immutable by default.
 
 Detects:
 
-* mutable object properties in type literals, interfaces, and aliases
-* `T[]`
-* `Array<T>`
-* mutable tuple types
-* mutable props types
+- mutable object properties in type literals, interfaces, and aliases
+- `T[]`
+- `Array<T>`
+- mutable tuple types
+- mutable props types
 
 Does not flag:
 
-* `ref.current`
-* explicit mutable builders
-* explicit mutable adapter boundaries
-* external library types requiring mutable arrays or mutable fields
-* generated files
+- `ref.current`
+- explicit mutable builders
+- explicit mutable adapter boundaries
+- external library types requiring mutable arrays or mutable fields
+- generated files
 
 Bad:
 
@@ -300,40 +304,36 @@ Standardize internal absence as `undefined`.
 
 Detects:
 
-* `T | null`
-* `value === null`
-* `value !== null`
-* `null` object property values
-* `return value ?? null`
-* `prop={null}`
-* schema/internal types that introduce `null` where the boundary does not require it
+- `T | null`
+- `value === null`
+- `value !== null`
+- `null` object property values
+- `return value ?? null`
+- `prop={null}`
+- schema/internal types that introduce `null` where the boundary does not require it
 
 Does not flag:
 
-* `return null` from React components
-* `useRef<T>(null)` for DOM refs
-* external APIs that actually send `null`
-* database schemas that actually return `null`
-* JSON/protocol mirrors that actually contain `null`
-* React-owned types where `null` is part of the library contract
+- `return null` from React components
+- `useRef<T>(null)` for DOM refs
+- external APIs that actually send `null`
+- database schemas that actually return `null`
+- JSON/protocol mirrors that actually contain `null`
+- React-owned types where `null` is part of the library contract
 
 Bad:
 
 ```tsx
-function Avatar(props: {
-  readonly imageUrl: string | null
-}) {
-  return <img src={props.imageUrl ?? undefined} />
+function Avatar(props: {readonly imageUrl: string | null}) {
+	return <img src={props.imageUrl ?? undefined} />
 }
 ```
 
 Good:
 
 ```tsx
-function Avatar(props: {
-  readonly imageUrl?: string
-}) {
-  return <img src={props.imageUrl} />
+function Avatar(props: {readonly imageUrl?: string}) {
+	return <img src={props.imageUrl} />
 }
 ```
 
@@ -366,58 +366,50 @@ Keep all property and element access explicit at the use site.
 
 Detects:
 
-* object destructuring
-* array destructuring
-* destructured function parameters
-* destructured loop bindings
-* destructured catch bindings
-* destructured imports from non-module values
+- object destructuring
+- array destructuring
+- destructured function parameters
+- destructured loop bindings
+- destructured catch bindings
+- destructured imports from non-module values
 
 Does not flag:
 
-* array destructuring directly from React hook tuple calls such as `useState`, `useReducer`, `useTransition`, `useActionState`, and `useOptimistic`
-* configured tuple-returning React hooks
-* normal ES import syntax
+- array destructuring directly from React hook tuple calls such as `useState`, `useReducer`, `useTransition`, `useActionState`, and `useOptimistic`
+- configured tuple-returning React hooks
+- normal ES import syntax
 
 Bad:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  const { user } = props
+function Profile(props: {readonly user: User}) {
+	const {user} = props
 
-  return <span>{user.name}</span>
+	return <span>{user.name}</span>
 }
 ```
 
 Good:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name}</span>
+function Profile(props: {readonly user: User}) {
+	return <span>{props.user.name}</span>
 }
 ```
 
 Bad:
 
 ```tsx
-function Profile({ user }: {
-  readonly user: User
-}) {
-  return <span>{user.name}</span>
+function Profile({user}: {readonly user: User}) {
+	return <span>{user.name}</span>
 }
 ```
 
 Good:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name}</span>
+function Profile(props: {readonly user: User}) {
+	return <span>{props.user.name}</span>
 }
 ```
 
@@ -450,64 +442,56 @@ Prevent temporary variables that only rename property access, element access, op
 
 Detects:
 
-* `const name = props.user.name`
-* `const first = values[0]`
-* `const title = props.post.title ?? "Untitled"`
-* `const normalized = String.toLowerCase(props.user.name)`
-* aliases used only once
-* aliases used multiple times when the expression is cheap
+- `const name = props.user.name`
+- `const first = values[0]`
+- `const title = props.post.title ?? "Untitled"`
+- `const normalized = String.toLowerCase(props.user.name)`
+- aliases used only once
+- aliases used multiple times when the expression is cheap
 
 Does not flag:
 
-* Effect programs assigned to a name
-* schemas assigned to a name
-* React components
-* service tags
-* expensive computations used more than once
-* values passed to APIs that require stable identity
-* React hook tuple bindings
+- Effect programs assigned to a name
+- schemas assigned to a name
+- React components
+- service tags
+- expensive computations used more than once
+- values passed to APIs that require stable identity
+- React hook tuple bindings
 
 Bad:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  const name = props.user.name
+function Profile(props: {readonly user: User}) {
+	const name = props.user.name
 
-  return <span>{name}</span>
+	return <span>{name}</span>
 }
 ```
 
 Good:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name}</span>
+function Profile(props: {readonly user: User}) {
+	return <span>{props.user.name}</span>
 }
 ```
 
 Bad:
 
 ```tsx
-function PostTitle(props: {
-  readonly post: Post
-}) {
-  const title = props.post.title ?? "Untitled"
+function PostTitle(props: {readonly post: Post}) {
+	const title = props.post.title ?? 'Untitled'
 
-  return <h1>{title}</h1>
+	return <h1>{title}</h1>
 }
 ```
 
 Good:
 
 ```tsx
-function PostTitle(props: {
-  readonly post: Post
-}) {
-  return <h1>{props.post.title ?? "Untitled"}</h1>
+function PostTitle(props: {readonly post: Post}) {
+	return <h1>{props.post.title ?? 'Untitled'}</h1>
 }
 ```
 
@@ -540,45 +524,39 @@ Keep equality checks, nullability checks, fallbacks, and logical chains visible 
 
 Detects:
 
-* `const isActive = user.status === "active"`
-* `const hasName = props.user.name !== undefined`
-* `const canEdit = a && b && c`
-* `const shouldRender = conditionA || conditionB`
-* boolean aliases used once
-* boolean aliases used multiple times when the expression is cheap
-* exported helpers that only hide cheap boolean logic
+- `const isActive = user.status === "active"`
+- `const hasName = props.user.name !== undefined`
+- `const canEdit = a && b && c`
+- `const shouldRender = conditionA || conditionB`
+- boolean aliases used once
+- boolean aliases used multiple times when the expression is cheap
+- exported helpers that only hide cheap boolean logic
 
 Does not flag:
 
-* schema/refinement predicates over `unknown`
-* security or permission policies with real domain semantics and non-trivial logic
-* expensive checks
-* predicates exported as a real validation boundary
-* callback predicates passed directly inline to Effect module functions
+- schema/refinement predicates over `unknown`
+- security or permission policies with real domain semantics and non-trivial logic
+- expensive checks
+- predicates exported as a real validation boundary
+- callback predicates passed directly inline to Effect module functions
 
 Bad:
 
 ```tsx
-function PostActions(props: {
-  readonly post: Post
-  readonly session: Session
-}) {
-  const canEdit = props.post.status === "draft" && props.post.authorId === props.session.user.id
+function PostActions(props: {readonly post: Post; readonly session: Session}) {
+	const canEdit = props.post.status === 'draft' && props.post.authorId === props.session.user.id
 
-  return canEdit ? <EditPostButton post={props.post} /> : undefined
+	return canEdit ? <EditPostButton post={props.post} /> : undefined
 }
 ```
 
 Good:
 
 ```tsx
-function PostActions(props: {
-  readonly post: Post
-  readonly session: Session
-}) {
-  return props.post.status === "draft" && props.post.authorId === props.session.user.id
-    ? <EditPostButton post={props.post} />
-    : undefined
+function PostActions(props: {readonly post: Post; readonly session: Session}) {
+	return props.post.status === 'draft' && props.post.authorId === props.session.user.id ? (
+		<EditPostButton post={props.post} />
+	) : undefined
 }
 ```
 
@@ -611,30 +589,26 @@ Remove explicit annotations that duplicate or widen inferred types.
 
 Detects:
 
-* `const value: T = expression` when `expression` already infers `T`
-* return annotations on non-recursive functions when inference is identical or narrower
-* redundant variable annotations around Effect values
-* annotations that widen literal types
-* annotations that hide precise inferred generic parameters
+- `const value: T = expression` when `expression` already infers `T`
+- return annotations on non-recursive functions when inference is identical or narrower
+- redundant variable annotations around Effect values
+- annotations that widen literal types
+- annotations that hide precise inferred generic parameters
 
 Does not flag:
 
-* function parameters without contextual type
-* recursive function return annotations
-* overload signatures
-* declaration files
-* public ambient declarations
-* places where removing the annotation changes the inferred type unsafely
+- function parameters without contextual type
+- recursive function return annotations
+- overload signatures
+- declaration files
+- public ambient declarations
+- places where removing the annotation changes the inferred type unsafely
 
 Bad:
 
 ```ts
 function normalize(value: string): string {
-  return pipe(
-    value,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(value, String.trim, String.toLowerCase)
 }
 ```
 
@@ -642,11 +616,7 @@ Good:
 
 ```ts
 function normalize(value: string) {
-  return pipe(
-    value,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(value, String.trim, String.toLowerCase)
 }
 ```
 
@@ -691,29 +661,29 @@ Let TypeScript infer generic type arguments when the inferred type is already co
 
 Detects:
 
-* `Option.some<string>("value")` when `string` is inferred
-* `Array.map<User, string>(users, ...)` when both types are inferred
-* `Effect.succeed<number>(1)` when `number` is inferred
-* `Schema.decodeUnknownSync<User>(schema)` when the decoded type is inferred from the schema
-* JSX generic arguments when props infer them correctly
+- `Option.some<string>("value")` when `string` is inferred
+- `Array.map<User, string>(users, ...)` when both types are inferred
+- `Effect.succeed<number>(1)` when `number` is inferred
+- `Schema.decodeUnknownSync<User>(schema)` when the decoded type is inferred from the schema
+- JSX generic arguments when props infer them correctly
 
 Does not flag:
 
-* generic arguments required because inference fails
-* generic arguments used to intentionally choose a wider/narrower overload that cannot be inferred
-* empty literal cases where TypeScript cannot infer the intended element type
-* recursive definitions requiring explicit generic anchors
+- generic arguments required because inference fails
+- generic arguments used to intentionally choose a wider/narrower overload that cannot be inferred
+- empty literal cases where TypeScript cannot infer the intended element type
+- recursive definitions requiring explicit generic anchors
 
 Bad:
 
 ```ts
-const value = Option.some<string>("value")
+const value = Option.some<string>('value')
 ```
 
 Good:
 
 ```ts
-const value = Option.some("value")
+const value = Option.some('value')
 ```
 
 Bad:
@@ -757,35 +727,33 @@ Remove generic constraints and type parameters that add no type information.
 
 Detects:
 
-* generic parameters used only once
-* `T extends unknown`
-* `T extends any`
-* generic identity wrappers where a concrete inferred type is enough
-* type parameters that only forward to another generic call
-* generic constraints duplicating the parameter type already known at the call site
+- generic parameters used only once
+- `T extends unknown`
+- `T extends any`
+- generic identity wrappers where a concrete inferred type is enough
+- type parameters that only forward to another generic call
+- generic constraints duplicating the parameter type already known at the call site
 
 Does not flag:
 
-* real reusable generic utilities with multiple independent call sites
-* constraints required for property access
-* constraints required for conditional types
-* schema/type-level helpers where the generic is the point of the API
+- real reusable generic utilities with multiple independent call sites
+- constraints required for property access
+- constraints required for conditional types
+- schema/type-level helpers where the generic is the point of the API
 
 Bad:
 
 ```ts
-function getId<T extends { readonly id: string }>(value: T) {
-  return value.id
+function getId<T extends {readonly id: string}>(value: T) {
+	return value.id
 }
 ```
 
 Good:
 
 ```ts
-function getId(value: {
-  readonly id: string
-}) {
-  return value.id
+function getId(value: {readonly id: string}) {
+	return value.id
 }
 ```
 
@@ -793,7 +761,7 @@ Bad:
 
 ```ts
 function identity<T>(value: T) {
-  return value
+	return value
 }
 ```
 
@@ -832,25 +800,25 @@ Remove runtime checks for facts already guaranteed by TypeScript.
 
 Detects:
 
-* nullability checks on non-nullish values
-* `typeof` checks on statically known primitive types
-* `Array.isArray` on statically known arrays
-* property-existence checks on required properties
-* optional chaining on non-nullish values
-* nullish coalescing where the left side cannot be nullish
-* fallback expressions where the fallback is unreachable
-* dead branches made unreachable by literal/discriminated types
-* schema/type guard checks on values already narrowed by TypeScript
-* equality checks impossible under the static type
+- nullability checks on non-nullish values
+- `typeof` checks on statically known primitive types
+- `Array.isArray` on statically known arrays
+- property-existence checks on required properties
+- optional chaining on non-nullish values
+- nullish coalescing where the left side cannot be nullish
+- fallback expressions where the fallback is unreachable
+- dead branches made unreachable by literal/discriminated types
+- schema/type guard checks on values already narrowed by TypeScript
+- equality checks impossible under the static type
 
 Does not flag:
 
-* checks on `unknown`
-* checks on `any` only when `any` comes from an external allowlisted boundary
-* checks before decoding external input
-* checks where the static type includes the checked case
-* checks after mutation where TypeScript cannot prove the value
-* external JavaScript APIs with inaccurate declarations behind an explicit allowlist
+- checks on `unknown`
+- checks on `any` only when `any` comes from an external allowlisted boundary
+- checks before decoding external input
+- checks where the static type includes the checked case
+- checks after mutation where TypeScript cannot prove the value
+- external JavaScript APIs with inaccurate declarations behind an explicit allowlist
 
 Bad:
 
@@ -945,23 +913,23 @@ Inline ad-hoc and intermediate types instead of leaving weak named types around 
 
 Detects:
 
-* single-use type aliases
-* single-use interfaces
-* exported type aliases used only by one nearby function
-* exported interfaces used only by one nearby function
-* intermediate `Pick`, `Omit`, `Partial`, `ReturnType`, or `Parameters` aliases
-* primitive aliases without branding
-* object aliases that do not cross a real boundary
+- single-use type aliases
+- single-use interfaces
+- exported type aliases used only by one nearby function
+- exported interfaces used only by one nearby function
+- intermediate `Pick`, `Omit`, `Partial`, `ReturnType`, or `Parameters` aliases
+- primitive aliases without branding
+- object aliases that do not cross a real boundary
 
 Does not flag:
 
-* branded/opaque types
-* recursive types
-* real multi-variant discriminated unions
-* schema-derived boundary types
-* Effect service tags/classes
-* types imported by another workspace package through a configured public subpath
-* explicitly allowlisted package public API types
+- branded/opaque types
+- recursive types
+- real multi-variant discriminated unions
+- schema-derived boundary types
+- Effect service tags/classes
+- types imported by another workspace package through a configured public subpath
+- explicitly allowlisted package public API types
 
 Bad:
 
@@ -979,29 +947,26 @@ function Button(props: ButtonOptions) {
 Good:
 
 ```tsx
-function Button(props: {
-  readonly disabled?: boolean
-  readonly label: string
-}) {
-  return <button disabled={props.disabled}>{props.label}</button>
+function Button(props: {readonly disabled?: boolean; readonly label: string}) {
+	return <button disabled={props.disabled}>{props.label}</button>
 }
 ```
 
 Bad:
 
 ```ts
-type CreateUserInput = Pick<User, "name" | "email">
+type CreateUserInput = Pick<User, 'name' | 'email'>
 
 function createUser(input: CreateUserInput) {
-  return UserRepo.create(input)
+	return UserRepo.create(input)
 }
 ```
 
 Good:
 
 ```ts
-function createUser(input: Pick<User, "name" | "email">) {
-  return UserRepo.create(input)
+function createUser(input: Pick<User, 'name' | 'email'>) {
+	return UserRepo.create(input)
 }
 ```
 
@@ -1034,61 +999,48 @@ Use `function` declarations for named plain functions and React components.
 
 Detects:
 
-* named arrow functions
-* named function expressions assigned to variables
-* React components declared as arrows
-* direct-return arrows for named functions
+- named arrow functions
+- named function expressions assigned to variables
+- React components declared as arrows
+- direct-return arrows for named functions
 
 Does not flag:
 
-* callbacks
-* `flow(...)` function values
-* `Effect.fnUntraced(...)`
-* `Effect.gen(...)`
-* `Match.type(...)` / reusable matcher values
-* schemas
-* service tags
-* data constructors
-* values that are not callable declarations
+- callbacks
+- `flow(...)` function values
+- `Effect.fnUntraced(...)`
+- `Effect.gen(...)`
+- `Match.type(...)` / reusable matcher values
+- schemas
+- service tags
+- data constructors
+- values that are not callable declarations
 
 Bad:
 
 ```tsx
-const UserCard = (props: {
-  readonly user: User
-}) => <span>{props.user.name}</span>
+const UserCard = (props: {readonly user: User}) => <span>{props.user.name}</span>
 ```
 
 Good:
 
 ```tsx
-function UserCard(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name}</span>
+function UserCard(props: {readonly user: User}) {
+	return <span>{props.user.name}</span>
 }
 ```
 
 Bad:
 
 ```ts
-const normalize = (value: string) =>
-  pipe(
-    value,
-    String.trim,
-    String.toLowerCase,
-  )
+const normalize = (value: string) => pipe(value, String.trim, String.toLowerCase)
 ```
 
 Good:
 
 ```ts
 function normalize(value: string) {
-  return pipe(
-    value,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(value, String.trim, String.toLowerCase)
 }
 ```
 
@@ -1121,34 +1073,34 @@ Use arrow functions for callbacks and never `function` expressions, except Effec
 
 Detects:
 
-* callback `function` expressions
-* callback method expressions when an arrow callback is equivalent
+- callback `function` expressions
+- callback method expressions when an arrow callback is equivalent
 
 Does not flag:
 
-* `function*` callbacks passed to `Effect.gen`
-* `function*` callbacks passed to `Effect.fnUntraced`
-* external APIs that require dynamic `this`, behind explicit allowlist
+- `function*` callbacks passed to `Effect.gen`
+- `function*` callbacks passed to `Effect.fnUntraced`
+- external APIs that require dynamic `this`, behind explicit allowlist
 
 Bad:
 
 ```ts
 Array.map(props.users, function (user) {
-  return user.name
+	return user.name
 })
 ```
 
 Good:
 
 ```ts
-Array.map(props.users, (user) => user.name)
+Array.map(props.users, user => user.name)
 ```
 
 Bad:
 
 ```ts
 setTimeout(function () {
-  Effect.runFork(Console.log("done"))
+	Effect.runFork(Console.log('done'))
 })
 ```
 
@@ -1156,7 +1108,7 @@ Good:
 
 ```ts
 setTimeout(() => {
-  Effect.runFork(Console.log("done"))
+	Effect.runFork(Console.log('done'))
 })
 ```
 
@@ -1189,26 +1141,26 @@ Parameterized functions that return `Effect.Effect` should be declared with `Eff
 
 Detects:
 
-* `function name(args) { return effect }`
-* `const name = (args) => effect`
-* parameterized functions whose inferred return type is `Effect.Effect<...>`
-* parameterized async-style factories that only wrap and return an Effect
+- `function name(args) { return effect }`
+- `const name = (args) => effect`
+- parameterized functions whose inferred return type is `Effect.Effect<...>`
+- parameterized async-style factories that only wrap and return an Effect
 
 Does not flag:
 
-* callbacks passed to Effect combinators
-* React event handlers that run Effects at an explicit boundary
-* framework functions requiring a fixed signature
-* zero-argument Effect programs; those are handled by `prefer-effect-gen-program`
+- callbacks passed to Effect combinators
+- React event handlers that run Effects at an explicit boundary
+- framework functions requiring a fixed signature
+- zero-argument Effect programs; those are handled by `prefer-effect-gen-program`
 
 Bad:
 
 ```ts
 function getUserName(id: UserId) {
-  return pipe(
-    UserRepo.get(id),
-    Effect.map((user) => user.name),
-  )
+	return pipe(
+		UserRepo.get(id),
+		Effect.map(user => user.name)
+	)
 }
 ```
 
@@ -1216,25 +1168,21 @@ Good:
 
 ```ts
 const getUserName = Effect.fnUntraced(function* (id: UserId) {
-  return (yield* UserRepo.get(id)).name
+	return (yield* UserRepo.get(id)).name
 })
 ```
 
 Bad:
 
 ```ts
-const saveUser = (user: User) =>
-  pipe(
-    UserRepo.save(user),
-    Effect.asVoid,
-  )
+const saveUser = (user: User) => pipe(UserRepo.save(user), Effect.asVoid)
 ```
 
 Good:
 
 ```ts
 const saveUser = Effect.fnUntraced(function* (user: User) {
-  yield* UserRepo.save(user)
+	yield* UserRepo.save(user)
 })
 ```
 
@@ -1267,27 +1215,27 @@ A zero-argument function returning an Effect should usually be an Effect value.
 
 Detects:
 
-* zero-argument functions returning `Effect.Effect`
-* zero-argument arrows returning `Effect.Effect`
-* zero-argument wrappers around `Effect.gen`
-* zero-argument wrappers around Effect pipelines
+- zero-argument functions returning `Effect.Effect`
+- zero-argument arrows returning `Effect.Effect`
+- zero-argument wrappers around `Effect.gen`
+- zero-argument wrappers around Effect pipelines
 
 Does not flag:
 
-* callbacks required by external APIs
-* factories that intentionally create a fresh resource scope per call
-* test helper factories where each call intentionally creates distinct scoped state
-* functions that should become parameterized and then use `Effect.fnUntraced`
+- callbacks required by external APIs
+- factories that intentionally create a fresh resource scope per call
+- test helper factories where each call intentionally creates distinct scoped state
+- functions that should become parameterized and then use `Effect.fnUntraced`
 
 Bad:
 
 ```ts
 function program() {
-  return Effect.gen(function* () {
-    yield* Console.log("starting")
+	return Effect.gen(function* () {
+		yield* Console.log('starting')
 
-    return yield* Config.load
-  })
+		return yield* Config.load
+	})
 }
 ```
 
@@ -1295,9 +1243,9 @@ Good:
 
 ```ts
 const program = Effect.gen(function* () {
-  yield* Console.log("starting")
+	yield* Console.log('starting')
 
-  return yield* Config.load
+	return yield* Config.load
 })
 ```
 
@@ -1330,27 +1278,27 @@ Prevent Effect values from being constructed and discarded.
 
 Detects:
 
-* bare expression statements typed as `Effect.Effect<...>`
-* Effect values inside `Effect.gen` not preceded by `yield*`
-* Effect values inside `Effect.fnUntraced` not preceded by `yield*`
-* Effect values outside generators that are not assigned, returned, composed, or run at a configured boundary
+- bare expression statements typed as `Effect.Effect<...>`
+- Effect values inside `Effect.gen` not preceded by `yield*`
+- Effect values inside `Effect.fnUntraced` not preceded by `yield*`
+- Effect values outside generators that are not assigned, returned, composed, or run at a configured boundary
 
 Does not flag:
 
-* `yield* effect`
-* `return effect` from a callback explicitly expected to return an Effect
-* `const program = Effect.gen(...)`
-* arguments to Effect combinators such as `Effect.all`, `Effect.tap`, `Effect.acquireUseRelease`
-* `Effect.run*` calls in configured runtime boundaries
-* Effect values assigned to a variable for later composition
+- `yield* effect`
+- `return effect` from a callback explicitly expected to return an Effect
+- `const program = Effect.gen(...)`
+- arguments to Effect combinators such as `Effect.all`, `Effect.tap`, `Effect.acquireUseRelease`
+- `Effect.run*` calls in configured runtime boundaries
+- Effect values assigned to a variable for later composition
 
 Bad:
 
 ```ts
 const program = Effect.gen(function* () {
-  Console.log("saving")
+	Console.log('saving')
 
-  return yield* UserRepo.save(props.user)
+	return yield* UserRepo.save(props.user)
 })
 ```
 
@@ -1358,29 +1306,25 @@ Good:
 
 ```ts
 const program = Effect.gen(function* () {
-  yield* Console.log("saving")
+	yield* Console.log('saving')
 
-  return yield* UserRepo.save(props.user)
+	return yield* UserRepo.save(props.user)
 })
 ```
 
 Bad:
 
 ```ts
-function handleClick(props: {
-  readonly user: User
-}) {
-  UserRepo.save(props.user)
+function handleClick(props: {readonly user: User}) {
+	UserRepo.save(props.user)
 }
 ```
 
 Good:
 
 ```ts
-function handleClick(props: {
-  readonly user: User
-}) {
-  Effect.runFork(UserRepo.save(props.user))
+function handleClick(props: {readonly user: User}) {
+	Effect.runFork(UserRepo.save(props.user))
 }
 ```
 
@@ -1413,17 +1357,17 @@ Use `pipe(effect, ...)` instead of `.pipe(...)` or data-first direct calls for v
 
 Detects:
 
-* `effect.pipe(...)` where `effect` is typed as `Effect.Effect<...>`
-* `Effect.asVoid(effect)`
-* `Effect.map(effect, callback)`
-* `Effect.flatMap(effect, callback)`
-* any data-first Effect operation called directly on an Effect value
+- `effect.pipe(...)` where `effect` is typed as `Effect.Effect<...>`
+- `Effect.asVoid(effect)`
+- `Effect.map(effect, callback)`
+- `Effect.flatMap(effect, callback)`
+- any data-first Effect operation called directly on an Effect value
 
 Does not flag:
 
-* non-Effect data module one-step calls such as `Array.filter(values, Predicate.isNotUndefined)`
-* `yield* effect` inside Effect generators
-* Effect constructor calls such as `Effect.succeed(value)`
+- non-Effect data module one-step calls such as `Array.filter(values, Predicate.isNotUndefined)`
+- `yield* effect` inside Effect generators
+- Effect constructor calls such as `Effect.succeed(value)`
 
 Bad:
 
@@ -1434,10 +1378,7 @@ Effect.succeed(0).pipe(Effect.asVoid)
 Good:
 
 ```ts
-pipe(
-  Effect.succeed(0),
-  Effect.asVoid,
-)
+pipe(Effect.succeed(0), Effect.asVoid)
 ```
 
 Bad:
@@ -1449,10 +1390,7 @@ Effect.asVoid(Effect.succeed(0))
 Good:
 
 ```ts
-pipe(
-  Effect.succeed(0),
-  Effect.asVoid,
-)
+pipe(Effect.succeed(0), Effect.asVoid)
 ```
 
 Diagnostic message:
@@ -1484,44 +1422,36 @@ Replace standard prototype/global helpers with Effect module functions when an E
 
 Detects:
 
-* standard Array prototype calls such as `.map`, `.filter`, `.flatMap`, `.reduce`, `.some`, `.every`, `.find`, `.includes`, `.slice`, `.join`
-* standard String prototype calls such as `.trim`, `.toLowerCase`, `.toUpperCase`, `.startsWith`, `.endsWith`, `.includes`, `.slice`
-* standard Object globals such as `Object.keys`, `Object.values`, `Object.entries`, `Object.fromEntries`
-* standard Array globals such as `Array.isArray`
-* standard Number globals where Effect has an equivalent
-* standard JSON/global helpers only when a configured Effect module equivalent exists
+- standard Array prototype calls such as `.map`, `.filter`, `.flatMap`, `.reduce`, `.some`, `.every`, `.find`, `.includes`, `.slice`, `.join`
+- standard String prototype calls such as `.trim`, `.toLowerCase`, `.toUpperCase`, `.startsWith`, `.endsWith`, `.includes`, `.slice`
+- standard Object globals such as `Object.keys`, `Object.values`, `Object.entries`, `Object.fromEntries`
+- standard Array globals such as `Array.isArray`
+- standard Number globals where Effect has an equivalent
+- standard JSON/global helpers only when a configured Effect module equivalent exists
 
 Does not flag:
 
-* external API methods
-* DOM methods
-* React APIs
-* methods with no Effect equivalent
-* mutation inside explicit ref boundaries
-* performance-specialized loops behind allowlist
-* framework-required code behind allowlist
+- external API methods
+- DOM methods
+- React APIs
+- methods with no Effect equivalent
+- mutation inside explicit ref boundaries
+- performance-specialized loops behind allowlist
+- framework-required code behind allowlist
 
 Bad:
 
 ```ts
-props.users
-  .filter((user) => user !== undefined)
-  .map((user) => user.name.trim().toLowerCase())
+props.users.filter(user => user !== undefined).map(user => user.name.trim().toLowerCase())
 ```
 
 Good:
 
 ```ts
 pipe(
-  props.users,
-  Array.filter(Predicate.isNotUndefined),
-  Array.map((user) =>
-    pipe(
-      user.name,
-      String.trim,
-      String.toLowerCase,
-    )
-  ),
+	props.users,
+	Array.filter(Predicate.isNotUndefined),
+	Array.map(user => pipe(user.name, String.trim, String.toLowerCase))
 )
 ```
 
@@ -1566,29 +1496,29 @@ Replace sequential temporary variables with composable `pipe` / `flow`.
 
 Detects:
 
-* linear transformation variables
-* variables where each next variable only consumes the previous variable
-* temporary collection variables used only to feed the next transformation
-* temporary normalized/string/object variables used only once
-* return of the final temporary variable
+- linear transformation variables
+- variables where each next variable only consumes the previous variable
+- temporary collection variables used only to feed the next transformation
+- temporary normalized/string/object variables used only once
+- return of the final temporary variable
 
 Does not flag:
 
-* values with meaningful side-effect boundaries
-* expensive computations consumed independently more than once
-* debugging-only code behind explicit test/debug allowlists
-* React hook tuple state variables
-* Effect values assigned as named programs
+- values with meaningful side-effect boundaries
+- expensive computations consumed independently more than once
+- debugging-only code behind explicit test/debug allowlists
+- React hook tuple state variables
+- Effect values assigned as named programs
 
 Bad:
 
 ```ts
 function getNames(users: ReadonlyArray<User | undefined>) {
-  const filtered = Array.filter(users, Predicate.isNotUndefined)
-  const names = Array.map(filtered, (user) => user.name)
-  const normalized = Array.map(names, String.toLowerCase)
+	const filtered = Array.filter(users, Predicate.isNotUndefined)
+	const names = Array.map(filtered, user => user.name)
+	const normalized = Array.map(names, String.toLowerCase)
 
-  return normalized
+	return normalized
 }
 ```
 
@@ -1596,12 +1526,12 @@ Good:
 
 ```ts
 function getNames(users: ReadonlyArray<User | undefined>) {
-  return pipe(
-    users,
-    Array.filter(Predicate.isNotUndefined),
-    Array.map((user) => user.name),
-    Array.map(String.toLowerCase),
-  )
+	return pipe(
+		users,
+		Array.filter(Predicate.isNotUndefined),
+		Array.map(user => user.name),
+		Array.map(String.toLowerCase)
+	)
 }
 ```
 
@@ -1634,26 +1564,23 @@ Avoid one-step `pipe` for non-Effect data transformations.
 
 Detects:
 
-* `pipe(value, Array.filter(...))`
-* `pipe(value, String.trim)`
-* `pipe(value, Record.keys)`
-* any one-step pipe where `value` is not typed as `Effect.Effect<...>`
+- `pipe(value, Array.filter(...))`
+- `pipe(value, String.trim)`
+- `pipe(value, Record.keys)`
+- any one-step pipe where `value` is not typed as `Effect.Effect<...>`
 
 Does not flag:
 
-* values typed as `Effect.Effect<...>`
-* Match pipelines
-* multi-step transformations
-* one-step pipelines where the first argument is multiline and direct call would exceed 120 columns
+- values typed as `Effect.Effect<...>`
+- Match pipelines
+- multi-step transformations
+- one-step pipelines where the first argument is multiline and direct call would exceed 120 columns
 
 Bad:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | undefined>) {
-  return pipe(
-    values,
-    Array.filter(Predicate.isNotUndefined),
-  )
+	return pipe(values, Array.filter(Predicate.isNotUndefined))
 }
 ```
 
@@ -1661,7 +1588,7 @@ Good:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | undefined>) {
-  return Array.filter(values, Predicate.isNotUndefined)
+	return Array.filter(values, Predicate.isNotUndefined)
 }
 ```
 
@@ -1694,38 +1621,31 @@ Use `flow` for reusable unary transformation composition instead of manually thr
 
 Detects:
 
-* named unary functions that only pipe one value through pure unary transformations
-* named unary functions that manually nest pure unary transformations
-* reusable unary arrows that should either be `flow` or inlined
+- named unary functions that only pipe one value through pure unary transformations
+- named unary functions that manually nest pure unary transformations
+- reusable unary arrows that should either be `flow` or inlined
 
 Does not flag:
 
-* one-off inline expressions
-* functions with branching
-* functions with multiple parameters
-* functions with validation
-* functions with Effect context
-* functions with real domain policy
+- one-off inline expressions
+- functions with branching
+- functions with multiple parameters
+- functions with validation
+- functions with Effect context
+- functions with real domain policy
 
 Bad:
 
 ```ts
 function normalize(value: string) {
-  return pipe(
-    value,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(value, String.trim, String.toLowerCase)
 }
 ```
 
 Good:
 
 ```ts
-const normalize = flow(
-  String.trim,
-  String.toLowerCase,
-)
+const normalize = flow(String.trim, String.toLowerCase)
 ```
 
 But when single-use, prefer inlining:
@@ -1775,29 +1695,29 @@ Replace switch statements and nested ternaries over literal variants with `Match
 
 Detects:
 
-* `switch` over `_tag`
-* `switch` over discriminant/literal union fields
-* nested ternaries over the same discriminant or literal field
-* chained `if`/`else if` over the same closed union variant
+- `switch` over `_tag`
+- `switch` over discriminant/literal union fields
+- nested ternaries over the same discriminant or literal field
+- chained `if`/`else if` over the same closed union variant
 
 Does not flag:
 
-* simple binary boolean `if`
-* simple binary ternaries
-* imperative switches with mutation
-* external unknown values before decoding/narrowing
-* performance-critical dispatch tables behind allowlist
+- simple binary boolean `if`
+- simple binary ternaries
+- imperative switches with mutation
+- external unknown values before decoding/narrowing
+- performance-critical dispatch tables behind allowlist
 
 Bad:
 
 ```tsx
 function renderEvent(event: Event) {
-  switch (event._tag) {
-    case "created":
-      return <CreatedEvent event={event} />
-    case "deleted":
-      return <DeletedEvent event={event} />
-  }
+	switch (event._tag) {
+		case 'created':
+			return <CreatedEvent event={event} />
+		case 'deleted':
+			return <DeletedEvent event={event} />
+	}
 }
 ```
 
@@ -1805,10 +1725,10 @@ Good:
 
 ```tsx
 const renderEvent = pipe(
-  Match.type<Event>(),
-  Match.tag("created", (event) => <CreatedEvent event={event} />),
-  Match.tag("deleted", (event) => <DeletedEvent event={event} />),
-  Match.exhaustive,
+	Match.type<Event>(),
+	Match.tag('created', event => <CreatedEvent event={event} />),
+	Match.tag('deleted', event => <DeletedEvent event={event} />),
+	Match.exhaustive
 )
 ```
 
@@ -1841,27 +1761,27 @@ Preserve literal output unions from `Match`.
 
 Detects:
 
-* `Match.tag("x", () => "literal")`
-* `Match.when(..., () => "literal")`
-* `Match.orElse(() => "literal")`
-* Match handlers returning string/number/boolean literals without `as const`
+- `Match.tag("x", () => "literal")`
+- `Match.when(..., () => "literal")`
+- `Match.orElse(() => "literal")`
+- Match handlers returning string/number/boolean literals without `as const`
 
 Does not flag:
 
-* JSX output
-* object literals already using `as const`
-* non-literal values
-* callbacks returning a value intentionally widened by a required API
-* tag/discriminator inputs
+- JSX output
+- object literals already using `as const`
+- non-literal values
+- callbacks returning a value intentionally widened by a required API
+- tag/discriminator inputs
 
 Bad:
 
 ```ts
 const eventLabel = pipe(
-  Match.type<Event>(),
-  Match.tag("created", () => "created"),
-  Match.tag("deleted", () => "deleted"),
-  Match.exhaustive,
+	Match.type<Event>(),
+	Match.tag('created', () => 'created'),
+	Match.tag('deleted', () => 'deleted'),
+	Match.exhaustive
 )
 ```
 
@@ -1869,10 +1789,10 @@ Good:
 
 ```ts
 const eventLabel = pipe(
-  Match.type<Event>(),
-  Match.tag("created", () => "created" as const),
-  Match.tag("deleted", () => "deleted" as const),
-  Match.exhaustive,
+	Match.type<Event>(),
+	Match.tag('created', () => 'created' as const),
+	Match.tag('deleted', () => 'deleted' as const),
+	Match.exhaustive
 )
 ```
 
@@ -1905,41 +1825,37 @@ Keep `if` imperative, but flatten control flow.
 
 Detects:
 
-* `else` after `return`
-* `else` after `throw`
-* `else` after `continue`
-* `else` after `break`
-* nested branches that can be flattened by a terminal guard
+- `else` after `return`
+- `else` after `throw`
+- `else` after `continue`
+- `else` after `break`
+- nested branches that can be flattened by a terminal guard
 
 Does not flag:
 
-* non-terminal branches
-* `else if` chains that should be converted to `Match`
-* ref-boundary code where both branches intentionally mutate `ref.current`
+- non-terminal branches
+- `else if` chains that should be converted to `Match`
+- ref-boundary code where both branches intentionally mutate `ref.current`
 
 Bad:
 
 ```tsx
-function PostStatus(props: {
-  readonly post: Post
-}) {
-  if (props.post.status === "draft") {
-    return <DraftPost post={props.post} />
-  } else {
-    return <PublishedPost post={props.post} />
-  }
+function PostStatus(props: {readonly post: Post}) {
+	if (props.post.status === 'draft') {
+		return <DraftPost post={props.post} />
+	} else {
+		return <PublishedPost post={props.post} />
+	}
 }
 ```
 
 Good:
 
 ```tsx
-function PostStatus(props: {
-  readonly post: Post
-}) {
-  if (props.post.status === "draft") return <DraftPost post={props.post} />
+function PostStatus(props: {readonly post: Post}) {
+	if (props.post.status === 'draft') return <DraftPost post={props.post} />
 
-  return <PublishedPost post={props.post} />
+	return <PublishedPost post={props.post} />
 }
 ```
 
@@ -1972,68 +1888,69 @@ Remove braces from single-statement `if` branches when the statement stays withi
 
 Detects:
 
-* single-statement `if` branches with braces that fit on one line without braces
-* single-line `if` branches without braces that exceed 120 columns
-* braceless branches with more than one statement
-* inconsistent branches where one side needs braces and the other side should be explicit for readability
+- single-statement `if` branches with braces that fit on one line without braces
+- single-line `if` branches without braces that exceed 120 columns
+- braceless branches with more than one statement
+- inconsistent branches where one side needs braces and the other side should be explicit for readability
 
 Does not flag:
 
-* multi-statement branches
-* branches whose body would exceed 120 columns without braces
-* branches containing comments
-* branches with declarations that require block scope
-* branches where removing braces would change ASI-sensitive behavior
+- multi-statement branches
+- branches whose body would exceed 120 columns without braces
+- branches containing comments
+- branches with declarations that require block scope
+- branches where removing braces would change ASI-sensitive behavior
 
 Bad:
 
 ```tsx
-function Button(props: {
-  readonly disabled?: boolean
-}) {
-  if (props.disabled === true) {
-    return <button disabled>Save</button>
-  }
+function Button(props: {readonly disabled?: boolean}) {
+	if (props.disabled === true) {
+		return <button disabled>Save</button>
+	}
 
-  return <button>Save</button>
+	return <button>Save</button>
 }
 ```
 
 Good:
 
 ```tsx
-function Button(props: {
-  readonly disabled?: boolean
-}) {
-  if (props.disabled === true) return <button disabled>Save</button>
+function Button(props: {readonly disabled?: boolean}) {
+	if (props.disabled === true) return <button disabled>Save</button>
 
-  return <button>Save</button>
+	return <button>Save</button>
 }
 ```
 
 Bad:
 
 ```tsx
-function Button(props: {
-  readonly disabled?: boolean
-}) {
-  if (props.disabled === true) return <button disabled aria-label="Save all pending changes before leaving the page">Save</button>
+function Button(props: {readonly disabled?: boolean}) {
+	if (props.disabled === true)
+		return (
+			<button disabled aria-label="Save all pending changes before leaving the page">
+				Save
+			</button>
+		)
 
-  return <button>Save</button>
+	return <button>Save</button>
 }
 ```
 
 Good:
 
 ```tsx
-function Button(props: {
-  readonly disabled?: boolean
-}) {
-  if (props.disabled === true) {
-    return <button disabled aria-label="Save all pending changes before leaving the page">Save</button>
-  }
+function Button(props: {readonly disabled?: boolean}) {
+	if (props.disabled === true) {
+		return (
+			<button disabled aria-label="Save all pending changes before leaving the page">
+				Save
+			</button>
+		)
+	}
 
-  return <button>Save</button>
+	return <button>Save</button>
 }
 ```
 
@@ -2066,23 +1983,23 @@ Use Effect Predicate helpers for real nullable/undefined filtering and refinemen
 
 Detects:
 
-* `(value) => value !== undefined` used as a filter/refinement callback
-* `(value) => value !== null`
-* `(value) => value != null`
-* project helpers such as `isDefined`, `isPresent`, `notNullish`
-* nullish predicate helpers that duplicate Effect Predicate
+- `(value) => value !== undefined` used as a filter/refinement callback
+- `(value) => value !== null`
+- `(value) => value != null`
+- project helpers such as `isDefined`, `isPresent`, `notNullish`
+- nullish predicate helpers that duplicate Effect Predicate
 
 Does not flag:
 
-* non-callback `if` conditions where a direct local check is clearer
-* values already non-nullish; those are handled by `no-redundant-type-system-check`
-* domain predicates that check more than nullability
+- non-callback `if` conditions where a direct local check is clearer
+- values already non-nullish; those are handled by `no-redundant-type-system-check`
+- domain predicates that check more than nullability
 
 Bad:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | undefined>) {
-  return Array.filter(values, (value) => value !== undefined)
+	return Array.filter(values, value => value !== undefined)
 }
 ```
 
@@ -2090,7 +2007,7 @@ Good:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | undefined>) {
-  return Array.filter(values, Predicate.isNotUndefined)
+	return Array.filter(values, Predicate.isNotUndefined)
 }
 ```
 
@@ -2098,7 +2015,7 @@ Bad:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | null | undefined>) {
-  return Array.filter(values, (value) => value != null)
+	return Array.filter(values, value => value != null)
 }
 ```
 
@@ -2106,7 +2023,7 @@ Good:
 
 ```ts
 function getUsers(values: ReadonlyArray<User | null | undefined>) {
-  return Array.filter(values, Predicate.isNotNullish)
+	return Array.filter(values, Predicate.isNotNullish)
 }
 ```
 
@@ -2139,25 +2056,25 @@ Prevent helpers that only rename, forward, await, spread, or reorder another cal
 
 Detects:
 
-* functions whose body is one call to another symbol
-* wrappers that only `return await target(...)`
-* wrappers that only reorder parameters
-* wrappers that only spread arguments
-* React components that only pass props through
-* exported aliases that only rename another symbol
+- functions whose body is one call to another symbol
+- wrappers that only `return await target(...)`
+- wrappers that only reorder parameters
+- wrappers that only spread arguments
+- React components that only pass props through
+- exported aliases that only rename another symbol
 
 Does not flag:
 
-* adapters crossing real external library/framework boundaries
-* wrappers that add validation, policy, authorization, error mapping, tracing, unit conversion, resource handling, or type refinement
-* configured public compatibility exports
-* test helpers used by multiple `*.test.*` files and required by a test framework
+- adapters crossing real external library/framework boundaries
+- wrappers that add validation, policy, authorization, error mapping, tracing, unit conversion, resource handling, or type refinement
+- configured public compatibility exports
+- test helpers used by multiple `*.test.*` files and required by a test framework
 
 Bad:
 
 ```ts
 function parseUser(input: unknown) {
-  return parseInput(input)
+	return parseInput(input)
 }
 ```
 
@@ -2171,7 +2088,7 @@ Bad:
 
 ```ts
 async function getUser(id: UserId) {
-  return await fetchUser(id)
+	return await fetchUser(id)
 }
 ```
 
@@ -2210,42 +2127,38 @@ Keep helper code adjacent to the code that consumes it.
 
 Detects:
 
-* private helpers used once far from their call site
-* helpers used only inside one component/function/test block but declared at module top level
-* helpers used multiple times but only inside one local region
-* exported helpers whose only consumers are near one feature
-* utilities in `lib/utils.ts` whose consumers are all in one local region
+- private helpers used once far from their call site
+- helpers used only inside one component/function/test block but declared at module top level
+- helpers used multiple times but only inside one local region
+- exported helpers whose only consumers are near one feature
+- utilities in `lib/utils.ts` whose consumers are all in one local region
 
 Does not flag:
 
-* heavy algorithms
-* recursive helpers
-* helpers used across genuinely separate regions
-* expensive computations worth naming
-* Effect programs/services/schemas that are intentionally top-level
-* test `beforeEach` / setup helpers used across multiple test cases in the same `*.test.*` file
+- heavy algorithms
+- recursive helpers
+- helpers used across genuinely separate regions
+- expensive computations worth naming
+- Effect programs/services/schemas that are intentionally top-level
+- test `beforeEach` / setup helpers used across multiple test cases in the same `*.test.*` file
 
 Bad:
 
 ```tsx
 function getUserLabel(user: User) {
-  return user.name ?? user.email
+	return user.name ?? user.email
 }
 
-function Profile(props: {
-  readonly user: User
-}) {
-  return <span>{getUserLabel(props.user)}</span>
+function Profile(props: {readonly user: User}) {
+	return <span>{getUserLabel(props.user)}</span>
 }
 ```
 
 Good:
 
 ```tsx
-function Profile(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name ?? props.user.email}</span>
+function Profile(props: {readonly user: User}) {
+	return <span>{props.user.name ?? props.user.email}</span>
 }
 ```
 
@@ -2278,37 +2191,35 @@ Do not share helpers for equality checks, nullability checks, simple fallbacks, 
 
 Detects even when used multiple times:
 
-* equality helpers
-* nullability helpers
-* fallback helpers
-* cheap `&&` / `||` condition helpers
-* helpers that only check one or two fields
-* helpers that wrap Effect Predicate/String/Array/Record functions without adding semantics
+- equality helpers
+- nullability helpers
+- fallback helpers
+- cheap `&&` / `||` condition helpers
+- helpers that only check one or two fields
+- helpers that wrap Effect Predicate/String/Array/Record functions without adding semantics
 
 Does not flag:
 
-* expensive computations
-* schema/refinement predicates over `unknown`
-* domain validation checking multiple fields with real validation semantics
-* security/permission policy
-* cross-runtime normalization
-* predicates intentionally passed as stable callbacks and not trivial
+- expensive computations
+- schema/refinement predicates over `unknown`
+- domain validation checking multiple fields with real validation semantics
+- security/permission policy
+- cross-runtime normalization
+- predicates intentionally passed as stable callbacks and not trivial
 
 Bad:
 
 ```ts
 function isPublished(post: Post) {
-  return post.status === "published"
+	return post.status === 'published'
 }
 ```
 
 Good:
 
 ```tsx
-function PostBadge(props: {
-  readonly post: Post
-}) {
-  return props.post.status === "published" ? <PublishedBadge /> : undefined
+function PostBadge(props: {readonly post: Post}) {
+	return props.post.status === 'published' ? <PublishedBadge /> : undefined
 }
 ```
 
@@ -2316,17 +2227,15 @@ Bad:
 
 ```ts
 function withDefaultName(name: string | undefined) {
-  return name ?? "Anonymous"
+	return name ?? 'Anonymous'
 }
 ```
 
 Good:
 
 ```tsx
-function UserName(props: {
-  readonly user: User
-}) {
-  return <span>{props.user.name ?? "Anonymous"}</span>
+function UserName(props: {readonly user: User}) {
+	return <span>{props.user.name ?? 'Anonymous'}</span>
 }
 ```
 
@@ -2359,35 +2268,33 @@ Do not keep symbols exported merely because they might be useful later.
 
 Detects:
 
-* exported symbols with no real imports in the Bun workspace graph
-* exported symbols used only inside the same file
-* exported symbols used only by one local feature and not part of a configured public API
-* symbols exported only through glob exports but not imported anywhere
+- exported symbols with no real imports in the Bun workspace graph
+- exported symbols used only inside the same file
+- exported symbols used only by one local feature and not part of a configured public API
+- symbols exported only through glob exports but not imported anywhere
 
 Does not flag:
 
-* configured package public API allowlist
-* framework-discovered exports
-* route handlers
-* generated exports
-* symbols imported by another workspace package through a real subpath
-* test helpers used by multiple `*.test.*` files
+- configured package public API allowlist
+- framework-discovered exports
+- route handlers
+- generated exports
+- symbols imported by another workspace package through a real subpath
+- test helpers used by multiple `*.test.*` files
 
 Bad:
 
 ```ts
 export function isPublished(post: Post) {
-  return post.status === "published"
+	return post.status === 'published'
 }
 ```
 
 Good:
 
 ```tsx
-function PostBadge(props: {
-  readonly post: Post
-}) {
-  return props.post.status === "published" ? <PublishedBadge /> : undefined
+function PostBadge(props: {readonly post: Post}) {
+	return props.post.status === 'published' ? <PublishedBadge /> : undefined
 }
 ```
 
@@ -2420,56 +2327,48 @@ Let React Compiler handle memoization instead of adding manual memoization const
 
 Detects:
 
-* `useMemo(...)`
-* `useCallback(...)`
-* `memo(Component)`
-* `React.memo(Component)`
-* `"use memo"`
-* `"use no memo"`
+- `useMemo(...)`
+- `useCallback(...)`
+- `memo(Component)`
+- `React.memo(Component)`
+- `"use memo"`
+- `"use no memo"`
 
 Does not flag:
 
-* explicitly allowlisted migration files with an expiry comment
+- explicitly allowlisted migration files with an expiry comment
 
 Bad:
 
 ```tsx
-const Button = memo(function Button(props: {
-  readonly label: string
-}) {
-  return <button>{props.label}</button>
+const Button = memo(function Button(props: {readonly label: string}) {
+	return <button>{props.label}</button>
 })
 ```
 
 Good:
 
 ```tsx
-function Button(props: {
-  readonly label: string
-}) {
-  return <button>{props.label}</button>
+function Button(props: {readonly label: string}) {
+	return <button>{props.label}</button>
 }
 ```
 
 Bad:
 
 ```tsx
-function Search(props: {
-  readonly query: string
-}) {
-  const normalized = useMemo(() => String.toLowerCase(props.query), [props.query])
+function Search(props: {readonly query: string}) {
+	const normalized = useMemo(() => String.toLowerCase(props.query), [props.query])
 
-  return <span>{normalized}</span>
+	return <span>{normalized}</span>
 }
 ```
 
 Good:
 
 ```tsx
-function Search(props: {
-  readonly query: string
-}) {
-  return <span>{String.toLowerCase(props.query)}</span>
+function Search(props: {readonly query: string}) {
+	return <span>{String.toLowerCase(props.query)}</span>
 }
 ```
 
@@ -2502,31 +2401,31 @@ Use React 19 ref-as-prop instead of `forwardRef`.
 
 Detects:
 
-* `forwardRef(...)`
-* `React.forwardRef(...)`
+- `forwardRef(...)`
+- `React.forwardRef(...)`
 
 Does not flag:
 
-* third-party compatibility wrappers in explicit migration allowlists
+- third-party compatibility wrappers in explicit migration allowlists
 
 Bad:
 
 ```tsx
-const Input = forwardRef<HTMLInputElement, {
-  readonly placeholder?: string
-}>(function Input(props, ref) {
-  return <input ref={ref} placeholder={props.placeholder} />
+const Input = forwardRef<
+	HTMLInputElement,
+	{
+		readonly placeholder?: string
+	}
+>(function Input(props, ref) {
+	return <input ref={ref} placeholder={props.placeholder} />
 })
 ```
 
 Good:
 
 ```tsx
-function Input(props: {
-  readonly ref?: React.Ref<HTMLInputElement>
-  readonly placeholder?: string
-}) {
-  return <input ref={props.ref} placeholder={props.placeholder} />
+function Input(props: {readonly ref?: React.Ref<HTMLInputElement>; readonly placeholder?: string}) {
+	return <input ref={props.ref} placeholder={props.placeholder} />
 }
 ```
 
@@ -2559,26 +2458,26 @@ Preserve literal keys, discriminants, tuple lengths, and narrow values by prefer
 
 Detects:
 
-* `const value: Record<string, T> = literal`
-* `const value: T[] = literal`
-* `const value: Array<T> = literal`
-* `const value: object = literal`
-* object literals annotated as broad interfaces when the inferred literal type is more precise
+- `const value: Record<string, T> = literal`
+- `const value: T[] = literal`
+- `const value: Array<T> = literal`
+- `const value: object = literal`
+- object literals annotated as broad interfaces when the inferred literal type is more precise
 
 Does not flag:
 
-* mutable `let` variables
-* arrays intentionally built up later
-* recursive values
-* values passed directly to external APIs requiring annotation
-* places where `as const satisfies` would not type-check
+- mutable `let` variables
+- arrays intentionally built up later
+- recursive values
+- values passed directly to external APIs requiring annotation
+- places where `as const satisfies` would not type-check
 
 Bad:
 
 ```ts
 const routes: Record<string, RouteConfig> = {
-  home: { path: "/" },
-  settings: { path: "/settings" },
+	home: {path: '/'},
+	settings: {path: '/settings'}
 }
 ```
 
@@ -2586,8 +2485,8 @@ Good:
 
 ```ts
 const routes = {
-  home: { path: "/" },
-  settings: { path: "/settings" },
+	home: {path: '/'},
+	settings: {path: '/settings'}
 } as const satisfies Record<string, RouteConfig>
 ```
 
@@ -2620,15 +2519,15 @@ Ensure Promise-returning or throwing async work is lifted into Effect with the c
 
 Detects:
 
-* `Effect.succeed(promise)`
-* `Effect.sync(async () => ...)`
-* `Effect.try(() => promise)`
-* sync Effect constructors receiving thenables
-* async callbacks passed to sync Effect constructors
+- `Effect.succeed(promise)`
+- `Effect.sync(async () => ...)`
+- `Effect.try(() => promise)`
+- sync Effect constructors receiving thenables
+- async callbacks passed to sync Effect constructors
 
 Does not flag:
 
-* code intentionally returning a `Promise` as a plain success value only when the expected success type is explicitly `Promise<T>` and no Effect sequencing is implied
+- code intentionally returning a `Promise` as a plain success value only when the expected success type is explicitly `Promise<T>` and no Effect sequencing is implied
 
 Bad:
 
@@ -2683,36 +2582,30 @@ Preserve specific Effect success, error, and dependency types instead of widenin
 
 Detects:
 
-* `Effect.Effect<User>`
-* `Effect.Effect<User, Error>`
-* `Effect.Effect<User, unknown, any>`
-* project aliases such as `Task<A>`
-* casts to broad Effect types
-* false `never` requirements/errors
-* annotations that erase inferred Effect error or environment types
+- `Effect.Effect<User>`
+- `Effect.Effect<User, Error>`
+- `Effect.Effect<User, unknown, any>`
+- project aliases such as `Task<A>`
+- casts to broad Effect types
+- false `never` requirements/errors
+- annotations that erase inferred Effect error or environment types
 
 Does not flag:
 
-* public boundary functions that actually map internal errors to a public error type
-* intentionally erased dependencies at a configured runtime boundary
-* tests that assert only success after errors have been handled
+- public boundary functions that actually map internal errors to a public error type
+- intentionally erased dependencies at a configured runtime boundary
+- tests that assert only success after errors have been handled
 
 Bad:
 
 ```ts
-const program: Effect.Effect<User, Error, never> = pipe(
-  getUser(id),
-  Effect.flatMap(loadPosts),
-)
+const program: Effect.Effect<User, Error, never> = pipe(getUser(id), Effect.flatMap(loadPosts))
 ```
 
 Good:
 
 ```ts
-const program = pipe(
-  getUser(id),
-  Effect.flatMap(loadPosts),
-)
+const program = pipe(getUser(id), Effect.flatMap(loadPosts))
 ```
 
 Diagnostic message:
@@ -2744,33 +2637,29 @@ Keep pure synchronous computation as plain TypeScript unless an Effect boundary 
 
 Detects:
 
-* `Effect.Effect<A, never, never>` helpers that only perform pure synchronous transformations
-* `Effect.gen` with zero meaningful yielded effects
-* `Effect.succeed(value).pipe(Effect.map(...))` for pure local computation
-* Effect-returning helpers with no error, dependency, resource, async, concurrency, interruption, retry/schedule, or observability semantics
+- `Effect.Effect<A, never, never>` helpers that only perform pure synchronous transformations
+- `Effect.gen` with zero meaningful yielded effects
+- `Effect.succeed(value).pipe(Effect.map(...))` for pure local computation
+- Effect-returning helpers with no error, dependency, resource, async, concurrency, interruption, retry/schedule, or observability semantics
 
 Does not flag:
 
-* functions implementing a required Effect-returning interface
-* code composing into a larger Effect at a boundary
-* pure values lifted once at the edge of an existing Effect pipeline
-* observability
-* retry/scheduling
-* interruption
-* dependency access
-* scoped resources
-* typed failure
-* async side-effect capture
+- functions implementing a required Effect-returning interface
+- code composing into a larger Effect at a boundary
+- pure values lifted once at the edge of an existing Effect pipeline
+- observability
+- retry/scheduling
+- interruption
+- dependency access
+- scoped resources
+- typed failure
+- async side-effect capture
 
 Bad:
 
 ```ts
 const normalizeName = Effect.fnUntraced(function* (name: string) {
-  return pipe(
-    name,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(name, String.trim, String.toLowerCase)
 })
 ```
 
@@ -2778,11 +2667,7 @@ Good:
 
 ```ts
 function normalizeName(name: string) {
-  return pipe(
-    name,
-    String.trim,
-    String.toLowerCase,
-  )
+	return pipe(name, String.trim, String.toLowerCase)
 }
 ```
 
@@ -2815,24 +2700,24 @@ Keep Effect execution at explicit runtime boundaries instead of inside reusable 
 
 Detects:
 
-* `Effect.runPromise`
-* `Effect.runSync`
-* `Effect.runFork`
-* imported aliases of Effect run functions
-* Effect execution inside reusable helpers
+- `Effect.runPromise`
+- `Effect.runSync`
+- `Effect.runFork`
+- imported aliases of Effect run functions
+- Effect execution inside reusable helpers
 
 Does not flag:
 
-* configured CLI/server/browser entrypoints
-* configured React event/runtime adapters
-* individual test bodies
-* explicitly configured runtime boundaries
+- configured CLI/server/browser entrypoints
+- configured React event/runtime adapters
+- individual test bodies
+- explicitly configured runtime boundaries
 
 Bad:
 
 ```ts
 async function getUserName(id: UserId) {
-  return Effect.runPromise(getUser(id))
+	return Effect.runPromise(getUser(id))
 }
 ```
 
@@ -2840,7 +2725,7 @@ Good:
 
 ```ts
 const getUserName = Effect.fnUntraced(function* (id: UserId) {
-  return (yield* getUser(id)).name
+	return (yield* getUser(id)).name
 })
 ```
 
@@ -2873,33 +2758,33 @@ Keep mutation confined to React refs or explicit external adapters.
 
 Detects:
 
-* assignment to non-ref variables after initialization
-* property mutation
-* index assignment
-* mutating array methods
-* increment/decrement on non-ref state
-* object mutation outside allowlisted builders/adapters
+- assignment to non-ref variables after initialization
+- property mutation
+- index assignment
+- mutating array methods
+- increment/decrement on non-ref state
+- object mutation outside allowlisted builders/adapters
 
 Does not flag:
 
-* `ref.current = ...`
-* local mutation inside explicitly allowlisted builders
-* external adapter code
-* generated code
-* tests that mutate local test doubles
+- `ref.current = ...`
+- local mutation inside explicitly allowlisted builders
+- external adapter code
+- generated code
+- tests that mutate local test doubles
 
 Bad:
 
 ```ts
-props.user.name = "Updated"
+props.user.name = 'Updated'
 ```
 
 Good:
 
 ```ts
 props.onUserChange({
-  ...props.user,
-  name: "Updated",
+	...props.user,
+	name: 'Updated'
 })
 ```
 
@@ -2938,28 +2823,28 @@ Prevent multiple project helpers from expressing the same operation under differ
 
 Detects:
 
-* exported helpers with normalized equivalent bodies
-* utility helpers that duplicate Effect module operations
-* helpers that duplicate each other under different names
-* duplicate boolean/fallback/predicate helpers
+- exported helpers with normalized equivalent bodies
+- utility helpers that duplicate Effect module operations
+- helpers that duplicate each other under different names
+- duplicate boolean/fallback/predicate helpers
 
 Does not flag:
 
-* deliberately duplicated local code inside unrelated features
-* tests with local scenario duplication
-* generated code
-* overloads
-* wrappers that add different domain brands, errors, units, telemetry, or policy
+- deliberately duplicated local code inside unrelated features
+- tests with local scenario duplication
+- generated code
+- overloads
+- wrappers that add different domain brands, errors, units, telemetry, or policy
 
 Bad:
 
 ```ts
 function isBlank(value: string) {
-  return String.isEmpty(String.trim(value))
+	return String.isEmpty(String.trim(value))
 }
 
 function isEmptyString(value: string) {
-  return String.isEmpty(String.trim(value))
+	return String.isEmpty(String.trim(value))
 }
 ```
 
@@ -2972,11 +2857,7 @@ String.isEmpty(String.trim(value))
 or, when used in a pipeline:
 
 ```ts
-pipe(
-  value,
-  String.trim,
-  String.isEmpty,
-)
+pipe(value, String.trim, String.isEmpty)
 ```
 
 Diagnostic message:
@@ -3008,32 +2889,35 @@ Remove options, modes, and branches whose variability is not exercised by real c
 
 Detects:
 
-* boolean flags where all callers pass the same value
-* option-object properties where all callers pass the same value or omit the property
-* string-literal modes with only one used mode
-* enum modes with only one used mode
-* branches unreachable under all known call sites
+- boolean flags where all callers pass the same value
+- option-object properties where all callers pass the same value or omit the property
+- string-literal modes with only one used mode
+- enum modes with only one used mode
+- branches unreachable under all known call sites
 
 Does not flag:
 
-* public APIs
-* callbacks exposed to external callers
-* framework hooks
-* functions called through dynamic references
-* test data builders whose options are varied across test cases
+- public APIs
+- callbacks exposed to external callers
+- framework hooks
+- functions called through dynamic references
+- test data builders whose options are varied across test cases
 
 Bad:
 
 ```ts
-function loadUser(id: UserId, options: {
-  readonly includePosts: boolean
-}) {
-  if (options.includePosts) return loadUserWithPosts(id)
+function loadUser(
+	id: UserId,
+	options: {
+		readonly includePosts: boolean
+	}
+) {
+	if (options.includePosts) return loadUserWithPosts(id)
 
-  return loadUserOnly(id)
+	return loadUserOnly(id)
 }
 
-loadUser(id, { includePosts: true })
+loadUser(id, {includePosts: true})
 ```
 
 Good:
@@ -3071,38 +2955,36 @@ Keep behavior in the file that uses it unless the extracted symbol has independe
 
 Detects:
 
-* exported functions used by exactly one non-generated external file
-* exported constants used by exactly one non-generated external file
-* exported types used by exactly one non-generated external file
-* exported fixtures used by exactly one test file
-* exported hooks/components/helpers with one real consumer
+- exported functions used by exactly one non-generated external file
+- exported constants used by exactly one non-generated external file
+- exported types used by exactly one non-generated external file
+- exported fixtures used by exactly one test file
+- exported hooks/components/helpers with one real consumer
 
 Does not flag:
 
-* configured public API exports
-* framework-discovered exports
-* route files
-* server entrypoints
-* large standalone components
-* recursive symbols
-* symbols used by two or more independent feature areas
-* symbols imported by another workspace package through a real `#` or package subpath
+- configured public API exports
+- framework-discovered exports
+- route files
+- server entrypoints
+- large standalone components
+- recursive symbols
+- symbols used by two or more independent feature areas
+- symbols imported by another workspace package through a real `#` or package subpath
 
 Bad:
 
 ```ts
 export function formatUserName(user: User) {
-  return `${user.firstName} ${user.lastName}`
+	return `${user.firstName} ${user.lastName}`
 }
 ```
 
 Good:
 
 ```tsx
-function ProfileCard(props: {
-  readonly user: User
-}) {
-  return <span>{`${props.user.firstName} ${props.user.lastName}`}</span>
+function ProfileCard(props: {readonly user: User}) {
+	return <span>{`${props.user.firstName} ${props.user.lastName}`}</span>
 }
 ```
 
@@ -3135,31 +3017,31 @@ Prevent interfaces, abstract classes, or service ports that pretend to support s
 
 Detects:
 
-* interfaces implemented by exactly one concrete class/object
-* abstract classes with exactly one subclass
-* object-shape aliases implemented by exactly one concrete provider
-* repository/service ports with one implementation and no test/live layer split
+- interfaces implemented by exactly one concrete class/object
+- abstract classes with exactly one subclass
+- object-shape aliases implemented by exactly one concrete provider
+- repository/service ports with one implementation and no test/live layer split
 
 Does not flag:
 
-* public plugin APIs
-* external protocol contracts
-* generated interfaces
-* abstractions with a production implementation and a real test/mock implementation
-* Effect service tags used through environment requirements with live and test layers
-* interfaces consumed by separate deployable packages
+- public plugin APIs
+- external protocol contracts
+- generated interfaces
+- abstractions with a production implementation and a real test/mock implementation
+- Effect service tags used through environment requirements with live and test layers
+- interfaces consumed by separate deployable packages
 
 Bad:
 
 ```ts
 interface UserRepository {
-  findById(id: UserId): Promise<User | undefined>
+	findById(id: UserId): Promise<User | undefined>
 }
 
 class PostgresUserRepository implements UserRepository {
-  findById(id: UserId) {
-    return db.user.findUnique({ where: { id } })
-  }
+	findById(id: UserId) {
+		return db.user.findUnique({where: {id}})
+	}
 }
 ```
 
@@ -3167,9 +3049,9 @@ Good:
 
 ```ts
 class PostgresUserRepository {
-  findById(id: UserId) {
-    return db.user.findUnique({ where: { id } })
-  }
+	findById(id: UserId) {
+		return db.user.findUnique({where: {id}})
+	}
 }
 ```
 
@@ -3202,29 +3084,29 @@ Prevent namespace/service objects that only group existing functions without own
 
 Detects:
 
-* exported object literals whose members are imported functions
-* service objects that only group functions
-* static classes that only forward to functions
-* namespace-like wrappers with no state, lifecycle, dependency, policy, or protocol role
+- exported object literals whose members are imported functions
+- service objects that only group functions
+- static classes that only forward to functions
+- namespace-like wrappers with no state, lifecycle, dependency, policy, or protocol role
 
 Does not flag:
 
-* objects with private state
-* runtime configuration
-* lifecycle/dependency ownership
-* protocol implementations
-* stable external API role
-* mock objects passed directly to a unit under test
+- objects with private state
+- runtime configuration
+- lifecycle/dependency ownership
+- protocol implementations
+- stable external API role
+- mock objects passed directly to a unit under test
 
 Bad:
 
 ```ts
-import { createUser } from "./create-user"
-import { deleteUser } from "./delete-user"
+import {createUser} from './create-user'
+import {deleteUser} from './delete-user'
 
 export const UserService = {
-  createUser,
-  deleteUser,
+	createUser,
+	deleteUser
 }
 ```
 
@@ -3264,39 +3146,33 @@ Allow classes only when they participate in an Effect/schema/error/tag hierarchy
 
 Detects:
 
-* classes with no `extends`
-* service classes with no inheritance
-* data classes with no Effect/schema/error/tag base
-* static utility classes
+- classes with no `extends`
+- service classes with no inheritance
+- data classes with no Effect/schema/error/tag base
+- static utility classes
 
 Does not flag:
 
-* classes extending `Error`
-* classes extending Effect data/tag/error/schema bases
-* classes extending framework-required bases in explicit allowlists
-* generated classes
+- classes extending `Error`
+- classes extending Effect data/tag/error/schema bases
+- classes extending framework-required bases in explicit allowlists
+- generated classes
 
 Bad:
 
 ```ts
 class UserService {
-  create(input: {
-    readonly name: string
-    readonly email: string
-  }) {
-    return createUser(input)
-  }
+	create(input: {readonly name: string; readonly email: string}) {
+		return createUser(input)
+	}
 }
 ```
 
 Good:
 
 ```ts
-function createUserFromInput(input: {
-  readonly name: string
-  readonly email: string
-}) {
-  return createUser(input)
+function createUserFromInput(input: {readonly name: string; readonly email: string}) {
+	return createUser(input)
 }
 ```
 
@@ -3329,54 +3205,47 @@ Split branch-heavy React components into composable or compound components.
 
 Detects:
 
-* React components with `mode`, `variant`, or `type` props selecting substantially different JSX trees
-* components with multiple boolean props controlling large optional regions
-* render functions with three or more JSX branches
-* components that would be easier to call by composing children/slots
+- React components with `mode`, `variant`, or `type` props selecting substantially different JSX trees
+- components with multiple boolean props controlling large optional regions
+- render functions with three or more JSX branches
+- components that would be easier to call by composing children/slots
 
 Does not flag:
 
-* small style variants
-* simple binary conditional rendering
-* `Match` over domain state when branches are small and local
-* controlled components where branching is intrinsic to the control
+- small style variants
+- simple binary conditional rendering
+- `Match` over domain state when branches are small and local
+- controlled components where branching is intrinsic to the control
 
 Bad:
 
 ```tsx
-function Panel(props: {
-  readonly mode: "summary" | "details" | "edit"
-  readonly post: Post
-}) {
-  return pipe(
-    Match.value(props.mode),
-    Match.when("summary", () => <PostSummary post={props.post} />),
-    Match.when("details", () => <PostDetails post={props.post} />),
-    Match.when("edit", () => <PostEditor post={props.post} />),
-    Match.exhaustive,
-  )
+function Panel(props: {readonly mode: 'summary' | 'details' | 'edit'; readonly post: Post}) {
+	return pipe(
+		Match.value(props.mode),
+		Match.when('summary', () => <PostSummary post={props.post} />),
+		Match.when('details', () => <PostDetails post={props.post} />),
+		Match.when('edit', () => <PostEditor post={props.post} />),
+		Match.exhaustive
+	)
 }
 ```
 
 Good:
 
 ```tsx
-function Panel(props: {
-  readonly children?: React.ReactNode
-}) {
-  return <section>{props.children}</section>
+function Panel(props: {readonly children?: React.ReactNode}) {
+	return <section>{props.children}</section>
 }
 
-function PostPanel(props: {
-  readonly post: Post
-}) {
-  return (
-    <Panel>
-      <PostSummary post={props.post} />
-      <PostDetails post={props.post} />
-      <PostEditor post={props.post} />
-    </Panel>
-  )
+function PostPanel(props: {readonly post: Post}) {
+	return (
+		<Panel>
+			<PostSummary post={props.post} />
+			<PostDetails post={props.post} />
+			<PostEditor post={props.post} />
+		</Panel>
+	)
 }
 ```
 
@@ -3409,29 +3278,29 @@ Use Node/Bun package subpath imports that start with `#`.
 
 Detects:
 
-* long relative imports that can be expressed through `package.json#imports`
-* monorepo-internal imports that bypass configured `#` aliases
-* imports reaching into package internals when a configured subpath exists
+- long relative imports that can be expressed through `package.json#imports`
+- monorepo-internal imports that bypass configured `#` aliases
+- imports reaching into package internals when a configured subpath exists
 
 Does not flag:
 
-* same-directory sibling imports
-* imports not exposed through `#`
-* external packages
-* generated files
-* config files
-* imports where the alias would cross a private package boundary incorrectly
+- same-directory sibling imports
+- imports not exposed through `#`
+- external packages
+- generated files
+- config files
+- imports where the alias would cross a private package boundary incorrectly
 
 Bad:
 
 ```ts
-import { parseUser } from "../../lib/users/parse-user"
+import {parseUser} from '../../lib/users/parse-user'
 ```
 
 Good:
 
 ```ts
-import { parseUser } from "#lib/users/parse-user"
+import {parseUser} from '#lib/users/parse-user'
 ```
 
 Diagnostic message:
@@ -3463,39 +3332,36 @@ Avoid unions, enums, registries, and switches that model future variants that do
 
 Detects:
 
-* discriminated unions with one member
-* enums with one member
-* registry objects with one key plus generic lookup logic
-* switches over a discriminant that has only one possible current value
+- discriminated unions with one member
+- enums with one member
+- registry objects with one key plus generic lookup logic
+- switches over a discriminant that has only one possible current value
 
 Does not flag:
 
-* external protocol mirrors
-* generated schemas
-* compatibility types matching an external API
-* tests intentionally constructing minimal protocol fixtures
+- external protocol mirrors
+- generated schemas
+- compatibility types matching an external API
+- tests intentionally constructing minimal protocol fixtures
 
 Bad:
 
 ```ts
-type PaymentEvent =
-  | { readonly type: "payment.created"; readonly paymentId: string }
+type PaymentEvent = {readonly type: 'payment.created'; readonly paymentId: string}
 
 function handleEvent(event: PaymentEvent) {
-  switch (event.type) {
-    case "payment.created":
-      return createPayment(event.paymentId)
-  }
+	switch (event.type) {
+		case 'payment.created':
+			return createPayment(event.paymentId)
+	}
 }
 ```
 
 Good:
 
 ```ts
-function handlePaymentCreated(event: {
-  readonly paymentId: string
-}) {
-  return createPayment(event.paymentId)
+function handlePaymentCreated(event: {readonly paymentId: string}) {
+	return createPayment(event.paymentId)
 }
 ```
 
@@ -3528,28 +3394,28 @@ Make dependencies point to the file that owns the behavior, not to an internal r
 
 Detects:
 
-* imports from internal `index.ts`
-* imports from internal `barrel.ts`
-* imports from re-export-only modules when a direct source module exists
+- imports from internal `index.ts`
+- imports from internal `barrel.ts`
+- imports from re-export-only modules when a direct source module exists
 
 Does not flag:
 
-* external package imports
-* configured package root public APIs
-* framework-required route/module exports
-* generated barrels
-* stable test harness entrypoints used by multiple `*.test.*` files
+- external package imports
+- configured package root public APIs
+- framework-required route/module exports
+- generated barrels
+- stable test harness entrypoints used by multiple `*.test.*` files
 
 Bad:
 
 ```ts
-import { formatUserName } from "#users"
+import {formatUserName} from '#users'
 ```
 
 Good:
 
 ```ts
-import { formatUserName } from "#users/format-user-name"
+import {formatUserName} from '#users/format-user-name'
 ```
 
 Diagnostic message:
@@ -3563,4 +3429,3 @@ error
 
 Phase:
 3
-

@@ -1,21 +1,21 @@
-import {pipe, Schema} from 'effect'
+import {Schema, pipe} from 'effect'
 
 import {Tool, Toolkit} from 'effect/unstable/ai'
 import {AiError} from 'effect/unstable/ai/AiError'
 
 export const WebSearchToolKit = Toolkit.make(
 	Tool.make('web_search', {
+		description: 'Search the web for recent, relevant sources and return concise page content snippets.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Search the web for recent, relevant sources and return concise page content snippets.',
 		parameters: Schema.Struct({
-			query: Schema.NonEmptyString.annotate({description: 'The search query to send to the web search provider.'}),
 			numResults: pipe(
 				Schema.Int,
 				Schema.optionalKey,
 				Schema.check(Schema.isGreaterThan(0)),
 				Schema.annotate({description: 'Optional maximum number of search results to return.'})
-			)
+			),
+			query: Schema.NonEmptyString.annotate({description: 'The search query to send to the web search provider.'})
 		}),
 		success: Schema.Struct({
 			query: Schema.String,
@@ -33,9 +33,9 @@ export const WebSearchToolKit = Toolkit.make(
 
 export const WebFetchToolKit = Toolkit.make(
 	Tool.make('web_fetch', {
+		description: 'Fetch clean text content from specified URLs using Exa.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Fetch clean text content from specified URLs using Exa.',
 		parameters: Schema.Struct({
 			urls: pipe(
 				Schema.Array(Schema.URLFromString),
@@ -59,9 +59,9 @@ export const WebFetchToolKit = Toolkit.make(
 
 export const CommandExecutionToolKit = Toolkit.make(
 	Tool.make('command_execution', {
+		description: 'Run a shell command through an agent-native command execution tool.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Run a shell command through an agent-native command execution tool.',
 		parameters: Schema.Struct({
 			command: Schema.String
 		}),
@@ -73,9 +73,9 @@ export const CommandExecutionToolKit = Toolkit.make(
 
 export const FileChangeToolKit = Toolkit.make(
 	Tool.make('file_change', {
+		description: 'Apply or report file changes made by an agent-native patch tool.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Apply or report file changes made by an agent-native patch tool.',
 		parameters: Schema.Struct({
 			changes: Schema.Array(
 				Schema.Struct({
@@ -97,9 +97,9 @@ export const FileChangeToolKit = Toolkit.make(
 
 export const McpToolCallToolKit = Toolkit.make(
 	Tool.make('mcp_tool_call', {
+		description: 'Call an MCP server tool through an agent-native MCP bridge.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Call an MCP server tool through an agent-native MCP bridge.',
 		parameters: Schema.Struct({
 			server: Schema.String,
 			tool: Schema.String
@@ -114,9 +114,9 @@ export const McpToolCallToolKit = Toolkit.make(
 
 export const TodoListToolKit = Toolkit.make(
 	Tool.make('todo_list', {
+		description: 'Report an agent-native task list update.',
 		failure: AiError,
 		failureMode: 'return',
-		description: 'Report an agent-native task list update.',
 		parameters: Schema.Struct({
 			items: Schema.Array(
 				Schema.Struct({

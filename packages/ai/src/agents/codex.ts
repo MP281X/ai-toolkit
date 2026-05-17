@@ -4,23 +4,24 @@ import {
 	DateTime,
 	Effect,
 	Option,
-	pipe,
 	Queue,
 	Ref,
 	Schema,
 	Scope,
 	Stream,
 	String,
-	SubscriptionRef
+	SubscriptionRef,
+	pipe
 } from 'effect'
 
 import type {Prompt} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import * as CodexRpc from '#codegen/codex-app-server/meta.gen.ts'
-import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 import type {AgentStatus} from '../service.ts'
 import {Agent} from '../service.ts'
+
+import * as CodexRpc from '#codegen/codex-app-server/meta.gen.ts'
+import {serializeAiPartToMarkdown} from '#lib/utils.ts'
 
 class CodexProtocolError extends Schema.TaggedErrorClass<CodexProtocolError>()('CodexProtocolError', {
 	cause: Schema.optional(Schema.Defect),
@@ -34,9 +35,9 @@ const JsonRpcRequest = Schema.Struct({
 })
 
 const JsonRpcResponse = Schema.Struct({
+	error: Schema.optional(Schema.Struct({message: Schema.optional(Schema.String)})),
 	id: Schema.Union([Schema.Number, Schema.String]),
-	result: Schema.optional(Schema.Defect),
-	error: Schema.optional(Schema.Struct({message: Schema.optional(Schema.String)}))
+	result: Schema.optional(Schema.Defect)
 })
 
 const JsonRpcNotification = Schema.Struct({
@@ -44,37 +45,47 @@ const JsonRpcNotification = Schema.Struct({
 	params: Schema.optional(Schema.Defect)
 })
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null
+}
 
-const isJsonRpcRequest = (value: unknown) => isRecord(value) && typeof value['method'] === 'string' && 'id' in value
+function isJsonRpcRequest(value: unknown) {
+	return isRecord(value) && typeof value['method'] === 'string' && 'id' in value
+}
 
-const isJsonRpcNotification = (value: unknown) =>
-	isRecord(value) && typeof value['method'] === 'string' && !('id' in value)
+function isJsonRpcNotification(value: unknown) {
+	return isRecord(value) && typeof value['method'] === 'string' && !('id' in value)
+}
 
-const isJsonRpcResponse = (value: unknown) => isRecord(value) && 'id' in value && !('method' in value)
+function isJsonRpcResponse(value: unknown) {
+	return isRecord(value) && 'id' in value && !('method' in value)
+}
 
 type ClientRequestMethod = CodexRpc.ClientRequestMethod
 type ClientRequestPayload<M extends ClientRequestMethod> = CodexRpc.ClientRequestParamsByMethod[M]
 type ClientRequestResponse<M extends ClientRequestMethod> = CodexRpc.ClientRequestResponsesByMethod[M]
 
-const getClientRequestParamSchema = <M extends ClientRequestMethod>(method: M) => CodexRpc.CLIENT_REQUEST_PARAMS[method]
+function getClientRequestParamSchema<M extends ClientRequestMethod>(method: M) {
+	return CodexRpc.CLIENT_REQUEST_PARAMS[method]
+}
 
-const getClientRequestResponseSchema = <M extends ClientRequestMethod>(method: M) =>
-	CodexRpc.CLIENT_REQUEST_RESPONSES[method]
+function getClientRequestResponseSchema<M extends ClientRequestMethod>(method: M) {
+	return CodexRpc.CLIENT_REQUEST_RESPONSES[method]
+}
 
-const encodeClientPayload = <M extends ClientRequestMethod>(method: M, payload: ClientRequestPayload<M>) => {
+function encodeClientPayload<M extends ClientRequestMethod>(method: M, payload: ClientRequestPayload<M>) {
 	const schema = getClientRequestParamSchema(method)
 	return schema ? Schema.encodeUnknownSync(schema as never)(payload) : payload
 }
 
-const decodeClientResponse = <M extends ClientRequestMethod>(method: M, payload: unknown) => {
+function decodeClientResponse<M extends ClientRequestMethod>(method: M, payload: unknown) {
 	const schema = getClientRequestResponseSchema(method)
 	return schema
 		? (Schema.decodeUnknownSync(schema as never)(payload) as ClientRequestResponse<M>)
 		: (payload as ClientRequestResponse<M>)
 }
 
-const decodeServerNotification = <M extends CodexRpc.ServerNotificationMethod>(method: M, payload: unknown) => {
+function decodeServerNotification<M extends CodexRpc.ServerNotificationMethod>(method: M, payload: unknown) {
 	const schema = CodexRpc.SERVER_NOTIFICATION_PARAMS[method]
 	return Schema.decodeUnknownOption(schema as never)(payload) as Option.Option<
 		CodexRpc.ServerNotificationParamsByMethod[M]
@@ -87,10 +98,10 @@ function makeThreadStartParams(config: {
 	readonly systemPrompt: Prompt.SystemMessage
 }): CodexRpc.ClientRequestParamsByMethod['thread/start'] {
 	return {
-		cwd: config.cwd,
-		model: config.model,
-		developerInstructions: config.systemPrompt.content,
 		approvalPolicy: 'on-request',
+		cwd: config.cwd,
+		developerInstructions: config.systemPrompt.content,
+		model: config.model,
 		sandbox: 'workspace-write'
 	}
 }
@@ -101,10 +112,10 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 	const child = yield* Effect.sync(() =>
 		Bun.spawn(['codex', 'app-server'], {
 			cwd: config.cwd,
-			stdin: 'pipe',
-			stdout: 'pipe',
+			env: Bun.env,
 			stderr: 'pipe',
-			env: Bun.env
+			stdin: 'pipe',
+			stdout: 'pipe'
 		})
 	)
 	yield* Scope.addFinalizer(
@@ -154,8 +165,8 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 			yield* writeJson(child, {id: request.id, result: {decision: 'accept'}})
 		} else {
 			yield* writeJson(child, {
-				id: request.id,
-				error: {code: -32601, message: `Method not found: ${request.method}`}
+				error: {code: -32_601, message: `Method not found: ${request.method}`},
+				id: request.id
 			})
 		}
 		return
@@ -165,8 +176,8 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 		readLines(child.stdout, line =>
 			pipe(
 				Effect.try({
-					try: () => JSON.parse(line),
-					catch: cause => new CodexProtocolError({message: 'Failed to decode Codex app-server message', cause})
+					catch: cause => new CodexProtocolError({cause, message: 'Failed to decode Codex app-server message'}),
+					try: () => JSON.parse(line)
 				}),
 				Effect.flatMap(handleMessage),
 				Effect.catchCause(cause => pipe(Effect.logDebug('codex app-server decode error'), Effect.annotateLogs({cause})))
@@ -206,17 +217,17 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 	})
 
 	yield* request('initialize', {
-		clientInfo: {name: '@ai-toolkit/ai', title: 'AI Toolkit', version: '0.0.0'},
-		capabilities: {experimentalApi: true, optOutNotificationMethods: null}
+		capabilities: {experimentalApi: true, optOutNotificationMethods: null},
+		clientInfo: {name: '@ai-toolkit/ai', title: 'AI Toolkit', version: '0.0.0'}
 	})
 	yield* pipe(writeJson(child, {method: 'initialized'}), Effect.orDie)
 
-	return {request, notifications}
+	return {notifications, request}
 })
 
 const readLines = Effect.fnUntraced(function* (
 	stream: ReadableStream<Uint8Array>,
-	onLine: (line: string) => Effect.Effect<void, never>
+	onLine: (line: string) => Effect.Effect<void>
 ) {
 	yield* Effect.callback<void>(resume => {
 		let remainder = ''
@@ -243,10 +254,9 @@ const readLines = Effect.fnUntraced(function* (
 	})
 })
 
+// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 const writeJson = Effect.fnUntraced(function* (process: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, message: unknown) {
-	yield* Effect.promise(() =>
-		Promise.resolve(process.stdin.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`)))
-	)
+	yield* Effect.promise(async () => process.stdin.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`)))
 })
 
 export const makeLayerCodex = Effect.fnUntraced(function* (config: {
@@ -268,8 +278,9 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 	const status = yield* SubscriptionRef.make<AgentStatus>({state: 'idle', updatedAt: yield* DateTime.now} as const)
 	const setStatusIfRunning = Effect.fnUntraced(function* (state: AgentStatus['state']) {
 		const current = yield* SubscriptionRef.get(status)
-		if (current.state === 'running')
+		if (current.state === 'running') {
 			yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now} as const)
+		}
 	})
 	const interruptCurrentTurn = Effect.fnUntraced(function* () {
 		const turnId = yield* Ref.get(currentTurnId)
@@ -282,8 +293,8 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 	return Agent.of({
 		history: Ref.get(history),
 		status,
-		streamText: input => {
-			return Stream.callback(
+		streamText: input =>
+			Stream.callback(
 				Effect.fnUntraced(function* (queue) {
 					let completed = false
 					yield* pipe(
@@ -294,17 +305,17 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 								updatedAt: yield* DateTime.now
 							} as const)
 							const turn = yield* client.request('turn/start', {
-								threadId: thread.thread.id,
-								model: input.model,
-								input: [{type: 'text', text: serializeAiPartToMarkdown(input.messages).markdown, text_elements: []}],
 								approvalPolicy: 'on-request',
+								input: [{text: serializeAiPartToMarkdown(input.messages).markdown, text_elements: [], type: 'text'}],
+								model: input.model,
 								sandboxPolicy: {
-									type: 'workspaceWrite',
-									writableRoots: [config.cwd],
-									networkAccess: false,
+									excludeSlashTmp: false,
 									excludeTmpdirEnvVar: false,
-									excludeSlashTmp: false
-								}
+									networkAccess: false,
+									type: 'workspaceWrite',
+									writableRoots: [config.cwd]
+								},
+								threadId: thread.thread.id
 							})
 							yield* Ref.set(currentTurnId, Option.some(turn.turn.id))
 
@@ -321,7 +332,7 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 									if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
 										yield* Queue.offer(
 											queue,
-											Response.makePart('text-delta', {id: params.value.turnId, delta: params.value.delta})
+											Response.makePart('text-delta', {delta: params.value.delta, id: params.value.turnId})
 										)
 									}
 								}
@@ -344,8 +355,8 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 											yield* Queue.offer(
 												queue,
 												Response.makePart('reasoning-delta', {
-													id: item.id,
-													delta: Array.join('\n')([...summary, ...content])
+													delta: Array.join('\n')([...summary, ...content]),
+													id: item.id
 												})
 											)
 										}
@@ -449,16 +460,16 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 											queue,
 											Response.makePart('finish', {
 												reason: 'stop',
+												response: undefined,
 												usage: new Response.Usage({
 													inputTokens: {
-														uncached: undefined,
-														total: undefined,
 														cacheRead: undefined,
-														cacheWrite: undefined
+														cacheWrite: undefined,
+														total: undefined,
+														uncached: undefined
 													},
-													outputTokens: {total: undefined, text: undefined, reasoning: undefined}
-												}),
-												response: undefined
+													outputTokens: {reasoning: undefined, text: undefined, total: undefined}
+												})
 											})
 										)
 										yield* Queue.end(queue)
@@ -483,6 +494,5 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 					)
 				})
 			)
-		}
 	})
 })

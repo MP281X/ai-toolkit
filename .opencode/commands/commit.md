@@ -39,17 +39,17 @@ Body: optional bullets for details
 1. Draft commit message from diff
 2. Output the commit preview with visual separation using `---` horizontal rules:
 
-   ---
+   ***
 
    ```markdown
    <prefix>: <subject line>
 
    - <bullet 1>
    - <bullet 2>
-   [additional bullets...]
+     [additional bullets...]
    ```
 
-   ---
+   ***
 
 3. `git commit -m "<prefix>: <subject>" -m "- bullet 1" -m "- bullet 2" ...`
 4. `git push`

@@ -1,8 +1,10 @@
+import {expect} from 'bun:test'
+
 import {Array} from 'effect'
 
-import {expect} from 'bun:test'
-import {analyzeText, analyzeTypedText} from '#lib/analyzer.ts'
 import type {RuleScope} from './helpers.ts'
+
+import {analyzeText, analyzeTypedText} from '#lib/analyzer.ts'
 
 export function expectRule(testCase: {
 	readonly rule: string

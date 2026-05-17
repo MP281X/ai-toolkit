@@ -3,8 +3,8 @@
   "sideEffects": false,
   "name": "@ai-toolkit/.opencode",
   "scripts": {
-    "fix": "biome check --write --unsafe || true",
-    "check": "tsgo --noEmit && biome check"
+    "fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
+    "check": "oxfmt --check . && oxlint ."
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.4.6",

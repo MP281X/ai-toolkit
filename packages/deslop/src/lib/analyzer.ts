@@ -35,15 +35,13 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 		Array.map(programFiles, filePath => `${options.cwd}/${filePath}`),
 		readCompilerOptions(options.cwd)
 	)
-	const programSourceFiles = Array.flatMap(programFiles, filePath => {
-		return Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
-	})
+	const programSourceFiles = Array.flatMap(programFiles, filePath =>
+		Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
+	)
 	const diagnostics = pipe(
-		Array.flatMap(files, filePath => {
-			return Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))
-		}),
-		Array.flatMap(sourceFile => {
-			return analyzeSourceFile(
+		Array.flatMap(files, filePath => Array.fromNullishOr(program.getSourceFile(`${options.cwd}/${filePath}`))),
+		Array.flatMap(sourceFile =>
+			analyzeSourceFile(
 				normalizePath(sourceFile.fileName).replace(`${normalizePath(options.cwd)}/`, ''),
 				sourceFile,
 				collectReferences(programSourceFiles),
@@ -54,7 +52,7 @@ export const runDeslop = Effect.fnUntraced(function* (options: {
 				options.scopes,
 				true
 			)
-		}),
+		),
 		Array.sort(compareDiagnosticPosition)
 	)
 
@@ -135,8 +133,8 @@ export function analyzeTypedText(
 export function renderText(diagnostics: readonly Diagnostic[]) {
 	return Array.match(diagnostics, {
 		onEmpty: () => '',
-		onNonEmpty: diagnostics => {
-			return `${pipe(
+		onNonEmpty: diagnostics =>
+			`${pipe(
 				Array.map(Array.dedupe(Array.map(diagnostics, diagnostic => diagnostic.filePath)), filePath => ({
 					diagnostics: Array.filter(diagnostics, diagnostic => diagnostic.filePath === filePath),
 					filePath
@@ -153,15 +151,15 @@ export function renderText(diagnostics: readonly Diagnostic[]) {
 
 					return `${color(fileDiagnostics.filePath, 'file')} ${color(`${Array.length(fileDiagnostics.diagnostics)}`, 'count')}\n\n${pipe(
 						fileDiagnostics.diagnostics,
-						Array.map(diagnostic => {
-							return `${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
-						}),
+						Array.map(
+							diagnostic =>
+								`${color(String.padEnd(locationWidth)(`L${diagnostic.line}:${diagnostic.column}`), 'line')}  ${color(String.padEnd(symbolWidth)(`@${diagnostic.symbol}`), 'symbol')}  ${color(diagnostic.rule, 'rule')}\n${color(String.padEnd(locationWidth)('Code'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.text, 'code')}\n${color(String.padEnd(locationWidth)('Problem'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.description, 'problem')}\n${color(String.padEnd(locationWidth)('Fix'), 'label')}  ${String.padEnd(symbolWidth)('')}  ${color(diagnostic.fix, 'help')}`
+						),
 						Array.join('\n\n')
 					)}`
 				}),
 				Array.join('\n\n')
 			)}\n`
-		}
 	})
 }
 
@@ -192,13 +190,13 @@ export function analyzeSourceFile(
 	function report(node: ts.Node, rule: string, diagnostic: {readonly description: string; readonly fix: string}) {
 		const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
 		diagnostics.push({
+			column: position.character + 1,
+			description: diagnostic.description,
+			filePath,
+			fix: diagnostic.fix,
+			line: position.line + 1,
 			rule,
 			severity: 'error',
-			description: diagnostic.description,
-			fix: diagnostic.fix,
-			filePath,
-			line: position.line + 1,
-			column: position.character + 1,
 			symbol: nearestSymbol(node),
 			text: pipe(
 				node.getText(sourceFile),
@@ -213,15 +211,15 @@ export function analyzeSourceFile(
 		for (const rule of rulesForScopes(scopes, useScopedRuleIds)) {
 			if (shouldRunRule(rule.id, filePath)) {
 				rule.run(node, {
-					filePath,
-					sourceFile,
 					checker,
-					program,
-					references,
-					referenceFiles,
 					declarations,
+					filePath,
+					program,
+					referenceFiles,
+					references,
 					report: (node, ruleId, diagnostic) =>
-						report(node, useScopedRuleIds ? scopedRuleId(rule.scope, ruleId) : ruleId, diagnostic)
+						report(node, useScopedRuleIds ? scopedRuleId(rule.scope, ruleId) : ruleId, diagnostic),
+					sourceFile
 				})
 			}
 		}
@@ -265,11 +263,11 @@ const collectSelectedPaths = Effect.fnUntraced(function* (options: {
 	if (options.mode === 'full') return Array.fromIterable(options.paths ?? ['.'])
 	const gitPaths = yield* runGitDiff(options.cwd, options.mode)
 	if (!options.paths) return gitPaths
-	return Array.filter(gitPaths, filePath => {
-		return Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope => {
-			return pathMatchesScope(normalizePath(filePath), scope)
-		})
-	})
+	return Array.filter(gitPaths, filePath =>
+		Array.some(Array.map(Array.fromIterable(options.paths ?? []), normalizePath), scope =>
+			pathMatchesScope(normalizePath(filePath), scope)
+		)
+	)
 })
 
 function pathMatchesScope(filePath: string, scope: string) {
@@ -282,7 +280,7 @@ const runGitDiff = Effect.fnUntraced(function* (cwd: string, mode: string) {
 		mode === 'changed'
 			? ['git', 'diff', '--name-only', '--diff-filter=ACMR', 'HEAD']
 			: ['git', 'diff', '--name-only', '--diff-filter=ACMR'],
-		{cwd, stdout: 'pipe', stderr: 'pipe'}
+		{cwd, stderr: 'pipe', stdout: 'pipe'}
 	)
 	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
@@ -332,7 +330,7 @@ const collectDirectoryFiles = Effect.fnUntraced(function* (cwd: string, selected
 })
 
 const runGitString = Effect.fnUntraced(function* (cwd: string, command: readonly string[]) {
-	const process = Bun.spawn(Array.fromIterable(command), {cwd, stdout: 'pipe', stderr: 'pipe'})
+	const process = Bun.spawn(Array.fromIterable(command), {cwd, stderr: 'pipe', stdout: 'pipe'})
 	if ((yield* Effect.promise(() => process.exited)) !== 0) {
 		return yield* pipe(
 			Effect.promise(() => new Response(process.stderr).text()),
@@ -355,7 +353,7 @@ function compareDiagnosticPosition(
 
 function readCompilerOptions(cwd: string) {
 	const configPath = ts.findConfigFile(cwd, ts.sys.fileExists, 'tsconfig.json')
-	if (!configPath) return {strict: true, jsx: ts.JsxEmit.ReactJSX}
+	if (!configPath) return {jsx: ts.JsxEmit.ReactJSX, strict: true}
 	return ts.parseJsonConfigFileContent(
 		ts.readConfigFile(configPath, ts.sys.readFile).config,
 		ts.sys,

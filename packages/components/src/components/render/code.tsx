@@ -5,9 +5,8 @@ export function Code(props: {readonly children: string; readonly lang: string; r
 	return (
 		<div
 			data-code-block
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: shiki html
 			dangerouslySetInnerHTML={{__html: highlightCode(props.children, resolveLanguage(props.lang))}}
-			className={cn('select-text overflow-hidden bg-muted/30 text-sm leading-relaxed', props.className)}
+			className={cn('bg-muted/30 overflow-hidden text-sm leading-relaxed select-text', props.className)}
 		/>
 	)
 }

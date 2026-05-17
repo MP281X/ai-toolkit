@@ -1,9 +1,9 @@
-import {Array, Effect, Hash, Option, pipe, Record, Stream} from 'effect'
+import {Array, Effect, Hash, Option, Record, Stream, pipe} from 'effect'
 
-import type {AgentKey} from '@ai-toolkit/ai/schema'
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
+import type {AgentKey} from '@ai-toolkit/ai/schema'
 
 export const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
@@ -27,19 +27,16 @@ export const agentsAtom = Atom.keepAlive(
 
 export const draftAgentsAtom = Atom.keepAlive(Atom.make(Record.empty<string, AgentKey>()))
 
-export const activeHomeAtom = Atom.family((worktreeId: string | undefined) => {
-	return Atom.keepAlive(
-		Atom.make(get => {
-			return Effect.gen(function* () {
+export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
+	Atom.keepAlive(
+		Atom.make(get =>
+			Effect.gen(function* () {
 				const projects = yield* get.result(projectsAtom)
 				const activeProject = pipe(
 					projects,
-					Array.findFirst(project => {
-						return Array.some(
-							project.worktrees,
-							worktree => Math.abs(Hash.string(worktree.root)).toString(36) === worktreeId
-						)
-					}),
+					Array.findFirst(project =>
+						Array.some(project.worktrees, worktree => Math.abs(Hash.string(worktree.root)).toString(36) === worktreeId)
+					),
 					Option.getOrUndefined
 				)
 
@@ -53,14 +50,14 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) => {
 					projects
 				}
 			})
-		})
+		)
 	)
-})
+)
 
-export const selectedAgentAtom = Atom.family((threadId: string) => {
-	return Atom.keepAlive(
-		Atom.make(get => {
-			return Effect.gen(function* () {
+export const selectedAgentAtom = Atom.family((threadId: string) =>
+	Atom.keepAlive(
+		Atom.make(get =>
+			Effect.gen(function* () {
 				const agents = yield* get.result(agentsAtom)
 				const draftAgents = get(draftAgentsAtom)
 
@@ -72,6 +69,6 @@ export const selectedAgentAtom = Atom.family((threadId: string) => {
 					Option.getOrUndefined
 				)
 			})
-		})
+		)
 	)
-})
+)

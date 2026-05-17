@@ -8,15 +8,15 @@ import {useEffect, useRef, useState} from 'react'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
 const DIFF_OPTIONS = {
-	overflow: 'scroll',
-	themeType: 'system',
-	diffStyle: 'unified',
-	lineDiffType: 'word-alt',
 	diffIndicators: 'bars',
+	diffStyle: 'unified',
 	disableBackground: false,
 	disableFileHeader: true,
+	disableLineNumbers: false,
+	lineDiffType: 'word-alt',
+	overflow: 'scroll',
 	theme: HIGHLIGHT_THEMES,
-	disableLineNumbers: false
+	themeType: 'system'
 } as const
 
 const DIFF_CSS = `
@@ -61,7 +61,7 @@ function CommentAnnotation(props: {
 
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
-			if (props.isDraft) {
+			if (props.isDraft === true) {
 				props.onCloseDraft?.()
 				return
 			}
@@ -79,23 +79,25 @@ function CommentAnnotation(props: {
 
 	if (editing) {
 		return (
-			<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
+			<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
 				<textarea
 					ref={inputRef}
 					value={body}
 					placeholder="Add comment"
-					className="block min-h-16 w-full resize-y border-0 bg-transparent p-0 font-inherit text-inherit outline-none"
+					className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
 					onChange={event => {
 						setBody(event.currentTarget.value)
 						props.onChangeComment?.({...props.comment, body: event.currentTarget.value})
 					}}
-					onClick={event => event.stopPropagation()}
+					onClick={event => {
+						event.stopPropagation()
+					}}
 					onKeyDown={event => {
 						if (event.key === 'Escape') {
 							event.preventDefault()
 
 							if (String.isEmpty(String.trim(body))) {
-								if (!props.isDraft) props.onDeleteComment?.({...props.comment, body})
+								if (props.isDraft !== true) props.onDeleteComment?.({...props.comment, body})
 								props.onCloseDraft?.()
 								return
 							}
@@ -114,10 +116,10 @@ function CommentAnnotation(props: {
 	}
 
 	return (
-		<div className="box-border w-full max-w-full bg-transparent px-3 py-2 text-foreground text-xs">
+		<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
 			<button
 				type="button"
-				className="block w-full whitespace-pre-wrap bg-transparent p-0 text-left leading-relaxed"
+				className="block w-full bg-transparent p-0 text-left leading-relaxed whitespace-pre-wrap"
 				onClick={event => {
 					event.stopPropagation()
 					setEditing(true)
@@ -135,14 +137,14 @@ function patchResultContent(patch: string) {
 	if (fileDiff.type === 'deleted') return ''
 
 	return Array.join(
-		Array.flatMap(fileDiff.hunks, hunk => {
-			return Array.flatMap(hunk.hunkContent, part => {
-				return Array.take(
+		Array.flatMap(fileDiff.hunks, hunk =>
+			Array.flatMap(hunk.hunkContent, part =>
+				Array.take(
 					Array.drop(fileDiff.additionLines, part.additionLineIndex),
 					part.type === 'context' ? part.lines : part.additions
 				)
-			})
-		}),
+			)
+		),
 		''
 	)
 }
@@ -180,18 +182,18 @@ export function PatchDiff(props: {
 		commitDraftComment()
 
 		if (
-			!Array.some(props.comments ?? Array.empty(), current => {
-				return (
+			!Array.some(
+				props.comments ?? Array.empty(),
+				current =>
 					`${current.filePath}:${current.side === 'deletions' ? 'deletions' : 'file'}:${current.lineNumber}` ===
 					`${props.filePath}:${line.side === 'deletions' ? 'deletions' : 'file'}:${line.lineNumber}`
-				)
-			})
+			)
 		) {
 			setDraftComment({
+				body: '',
 				filePath: props.filePath,
 				lineNumber: line.lineNumber,
-				side: line.side === 'deletions' ? line.side : undefined,
-				body: ''
+				side: line.side === 'deletions' ? line.side : undefined
 			})
 		}
 	}
@@ -202,7 +204,7 @@ export function PatchDiff(props: {
 				ref={containerRef}
 				tabIndex={-1}
 				aria-label="Diff viewer"
-				className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+				className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
 				onPointerDownCapture={event => {
 					if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
 						event.currentTarget.focus()
@@ -217,30 +219,31 @@ export function PatchDiff(props: {
 			>
 				<WorkerPoolContextProvider
 					poolOptions={{
-						workerFactory: () => {
-							return new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
-						},
 						poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
-						totalASTLRUCacheSize: 240
+						totalASTLRUCacheSize: 240,
+						workerFactory: () =>
+							new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
 					}}
-					highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+					highlighterOptions={{lineDiffType: 'word-alt', theme: HIGHLIGHT_THEMES, tokenizeMaxLineLength: 1000}}
 				>
 					<PierrePatchDiff<DiffComment>
 						key={props.patch}
 						patch={props.patch}
 						options={{
 							...DIFF_OPTIONS,
-							unsafeCSS: DIFF_CSS,
-							onLineNumberClick: line => openComment({lineNumber: line.lineNumber, side: line.annotationSide})
+							onLineNumberClick: line => {
+								openComment({lineNumber: line.lineNumber, side: line.annotationSide})
+							},
+							unsafeCSS: DIFF_CSS
 						}}
 						lineAnnotations={Array.map(
 							draftComment
 								? Array.append(props.comments ?? Array.empty(), draftComment)
 								: (props.comments ?? Array.empty()),
 							comment => ({
-								side: comment.side ?? 'additions',
 								lineNumber: comment.lineNumber,
-								metadata: comment
+								metadata: comment,
+								side: comment.side ?? 'additions'
 							})
 						)}
 						renderAnnotation={annotation => (
@@ -263,7 +266,9 @@ export function PatchDiff(props: {
 								}}
 								onSaveComment={props.onSaveComment}
 								onDeleteComment={props.onDeleteComment}
-								onCloseDraft={() => setDraftComment(undefined)}
+								onCloseDraft={() => {
+									setDraftComment(undefined)
+								}}
 							/>
 						)}
 					/>
@@ -277,7 +282,7 @@ export function PatchDiff(props: {
 			ref={containerRef}
 			tabIndex={-1}
 			aria-label="Diff viewer"
-			className="block h-full min-h-0 w-full overflow-auto rounded-none bg-background outline-none"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
 			onPointerDownCapture={event => {
 				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
 					event.currentTarget.focus()
@@ -292,27 +297,29 @@ export function PatchDiff(props: {
 		>
 			<WorkerPoolContextProvider
 				poolOptions={{
-					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'}),
 					poolSize: Math.max(2, Math.min(6, Math.floor(Math.max(1, navigator.hardwareConcurrency || 4) / 2))),
-					totalASTLRUCacheSize: 240
+					totalASTLRUCacheSize: 240,
+					workerFactory: () => new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), {type: 'module'})
 				}}
-				highlighterOptions={{theme: HIGHLIGHT_THEMES, lineDiffType: 'word-alt', tokenizeMaxLineLength: 1_000}}
+				highlighterOptions={{lineDiffType: 'word-alt', theme: HIGHLIGHT_THEMES, tokenizeMaxLineLength: 1000}}
 			>
 				<File<DiffComment>
 					key={props.patch}
 					file={{
-						name: props.filePath,
 						contents: patchResultContent(props.patch),
-						lang: resolveLanguage(props.filePath)
+						lang: resolveLanguage(props.filePath),
+						name: props.filePath
 					}}
 					options={{
-						overflow: DIFF_OPTIONS.overflow,
-						themeType: DIFF_OPTIONS.themeType,
 						disableFileHeader: DIFF_OPTIONS.disableFileHeader,
-						theme: DIFF_OPTIONS.theme,
 						disableLineNumbers: DIFF_OPTIONS.disableLineNumbers,
-						unsafeCSS: DIFF_CSS,
-						onLineNumberClick: line => openComment({lineNumber: line.lineNumber})
+						onLineNumberClick: line => {
+							openComment({lineNumber: line.lineNumber})
+						},
+						overflow: DIFF_OPTIONS.overflow,
+						theme: DIFF_OPTIONS.theme,
+						themeType: DIFF_OPTIONS.themeType,
+						unsafeCSS: DIFF_CSS
 					}}
 					lineAnnotations={Array.map(
 						Array.filter(
@@ -343,7 +350,9 @@ export function PatchDiff(props: {
 							}}
 							onSaveComment={props.onSaveComment}
 							onDeleteComment={props.onDeleteComment}
-							onCloseDraft={() => setDraftComment(undefined)}
+							onCloseDraft={() => {
+								setDraftComment(undefined)
+							}}
 						/>
 					)}
 				/>

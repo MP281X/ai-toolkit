@@ -1,4 +1,4 @@
-import {Array, Effect, Predicate, PubSub, pipe, Ref, Stream, String} from 'effect'
+import {Array, Effect, Predicate, PubSub, Ref, Stream, String, pipe} from 'effect'
 
 import type {Prompt, Tool} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
@@ -29,31 +29,35 @@ export function partsStreamSanitizer<A extends Response.StreamPart<Record<string
 				case 'text-end':
 				case 'tool-params-start':
 				case 'tool-params-end':
-				case 'tool-params-delta':
+				case 'tool-params-delta': {
 					return
+				}
 				case 'text-delta':
 				case 'reasoning-delta': {
 					if (String.isEmpty(part.delta)) return
 					if (part.delta === '[REDACTED]') return
 					return part
 				}
-				case 'response-metadata':
+				case 'response-metadata': {
 					return Response.makePart('response-metadata', {
 						id: part.id,
+						metadata: part.metadata,
 						modelId: part.modelId,
-						timestamp: part.timestamp,
 						request: undefined,
-						metadata: part.metadata
+						timestamp: part.timestamp
 					})
-				case 'finish':
+				}
+				case 'finish': {
 					return Response.makePart('finish', {
+						metadata: part.metadata,
 						reason: part.reason,
-						usage: part.usage,
 						response: undefined,
-						metadata: part.metadata
+						usage: part.usage
 					})
-				default:
+				}
+				default: {
 					return part
+				}
 			}
 		}),
 		Stream.filter(Predicate.isNotUndefined)
@@ -83,6 +87,7 @@ export function compactAiParts<T extends Record<string, Tool.Any>>(input: readon
 }
 
 export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
+	// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 	input: readonly (Prompt.Message | Response.StreamPart<T>)[]
 ) {
 	let files = Array.empty<File>()
@@ -94,19 +99,23 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 			if (Predicate.hasProperty('type')(item)) {
 				switch (item.type) {
 					case 'text-delta':
-					case 'reasoning-delta':
+					case 'reasoning-delta': {
 						markdown = item.delta
 						break
-					case 'tool-call':
+					}
+					case 'tool-call': {
 						markdown = `Tool call: ${item.name}\n\n\`\`\`json\n${JSON.stringify(item.params, undefined, 2)}\n\`\`\``
 						break
-					case 'tool-result':
+					}
+					case 'tool-result': {
 						markdown = `Tool result: ${item.name}${item.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(item.result, undefined, 2)}\n\`\`\``
 						break
-					case 'tool-approval-request':
+					}
+					case 'tool-approval-request': {
 						markdown = `Tool approval request: ${item.approvalId}\n\nTool call: ${item.toolCallId}`
 						break
-					case 'file':
+					}
+					case 'file': {
 						if (item.data instanceof URL) {
 							markdown = `File URL: ${item.data.href} (${item.mediaType})`
 							break
@@ -121,17 +130,20 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 							)
 						]
 
-						markdown = `File: ${files[files.length - 1]?.name ?? 'attachment'} (${item.mediaType})`
+						markdown = `File: ${files.at(-1)?.name ?? 'attachment'} (${item.mediaType})`
 						break
-					case 'source':
+					}
+					case 'source': {
 						markdown =
 							item.sourceType === 'url'
 								? `Source: [${item.title}](${item.url})`
 								: `Source: ${item.title} (${item.mediaType})`
 						break
-					case 'error':
+					}
+					case 'error': {
 						markdown = `Error: ${item.error}`
 						break
+					}
 				}
 
 				return String.trim(markdown)
@@ -143,16 +155,18 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 				item.content,
 				Array.map(part => {
 					switch (part.type) {
-						case 'text':
+						case 'text': {
 							return part.text
-						case 'reasoning':
+						}
+						case 'reasoning': {
 							return `> Reasoning\n>\n${pipe(
 								part.text,
 								String.split('\n'),
 								Array.map(line => `> ${line}`),
 								Array.join('\n')
 							)}`
-						case 'file':
+						}
+						case 'file': {
 							if (part.data instanceof URL) return `File URL: ${part.data.href} (${part.mediaType})`
 
 							files = [
@@ -165,14 +179,19 @@ export function serializeAiPartToMarkdown<T extends Record<string, Tool.Any>>(
 							]
 
 							return `File: ${part.fileName ?? 'attachment'} (${part.mediaType})`
-						case 'tool-call':
+						}
+						case 'tool-call': {
 							return `Tool call: ${part.name}\n\n\`\`\`json\n${JSON.stringify(part.params, undefined, 2)}\n\`\`\``
-						case 'tool-result':
+						}
+						case 'tool-result': {
 							return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(part.result, undefined, 2)}\n\`\`\``
-						case 'tool-approval-request':
+						}
+						case 'tool-approval-request': {
 							return `Tool approval request: ${part.approvalId}\n\nTool call: ${part.toolCallId}`
-						case 'tool-approval-response':
+						}
+						case 'tool-approval-response': {
 							return `Tool approval response: ${part.approvalId}\n\nApproved: ${part.approved}${part.reason ? `\n\nReason: ${part.reason}` : ''}`
+						}
 					}
 				}),
 				Array.join('\n\n'),

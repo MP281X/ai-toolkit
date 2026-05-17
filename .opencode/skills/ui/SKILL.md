@@ -62,10 +62,7 @@ DevTools components explore possibilities — not production code. Design rules 
 **`DevTools.Navigation`** — switch between different pages or layouts. Used with TanStack Router, typically in `__root.tsx`.
 
 ```tsx
-<DevTools.Navigation
-	routes={['list', 'grid', 'board'] as const}
-	onChange={view => navigate({search: {view}})}
-/>
+<DevTools.Navigation routes={['list', 'grid', 'board'] as const} onChange={view => navigate({search: {view}})} />
 ```
 
 ## Visual style
