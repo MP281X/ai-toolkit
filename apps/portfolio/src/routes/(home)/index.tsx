@@ -76,7 +76,7 @@ function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: Portfolio
 		return nextVisitors
 	}
 
-	return Array.appendAll(visitors, [visitor])
+	return Array.append(visitors, visitor)
 }
 
 function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
@@ -143,9 +143,9 @@ type CursorMotion = {
 
 type Point = {readonly x: number; readonly y: number}
 
-let localPointer: (Point & {readonly updatedAt: number}) | undefined
+let localPointer: Point | undefined
 const SUMMARY_LINES = [
-	"I'm a full-stack TypeScript developer with production experience building real-time, type-safe web applications using React, Node.js, and PostgreSQL.",
+	"I'm a frontend TypeScript developer with production experience building real-time, type-safe web applications using React and modern frontend tooling.",
 	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
 	'I use AI coding agents daily to accelerate development, refactoring, and testing while maintaining manual code review to ensure consistency and quality.'
 ]
@@ -161,6 +161,14 @@ const TECHNICAL_SKILLS = [
 
 const WORK_EXPERIENCE = [
 	{
+		company: 'Humans.Tech',
+		highlights: [],
+		location: 'Frosinone, Italy',
+		note: '',
+		period: 'Apr 2026 – Present',
+		role: 'Frontend Developer'
+	},
+	{
 		company: 'Tinexta Cyber',
 		highlights: [
 			'Developed a real-time network inventory application for a major telecommunications company',
@@ -172,7 +180,7 @@ const WORK_EXPERIENCE = [
 		],
 		location: 'Udine, Italy',
 		note: '',
-		period: 'Oct 2024 – Present',
+		period: 'Oct 2024 – Mar 2026',
 		role: 'Full-Stack Developer'
 	},
 	{
@@ -232,10 +240,6 @@ const CONTACT_ITEMS = [
 	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
 ]
 
-function getViewport() {
-	return {height: window.innerHeight, width: window.innerWidth} satisfies Viewport
-}
-
 function subscribeFrame(listener: (now: number) => void) {
 	frameListeners.add(listener)
 
@@ -286,10 +290,6 @@ function createCursorMotion(target: Point, viewport: Viewport) {
 	} satisfies CursorMotion
 }
 
-function updateCursorMotion(motion: CursorMotion, target: Point) {
-	return {...motion, targetX: target.x, targetY: target.y}
-}
-
 function stepCursorMotion(motion: CursorMotion, now: number) {
 	const frameDelta = motion.lastFrameAt > 0 ? Math.max(8, Math.min(64, now - motion.lastFrameAt)) : 16
 	const deltaX = motion.targetX - motion.x
@@ -315,12 +315,11 @@ function syncCursorMotion(motion: CursorMotion, cursor: Readonly<PortfolioVisito
 
 	if (motion.targetX === nextTarget.x && motion.targetY === nextTarget.y) return motion
 
-	return updateCursorMotion(motion, nextTarget)
+	return {...motion, targetX: nextTarget.x, targetY: nextTarget.y}
 }
 
 function getViewportSnapshot() {
-	const viewport = getViewport()
-	return `${viewport.width}:${viewport.height}`
+	return `${window.innerWidth}:${window.innerHeight}`
 }
 
 function useViewport() {
@@ -341,10 +340,6 @@ function useViewport() {
 		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0),
 		width: Option.getOrElse(Number.parse(width), () => 0)
 	} satisfies Viewport
-}
-
-function getTrailCell(trail: Readonly<PortfolioTrail>, viewport: Viewport) {
-	return {col: Math.floor((trail.x * viewport.width) / 26), row: Math.floor((trail.y * viewport.height) / 26)}
 }
 
 function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
@@ -397,7 +392,11 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 		const previousByVisitor = new Map<string, {trail: PortfolioTrail; col: number; row: number}>()
 
 		for (const trail of input.trails) {
-			const current = {...getTrailCell(trail, input.viewport), trail}
+			const current = {
+				col: Math.floor((trail.x * input.viewport.width) / 26),
+				row: Math.floor((trail.y * input.viewport.height) / 26),
+				trail
+			}
 			const previous = previousByVisitor.get(trail.visitorId)
 
 			if (!previous) {
@@ -611,17 +610,19 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 								{job.period} · {job.location}
 							</p>
 						</div>
-						<ul className="mt-3 flex flex-col gap-1.5">
-							{Array.map(job.highlights, highlight => (
-								<li
-									key={highlight}
-									className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
-								>
-									<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
-									<span>{highlight}</span>
-								</li>
-							))}
-						</ul>
+						{job.highlights.length > 0 && (
+							<ul className="mt-3 flex flex-col gap-1.5">
+								{Array.map(job.highlights, highlight => (
+									<li
+										key={highlight}
+										className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
+									>
+										<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
+										<span>{highlight}</span>
+									</li>
+								))}
+							</ul>
+						)}
 					</Panel>
 				))}
 			</div>
@@ -821,7 +822,7 @@ function PortfolioRoute() {
 					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
 				}
 
-				localPointer = {updatedAt: performance.now(), x: nextPointer.x, y: nextPointer.y}
+				localPointer = nextPointer
 				queuedPointerRef.current = nextPointer
 
 				if (pointerFrameRef.current) return
