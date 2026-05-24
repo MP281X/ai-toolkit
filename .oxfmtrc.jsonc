@@ -9,6 +9,7 @@
 	"arrowParens": "avoid",
 	"trailingComma": "none",
 	"bracketSpacing": false,
+	"objectWrap": "collapse",
 
 	"sortTailwindcss": {"functions": ["cn"]},
 

@@ -41,11 +41,7 @@ import {GitBranchesSnapshot} from '@ai-toolkit/git/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
-	validateSearch: Schema.toStandardSchemaV1(
-		Schema.Struct({
-			threadId: Schema.optional(Schema.String)
-		})
-	)
+	validateSearch: Schema.toStandardSchemaV1(Schema.Struct({threadId: Schema.optional(Schema.String)}))
 })
 
 const projectAccentClassNames = [
@@ -83,10 +79,7 @@ function HomeLayout() {
 				Match.orElse(() => 'diff' as const)
 			)
 
-			return {
-				activeView,
-				activeWorktreeId: String.split('/')(state.location.pathname)[1]
-			}
+			return {activeView, activeWorktreeId: String.split('/')(state.location.pathname)[1]}
 		}
 	})
 	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
@@ -115,9 +108,7 @@ function HomeLayout() {
 							startTransition(() => {
 								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									search: {
-										threadId: agentId
-									},
+									search: {threadId: agentId},
 									to: '/$worktree/thread'
 								})
 							})
@@ -130,14 +121,14 @@ function HomeLayout() {
 								})
 							})
 						}}
-						selectBrowser={worktreeRoot =>
+						selectBrowser={worktreeRoot => {
 							startTransition(() => {
-								navigate({
+								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
 									to: '/$worktree/browser'
 								})
 							})
-						}
+						}}
 					/>
 				</ResizablePanel>
 
@@ -238,10 +229,10 @@ function WorktreeManager(input: {
 			setSwitcherOpen(open => !open)
 		}
 
-		globalThis.addEventListener('keydown', openThreadSearch)
+		addEventListener('keydown', openThreadSearch)
 
 		return () => {
-			globalThis.removeEventListener('keydown', openThreadSearch)
+			removeEventListener('keydown', openThreadSearch)
 		}
 	}, [])
 
@@ -276,12 +267,7 @@ function WorktreeManager(input: {
 	}
 
 	async function createFastAgent(layer: typeof AgentId.Type) {
-		const agent = await createAgent({
-			payload: {
-				agent: layer,
-				cwd: input.activeWorktree?.root ?? ''
-			}
-		})
+		const agent = await createAgent({payload: {agent: layer, cwd: input.activeWorktree?.root ?? ''}})
 
 		setActionsOpen(false)
 		setDraftAgents(draftAgents => ({...draftAgents, [agent.id]: agent}))
@@ -308,11 +294,7 @@ function WorktreeManager(input: {
 						className="text-destructive hover:bg-muted hover:text-destructive flex h-8 w-8 items-center justify-center"
 						onClick={async () => {
 							if (!input.activeWorktree) return
-							if (
-								!globalThis.confirm(
-									`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`
-								)
-							) {
+							if (!confirm(`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`)) {
 								return
 							}
 
@@ -520,12 +502,12 @@ function WorktreeManager(input: {
 													key={worktree.root}
 													icon={
 														<WorktreeIcon
-															dirty={Boolean(
+															dirty={
 																worktree.status?.dirtyTracked ??
 																worktree.status?.untracked ??
 																worktree.status?.unpushedCommits ??
-																worktree.status?.behind
-															)}
+																(worktree.status?.behind ?? 0) > 0
+															}
 															root={worktree.root === project.repository.root}
 														/>
 													}
@@ -571,7 +553,9 @@ function WorktreeManager(input: {
 														<TreeExplorerRow
 															icon={<GlobeIcon className="size-3.5" />}
 															selected={input.activeView === 'browser' && input.activeWorktree?.root === worktree.root}
-															onClick={() => input.selectBrowser(worktree.root)}
+															onClick={() => {
+																input.selectBrowser(worktree.root)
+															}}
 														>
 															browser
 														</TreeExplorerRow>

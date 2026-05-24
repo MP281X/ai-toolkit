@@ -16,11 +16,7 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
 	// Envs
 	Layer.provideMerge(
-		ConfigProvider.layer(
-			ConfigProvider.fromUnknown({
-				VITE_OTEL_URL: import.meta.env['VITE_OTEL_URL']
-			})
-		)
+		ConfigProvider.layer(ConfigProvider.fromUnknown({VITE_OTEL_URL: import.meta.env['VITE_OTEL_URL']}))
 	)
 )
 
@@ -28,7 +24,7 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 	group: Rpc.RpcGroup.make().merge(RpcContracts),
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
-		Layer.provideMerge(Socket.layerWebSocket(`${globalThis.origin}/api/rpc`)),
+		Layer.provideMerge(Socket.layerWebSocket(`${location.origin}/api/rpc`)),
 		Layer.provideMerge(Socket.layerWebSocketConstructorGlobal),
 		Layer.provideMerge(LiveLayers)
 	)

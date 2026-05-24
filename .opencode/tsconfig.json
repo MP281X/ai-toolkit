@@ -1,4 +1,1 @@
-{
-	"extends": "../tsconfig.json",
-	"include": ["${configDir}/plugins/**/*"]
-}
+{"extends": "../tsconfig.json", "include": ["${configDir}/plugins/**/*"]}

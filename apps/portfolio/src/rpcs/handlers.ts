@@ -35,15 +35,7 @@ const botPalette = [
 ] as const
 
 const SERVER_BOTS = [
-	{
-		color: botPalette[3],
-		id: 'server-alpha',
-		name: 'server-alpha',
-		xFreq: 0.47,
-		xPhase: 0,
-		yFreq: 0.71,
-		yPhase: 0
-	},
+	{color: botPalette[3], id: 'server-alpha', name: 'server-alpha', xFreq: 0.47, xPhase: 0, yFreq: 0.71, yPhase: 0},
 	{
 		color: botPalette[17],
 		id: 'server-beta',

@@ -13,8 +13,6 @@
 		"fix": "turbo run fix",
 		"check": "turbo run check",
 
-		"deslop": "bun packages/deslop/src/index.ts --changed",
-
 		"shadcn": "cd packages/components && bunx shadcn@latest"
 	},
 

@@ -22,18 +22,13 @@ class TokenNode extends Lexical.TextNode {
 		return 'input-token'
 	}
 
-	// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 	public static override clone(node: TokenNode) {
 		return new TokenNode(node.__text, node.__id, node.__kind, node.__key)
 	}
 
 	public static override importJSON(
 		node: Readonly<
-			Lexical.SerializedTextNode & {
-				readonly id: string
-				readonly kind: 'entry' | 'file'
-				readonly type: 'input-token'
-			}
+			Lexical.SerializedTextNode & {readonly id: string; readonly kind: 'entry' | 'file'; readonly type: 'input-token'}
 		>
 	) {
 		return new TokenNode(node.text, node.id, node.kind).updateFromJSON(node)
@@ -71,9 +66,7 @@ class Item<TValue extends RichTextArea.Value> extends MenuOption {
 	}
 }
 
-function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>(
-	_tokensMap?: Map<string, TextAreaToken<TValue>>
-) {
+function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>() {
 	return {
 		editorState: JSON.parse(
 			'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
@@ -87,7 +80,7 @@ function snapshot<TValue extends RichTextArea.Value>(
 	editor: Lexical.LexicalEditor | undefined,
 	tokensMap: Map<string, TextAreaToken<TValue>>
 ) {
-	if (!editor) return emptySnapshot(tokensMap)
+	if (!editor) return emptySnapshot<TValue>()
 
 	const editorState = editor.getEditorState().toJSON()
 	const ids = new Set<string>()
@@ -157,10 +150,7 @@ function getItems<TValue extends RichTextArea.Value>(
 				queryIndex += 1
 			}
 
-			return {
-				score: queryIndex === String.length(query) ? total - String.length(label) / 1000 : noMatchScore,
-				value
-			}
+			return {score: queryIndex === String.length(query) ? total - String.length(label) / 1000 : noMatchScore, value}
 		}),
 		Array.filter(candidate => candidate.score > noMatchScore),
 		Array.sortWith(candidate => -candidate.score, Order.Number),
@@ -185,12 +175,7 @@ function match(text: string, triggers: readonly string[]) {
 		const query = String.slice(index + String.length(trigger))(text)
 		if (String.length(query) > 32 || /\s/u.test(query)) continue
 
-		return {
-			leadOffset: index,
-			query,
-			replaceableString: String.slice(index)(text),
-			trigger
-		}
+		return {leadOffset: index, query, replaceableString: String.slice(index)(text), trigger}
 	}
 }
 
@@ -219,10 +204,7 @@ function lineBeforeCursor(text: string, offset: number) {
 	const before = String.slice(0, offset)(text)
 	const index = before.lastIndexOf('\n')
 
-	return {
-		line: String.slice(index + 1)(before),
-		start: index + 1
-	}
+	return {line: String.slice(index + 1)(before), start: index + 1}
 }
 
 function continueList(event: KeyboardEvent | undefined) {
@@ -271,7 +253,6 @@ function closeXmlTag(event: KeyboardEvent) {
 	return true
 }
 
-// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly editorRef: {current: Lexical.LexicalEditor | null}
 	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
@@ -364,7 +345,6 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	return <HistoryPlugin />
 }
 
-// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
@@ -409,11 +389,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 				})
 
 				return next
-					? {
-							leadOffset: next.leadOffset,
-							matchingString: next.query,
-							replaceableString: next.replaceableString
-						}
+					? {leadOffset: next.leadOffset, matchingString: next.query, replaceableString: next.replaceableString}
 					: null
 			}}
 			onSelectOption={(option, node, close) => {
@@ -494,9 +470,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 }
 
 export declare namespace RichTextArea {
-	export type Value = {
-		readonly label: string
-	}
+	export type Value = {readonly label: string}
 
 	export type Handle<TValue extends Value = Value> = {
 		readonly getSnapshot: () => Snapshot<TValue>
@@ -536,7 +510,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 			clear() {
 				if (!editorRef.current) return
 				menuRef.current = false
-				restore(editorRef.current, emptySnapshot(tokensRef.current), tokensRef.current)
+				restore(editorRef.current, emptySnapshot<TValue>(), tokensRef.current)
 			},
 			focus() {
 				editorRef.current?.focus()

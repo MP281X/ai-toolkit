@@ -32,9 +32,7 @@ import {Collapsible, CollapsibleContent, CollapsibleTrigger} from '@ai-toolkit/c
 import {Select, SelectContent, SelectItem, SelectTrigger} from '@ai-toolkit/components/ui/select'
 import {formatError, formatNumber} from '@ai-toolkit/components/utils'
 
-export const Route = createFileRoute('/(home)/$worktree/thread')({
-	component: ThreadPage
-})
+export const Route = createFileRoute('/(home)/$worktree/thread')({component: ThreadPage})
 
 const agentInputStates = new Map<string, RichTextArea.Snapshot<{readonly label: string}>>()
 const agentStashedPrompts = new Map<
@@ -408,7 +406,6 @@ function renderToolPayload(name: string, payload: unknown, inputPayload: unknown
 	}
 }
 
-// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 function AgentPanel(input: {
 	readonly agent: AgentId
 	readonly agentKey: Readonly<AgentKey>
@@ -467,12 +464,7 @@ function AgentPanel(input: {
 		if (!prompt) return
 
 		void promptAgent({
-			payload: {
-				key: input.agentKey,
-				model: prompt.model,
-				prompt: prompt.text,
-				provider: prompt.provider
-			}
+			payload: {key: input.agentKey, model: prompt.model, prompt: prompt.text, provider: prompt.provider}
 		})
 		inputRef.current?.clear()
 	}

@@ -63,12 +63,7 @@ const AgentSessions = RcMap.make({
 			)
 		})
 
-		return {
-			events: stream.stream,
-			prompt,
-			status: agent.status,
-			stop: FiberHandle.clear(handle)
-		} as const
+		return {events: stream.stream, prompt, status: agent.status, stop: FiberHandle.clear(handle)} as const
 	})
 })
 const agentSessionStore = Effect.gen(function* () {
@@ -138,9 +133,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.flatMap(session => session.stop)
 				)
 			}),
-			'agents.create': Effect.fnUntraced(function* (payload) {
-				return yield* agents.create(payload)
-			}),
+			'agents.create': payload => agents.create(payload),
 			'agents.watch': () => agents.watch,
 			'projects.branches': payload => git.branches(payload.cwd),
 			'projects.createWorktree': payload => git.createWorktree(payload),

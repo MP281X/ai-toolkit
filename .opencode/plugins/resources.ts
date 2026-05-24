@@ -11,58 +11,21 @@ export const plugin = (async context => {
 		pipe(
 			Effect.forEach(
 				[
-					{
-						name: 'effect',
-						url: 'https://github.com/Effect-TS/effect-smol'
-					},
-					{
-						name: 'tanstack-router',
-						url: 'https://github.com/TanStack/router'
-					},
-					{
-						name: 'tanstack-hotkey',
-						url: 'https://github.com/TanStack/hotkeys'
-					},
-					{
-						name: 'tanstack-form',
-						url: 'https://github.com/TanStack/form'
-					},
-					{
-						name: 'legend-list',
-						url: 'https://github.com/LegendApp/legend-list'
-					},
-					{
-						name: 'pierre-diffs',
-						url: 'https://github.com/pierrecomputer/pierre'
-					},
-					{
-						name: 'lexical',
-						url: 'https://github.com/facebook/lexical'
-					},
-					{
-						name: 'typescript',
-						url: 'https://github.com/microsoft/TypeScript.git'
-					},
-					{
-						name: 'xterm.js',
-						url: 'https://github.com/xtermjs/xterm.js'
-					},
-					{
-						name: 't3code',
-						url: 'https://github.com/pingdotgg/t3code'
-					},
-					{
-						name: 'vscode',
-						url: 'https://github.com/microsoft/vscode'
-					},
-					{
-						name: 'effect-lsp',
-						url: 'https://github.com/Effect-TS/language-service'
-					},
-					{
-						name: 'codex',
-						url: 'https://github.com/openai/codex'
-					}
+					{name: 'effect', url: 'https://github.com/Effect-TS/effect-smol'},
+					{name: 'tanstack-router', url: 'https://github.com/TanStack/router'},
+					{name: 'tanstack-hotkey', url: 'https://github.com/TanStack/hotkeys'},
+					{name: 'tanstack-form', url: 'https://github.com/TanStack/form'},
+					{name: 'legend-list', url: 'https://github.com/LegendApp/legend-list'},
+					{name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre'},
+					{name: 'lexical', url: 'https://github.com/facebook/lexical'},
+					{name: 'typescript', url: 'https://github.com/microsoft/TypeScript.git'},
+					{name: 'xterm.js', url: 'https://github.com/xtermjs/xterm.js'},
+					{name: 't3code', url: 'https://github.com/pingdotgg/t3code'},
+					{name: 'vscode', url: 'https://github.com/microsoft/vscode'},
+					{name: 'effect-lsp', url: 'https://github.com/Effect-TS/language-service'},
+					{name: 'codex', url: 'https://github.com/openai/codex'},
+					{name: 'opencode', url: 'https://github.com/anomalyco/opencode'},
+					{name: 'react-doctor', url: 'https://github.com/millionco/react-doctor'}
 				] as const,
 				Effect.fnUntraced(function* (resource) {
 					yield* GitWorkspace.use(git =>

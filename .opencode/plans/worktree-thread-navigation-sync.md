@@ -408,12 +408,7 @@ Selection needs to represent:
 Minimum route/search state:
 
 ```ts
-type HomeSearch = {
-	projectRoot?: string
-	worktreeRoot?: string
-	threadId?: string
-	view?: 'thread' | 'diff'
-}
+type HomeSearch = {projectRoot?: string; worktreeRoot?: string; threadId?: string; view?: 'thread' | 'diff'}
 ```
 
 Rules:

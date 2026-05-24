@@ -65,13 +65,17 @@ export function Browser(props: {readonly className?: string; readonly url: strin
 					value={address}
 					placeholder="localhost:3000"
 					className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-7 min-w-0 flex-1 border px-2 font-mono text-xs outline-none focus-visible:ring-1"
-					onChange={event => setAddress(event.currentTarget.value)}
+					onChange={event => {
+						setAddress(event.currentTarget.value)
+					}}
 				/>
 				<button
 					type="button"
 					className="border-input bg-background text-muted-foreground hover:text-foreground inline-flex size-7 shrink-0 items-center justify-center border"
 					aria-label="Reload"
-					onClick={() => setFrameKey(key => key + 1)}
+					onClick={() => {
+						setFrameKey(key => key + 1)
+					}}
 				>
 					<RotateCwIcon className="size-3.5" />
 				</button>

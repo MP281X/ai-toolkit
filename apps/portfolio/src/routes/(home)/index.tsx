@@ -47,8 +47,8 @@ function pickNextCursorColor(currentColor: string) {
 }
 
 function getIdentity() {
-	const existingId = globalThis.sessionStorage.getItem('portfolio.id')
-	const existingName = globalThis.sessionStorage.getItem('portfolio.name')
+	const existingId = sessionStorage.getItem('portfolio.id')
+	const existingName = sessionStorage.getItem('portfolio.name')
 
 	if (Predicate.isNotNullish(existingId) && Predicate.isNotNullish(existingName)) {
 		return {color: pickRandomCursorColor(), id: existingId, name: existingName}
@@ -56,15 +56,11 @@ function getIdentity() {
 
 	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
 
-	const next = {
-		color: pickRandomCursorColor(),
-		id: `v-${seed}`,
-		name: `Guest-${pipe(seed, String.slice(0, 3))}`
-	}
+	const next = {color: pickRandomCursorColor(), id: `v-${seed}`, name: `Guest-${pipe(seed, String.slice(0, 3))}`}
 
-	globalThis.sessionStorage.setItem('portfolio.id', next.id)
-	globalThis.sessionStorage.setItem('portfolio.name', next.name)
-	globalThis.sessionStorage.removeItem('portfolio.color')
+	sessionStorage.setItem('portfolio.id', next.id)
+	sessionStorage.setItem('portfolio.name', next.name)
+	sessionStorage.removeItem('portfolio.color')
 
 	return next
 }
@@ -105,27 +101,15 @@ function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 		Match.tag('snapshot', next => new PortfolioState({trails: next.trails, visitors: next.visitors})),
 		Match.tag(
 			'visitor-upserted',
-			next =>
-				new PortfolioState({
-					trails: state.trails,
-					visitors: upsertVisitor(state.visitors, next.visitor)
-				})
+			next => new PortfolioState({trails: state.trails, visitors: upsertVisitor(state.visitors, next.visitor)})
 		),
 		Match.tag(
 			'visitor-removed',
-			next =>
-				new PortfolioState({
-					trails: state.trails,
-					visitors: removeVisitor(state.visitors, next.id)
-				})
+			next => new PortfolioState({trails: state.trails, visitors: removeVisitor(state.visitors, next.id)})
 		),
 		Match.tag(
 			'trail-added',
-			next =>
-				new PortfolioState({
-					trails: appendTrail(state.trails, next.trail),
-					visitors: state.visitors
-				})
+			next => new PortfolioState({trails: appendTrail(state.trails, next.trail), visitors: state.visitors})
 		),
 		Match.exhaustive
 	)
@@ -145,10 +129,7 @@ const portfolioAtom = Atom.keepAlive(
 const frameListeners = new Set<(now: number) => void>()
 let frameId = 0
 
-type Viewport = {
-	readonly width: number
-	readonly height: number
-}
+type Viewport = {readonly width: number; readonly height: number}
 
 type CursorMotion = {
 	readonly x: number
@@ -160,12 +141,9 @@ type CursorMotion = {
 	readonly viewportHeight: number
 }
 
-type Point = {
-	readonly x: number
-	readonly y: number
-}
+type Point = {readonly x: number; readonly y: number}
 
-let localPointer: {x: number; y: number; updatedAt: number} | undefined = undefined
+let localPointer: (Point & {readonly updatedAt: number}) | undefined
 const SUMMARY_LINES = [
 	"I'm a full-stack TypeScript developer with production experience building real-time, type-safe web applications using React, Node.js, and PostgreSQL.",
 	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
@@ -173,20 +151,12 @@ const SUMMARY_LINES = [
 ]
 
 const TECHNICAL_SKILLS = [
-	{
-		area: 'Frontend',
-		icon: Monitor,
-		items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'
-	},
+	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
 	{area: 'Backend', icon: Server, items: 'Node.js, Effect-TS (functional TypeScript library), RESTful API'},
 	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
 	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
 	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{
-		area: 'AI Tooling',
-		icon: Sparkles,
-		items: 'OpenCode, Github Copilot, Claude Code'
-	}
+	{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
 ]
 
 const WORK_EXPERIENCE = [
@@ -263,10 +233,7 @@ const CONTACT_ITEMS = [
 ]
 
 function getViewport() {
-	return {
-		height: window.innerHeight,
-		width: window.innerWidth
-	} satisfies Viewport
+	return {height: window.innerHeight, width: window.innerWidth} satisfies Viewport
 }
 
 function subscribeFrame(listener: (now: number) => void) {
@@ -297,16 +264,10 @@ function subscribeFrame(listener: (now: number) => void) {
 
 function getDisplayCursorTarget(cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
 	if (isMe && localPointer) {
-		return {
-			x: localPointer.x * viewport.width,
-			y: localPointer.y * viewport.height
-		}
+		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
 	}
 
-	return {
-		x: cursor.x * viewport.width,
-		y: cursor.y * viewport.height
-	}
+	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
 }
 
 function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
@@ -326,11 +287,7 @@ function createCursorMotion(target: Point, viewport: Viewport) {
 }
 
 function updateCursorMotion(motion: CursorMotion, target: Point) {
-	return {
-		...motion,
-		targetX: target.x,
-		targetY: target.y
-	}
+	return {...motion, targetX: target.x, targetY: target.y}
 }
 
 function stepCursorMotion(motion: CursorMotion, now: number) {
@@ -387,10 +344,7 @@ function useViewport() {
 }
 
 function getTrailCell(trail: Readonly<PortfolioTrail>, viewport: Viewport) {
-	return {
-		col: Math.floor((trail.x * viewport.width) / 26),
-		row: Math.floor((trail.y * viewport.height) / 26)
-	}
+	return {col: Math.floor((trail.x * viewport.width) / 26), row: Math.floor((trail.y * viewport.height) / 26)}
 }
 
 function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
@@ -401,9 +355,7 @@ function Panel(input: {readonly className?: string; readonly children: React.Rea
 	)
 }
 
-export const Route = createFileRoute('/(home)/')({
-	component: PortfolioRoute
-})
+export const Route = createFileRoute('/(home)/')({component: PortfolioRoute})
 
 function GridOverlay() {
 	return (
@@ -515,9 +467,7 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 		<div
 			ref={nodeRef}
 			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
-			style={{
-				transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`
-			}}
+			style={{transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
@@ -793,8 +743,8 @@ function PortfolioRoute() {
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(undefined)
-	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>(undefined)
+	const queuedPointerRef = useRef<Point | undefined>(undefined)
+	const lastSentPointerRef = useRef<(Point & {readonly sentAt: number}) | undefined>(undefined)
 	const [identityColor, setIdentityColor] = useState(identity.color)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
@@ -821,14 +771,7 @@ function PortfolioRoute() {
 		setIdentityColor(nextColor)
 		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
 
-		moveRpc({
-			payload: {
-				color: nextColor,
-				id: identity.id,
-				x: currentPointer.x,
-				y: currentPointer.y
-			}
-		})
+		moveRpc({payload: {color: nextColor, id: identity.id, x: currentPointer.x, y: currentPointer.y}})
 	}
 
 	useHotkey('J', () => {
@@ -902,11 +845,7 @@ function PortfolioRoute() {
 
 					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
 
-					lastSentPointerRef.current = {
-						sentAt: now,
-						x: queuedPointerRef.current.x,
-						y: queuedPointerRef.current.y
-					}
+					lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 
 					moveRpc({
 						payload: {
