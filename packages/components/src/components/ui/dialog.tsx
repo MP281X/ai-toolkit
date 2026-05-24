@@ -41,9 +41,7 @@ function DialogContent({
 	children,
 	showCloseButton = true,
 	...props
-}: DialogPrimitive.Popup.Props & {
-	showCloseButton?: boolean
-}) {
+}: DialogPrimitive.Popup.Props & {showCloseButton?: boolean}) {
 	return (
 		<DialogPortal>
 			<DialogOverlay />
@@ -79,9 +77,7 @@ function DialogFooter({
 	showCloseButton = false,
 	children,
 	...props
-}: React.ComponentProps<'div'> & {
-	showCloseButton?: boolean
-}) {
+}: React.ComponentProps<'div'> & {showCloseButton?: boolean}) {
 	return (
 		<div
 			data-slot="dialog-footer"

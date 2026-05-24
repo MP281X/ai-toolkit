@@ -60,9 +60,7 @@ const fieldVariants = cva('group/field flex w-full gap-2 data-[invalid=true]:tex
 				'flex-col *:w-full @md/field-group:flex-row @md/field-group:items-center @md/field-group:*:w-auto @md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:*:data-[slot=field-label]:flex-auto [&>.sr-only]:w-auto @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px'
 		}
 	},
-	defaultVariants: {
-		orientation: 'vertical'
-	}
+	defaultVariants: {orientation: 'vertical'}
 })
 
 function Field({
@@ -133,13 +131,7 @@ function FieldDescription({className, ...props}: React.ComponentProps<'p'>) {
 	)
 }
 
-function FieldSeparator({
-	children,
-	className,
-	...props
-}: React.ComponentProps<'div'> & {
-	children?: React.ReactNode
-}) {
+function FieldSeparator({children, className, ...props}: React.ComponentProps<'div'> & {children?: React.ReactNode}) {
 	return (
 		<div
 			data-slot="field-separator"
@@ -165,9 +157,7 @@ function FieldError({
 	children,
 	errors,
 	...props
-}: React.ComponentProps<'div'> & {
-	errors?: Array<{message?: string} | undefined>
-}) {
+}: React.ComponentProps<'div'> & {errors?: Array<{message?: string} | undefined>}) {
 	if (Array.isArrayEmpty(errors ?? [])) return null
 
 	return (

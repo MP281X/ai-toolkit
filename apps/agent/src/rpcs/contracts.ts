@@ -8,10 +8,7 @@ import {GitBranchesSnapshot, GitDiff, GitDiffScope, GitError, GitProject} from '
 import {TerminalError, TerminalEvent} from '@ai-toolkit/terminal/schema'
 
 export class RpcContracts extends RpcGroup.make(
-	Rpc.make('projects.watch', {
-		stream: true,
-		success: Schema.Array(GitProject)
-	}),
+	Rpc.make('projects.watch', {stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String}),
@@ -19,77 +16,31 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('review.watch', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			scope: GitDiffScope
-		}),
+		payload: Schema.Struct({cwd: Schema.String, scope: GitDiffScope}),
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),
 	Rpc.make('review.stageFile', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			filePath: Schema.String
-		})
+		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
 	}),
 	Rpc.make('review.unstageFile', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			filePath: Schema.String
-		})
+		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
 	}),
 	Rpc.make('review.discardFile', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			filePath: Schema.String
-		})
+		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
 	}),
-	Rpc.make('agents.watch', {
-		stream: true,
-		success: Schema.Array(AgentKey)
-	}),
-	Rpc.make('agents.create', {
-		payload: Schema.Struct({
-			agent: AgentId,
-			cwd: Schema.String
-		}),
-		success: AgentKey
-	}),
-	Rpc.make('agent.status', {
-		payload: Schema.Struct({
-			key: AgentKey
-		}),
-		stream: true,
-		success: AgentStatus
-	}),
+	Rpc.make('agents.watch', {stream: true, success: Schema.Array(AgentKey)}),
+	Rpc.make('agents.create', {payload: Schema.Struct({agent: AgentId, cwd: Schema.String}), success: AgentKey}),
+	Rpc.make('agent.status', {payload: Schema.Struct({key: AgentKey}), stream: true, success: AgentStatus}),
 	Rpc.make('agent.prompt', {
-		payload: Schema.Struct({
-			key: AgentKey,
-			model: ModelId,
-			prompt: Schema.NonEmptyString,
-			provider: ProviderId
-		})
+		payload: Schema.Struct({key: AgentKey, model: ModelId, prompt: Schema.NonEmptyString, provider: ProviderId})
 	}),
-	Rpc.make('agent.stop', {
-		payload: Schema.Struct({
-			key: AgentKey
-		})
-	}),
-	Rpc.make('agent.delete', {
-		payload: Schema.Struct({
-			key: AgentKey
-		})
-	}),
-	Rpc.make('agent.events', {
-		payload: Schema.Struct({
-			key: AgentKey
-		}),
-		stream: true,
-		success: AgentEvent
-	}),
+	Rpc.make('agent.stop', {payload: Schema.Struct({key: AgentKey})}),
+	Rpc.make('agent.delete', {payload: Schema.Struct({key: AgentKey})}),
+	Rpc.make('agent.events', {payload: Schema.Struct({key: AgentKey}), stream: true, success: AgentEvent}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
 		payload: Schema.Struct({
@@ -102,32 +53,17 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('projects.deleteWorktree', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			force: Schema.Boolean
-		})
+		payload: Schema.Struct({cwd: Schema.String, force: Schema.Boolean})
 	}),
 	Rpc.make('terminal.events', {
 		error: TerminalError,
-		payload: Schema.Struct({
-			cwd: Schema.String
-		}),
+		payload: Schema.Struct({cwd: Schema.String}),
 		stream: true,
 		success: TerminalEvent
 	}),
-	Rpc.make('terminal.input', {
-		error: TerminalError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			data: Schema.String
-		})
-	}),
+	Rpc.make('terminal.input', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, data: Schema.String})}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
-		payload: Schema.Struct({
-			cols: Schema.Number,
-			cwd: Schema.String,
-			rows: Schema.Number
-		})
+		payload: Schema.Struct({cols: Schema.Number, cwd: Schema.String, rows: Schema.Number})
 	})
 ) {}

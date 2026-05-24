@@ -37,12 +37,7 @@ function SubmitButton(props: {readonly children: React.ReactNode}) {
 	const form = useFormContext()
 
 	return (
-		<form.Subscribe
-			selector={state => ({
-				canSubmit: state.canSubmit,
-				isSubmitting: state.isSubmitting
-			})}
-		>
+		<form.Subscribe selector={state => ({canSubmit: state.canSubmit, isSubmitting: state.isSubmitting})}>
 			{state => (
 				<Button type="submit" disabled={state.isSubmitting || !state.canSubmit}>
 					{state.isSubmitting && <Spinner />}

@@ -10,7 +10,7 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		let cols = 120
 		let rows = 32
-		let processHandle: ReturnType<typeof Bun.spawn> | undefined = undefined
+		let processHandle: ReturnType<typeof Bun.spawn> | undefined
 		const decoder = new TextDecoder()
 		let screenParsed = Promise.resolve()
 		const readySubscribers = new WeakSet<Queue.Queue<TerminalEvent>>()
@@ -18,7 +18,7 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 		const screen = new HeadlessTerminal({allowProposedApi: true, cols, rows, scrollback: 10_000})
 		const serialize = new SerializeAddon()
 		screen.loadAddon(serialize)
-		const waitForScreen = Effect.promise(async function wait(): Promise<void> {
+		const waitForScreen = Effect.promise(async function wait() {
 			const parsed = screenParsed
 			await parsed
 			if (parsed !== screenParsed) return wait()
@@ -39,9 +39,9 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 										data: (_terminal, data) => {
 											const text = decoder.decode(data, {stream: true})
 											screenParsed = Effect.runPromise(
-												Effect.callback<undefined>(resume => {
+												Effect.callback<void>(resume => {
 													screen.write(text, () => {
-														resume(Effect.succeed(undefined))
+														resume(Effect.void)
 													})
 												})
 											)
@@ -85,10 +85,7 @@ export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/
 								Effect.tap(() => waitForScreen),
 								Effect.map(queue => {
 									subscribers.add(queue)
-									Queue.offerUnsafe(queue, {
-										data: serialize.serialize({scrollback: 10_000}),
-										type: 'snapshot'
-									})
+									Queue.offerUnsafe(queue, {data: serialize.serialize({scrollback: 10_000}), type: 'snapshot'})
 									readySubscribers.add(queue)
 									return queue
 								})

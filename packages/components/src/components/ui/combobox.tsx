@@ -47,10 +47,7 @@ function ComboboxInput({
 	showTrigger = true,
 	showClear = false,
 	...props
-}: ComboboxPrimitive.Input.Props & {
-	showTrigger?: boolean
-	showClear?: boolean
-}) {
+}: ComboboxPrimitive.Input.Props & {showTrigger?: boolean; showClear?: boolean}) {
 	return (
 		<InputGroup className={cn('w-auto', className)}>
 			<ComboboxPrimitive.Input render={<InputGroupInput disabled={disabled} />} {...props} />
@@ -201,9 +198,7 @@ function ComboboxChip({
 	children,
 	showRemove = true,
 	...props
-}: ComboboxPrimitive.Chip.Props & {
-	showRemove?: boolean
-}) {
+}: ComboboxPrimitive.Chip.Props & {showRemove?: boolean}) {
 	return (
 		<ComboboxPrimitive.Chip
 			data-slot="combobox-chip"

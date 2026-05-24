@@ -14,15 +14,8 @@ export default defineConfig({
 	plugins: [
 		tanstackRouter({autoCodeSplitting: true, target: 'react'}),
 		react(),
-		babel({
-			parserOpts: {plugins: ['jsx', 'typescript']},
-			presets: [reactCompilerPreset()]
-		}),
+		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
 	],
-	server: {
-		proxy: {
-			'/api/rpc': {changeOrigin: true, target: 'http://localhost:3021', ws: true}
-		}
-	}
+	server: {proxy: {'/api/rpc': {changeOrigin: true, target: 'http://localhost:3021', ws: true}}}
 })

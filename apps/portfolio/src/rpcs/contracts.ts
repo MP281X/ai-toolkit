@@ -50,11 +50,7 @@ export type PortfolioEvent = typeof PortfolioEvent.Type
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('portfolio.join', {
-		payload: Schema.Struct({
-			color: Schema.NonEmptyString,
-			id: Schema.NonEmptyString,
-			name: Schema.NonEmptyString
-		}),
+		payload: Schema.Struct({color: Schema.NonEmptyString, id: Schema.NonEmptyString, name: Schema.NonEmptyString}),
 		stream: true,
 		success: PortfolioEvent
 	}),

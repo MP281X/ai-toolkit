@@ -239,30 +239,31 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					Effect.flatMap(
 						Effect.forEach(
 							repository =>
-								pipe(
-									listWorktrees(repository.root),
-									Effect.map(
-										discoveredWorktrees =>
-											new GitProject({
-												repository: new GitRepository({
-													gitDirectory: repository.gitDirectory,
-													root: discoveredWorktrees[0]?.root ?? repository.root
-												}),
-												worktrees: Array.sortWith(
-													discoveredWorktrees,
-													worktree =>
-														`${worktree.root === (discoveredWorktrees[0]?.root ?? repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
-													Order.String
-												)
-											})
-									),
-									Effect.orElseSucceed(() => undefined)
+								Effect.option(
+									pipe(
+										listWorktrees(repository.root),
+										Effect.map(
+											discoveredWorktrees =>
+												new GitProject({
+													repository: new GitRepository({
+														gitDirectory: repository.gitDirectory,
+														root: discoveredWorktrees[0]?.root ?? repository.root
+													}),
+													worktrees: Array.sortWith(
+														discoveredWorktrees,
+														worktree =>
+															`${worktree.root === (discoveredWorktrees[0]?.root ?? repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
+														Order.String
+													)
+												})
+										)
+									)
 								),
 							{concurrency: 'unbounded'}
 						)
 					)
 				),
-				Array.filter(Predicate.isNotUndefined),
+				Array.getSomes,
 				Array.sortWith(project => project.repository.root, Order.String)
 			)
 		})

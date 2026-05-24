@@ -62,12 +62,8 @@ export const CommandExecutionToolKit = Toolkit.make(
 		description: 'Run a shell command through an agent-native command execution tool.',
 		failure: AiError,
 		failureMode: 'return',
-		parameters: Schema.Struct({
-			command: Schema.String
-		}),
-		success: Schema.Struct({
-			output: Schema.String
-		})
+		parameters: Schema.Struct({command: Schema.String}),
+		success: Schema.Struct({output: Schema.String})
 	}).annotate(Tool.Strict, true)
 )
 
@@ -76,22 +72,8 @@ export const FileChangeToolKit = Toolkit.make(
 		description: 'Apply or report file changes made by an agent-native patch tool.',
 		failure: AiError,
 		failureMode: 'return',
-		parameters: Schema.Struct({
-			changes: Schema.Array(
-				Schema.Struct({
-					kind: Schema.String,
-					path: Schema.String
-				})
-			)
-		}),
-		success: Schema.Struct({
-			changes: Schema.Array(
-				Schema.Struct({
-					kind: Schema.String,
-					path: Schema.String
-				})
-			)
-		})
+		parameters: Schema.Struct({changes: Schema.Array(Schema.Struct({kind: Schema.String, path: Schema.String}))}),
+		success: Schema.Struct({changes: Schema.Array(Schema.Struct({kind: Schema.String, path: Schema.String}))})
 	}).annotate(Tool.Strict, true)
 )
 
@@ -100,15 +82,8 @@ export const McpToolCallToolKit = Toolkit.make(
 		description: 'Call an MCP server tool through an agent-native MCP bridge.',
 		failure: AiError,
 		failureMode: 'return',
-		parameters: Schema.Struct({
-			server: Schema.String,
-			tool: Schema.String
-		}),
-		success: Schema.Struct({
-			server: Schema.String,
-			text: Schema.String,
-			tool: Schema.String
-		})
+		parameters: Schema.Struct({server: Schema.String, tool: Schema.String}),
+		success: Schema.Struct({server: Schema.String, text: Schema.String, tool: Schema.String})
 	}).annotate(Tool.Strict, true)
 )
 
@@ -117,22 +92,8 @@ export const TodoListToolKit = Toolkit.make(
 		description: 'Report an agent-native task list update.',
 		failure: AiError,
 		failureMode: 'return',
-		parameters: Schema.Struct({
-			items: Schema.Array(
-				Schema.Struct({
-					completed: Schema.Boolean,
-					text: Schema.String
-				})
-			)
-		}),
-		success: Schema.Struct({
-			items: Schema.Array(
-				Schema.Struct({
-					completed: Schema.Boolean,
-					text: Schema.String
-				})
-			)
-		})
+		parameters: Schema.Struct({items: Schema.Array(Schema.Struct({completed: Schema.Boolean, text: Schema.String}))}),
+		success: Schema.Struct({items: Schema.Array(Schema.Struct({completed: Schema.Boolean, text: Schema.String}))})
 	}).annotate(Tool.Strict, true)
 )
 

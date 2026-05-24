@@ -20,9 +20,7 @@ function ResizableHandle({
 	withHandle,
 	className,
 	...props
-}: ResizablePrimitive.SeparatorProps & {
-	withHandle?: boolean
-}) {
+}: ResizablePrimitive.SeparatorProps & {withHandle?: boolean}) {
 	return (
 		<ResizablePrimitive.Separator
 			data-slot="resizable-handle"

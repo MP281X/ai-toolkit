@@ -19,12 +19,6 @@ export class AgentKey extends Schema.Class<AgentKey>('AgentKey')({
 
 export type AgentEvent = typeof AgentEvent.Type
 export const AgentEvent = Schema.Union([
-	Schema.Struct({
-		prompt: Schema.NonEmptyString,
-		type: Schema.Literal('user-message')
-	}),
-	Schema.Struct({
-		part: Response.StreamPart(AgentToolKit),
-		type: Schema.Literal('agent-part')
-	})
+	Schema.Struct({prompt: Schema.NonEmptyString, type: Schema.Literal('user-message')}),
+	Schema.Struct({part: Response.StreamPart(AgentToolKit), type: Schema.Literal('agent-part')})
 ])

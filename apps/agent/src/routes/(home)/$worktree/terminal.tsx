@@ -10,9 +10,7 @@ import {activeHomeAtom} from '#lib/state.ts'
 import {Terminal} from '@ai-toolkit/components/render/terminal'
 import type {TerminalEvent} from '@ai-toolkit/terminal/schema'
 
-export const Route = createFileRoute('/(home)/$worktree/terminal')({
-	component: TerminalPage
-})
+export const Route = createFileRoute('/(home)/$worktree/terminal')({component: TerminalPage})
 
 const terminalEventsAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(

@@ -5,9 +5,7 @@ import {createFileRoute, Navigate} from '@tanstack/react-router'
 import {activeHomeAtom} from '#lib/state.ts'
 import {Browser} from '@ai-toolkit/components/render/browser'
 
-export const Route = createFileRoute('/(home)/$worktree/browser')({
-	component: BrowserPage
-})
+export const Route = createFileRoute('/(home)/$worktree/browser')({component: BrowserPage})
 
 function BrowserPage() {
 	const params = Route.useParams()

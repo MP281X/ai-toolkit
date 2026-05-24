@@ -40,10 +40,7 @@ const JsonRpcResponse = Schema.Struct({
 	result: Schema.optional(Schema.Defect)
 })
 
-const JsonRpcNotification = Schema.Struct({
-	method: Schema.String,
-	params: Schema.optional(Schema.Defect)
-})
+const JsonRpcNotification = Schema.Struct({method: Schema.String, params: Schema.optional(Schema.Defect)})
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null
@@ -65,21 +62,13 @@ type ClientRequestMethod = CodexRpc.ClientRequestMethod
 type ClientRequestPayload<M extends ClientRequestMethod> = CodexRpc.ClientRequestParamsByMethod[M]
 type ClientRequestResponse<M extends ClientRequestMethod> = CodexRpc.ClientRequestResponsesByMethod[M]
 
-function getClientRequestParamSchema<M extends ClientRequestMethod>(method: M) {
-	return CodexRpc.CLIENT_REQUEST_PARAMS[method]
-}
-
-function getClientRequestResponseSchema<M extends ClientRequestMethod>(method: M) {
-	return CodexRpc.CLIENT_REQUEST_RESPONSES[method]
-}
-
 function encodeClientPayload<M extends ClientRequestMethod>(method: M, payload: ClientRequestPayload<M>) {
-	const schema = getClientRequestParamSchema(method)
+	const schema = CodexRpc.CLIENT_REQUEST_PARAMS[method]
 	return schema ? Schema.encodeUnknownSync(schema as never)(payload) : payload
 }
 
 function decodeClientResponse<M extends ClientRequestMethod>(method: M, payload: unknown) {
-	const schema = getClientRequestResponseSchema(method)
+	const schema = CodexRpc.CLIENT_REQUEST_RESPONSES[method]
 	return schema
 		? (Schema.decodeUnknownSync(schema as never)(payload) as ClientRequestResponse<M>)
 		: (payload as ClientRequestResponse<M>)
@@ -92,31 +81,11 @@ function decodeServerNotification<M extends CodexRpc.ServerNotificationMethod>(m
 	>
 }
 
-function makeThreadStartParams(config: {
-	readonly cwd: string
-	readonly model: string
-	readonly systemPrompt: Prompt.SystemMessage
-}): CodexRpc.ClientRequestParamsByMethod['thread/start'] {
-	return {
-		approvalPolicy: 'on-request',
-		cwd: config.cwd,
-		developerInstructions: config.systemPrompt.content,
-		model: config.model,
-		sandbox: 'workspace-write'
-	}
-}
-
 const textDecoder = new TextDecoder()
 
 const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 	const child = yield* Effect.sync(() =>
-		Bun.spawn(['codex', 'app-server'], {
-			cwd: config.cwd,
-			env: Bun.env,
-			stderr: 'pipe',
-			stdin: 'pipe',
-			stdout: 'pipe'
-		})
+		Bun.spawn(['codex', 'app-server'], {cwd: config.cwd, env: Bun.env, stderr: 'pipe', stdin: 'pipe', stdout: 'pipe'})
 	)
 	yield* Scope.addFinalizer(
 		yield* Scope.Scope,
@@ -135,8 +104,8 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 			if (Option.isSome(response)) {
 				const queue = yield* Ref.modify(pending, entries => {
 					const next = new Map(entries)
-					next.delete(globalThis.String(response.value.id))
-					return [entries.get(globalThis.String(response.value.id)), next] as const
+					next.delete(`${response.value.id}`)
+					return [entries.get(`${response.value.id}`), next] as const
 				})
 				if (queue) {
 					if (response.value.error) {
@@ -164,12 +133,8 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 		) {
 			yield* writeJson(child, {id: request.id, result: {decision: 'accept'}})
 		} else {
-			yield* writeJson(child, {
-				error: {code: -32_601, message: `Method not found: ${request.method}`},
-				id: request.id
-			})
+			yield* writeJson(child, {error: {code: -32_601, message: `Method not found: ${request.method}`}, id: request.id})
 		}
-		return
 	})
 
 	yield* pipe(
@@ -196,7 +161,7 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 	) {
 		const id = yield* Ref.modify(nextRequestId, current => [current, current + 1] as const)
 		const queue = yield* Queue.bounded<unknown>(1)
-		yield* Ref.update(pending, entries => new Map([...entries, [globalThis.String(id), queue]]))
+		yield* Ref.update(pending, entries => new Map([...entries, [`${id}`, queue]]))
 		const encodedParams = encodeClientPayload(method, params)
 		yield* pipe(
 			writeJson(child, {id, method, ...(encodedParams !== undefined ? {params: encodedParams} : {})}),
@@ -207,7 +172,7 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 			Effect.ensuring(
 				Ref.update(pending, entries => {
 					const next = new Map(entries)
-					next.delete(globalThis.String(id))
+					next.delete(`${id}`)
 					return next
 				})
 			)
@@ -254,7 +219,6 @@ const readLines = Effect.fnUntraced(function* (
 	})
 })
 
-// oxlint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 const writeJson = Effect.fnUntraced(function* (process: Bun.Subprocess<'pipe', 'pipe', 'pipe'>, message: unknown) {
 	yield* Effect.promise(async () => process.stdin.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`)))
 })
@@ -265,11 +229,13 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 	readonly systemPrompt: Prompt.SystemMessage
 }) {
 	const client = yield* makeCodexClient({cwd: config.cwd})
-	const threadStartParams = makeThreadStartParams({
+	const threadStartParams = {
+		approvalPolicy: 'on-request',
 		cwd: config.cwd,
+		developerInstructions: config.systemPrompt.content,
 		model: 'gpt-5.1-codex',
-		systemPrompt: config.systemPrompt
-	})
+		sandbox: 'workspace-write'
+	} satisfies CodexRpc.ClientRequestParamsByMethod['thread/start']
 	const thread = yield* config.sessionId
 		? client.request('thread/resume', {threadId: config.sessionId, ...threadStartParams})
 		: client.request('thread/start', threadStartParams)
@@ -300,10 +266,7 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 					yield* pipe(
 						Effect.gen(function* () {
 							yield* Ref.set(history, input.messages)
-							yield* SubscriptionRef.set(status, {
-								state: 'running',
-								updatedAt: yield* DateTime.now
-							} as const)
+							yield* SubscriptionRef.set(status, {state: 'running', updatedAt: yield* DateTime.now} as const)
 							const turn = yield* client.request('turn/start', {
 								approvalPolicy: 'on-request',
 								input: [{text: serializeAiPartToMarkdown(input.messages).markdown, text_elements: [], type: 'text'}],

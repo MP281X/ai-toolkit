@@ -18,9 +18,7 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/
 import {cn} from '@ai-toolkit/components/utils'
 import type {GitDiff} from '@ai-toolkit/git/schema'
 
-export const Route = createFileRoute('/(home)/$worktree/diff')({
-	component: DiffPage
-})
+export const Route = createFileRoute('/(home)/$worktree/diff')({component: DiffPage})
 
 const changesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -123,13 +121,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		setReviewSelection(selection)
 	}
 	const moveReviewSelectionAtom = Atom.fn(
-		Effect.fnUntraced(function* (
-			selectionInput: {
-				readonly cwd: string
-				readonly offset: number
-			},
-			get: Atom.FnContext
-		) {
+		Effect.fnUntraced(function* (selectionInput: {readonly cwd: string; readonly offset: number}, get: Atom.FnContext) {
 			const panel = yield* get.result(reviewPanelAtom(selectionInput.cwd))
 			if (!panel.selectedEntry) return
 			const nextEntry = Array.get(

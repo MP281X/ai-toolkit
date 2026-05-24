@@ -18,102 +18,86 @@
 		"correctness": "off"
 	},
 	"rules": {
-		"func-style": ["error", "declaration"],
+		// Runtime hazards and restricted APIs
+		"no-console": "error",
+		"no-param-reassign": ["error", {"props": true}],
+		"no-restricted-globals": ["error", "global", "globalThis", "String", "Boolean", "Array"],
+		"use-isnan": "error",
+
+		// Control flow
 		"arrow-body-style": ["error", "as-needed"],
 		"curly": ["error", "multi-line", "consistent"],
-		"no-param-reassign": ["error", {"props": true}],
-		"no-empty-function": ["error", {"allow": ["arrowFunctions"]}],
-		"func-names": ["error", "as-needed", {"generators": "never"}],
-		"sort-keys": ["error", "asc", {"allowLineSeparatedGroups": true, "natural": true}],
+		"no-else-return": "error",
+		"no-lonely-if": "error",
+		"no-unneeded-ternary": "error",
+		"no-useless-return": "error",
+		"prefer-const": ["error", {"destructuring": "all"}],
 
+		// Useless expressions and simpler built-ins
+		"no-extra-boolean-cast": "error",
+		"prefer-object-spread": "error",
+		"prefer-regex-literals": "error",
+		"no-useless-concat": "error",
+		"no-useless-rename": "error",
+		"unicorn/no-useless-fallback-in-spread": "error",
+		"unicorn/no-useless-length-check": "error",
+		"unicorn/no-useless-promise-resolve-reject": "error",
+		"unicorn/no-useless-spread": "error",
+		"unicorn/no-useless-switch-case": "error",
+		"unicorn/prefer-logical-operator-over-ternary": "error",
+		"unicorn/prefer-number-properties": "error",
+
+		// TypeScript correctness
+		"@typescript-eslint/no-confusing-void-expression": "error",
+		"@typescript-eslint/no-duplicate-type-constituents": "error",
+		"@typescript-eslint/no-floating-promises": "error",
+		"@typescript-eslint/no-meaningless-void-operator": "error",
+		"@typescript-eslint/no-misused-promises": ["error", {"checksVoidReturn": false}],
+		"@typescript-eslint/no-redundant-type-constituents": "error",
+		"@typescript-eslint/no-unnecessary-template-expression": "error",
+		"@typescript-eslint/no-unnecessary-type-arguments": "error",
+		"@typescript-eslint/no-unnecessary-type-assertion": "error",
+		"@typescript-eslint/no-unnecessary-type-constraint": "error",
+		"@typescript-eslint/no-useless-empty-export": "error",
+		"@typescript-eslint/non-nullable-type-assertion-style": "error",
+		"@typescript-eslint/prefer-nullish-coalescing": "error",
+		"@typescript-eslint/prefer-optional-chain": "error",
+
+		// TypeScript type syntax
 		"@typescript-eslint/array-type": ["error", {"default": "array"}],
 		"@typescript-eslint/consistent-type-definitions": ["error", "type"],
-		"@typescript-eslint/no-namespace": ["error", {"allowDeclarations": true}],
-		"@typescript-eslint/no-inferrable-types": ["error", {"ignoreParameters": true}],
-		"@typescript-eslint/no-misused-promises": ["error", {"checksVoidReturn": false}],
+		"@typescript-eslint/consistent-type-exports": "error",
 		"@typescript-eslint/consistent-type-imports": [
 			"error",
 			{"fixStyle": "separate-type-imports", "prefer": "type-imports"}
 		],
+		"@typescript-eslint/no-explicit-any": "error",
+		"@typescript-eslint/no-inferrable-types": "error",
+		"@typescript-eslint/no-namespace": ["error", {"allowDeclarations": true}],
+		"@typescript-eslint/prefer-as-const": "error",
+		"@typescript-eslint/prefer-readonly": "error",
 
-		"@typescript-eslint/prefer-readonly-parameter-types": [
+		// Declarations and object shape
+		"func-names": ["error", "as-needed", {"generators": "never"}],
+		"func-style": ["error", "declaration"],
+		"no-empty-function": ["error", {"allow": ["arrowFunctions"]}],
+		"sort-keys": ["error", "asc", {"allowLineSeparatedGroups": true, "natural": true}],
+
+		// React
+		"no-restricted-imports": [
 			"error",
 			{
-				"allow": [
-					{"from": "lib", "name": ["Error", "File", "HTMLDivElement", "KeyboardEvent", "Map", "Record", "Subprocess"]},
-					{"from": "package", "name": "ClassValue", "package": "clsx"},
+				"paths": [
 					{
-						"from": "package",
-						"name": ["Any", "FnContext", "Message", "Result", "Stream", "StreamPart"],
-						"package": "effect"
-					},
-					{
-						"from": "package",
-						"name": ["LexicalEditor", "SerializedEditorState", "SerializedTextNode", "TextNode"],
-						"package": "lexical"
-					},
-					{"from": "package", "name": ["ComponentType", "ReactNode", "RefObject"], "package": "react"},
-					{
-						"from": "package",
-						"name": [
-							"ArrowFunction",
-							"BinaryExpression",
-							"Block",
-							"CallExpression",
-							"ClassDeclaration",
-							"Declaration",
-							"EntityName",
-							"Expression",
-							"FunctionDeclaration",
-							"FunctionExpression",
-							"FunctionLikeDeclaration",
-							"Identifier",
-							"InterfaceDeclaration",
-							"ModifierLike",
-							"Node",
-							"NodeArray",
-							"ParameterDeclaration",
-							"Program",
-							"SourceFile",
-							"Statement",
-							"SyntaxKind",
-							"Type",
-							"TypeAliasDeclaration",
-							"TypeNode",
-							"VariableDeclaration",
-							"TypeChecker"
-						],
-						"package": "typescript"
+						"importNames": ["memo", "useCallback", "useMemo"],
+						"message": "React Compiler handles memoization. Remove manual memoization.",
+						"name": "react"
 					}
-				],
-				"ignoreInferredTypes": true,
-				"treatMethodsAsReadonly": true,
-				"checkParameterProperties": false
+				]
 			}
-		]
-
-		// "use-isnan": "error",
-		// "no-console": "error",
-		// "no-lonely-if": "error",
-		// "no-else-return": "error",
-		// "react/jsx-key": "error",
-		// "no-nested-ternary": "error",
-		// "default-param-last": "warn",
-		// "no-useless-concat": "error",
-		// "import/extensions": "error",
-		// "oxc/no-barrel-file": "error",
-		// "react/rules-of-hooks": "error",
-		// "prefer-regex-literals": "error",
-		// "unicorn/no-useless-undefined": "error",
-		// "unicorn/prefer-number-properties": "warn",
-		// "@typescript-eslint/no-explicit-any": "error",
-		// "@typescript-eslint/prefer-as-const": "warn",
-		// "@typescript-eslint/no-floating-promises": "error",
-		// "@typescript-eslint/parameter-properties": "error",
-		// "@typescript-eslint/prefer-enum-initializers": "warn",
-		// "@typescript-eslint/consistent-type-exports": "error",
-		// "unicorn/prefer-logical-operator-over-ternary": "error",
-		// "@typescript-eslint/no-unnecessary-template-expression": "error"
+		],
+		"react/jsx-key": "error",
+		"react/rules-of-hooks": "error"
 	},
 
 	"overrides": [

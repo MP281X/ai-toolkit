@@ -3,17 +3,14 @@
 import {make as makeJsonSchemaGenerator} from '@effect/openapi-generator/JsonSchemaGenerator'
 import {BunRuntime, BunServices} from '@effect/platform-bun'
 
-import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
-import * as Layer from 'effect/Layer'
-import * as Logger from 'effect/Logger'
-import * as Path from 'effect/Path'
-import * as Schema from 'effect/Schema'
+import {Array, Effect, FileSystem, Layer, Logger, Path, Schema} from 'effect'
+
 import {FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse} from 'effect/unstable/http'
 
 const USER_AGENT = '@ai-toolkit/ai-codex-app-server-generator'
 const GITHUB_API_BASE = 'https://api.github.com/repos/openai/codex/contents/codex-rs/app-server-protocol'
 const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/openai/codex/HEAD/codex-rs/app-server-protocol'
+type Json = typeof Schema.Json.Type
 
 const GithubContentEntries = Schema.Array(
 	Schema.Struct({
@@ -26,24 +23,13 @@ const GithubContentEntries = Schema.Array(
 type GithubContentEntry = (typeof GithubContentEntries.Type)[number]
 
 const JsonSchemaDocument = Schema.StructWithRest(
-	Schema.Struct({
-		definitions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json))
-	}),
+	Schema.Struct({definitions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json))}),
 	[Schema.Record(Schema.String, Schema.Json)]
 )
 const decodeGithubContentEntries = Schema.decodeEffect(Schema.fromJsonString(GithubContentEntries))
 const decodeJsonSchemaDocument = Schema.decodeEffect(Schema.fromJsonString(JsonSchemaDocument))
 
-type GeneratedPaths = {
-	readonly generatedDir: string
-	readonly schemaOutputPath: string
-	readonly metaOutputPath: string
-}
-
-type MethodEntry = {
-	readonly method: string
-	readonly paramsType?: string
-}
+type MethodEntry = {readonly method: string; readonly paramsType?: string}
 
 type JsonSchemaFile = {
 	readonly namespace?: string
@@ -65,27 +51,17 @@ class GeneratorError extends Schema.TaggedErrorClass<GeneratorError>()('Generato
 const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
 	GetAuthStatusParams: {
 		properties: {
-			includeToken: {
-				anyOf: [{type: 'boolean'}, {type: 'null'}]
-			},
-			refreshToken: {
-				anyOf: [{type: 'boolean'}, {type: 'null'}]
-			}
+			includeToken: {anyOf: [{type: 'boolean'}, {type: 'null'}]},
+			refreshToken: {anyOf: [{type: 'boolean'}, {type: 'null'}]}
 		},
 		title: 'GetAuthStatusParams',
 		type: 'object'
 	},
 	GetAuthStatusResponse: {
 		properties: {
-			authMethod: {
-				anyOf: [{}, {type: 'null'}]
-			},
-			authToken: {
-				anyOf: [{type: 'string'}, {type: 'null'}]
-			},
-			requiresOpenaiAuth: {
-				anyOf: [{type: 'boolean'}, {type: 'null'}]
-			}
+			authMethod: {anyOf: [{}, {type: 'null'}]},
+			authToken: {anyOf: [{type: 'string'}, {type: 'null'}]},
+			requiresOpenaiAuth: {anyOf: [{type: 'boolean'}, {type: 'null'}]}
 		},
 		required: ['authMethod', 'authToken', 'requiresOpenaiAuth'],
 		title: 'GetAuthStatusResponse',
@@ -93,44 +69,25 @@ const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
 	},
 	GetConversationSummaryParams: {
 		oneOf: [
-			{
-				properties: {
-					rolloutPath: {type: 'string'}
-				},
-				required: ['rolloutPath'],
-				type: 'object'
-			},
-			{
-				properties: {
-					conversationId: {type: 'string'}
-				},
-				required: ['conversationId'],
-				type: 'object'
-			}
+			{properties: {rolloutPath: {type: 'string'}}, required: ['rolloutPath'], type: 'object'},
+			{properties: {conversationId: {type: 'string'}}, required: ['conversationId'], type: 'object'}
 		],
 		title: 'GetConversationSummaryParams'
 	},
 	GetConversationSummaryResponse: {
-		properties: {
-			summary: {}
-		},
+		properties: {summary: {}},
 		required: ['summary'],
 		title: 'GetConversationSummaryResponse',
 		type: 'object'
 	},
 	GitDiffToRemoteParams: {
-		properties: {
-			cwd: {type: 'string'}
-		},
+		properties: {cwd: {type: 'string'}},
 		required: ['cwd'],
 		title: 'GitDiffToRemoteParams',
 		type: 'object'
 	},
 	GitDiffToRemoteResponse: {
-		properties: {
-			diff: {type: 'string'},
-			sha: {type: 'string'}
-		},
+		properties: {diff: {type: 'string'}, sha: {type: 'string'}},
 		required: ['sha', 'diff'],
 		title: 'GitDiffToRemoteResponse',
 		type: 'object'
@@ -144,7 +101,7 @@ const getGeneratedPaths = Effect.fn('getGeneratedPaths')(function* () {
 		generatedDir,
 		metaOutputPath: path.join(generatedDir, 'meta.gen.ts'),
 		schemaOutputPath: path.join(generatedDir, 'schema.gen.ts')
-	} satisfies GeneratedPaths
+	}
 })
 
 const ensureGeneratedDir = Effect.fn('ensureGeneratedDir')(function* () {
@@ -159,13 +116,7 @@ const fetchText = Effect.fn('fetchText')(function* (url: string) {
 		HttpClient.execute,
 		Effect.flatMap(HttpClientResponse.filterStatusOk),
 		Effect.flatMap(okResponse => okResponse.text),
-		Effect.mapError(
-			cause =>
-				new GeneratorError({
-					cause,
-					detail: `Failed to fetch ${url}`
-				})
-		)
+		Effect.mapError(cause => new GeneratorError({cause, detail: `Failed to fetch ${url}`}))
 	)
 })
 
@@ -174,7 +125,7 @@ const fetchDirectoryEntries = Effect.fn('fetchDirectoryEntries')(function* (path
 	return yield* decodeGithubContentEntries(raw)
 })
 
-function collectSchemaEntries(chunk: string): readonly {readonly name: string; readonly code: string}[] {
+function collectSchemaEntries(chunk: string) {
 	const lines = chunk
 		.split('\n')
 		.map(line => line.trim())
@@ -197,18 +148,19 @@ function collectSchemaEntries(chunk: string): readonly {readonly name: string; r
 			throw new Error(`Could not extract schema name from: ${typeLine}`)
 		}
 
-		entries.push({
-			code: `${typeLine}\n${constLine}`,
-			name: match[1]
-		})
+		entries.push({code: `${typeLine}\n${constLine}`, name: match[1]})
 		index += 1
 	}
 
 	return entries
 }
 
-function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.Json.Type {
-	if (Array.isArray(value)) {
+function isJsonArray(value: Json): value is readonly Json[] {
+	return Array.isArray(value)
+}
+
+function normalizeNullableTypes(value: Json): Json {
+	if (isJsonArray(value)) {
 		return value.map(normalizeNullableTypes)
 	}
 	if (value === null || typeof value !== 'object') {
@@ -241,19 +193,11 @@ function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.J
 		}
 	}
 
-	return {
-		anyOf: [
-			{
-				...nextObject,
-				type: nonNullType
-			},
-			{type: 'null'}
-		]
-	}
+	return {anyOf: [{...nextObject, type: nonNullType}, {type: 'null'}]}
 }
 
-function stripNullDefaults(value: typeof Schema.Json.Type): typeof Schema.Json.Type {
-	if (Array.isArray(value)) {
+function stripNullDefaults(value: Json): Json {
+	if (isJsonArray(value)) {
 		return value.map(stripNullDefaults)
 	}
 	if (value === null || typeof value !== 'object') {
@@ -272,7 +216,7 @@ function toPascalCaseMethod(method: string) {
 		.split('/')
 		.flatMap(segment => segment.split(/(?=[A-Z])/))
 		.flatMap(segment => segment.split(/[-_]/))
-		.filter(Boolean)
+		.filter(segment => segment.length > 0)
 		.map(segment => segment[0]!.toUpperCase() + segment.slice(1))
 		.join('')
 }
@@ -282,10 +226,7 @@ function parseRequestEntries(fileContents: string): readonly MethodEntry[] {
 	const entries: MethodEntry[] = []
 	let match: RegExpExecArray | null
 	while ((match = entryPattern.exec(fileContents)) !== null) {
-		entries.push({
-			method: match[1]!,
-			paramsType: match[2]!.trim()
-		})
+		entries.push({method: match[1]!, paramsType: match[2]!.trim()})
 	}
 	return entries
 }
@@ -295,15 +236,12 @@ function parseNotificationEntries(fileContents: string): readonly MethodEntry[] 
 	const entries: MethodEntry[] = []
 	let match: RegExpExecArray | null
 	while ((match = entryPattern.exec(fileContents)) !== null) {
-		entries.push({
-			method: match[1]!,
-			...(match[2] ? {paramsType: match[2].trim()} : {})
-		})
+		entries.push({method: match[1]!, ...(match[2] ? {paramsType: match[2].trim()} : {})})
 	}
 	return entries
 }
 
-function resolveSchemaTypeName(rawTypeName: string, generatedSchemaNames: ReadonlySet<string>): string {
+function resolveSchemaTypeName(rawTypeName: string, generatedSchemaNames: ReadonlySet<string>) {
 	if (rawTypeName === 'undefined') {
 		return 'undefined'
 	}
@@ -322,7 +260,7 @@ function resolveResponseTypeName(
 	method: string,
 	paramsType: string | undefined,
 	generatedSchemaNames: ReadonlySet<string>
-): string {
+) {
 	const overrides: Record<string, string> = {
 		'account/logout': 'LogoutAccountResponse',
 		'account/rateLimits/read': 'GetAccountRateLimitsResponse',
@@ -393,7 +331,7 @@ function renderSchemaTypeReference(schemaName: string) {
 	return schemaName === 'undefined' ? 'undefined' : `typeof CodexSchema.${schemaName}.Type`
 }
 
-function exportNameForPath(filePath: string): string {
+function exportNameForPath(filePath: string) {
 	const relative = filePath.replace(/^schema\/json\//, '').replace(/\.json$/, '')
 	if (!relative.includes('/')) {
 		return relative
@@ -402,13 +340,13 @@ function exportNameForPath(filePath: string): string {
 	const [namespace, name] = relative.split('/', 2) as [string, string]
 	const namespacePrefix = namespace
 		.split(/[^A-Za-z0-9]+/)
-		.filter(Boolean)
+		.filter(segment => segment.length > 0)
 		.map(segment => segment[0]!.toUpperCase() + segment.slice(1))
 		.join('')
 	return `${namespacePrefix}${name}`
 }
 
-function buildJsonSchemaFiles(entries: readonly GithubContentEntry[]): readonly JsonSchemaFile[] {
+function buildJsonSchemaFiles(entries: readonly GithubContentEntry[]) {
 	return entries
 		.filter(
 			entry =>
@@ -439,12 +377,12 @@ function buildJsonSchemaFiles(entries: readonly GithubContentEntry[]): readonly 
 }
 
 function rewriteExternalRefs(
-	value: typeof Schema.Json.Type,
+	value: Json,
 	localDefinitionNames: ReadonlyMap<string, string>,
 	currentNamespace: string | undefined,
 	exportNameByQualifiedName: ReadonlyMap<string, string>
-): typeof Schema.Json.Type {
-	if (Array.isArray(value)) {
+): Json {
+	if (isJsonArray(value)) {
 		return value.map(entry =>
 			rewriteExternalRefs(entry, localDefinitionNames, currentNamespace, exportNameByQualifiedName)
 		)

@@ -240,11 +240,7 @@ export function PatchDiff(props: {
 							draftComment
 								? Array.append(props.comments ?? Array.empty(), draftComment)
 								: (props.comments ?? Array.empty()),
-							comment => ({
-								lineNumber: comment.lineNumber,
-								metadata: comment,
-								side: comment.side ?? 'additions'
-							})
+							comment => ({lineNumber: comment.lineNumber, metadata: comment, side: comment.side ?? 'additions'})
 						)}
 						renderAnnotation={annotation => (
 							<CommentAnnotation

@@ -25,10 +25,7 @@ export const resolveLanguageModel = pipe(
 	),
 	Match.when({model: 'glm-5', provider: 'opencode-go'}, input =>
 		Layer.provideMerge(
-			OpenAiCompat.OpenAiLanguageModel.layer({
-				config: {strictJsonSchema: true},
-				model: input.model
-			}),
+			OpenAiCompat.OpenAiLanguageModel.layer({config: {strictJsonSchema: true}, model: input.model}),
 			OpenAiCompat.OpenAiClient.layerConfig(providers[input.provider])
 		)
 	),
