@@ -503,7 +503,10 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 		})
 
 		const reviewDiffs = Effect.fnUntraced(function* (scope: 'staged-to-worktree' | 'head-to-staged') {
-			const args = scope === 'head-to-staged' ? ['diff', '--cached', '--name-status'] : ['diff', '--name-status']
+			const args =
+				scope === 'head-to-staged'
+					? ['diff', '--cached', '--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol', '--name-status']
+					: ['diff', '--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol', '--name-status']
 			const diffs = yield* pipe(
 				git.lines(config.cwd, args),
 				Effect.flatMap(
@@ -541,7 +544,15 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 			readonly to: GitReviewTo
 		}) {
 			const from = yield* resolveFrom(input.from)
-			const args = ['diff', from, ...toArgs(input.to), '--name-status']
+			const args = [
+				'diff',
+				from,
+				...toArgs(input.to),
+				'--ignore-all-space',
+				'--ignore-blank-lines',
+				'--ignore-cr-at-eol',
+				'--name-status'
+			]
 			const diffs = yield* pipe(
 				git.lines(config.cwd, args),
 				Effect.flatMap(
@@ -552,6 +563,9 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 									'diff',
 									from,
 									...toArgs(input.to),
+									'--ignore-all-space',
+									'--ignore-blank-lines',
+									'--ignore-cr-at-eol',
 									'--patch',
 									'--find-renames',
 									'-U999999',
