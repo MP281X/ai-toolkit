@@ -14,14 +14,15 @@ import {
 	pipe
 } from 'effect'
 
-import type {Prompt} from 'effect/unstable/ai'
+import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
 import type {AgentStatus} from '../service.ts'
 import {Agent} from '../service.ts'
 
 import * as CodexRpc from '#codegen/codex-app-server/meta.gen.ts'
-import {serializeAiPartToMarkdown} from '#lib/utils.ts'
+import {partsStreamSanitizer, serializeAiPartToMarkdown} from '#lib/utils.ts'
+import type {AgentToolKit} from '#tools/contracts.ts'
 
 class CodexProtocolError extends Schema.TaggedErrorClass<CodexProtocolError>()('CodexProtocolError', {
 	cause: Schema.optional(Schema.Defect),
@@ -260,202 +261,208 @@ export const makeLayerCodex = Effect.fnUntraced(function* (config: {
 		history: Ref.get(history),
 		status,
 		streamText: input =>
-			Stream.callback(
-				Effect.fnUntraced(function* (queue) {
-					let completed = false
-					yield* pipe(
-						Effect.gen(function* () {
-							yield* Ref.set(history, input.messages)
-							yield* SubscriptionRef.set(status, {state: 'running', updatedAt: yield* DateTime.now} as const)
-							const turn = yield* client.request('turn/start', {
-								approvalPolicy: 'on-request',
-								input: [{text: serializeAiPartToMarkdown(input.messages).markdown, text_elements: [], type: 'text'}],
-								model: input.model,
-								sandboxPolicy: {
-									excludeSlashTmp: false,
-									excludeTmpdirEnvVar: false,
-									networkAccess: false,
-									type: 'workspaceWrite',
-									writableRoots: [config.cwd]
-								},
-								threadId: thread.thread.id
-							})
-							yield* Ref.set(currentTurnId, Option.some(turn.turn.id))
-
-							while (true) {
-								const notification = yield* Queue.take(client.notifications)
-								if (notification.method === 'turn/started') {
-									const params = decodeServerNotification(notification.method, notification.params)
-									if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
-										yield* Ref.set(currentTurnId, Option.some(params.value.turn.id))
-									}
-								}
-								if (notification.method === 'item/agentMessage/delta') {
-									const params = decodeServerNotification(notification.method, notification.params)
-									if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
-										yield* Queue.offer(
-											queue,
-											Response.makePart('text-delta', {delta: params.value.delta, id: params.value.turnId})
-										)
-									}
-								}
-								if (notification.method === 'error') {
-									const params = decodeServerNotification(notification.method, notification.params)
-									if (Option.isSome(params) && (!params.value.threadId || params.value.threadId === thread.thread.id)) {
-										yield* SubscriptionRef.set(status, {state: 'error', updatedAt: yield* DateTime.now} as const)
-										yield* Queue.offer(queue, Response.makePart('error', {error: params.value.error.message}))
-										yield* Queue.end(queue)
-										return
-									}
-								}
-								if (notification.method === 'item/completed') {
-									const params = decodeServerNotification(notification.method, notification.params)
-									if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
-										const item = params.value.item
-										if (item.type === 'reasoning') {
-											const summary = item.summary ?? []
-											const content = item.content ?? []
-											yield* Queue.offer(
-												queue,
-												Response.makePart('reasoning-delta', {
-													delta: Array.join('\n')([...summary, ...content]),
-													id: item.id
-												})
-											)
-										}
-										if (item.type === 'commandExecution') {
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-call', {
-													id: item.id,
-													name: 'command_execution',
-													params: {command: item.command},
-													providerExecuted: false
-												})
-											)
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-result', {
-													encodedResult: {output: item.aggregatedOutput ?? ''},
-													id: item.id,
-													isFailure: item.exitCode !== 0,
-													name: 'command_execution',
-													preliminary: false,
-													providerExecuted: false,
-													result: {output: item.aggregatedOutput ?? ''}
-												})
-											)
-										}
-										if (item.type === 'fileChange') {
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-call', {
-													id: item.id,
-													name: 'file_change',
-													params: {changes: item.changes},
-													providerExecuted: false
-												})
-											)
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-result', {
-													encodedResult: {changes: item.changes},
-													id: item.id,
-													isFailure: item.status !== 'completed',
-													name: 'file_change',
-													preliminary: false,
-													providerExecuted: false,
-													result: {changes: item.changes}
-												})
-											)
-										}
-										if (item.type === 'mcpToolCall') {
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-call', {
-													id: item.id,
-													name: 'mcp_tool_call',
-													params: {server: item.server, tool: item.tool},
-													providerExecuted: false
-												})
-											)
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-result', {
-													encodedResult: {
-														server: item.server,
-														text: JSON.stringify(item.result ?? item.error ?? ''),
-														tool: item.tool
-													},
-													id: item.id,
-													isFailure: item.error !== null,
-													name: 'mcp_tool_call',
-													preliminary: false,
-													providerExecuted: false,
-													result: {
-														server: item.server,
-														text: JSON.stringify(item.result ?? item.error ?? ''),
-														tool: item.tool
-													}
-												})
-											)
-										}
-										if (item.type === 'webSearch') {
-											yield* Queue.offer(
-												queue,
-												Response.makePart('tool-call', {
-													id: item.id,
-													name: 'web_search',
-													params: {query: item.query},
-													providerExecuted: false
-												})
-											)
-										}
-									}
-								}
-								if (notification.method === 'turn/completed') {
-									const params = decodeServerNotification(notification.method, notification.params)
-									if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
-										completed = true
-										yield* Ref.set(currentTurnId, Option.none())
-										yield* SubscriptionRef.set(status, {state: 'idle', updatedAt: yield* DateTime.now} as const)
-										yield* Queue.offer(
-											queue,
-											Response.makePart('finish', {
-												reason: 'stop',
-												response: undefined,
-												usage: new Response.Usage({
-													inputTokens: {
-														cacheRead: undefined,
-														cacheWrite: undefined,
-														total: undefined,
-														uncached: undefined
-													},
-													outputTokens: {reasoning: undefined, text: undefined, total: undefined}
-												})
-											})
-										)
-										yield* Queue.end(queue)
-										return
-									}
-								}
-							}
-						}),
-						Effect.catchCause(cause =>
-							pipe(
-								setStatusIfRunning('error'),
-								Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: Cause.pretty(cause)}))),
-								Effect.andThen(Queue.end(queue))
-							)
-						),
-						Effect.ensuring(
+			pipe(
+				Stream.callback<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>>(
+					Effect.fnUntraced(function* (queue) {
+						let completed = false
+						yield* pipe(
 							Effect.gen(function* () {
-								if (!completed) yield* interruptCurrentTurn()
-								yield* setStatusIfRunning('idle')
-							})
+								yield* Ref.set(history, input.messages)
+								yield* SubscriptionRef.set(status, {state: 'running', updatedAt: yield* DateTime.now} as const)
+								const turn = yield* client.request('turn/start', {
+									approvalPolicy: 'on-request',
+									input: [{text: serializeAiPartToMarkdown(input.messages).markdown, text_elements: [], type: 'text'}],
+									model: input.model,
+									sandboxPolicy: {
+										excludeSlashTmp: false,
+										excludeTmpdirEnvVar: false,
+										networkAccess: false,
+										type: 'workspaceWrite',
+										writableRoots: [config.cwd]
+									},
+									threadId: thread.thread.id
+								})
+								yield* Ref.set(currentTurnId, Option.some(turn.turn.id))
+
+								while (true) {
+									const notification = yield* Queue.take(client.notifications)
+									if (notification.method === 'turn/started') {
+										const params = decodeServerNotification(notification.method, notification.params)
+										if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
+											yield* Ref.set(currentTurnId, Option.some(params.value.turn.id))
+										}
+									}
+									if (notification.method === 'item/agentMessage/delta') {
+										const params = decodeServerNotification(notification.method, notification.params)
+										if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
+											yield* Queue.offer(
+												queue,
+												Response.makePart('text-delta', {delta: params.value.delta, id: params.value.turnId})
+											)
+										}
+									}
+									if (notification.method === 'error') {
+										const params = decodeServerNotification(notification.method, notification.params)
+										if (
+											Option.isSome(params) &&
+											(!params.value.threadId || params.value.threadId === thread.thread.id)
+										) {
+											yield* SubscriptionRef.set(status, {state: 'error', updatedAt: yield* DateTime.now} as const)
+											yield* Queue.offer(queue, Response.makePart('error', {error: params.value.error.message}))
+											yield* Queue.end(queue)
+											return
+										}
+									}
+									if (notification.method === 'item/completed') {
+										const params = decodeServerNotification(notification.method, notification.params)
+										if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
+											const item = params.value.item
+											if (item.type === 'reasoning') {
+												const summary = item.summary ?? []
+												const content = item.content ?? []
+												yield* Queue.offer(
+													queue,
+													Response.makePart('reasoning-delta', {
+														delta: Array.join('\n')([...summary, ...content]),
+														id: item.id
+													})
+												)
+											}
+											if (item.type === 'commandExecution') {
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-call', {
+														id: item.id,
+														name: 'command_execution',
+														params: {command: item.command},
+														providerExecuted: false
+													})
+												)
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-result', {
+														encodedResult: {output: item.aggregatedOutput ?? ''},
+														id: item.id,
+														isFailure: item.exitCode !== 0,
+														name: 'command_execution',
+														preliminary: false,
+														providerExecuted: false,
+														result: {output: item.aggregatedOutput ?? ''}
+													})
+												)
+											}
+											if (item.type === 'fileChange') {
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-call', {
+														id: item.id,
+														name: 'file_change',
+														params: {changes: item.changes},
+														providerExecuted: false
+													})
+												)
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-result', {
+														encodedResult: {changes: item.changes},
+														id: item.id,
+														isFailure: item.status !== 'completed',
+														name: 'file_change',
+														preliminary: false,
+														providerExecuted: false,
+														result: {changes: item.changes}
+													})
+												)
+											}
+											if (item.type === 'mcpToolCall') {
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-call', {
+														id: item.id,
+														name: 'mcp_tool_call',
+														params: {server: item.server, tool: item.tool},
+														providerExecuted: false
+													})
+												)
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-result', {
+														encodedResult: {
+															server: item.server,
+															text: JSON.stringify(item.result ?? item.error ?? ''),
+															tool: item.tool
+														},
+														id: item.id,
+														isFailure: item.error !== null,
+														name: 'mcp_tool_call',
+														preliminary: false,
+														providerExecuted: false,
+														result: {
+															server: item.server,
+															text: JSON.stringify(item.result ?? item.error ?? ''),
+															tool: item.tool
+														}
+													})
+												)
+											}
+											if (item.type === 'webSearch') {
+												yield* Queue.offer(
+													queue,
+													Response.makePart('tool-call', {
+														id: item.id,
+														name: 'web_search',
+														params: {query: item.query},
+														providerExecuted: false
+													})
+												)
+											}
+										}
+									}
+									if (notification.method === 'turn/completed') {
+										const params = decodeServerNotification(notification.method, notification.params)
+										if (Option.isSome(params) && params.value.threadId === thread.thread.id) {
+											completed = true
+											yield* Ref.set(currentTurnId, Option.none())
+											yield* SubscriptionRef.set(status, {state: 'idle', updatedAt: yield* DateTime.now} as const)
+											yield* Queue.offer(
+												queue,
+												Response.makePart('finish', {
+													reason: 'stop',
+													response: undefined,
+													usage: new Response.Usage({
+														inputTokens: {
+															cacheRead: undefined,
+															cacheWrite: undefined,
+															total: undefined,
+															uncached: undefined
+														},
+														outputTokens: {reasoning: undefined, text: undefined, total: undefined}
+													})
+												})
+											)
+											yield* Queue.end(queue)
+											return
+										}
+									}
+								}
+							}),
+							Effect.catchCause(cause =>
+								pipe(
+									setStatusIfRunning('error'),
+									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: Cause.pretty(cause)}))),
+									Effect.andThen(Queue.end(queue))
+								)
+							),
+							Effect.ensuring(
+								Effect.gen(function* () {
+									if (!completed) yield* interruptCurrentTurn()
+									yield* setStatusIfRunning('idle')
+								})
+							)
 						)
-					)
-				})
+					})
+				),
+				partsStreamSanitizer
 			)
 	})
 })

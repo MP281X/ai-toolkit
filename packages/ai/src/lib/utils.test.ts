@@ -95,12 +95,15 @@ describe('partsStreamSanitizer', () => {
 })
 
 describe('compactAiParts', () => {
-	test('merges adjacent text and reasoning deltas and removes structural parts', () => {
+	test('merges adjacent text and reasoning deltas and removes structural and empty parts', () => {
 		expect(
 			compactAiParts([
 				Response.makePart('text-start', {id: 'text'}),
+				Response.makePart('text-delta', {delta: '', id: 'empty-text'}),
 				Response.makePart('text-delta', {delta: 'Hel', id: 'a'}),
 				Response.makePart('text-delta', {delta: 'lo', id: 'b'}),
+				Response.makePart('reasoning-delta', {delta: '[REDACTED]', id: 'redacted-reasoning'}),
+				Response.makePart('reasoning-delta', {delta: '', id: 'empty-reasoning'}),
 				Response.makePart('reasoning-delta', {delta: 'Step ', id: 'c'}),
 				Response.makePart('reasoning-delta', {delta: 'one', id: 'd'}),
 				Response.makePart('text-end', {id: 'text'})

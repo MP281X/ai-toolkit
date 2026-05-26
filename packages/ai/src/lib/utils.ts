@@ -16,8 +16,8 @@ export const makeResumableStream = Effect.fnUntraced(function* <A>() {
 	}
 })
 
-export function partsStreamSanitizer<A extends Response.StreamPart<Record<string, Tool.Any>>, E, R>(
-	parts: Stream.Stream<A, E, R>
+export function partsStreamSanitizer<T extends Record<string, Tool.Any>, E, R>(
+	parts: Stream.Stream<Response.StreamPart<T>, E, R>
 ) {
 	return pipe(
 		parts,
@@ -70,6 +70,10 @@ export function compactAiParts<T extends Record<string, Tool.Any>>(input: readon
 		if (part.type === 'text-start' || part.type === 'text-end') return parts
 		if (part.type === 'tool-params-start' || part.type === 'tool-params-end') return parts
 		if (part.type === 'tool-params-delta') return parts
+		if (part.type === 'text-delta' || part.type === 'reasoning-delta') {
+			if (String.isEmpty(part.delta)) return parts
+			if (part.delta === '[REDACTED]') return parts
+		}
 		if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
 
 		const [previousParts, lastPart] = Array.unappend(parts)
