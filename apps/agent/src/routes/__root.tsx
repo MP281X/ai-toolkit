@@ -4,6 +4,8 @@ import {Function} from 'effect'
 
 import {HeadContent, Scripts, createRootRoute} from '@tanstack/react-router'
 
+import {Toaster} from '@ai-toolkit/components/ui/sonner'
+
 export const Route = createRootRoute({
 	head: Function.constant({
 		scripts: [
@@ -17,6 +19,7 @@ export const Route = createRootRoute({
 			<Scripts />
 
 			{props.children}
+			<Toaster />
 		</div>
 	)
 })

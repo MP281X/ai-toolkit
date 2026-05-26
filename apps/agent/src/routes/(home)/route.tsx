@@ -1,6 +1,6 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Hash, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Effect, Hash, Match, Option, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
@@ -164,11 +164,6 @@ function shortPath(value: string) {
 	return pathLabel(value)
 }
 
-function BranchCandidateIcon(input: {readonly type: 'local' | 'remote'}) {
-	if (input.type === 'local') return <GitBranch className="size-3.5" />
-	return <Square className="size-3.5" />
-}
-
 function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) {
 	if (input.root) return <PanelTop className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
 	return <Square className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
@@ -242,13 +237,6 @@ function WorktreeManager(input: {
 			Array.findFirst(candidate => candidate.name === nextBranch),
 			Option.getOrUndefined
 		)
-		const mode = pipe(
-			Match.value(nextSelectedBranch?.type),
-			Match.when('local', () => 'existing-local' as const),
-			Match.when('remote', () => 'existing-remote' as const),
-			Match.orElse(() => 'new-local' as const)
-		)
-
 		const worktreeRoot = await createWorktree({
 			payload: {
 				baseBranch:
@@ -257,7 +245,12 @@ function WorktreeManager(input: {
 						: `origin/${branchSnapshot.value.defaultBranch}`,
 				branch: nextBranch,
 				cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
-				mode
+				mode:
+					nextSelectedBranch?.type === 'local'
+						? 'existing-local'
+						: nextSelectedBranch?.type === 'remote'
+							? 'existing-remote'
+							: 'new-local'
 			}
 		})
 		setActionsOpen(false)
@@ -417,15 +410,13 @@ function WorktreeManager(input: {
 											void createFastWorktree(candidate.name)
 										}}
 									>
-										<BranchCandidateIcon type={candidate.type} />
+										{candidate.type === 'local' ? <GitBranch className="size-3.5" /> : <Square className="size-3.5" />}
 										<span className="min-w-0 truncate">{candidate.name}</span>
 										<CommandShortcut>{candidate.type}</CommandShortcut>
 									</CommandItem>
 								))}
 								{branch !== '' &&
-									Predicate.isUndefined(
-										Option.getOrUndefined(Array.findFirst(availableBranches, candidate => candidate.name === branch))
-									) && (
+									Option.isNone(Array.findFirst(availableBranches, candidate => candidate.name === branch)) && (
 										<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
 											<GitBranchPlus className="size-3.5" />
 											Create {branch}
@@ -493,7 +484,7 @@ function WorktreeManager(input: {
 										<GitBranchPlus className="size-3" />
 									</Button>
 								</div>
-								<ul className="border-muted-foreground/20 flex flex-col gap-px border-l" style={{marginLeft: 15}}>
+								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 									{Array.map(project.worktrees, worktree => {
 										const worktreeAgents = Array.filter(input.agents, agent => agent.cwd === worktree.root)
 										return (
@@ -534,10 +525,7 @@ function WorktreeManager(input: {
 												>
 													{worktree.branch ?? pathLabel(worktree.root)}
 												</TreeExplorerRow>
-												<ul
-													className="border-muted-foreground/20 flex flex-col gap-px border-l"
-													style={{marginLeft: 15}}
-												>
+												<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 													<li className="w-full min-w-0">
 														<TreeExplorerRow
 															icon={<TerminalIcon className="size-3.5" />}
@@ -562,10 +550,7 @@ function WorktreeManager(input: {
 													</li>
 												</ul>
 												{!Array.isReadonlyArrayEmpty(worktreeAgents) && (
-													<ul
-														className="border-muted-foreground/20 flex flex-col gap-px border-l"
-														style={{marginLeft: 15}}
-													>
+													<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 														{Array.map(worktreeAgents, agent => (
 															<li key={agent.id} className="w-full min-w-0">
 																<TreeExplorerRow

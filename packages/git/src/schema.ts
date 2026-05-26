@@ -17,6 +17,32 @@ export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 	status: GitDiffStatus
 }) {}
 
+export type GitReviewFrom = typeof GitReviewFrom.Type
+export const GitReviewFrom = Schema.Union([
+	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
+	Schema.Struct({base: Schema.String, type: Schema.Literal('merge-base')})
+])
+
+export type GitReviewTo = typeof GitReviewTo.Type
+export const GitReviewTo = Schema.Union([
+	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
+	Schema.Struct({type: Schema.Literal('worktree')})
+])
+
+export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
+	hash: Schema.String,
+	parents: Schema.Array(Schema.String),
+	shortHash: Schema.String,
+	subject: Schema.String,
+	wip: Schema.Boolean
+}) {}
+
+export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
+	base: Schema.String,
+	commits: Schema.Array(GitCommit),
+	dirty: Schema.Boolean
+}) {}
+
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({
 	gitDirectory: Schema.String,
 	root: Schema.String

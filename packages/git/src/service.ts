@@ -5,12 +5,10 @@ import {
 	Effect,
 	FileSystem,
 	Layer,
-	Match,
 	Number,
 	Option,
 	Order,
 	Path,
-	Predicate,
 	Random,
 	Result,
 	Stream,
@@ -22,12 +20,15 @@ import {
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
+import type {GitReviewFrom, GitReviewTo} from './schema.ts'
 import {
 	GitBranch,
 	GitBranchesSnapshot,
+	GitCommit,
 	GitDiff,
 	GitError,
 	GitProject,
+	GitReviewMetadata,
 	GitRepository,
 	GitWorktree as GitWorktreeSchema,
 	GitWorktreeStatus
@@ -427,7 +428,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 					Effect.asVoid
 				)
 
-				if (Predicate.isNotUndefined(worktree.branch)) {
+				if (worktree.branch !== undefined) {
 					yield* pipe(git.string(worktree.mainRoot, ['branch', '-D', worktree.branch]), Effect.ignore)
 				}
 				yield* refreshProjects()
@@ -448,6 +449,59 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 
+		const hasWorktreeChanges = Effect.fnUntraced(function* () {
+			return yield* pipe(
+				git.lines(config.cwd, ['status', '--porcelain']),
+				Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
+			)
+		})
+
+		const resolveFrom = Effect.fnUntraced(function* (from: GitReviewFrom) {
+			if (from.type === 'ref') return from.ref
+
+			return yield* pipe(git.string(config.cwd, ['merge-base', from.base, 'HEAD']), Effect.map(String.trim))
+		})
+
+		function toArgs(to: GitReviewTo) {
+			return to.type === 'ref' ? [to.ref] : Array.empty<string>()
+		}
+
+		function statusFromNameStatus(line: string) {
+			if (String.startsWith('A')(line)) return 'added'
+			if (String.startsWith('D')(line)) return 'deleted'
+			if (String.startsWith('R')(line)) return 'renamed'
+
+			return 'modified'
+		}
+
+		function filePathFromNameStatus(line: string) {
+			return pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
+		}
+
+		const untrackedDiffs = Effect.fnUntraced(function* () {
+			return yield* Effect.forEach(
+				yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
+				filePath =>
+					pipe(
+						fs.readFileString(path.join(config.cwd, filePath)),
+						Effect.orElseSucceed(() => ''),
+						Effect.map(
+							content =>
+								new GitDiff({
+									filePath,
+									patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+										String.split('\n')(content),
+										Array.map(line => `+${line}`),
+										Array.join('\n')
+									)}`,
+									status: 'added'
+								})
+						)
+					),
+				{concurrency: 'unbounded'}
+			)
+		})
+
 		const reviewDiffs = Effect.fnUntraced(function* (scope: 'staged-to-worktree' | 'head-to-staged') {
 			const args = scope === 'head-to-staged' ? ['diff', '--cached', '--name-status'] : ['diff', '--name-status']
 			const diffs = yield* pipe(
@@ -458,32 +512,18 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 							pipe(
 								git.string(
 									config.cwd,
-									pipe(
-										args,
-										Array.dropRight(1),
-										Array.appendAll([
-											'--patch',
-											'--find-renames',
-											'-U999999',
-											'--no-ext-diff',
-											'--',
-											pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
-										])
-									)
+									Array.appendAll(Array.dropRight(args, 1), [
+										'--patch',
+										'--find-renames',
+										'-U999999',
+										'--no-ext-diff',
+										'--',
+										filePathFromNameStatus(line)
+									])
 								),
 								Effect.map(
 									patch =>
-										new GitDiff({
-											filePath: pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? '',
-											patch,
-											status: pipe(
-												Match.value(line),
-												Match.when(String.startsWith('A'), () => 'added' as const),
-												Match.when(String.startsWith('D'), () => 'deleted' as const),
-												Match.when(String.startsWith('R'), () => 'renamed' as const),
-												Match.orElse(() => 'modified' as const)
-											)
-										})
+										new GitDiff({filePath: filePathFromNameStatus(line), patch, status: statusFromNameStatus(line)})
 								)
 							),
 						{concurrency: 'unbounded'}
@@ -493,42 +533,151 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 
 			if (scope === 'head-to-staged') return diffs
 
+			return yield* pipe(untrackedDiffs(), Effect.map(Array.appendAll(diffs)))
+		})
+
+		const reviewRangeDiffs = Effect.fnUntraced(function* (input: {
+			readonly from: GitReviewFrom
+			readonly to: GitReviewTo
+		}) {
+			const from = yield* resolveFrom(input.from)
+			const args = ['diff', from, ...toArgs(input.to), '--name-status']
+			const diffs = yield* pipe(
+				git.lines(config.cwd, args),
+				Effect.flatMap(
+					Effect.forEach(
+						line =>
+							pipe(
+								git.string(config.cwd, [
+									'diff',
+									from,
+									...toArgs(input.to),
+									'--patch',
+									'--find-renames',
+									'-U999999',
+									'--no-ext-diff',
+									'--',
+									filePathFromNameStatus(line)
+								]),
+								Effect.map(
+									patch =>
+										new GitDiff({filePath: filePathFromNameStatus(line), patch, status: statusFromNameStatus(line)})
+								)
+							),
+						{concurrency: 'unbounded'}
+					)
+				)
+			)
+
+			if (input.to.type === 'ref') return diffs
+
+			return yield* pipe(untrackedDiffs(), Effect.map(Array.appendAll(diffs)))
+		})
+
+		const suggestBase = Effect.gen(function* () {
+			const defaultBranch = yield* pipe(
+				git.string(config.cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
+				Effect.map(flow(String.trim, String.replace(/^origin\//u, 'origin/'))),
+				Effect.orElseSucceed(() => 'origin/main')
+			)
+			const candidates = [defaultBranch, 'origin/main', 'origin/master', 'main', 'master']
+
 			return yield* pipe(
-				Effect.forEach(
-					yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
-					filePath =>
-						pipe(
-							fs.readFileString(path.join(config.cwd, filePath)),
-							Effect.orElseSucceed(() => ''),
-							Effect.map(
-								content =>
-									new GitDiff({
-										filePath,
-										patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-											String.split('\n')(content),
-											Array.map(line => `+${line}`),
-											Array.join('\n')
-										)}`,
-										status: 'added'
-									})
-							)
-						),
-					{concurrency: 'unbounded'}
+				candidates,
+				Effect.findFirst(candidate =>
+					pipe(
+						git.string(config.cwd, ['rev-parse', '--verify', candidate]),
+						Effect.as(true),
+						Effect.orElseSucceed(() => false)
+					)
 				),
-				Effect.map(Array.appendAll(diffs))
+				Effect.map(Option.getOrElse(() => 'HEAD'))
+			)
+		})
+
+		const commits = Effect.fnUntraced(function* (base: string) {
+			const from = yield* pipe(
+				git.string(config.cwd, ['merge-base', base, 'HEAD']),
+				Effect.map(String.trim),
+				Effect.catchTag('GitError', () => Effect.succeed(base))
+			)
+
+			return yield* pipe(
+				git.lines(config.cwd, ['log', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', `${from}..HEAD`]),
+				Effect.map(
+					Array.map(line => {
+						const parts = String.split('\u0000')(line)
+						const subject = parts[2] ?? ''
+						return new GitCommit({
+							hash: parts[0] ?? '',
+							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
+							shortHash: parts[1] ?? '',
+							subject,
+							wip: String.startsWith('wip: ')(subject)
+						})
+					})
+				)
 			)
 		})
 
 		return {
-			discardFile: (filePath: string) =>
-				Effect.gen(function* () {
-					yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.ignore)
-					yield* pipe(git.string(config.cwd, ['restore', '--worktree', '--source=HEAD', '--', filePath]), Effect.ignore)
-					yield* pipe(git.string(config.cwd, ['clean', '-fd', '--', filePath]), Effect.asVoid)
-				}),
+			commitAndPush: Effect.fnUntraced(function* (input: {readonly base: string; readonly message: string}) {
+				if (yield* hasWorktreeChanges()) {
+					return yield* Effect.fail(new GitError({message: 'Create a WIP commit before squashing.'}))
+				}
+
+				const oldestWip = pipe(
+					yield* commits(input.base),
+					Array.filter(commit => commit.wip),
+					Array.last,
+					Option.getOrUndefined
+				)
+
+				if (!oldestWip) {
+					return yield* Effect.fail(new GitError({message: 'No WIP commits to squash.'}))
+				}
+
+				yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldestWip.hash}^`]), Effect.asVoid)
+				yield* pipe(git.string(config.cwd, ['commit', '-m', input.message]), Effect.asVoid)
+
+				const branch = yield* pipe(git.string(config.cwd, ['branch', '--show-current']), Effect.map(String.trim))
+				const hasUpstream = yield* pipe(
+					git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+					Effect.as(true),
+					Effect.orElseSucceed(() => false)
+				)
+				yield* pipe(
+					hasUpstream ? git.string(config.cwd, ['push']) : git.string(config.cwd, ['push', '-u', 'origin', branch]),
+					Effect.asVoid
+				)
+			}),
+			commits,
+			createWipCommit: Effect.fnUntraced(function* (message: string) {
+				if (!(yield* hasWorktreeChanges())) {
+					return yield* Effect.fail(new GitError({message: 'No changes to commit.'}))
+				}
+
+				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
+				yield* pipe(git.string(config.cwd, ['commit', '-m', `wip: ${message}`]), Effect.asVoid)
+			}),
+			discardFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.ignore)
+				yield* pipe(git.string(config.cwd, ['restore', '--worktree', '--source=HEAD', '--', filePath]), Effect.ignore)
+				yield* pipe(git.string(config.cwd, ['clean', '-fd', '--', filePath]), Effect.asVoid)
+			}),
+			metadata: Effect.fnUntraced(function* (input?: {readonly base?: string}) {
+				const base = input?.base ?? (yield* suggestBase)
+
+				return new GitReviewMetadata({base, commits: yield* commits(base), dirty: yield* hasWorktreeChanges()})
+			}),
 			reviewDiffs,
-			stageFile: (filePath: string) => pipe(git.string(config.cwd, ['add', '--', filePath]), Effect.asVoid),
-			unstageFile: (filePath: string) => pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.asVoid),
+			reviewRangeDiffs,
+			stageFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(git.string(config.cwd, ['add', '--', filePath]), Effect.asVoid)
+			}),
+			unstageFile: Effect.fnUntraced(function* (filePath: string) {
+				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.asVoid)
+			}),
 			watchReviewDiffs: (scope: 'staged-to-worktree' | 'head-to-staged') =>
 				pipe(
 					fs.watch(config.cwd),
@@ -538,6 +687,31 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git
 					Stream.mapEffect(() =>
 						pipe(
 							reviewDiffs(scope),
+							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
+						)
+					),
+					Stream.changesWith(
+						(left, right) =>
+							Array.length(left) === Array.length(right) &&
+							Array.every(
+								left,
+								(leftDiff, index) =>
+									right[index] !== undefined &&
+									leftDiff.filePath === right[index].filePath &&
+									leftDiff.status === right[index].status &&
+									leftDiff.patch === right[index].patch
+							)
+					)
+				),
+			watchReviewRangeDiffs: (input: {readonly from: GitReviewFrom; readonly to: GitReviewTo}) =>
+				pipe(
+					fs.watch(config.cwd),
+					Stream.catch(() => Stream.empty),
+					Stream.merge(Stream.tick(Duration.millis(250))),
+					Stream.debounce(Duration.millis(50)),
+					Stream.mapEffect(() =>
+						pipe(
+							reviewRangeDiffs(input),
 							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
 						)
 					),

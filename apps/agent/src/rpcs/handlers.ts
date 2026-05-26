@@ -147,10 +147,25 @@ export const RpcHandlers = RpcContracts.toLayer(
 						)
 					)
 				),
+			'review.commitAndPush': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.commitAndPush({base: payload.base, message: payload.message}))
+				),
+			'review.createWipCommit': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.createWipCommit(payload.message))
+				),
 			'review.discardFile': payload =>
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
+				),
+			'review.metadata': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.metadata({base: payload.base}))
 				),
 			'review.stageFile': payload =>
 				pipe(
@@ -167,6 +182,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 					pipe(
 						RcMap.get(gitWorktrees, payload.cwd),
 						Effect.map(worktree => worktree.watchReviewDiffs(payload.scope))
+					)
+				),
+			'review.watchRange': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitWorktrees, payload.cwd),
+						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
 					)
 				),
 			'terminal.events': payload =>
