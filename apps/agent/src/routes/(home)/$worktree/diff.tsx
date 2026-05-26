@@ -1,81 +1,81 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, Stream, pipe} from 'effect'
+import {Array, Effect, Match, Option, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {useState} from 'react'
+import {startTransition, useEffect, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
-import {ClipboardCopyIcon, FileIcon, TrashIcon} from '@ai-toolkit/components/icons'
+import {CopyIcon, FileIcon, FolderIcon, GitCompareIcon, TrashIcon, UploadIcon} from '@ai-toolkit/components/icons'
 import {PatchDiff} from '@ai-toolkit/components/render/diff'
-import {TreeExplorer, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
+import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
 import {Button} from '@ai-toolkit/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
+import {InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput} from '@ai-toolkit/components/ui/input-group'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
+import {toast} from '@ai-toolkit/components/ui/sonner'
 import {cn} from '@ai-toolkit/components/utils'
-import type {GitDiff} from '@ai-toolkit/git/schema'
+import type {GitCommit, GitDiff} from '@ai-toolkit/git/schema'
 
-export const Route = createFileRoute('/(home)/$worktree/diff')({component: DiffPage})
+export const Route = createFileRoute('/(home)/$worktree/diff')({
+	component: DiffPage,
+	validateSearch: Schema.toStandardSchemaV1(Schema.Struct({commit: Schema.optional(Schema.String)}))
+})
 
-const changesAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client => client('review.watch', {cwd, scope: 'staged-to-worktree'})),
-				Stream.unwrap
-			)
+const suggestedMetadataAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.flatMap(client => client('review.metadata', {cwd}))
 		)
 	)
 )
 
-const stagedAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client => client('review.watch', {cwd, scope: 'head-to-staged'})),
-				Stream.unwrap
-			)
+const metadataAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.flatMap(client => client('review.metadata', input))
 		)
 	)
 )
 
-const reviewSelectionAtom = Atom.family((_cwd: string) => Atom.keepAlive(Atom.make({filePath: '', scope: ''})))
+type ReviewTarget =
+	| {readonly type: 'head-to-worktree'}
+	| {readonly commit: string; readonly from: string; readonly type: 'commit-to-worktree'}
 
-const reviewPanelAtom = Atom.family((cwd: string) =>
+function targetKey(target: ReviewTarget) {
+	return pipe(
+		Match.value(target),
+		Match.when({type: 'head-to-worktree'}, () => 'head-to-worktree' as const),
+		Match.when({type: 'commit-to-worktree'}, current => `worktree:${current.commit}`),
+		Match.exhaustive
+	)
+}
+
+function rangeForTarget(target: ReviewTarget) {
+	return pipe(
+		Match.value(target),
+		Match.when({type: 'head-to-worktree'}, () => ({from: {ref: 'HEAD', type: 'ref'}, to: {type: 'worktree'}}) as const),
+		Match.when(
+			{type: 'commit-to-worktree'},
+			current => ({from: {ref: current.from, type: 'ref'}, to: {type: 'worktree'}}) as const
+		),
+		Match.exhaustive
+	)
+}
+
+const reviewDiffsAtom = Atom.family((input: {readonly cwd: string; readonly target: ReviewTarget}) =>
 	Atom.keepAlive(
-		Atom.make(get =>
-			Effect.gen(function* () {
-				const changes = yield* get.result(changesAtom(cwd))
-				const staged = yield* get.result(stagedAtom(cwd))
-				const selection = get(reviewSelectionAtom(cwd))
-				const entries = pipe(
-					changes,
-					Array.map(diff => ({diff, scope: 'staged-to-worktree'})),
-					Array.appendAll(Array.map(staged, diff => ({diff, scope: 'head-to-staged'})))
-				)
-
-				return {
-					changesDiffs: changes,
-					entries,
-					selectedEntry:
-						pipe(
-							entries,
-							Array.findFirst(
-								entry =>
-									selection.scope !== '' &&
-									entry.scope === selection.scope &&
-									entry.diff.filePath === selection.filePath
-							),
-							Option.getOrUndefined
-						) ?? entries[0],
-					stagedDiffs: staged
-				}
-			})
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient,
+				Effect.map(client => client('review.watchRange', {cwd: input.cwd, ...rangeForTarget(input.target)})),
+				Stream.unwrap
+			)
 		)
 	)
 )
@@ -89,19 +89,20 @@ export type QueuedComment = {
 }
 
 function groupCommentsByFile(comments: readonly QueuedComment[]) {
-	const groups = new Map<string, readonly QueuedComment[]>()
+	const groups = new Map<string, {comments: QueuedComment[]; filePath: string; key: string; scope: string}>()
 
 	for (const comment of comments) {
 		const key = `${comment.scope}:${comment.filePath}`
-		groups.set(key, [...(groups.get(key) ?? []), comment])
+		const group = groups.get(key)
+
+		if (group) {
+			group.comments.push(comment)
+		} else {
+			groups.set(key, {comments: [comment], filePath: comment.filePath, key, scope: comment.scope})
+		}
 	}
 
-	return Array.flatMap(Array.fromIterable(groups), entry => {
-		const comment = Array.head(entry[1])
-		return Option.isSome(comment)
-			? [{comments: entry[1], filePath: comment.value.filePath, key: entry[0], scope: comment.value.scope}]
-			: []
-	})
+	return Array.fromIterable(groups.values())
 }
 
 function DiffPage() {
@@ -113,130 +114,66 @@ function DiffPage() {
 }
 
 function ReviewViewPanel(input: {readonly cwd: string}) {
+	const navigate = Route.useNavigate()
+	const search = Route.useSearch()
+	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
+	const [base] = useState(suggestedMetadata.value.base)
+	const metadata = useAtomSuspense(metadataAtom({base, cwd: input.cwd}))
 	const [comments, setComments] = useState<readonly QueuedComment[]>(Array.empty())
 	const [shortcutsOpen, setShortcutsOpen] = useState(false)
-	const reviewPanel = useAtomSuspense(reviewPanelAtom(input.cwd))
-	const setReviewSelection = useAtomSet(reviewSelectionAtom(input.cwd))
-	function selectReviewEntry(selection: {readonly scope: string; readonly filePath: string}) {
-		setReviewSelection(selection)
-	}
-	const moveReviewSelectionAtom = Atom.fn(
-		Effect.fnUntraced(function* (selectionInput: {readonly cwd: string; readonly offset: number}, get: Atom.FnContext) {
-			const panel = yield* get.result(reviewPanelAtom(selectionInput.cwd))
-			if (!panel.selectedEntry) return
-			const nextEntry = Array.get(
-				panel.entries,
-				Math.max(
-					0,
-					Math.min(
-						pipe(
-							panel.entries,
-							Array.findFirstIndex(
-								entry =>
-									entry.scope === panel.selectedEntry?.scope &&
-									entry.diff.filePath === panel.selectedEntry.diff.filePath
-							),
-							Option.getOrElse(() => 0)
-						) + selectionInput.offset,
-						Array.length(panel.entries) - 1
-					)
-				)
-			)
-			if (Option.isNone(nextEntry)) return
-
-			get.set(reviewSelectionAtom(selectionInput.cwd), {
-				filePath: nextEntry.value.diff.filePath,
-				scope: nextEntry.value.scope
-			})
-		})
+	const selectedCommit = pipe(
+		metadata.value.commits,
+		Array.findFirst(commit => commit.hash === search.commit),
+		Option.getOrUndefined
 	)
-	const moveReviewSelection = useAtomSet(moveReviewSelectionAtom, {mode: 'promise'})
-	void moveReviewSelectionAtom
-	const toggleStageReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
-			const panel = yield* get.result(reviewPanelAtom(cwd))
-			if (!panel.selectedEntry) return
-
-			if (panel.selectedEntry.scope === 'head-to-staged') {
-				yield* get.setResult(RpcClient.mutation('review.unstageFile'), {
-					payload: {cwd, filePath: panel.selectedEntry.diff.filePath}
-				})
-				get.refresh(changesAtom(cwd))
-				get.refresh(stagedAtom(cwd))
-				return
+	const reviewTarget: ReviewTarget = selectedCommit
+		? {
+				commit: selectedCommit.hash,
+				from: selectedCommit.parents[0] ?? `${selectedCommit.hash}^`,
+				type: 'commit-to-worktree'
 			}
+		: {type: 'head-to-worktree'}
+	const [selectedFilePath, setSelectedFilePath] = useState('')
+	const reviewDiffs = useAtomSuspense(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const selectedEntry =
+		pipe(
+			reviewDiffs.value,
+			Array.findFirst(diff => diff.filePath === selectedFilePath),
+			Option.getOrUndefined
+		) ?? reviewDiffs.value[0]
+	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
+	const refreshMetadata = useAtomRefresh(metadataAtom({base, cwd: input.cwd}))
+	const refreshDiffs = useAtomRefresh(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const hasWipCommits = Array.some(metadata.value.commits, commit => commit.wip)
 
-			yield* get.setResult(RpcClient.mutation('review.stageFile'), {
-				payload: {cwd, filePath: panel.selectedEntry.diff.filePath}
-			})
+	useEffect(() => {
+		const firstFilePath = reviewDiffs.value[0]?.filePath
 
-			get.refresh(changesAtom(cwd))
-			get.refresh(stagedAtom(cwd))
+		if (firstFilePath === undefined) {
+			if (String.isNonEmpty(selectedFilePath)) setSelectedFilePath('')
+			return
+		}
+
+		if (!Array.some(reviewDiffs.value, diff => diff.filePath === selectedFilePath)) setSelectedFilePath(firstFilePath)
+	}, [reviewDiffs.value, selectedFilePath])
+
+	function selectTarget(target: ReviewTarget) {
+		startTransition(() => {
+			void navigate({search: target.type === 'commit-to-worktree' ? {commit: target.commit} : {}})
 		})
-	)
-	const toggleStageReviewEntry = useAtomSet(toggleStageReviewEntryAtom, {mode: 'promise'})
-	void toggleStageReviewEntryAtom
-	const discardReviewEntryAtom = Atom.fn(
-		Effect.fnUntraced(function* (cwd: string, get: Atom.FnContext) {
-			const panel = yield* get.result(reviewPanelAtom(cwd))
-			if (!panel.selectedEntry) return
-
-			if (panel.selectedEntry.scope === 'head-to-staged') {
-				yield* get.setResult(RpcClient.mutation('review.unstageFile'), {
-					payload: {cwd, filePath: panel.selectedEntry.diff.filePath}
-				})
-			}
-			yield* get.setResult(RpcClient.mutation('review.discardFile'), {
-				payload: {cwd, filePath: panel.selectedEntry.diff.filePath}
-			})
-
-			get.refresh(changesAtom(cwd))
-			get.refresh(stagedAtom(cwd))
-		})
-	)
-	const discardReviewEntry = useAtomSet(discardReviewEntryAtom, {mode: 'promise'})
-	void discardReviewEntryAtom
-
-	useHotkey('ArrowDown', () => void moveReviewSelection({cwd: input.cwd, offset: 1}), {
-		enabled: !Array.isReadonlyArrayEmpty(reviewPanel.value.entries)
-	})
-	useHotkey('ArrowUp', () => void moveReviewSelection({cwd: input.cwd, offset: -1}), {
-		enabled: !Array.isReadonlyArrayEmpty(reviewPanel.value.entries)
-	})
-	async function toggleSelectedEntryStage() {
-		if (!reviewPanel.value.selectedEntry) return
-
-		await toggleStageReviewEntry(input.cwd)
-		setComments(current =>
-			Array.map(current, comment =>
-				comment.scope === reviewPanel.value.selectedEntry?.scope &&
-				comment.filePath === reviewPanel.value.selectedEntry.diff.filePath
-					? {
-							...comment,
-							scope:
-								reviewPanel.value.selectedEntry.scope === 'head-to-staged' ? 'staged-to-worktree' : 'head-to-staged'
-						}
-					: comment
-			)
-		)
+		setSelectedFilePath('')
 	}
 
-	async function discardSelectedEntry() {
-		if (!reviewPanel.value.selectedEntry) return
-
-		await discardReviewEntry(input.cwd)
-		setComments(current =>
-			Array.filter(current, comment => comment.filePath !== reviewPanel.value.selectedEntry?.diff.filePath)
-		)
+	function selectCommit(commit: GitCommit) {
+		selectTarget({commit: commit.hash, from: commit.parents[0] ?? `${commit.hash}^`, type: 'commit-to-worktree'})
 	}
 
-	useHotkey('Enter', () => void toggleSelectedEntryStage(), {
-		enabled: Predicate.isNotUndefined(reviewPanel.value.selectedEntry)
-	})
-	useHotkey({key: 'D', shift: true}, () => void discardSelectedEntry(), {
-		enabled: Predicate.isNotUndefined(reviewPanel.value.selectedEntry),
-		preventDefault: true
-	})
+	function refreshReview() {
+		refreshSuggestedMetadata()
+		refreshMetadata()
+		refreshDiffs()
+	}
+
 	useHotkey({key: 'C', shift: true}, () => void copyComments(comments), {
 		enabled: !Array.isReadonlyArrayEmpty(comments),
 		preventDefault: true
@@ -286,12 +223,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		)
 	}
 
-	function deleteFileComments(group: Readonly<ReturnType<typeof groupCommentsByFile>[number]>) {
-		setComments(current =>
-			Array.filter(current, comment => comment.scope !== group.scope || comment.filePath !== group.filePath)
-		)
-	}
-
 	return (
 		<>
 			<Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
@@ -305,18 +236,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							<span>Show shortcuts</span>
 						</div>
 						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
-							<kbd className="border px-1.5 py-0.5 text-center">↑ / ↓</kbd>
-							<span>Move file selection</span>
-						</div>
-						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
-							<kbd className="border px-1.5 py-0.5 text-center">Enter</kbd>
-							<span>Stage or unstage selected file</span>
-						</div>
-						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
-							<kbd className="border px-1.5 py-0.5 text-center">Shift+D</kbd>
-							<span>Discard selected file</span>
-						</div>
-						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
 							<kbd className="border px-1.5 py-0.5 text-center">Shift+C</kbd>
 							<span>Copy all queued comments</span>
 						</div>
@@ -324,98 +243,52 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				</DialogContent>
 			</Dialog>
 			<ResizablePanelGroup orientation="horizontal">
-				<ResizablePanel defaultSize="24%" minSize="18%" maxSize="36%">
+				<ResizablePanel defaultSize="34%" minSize="24%" maxSize="46%">
 					<div className="flex h-full flex-col border-r">
-						<ResizablePanelGroup orientation="vertical">
-							<ResizablePanel defaultSize="50%" minSize="20%">
-								<DiffList
-									title="Unstaged changes"
-									empty="No changes."
-									diffs={reviewPanel.value.changesDiffs}
-									scope="staged-to-worktree"
-									selectedEntry={reviewPanel.value.selectedEntry}
-									selectReviewEntry={selectReviewEntry}
-								/>
-							</ResizablePanel>
-							<ResizableHandle />
-							<ResizablePanel defaultSize="50%" minSize="20%">
-								<DiffList
-									title="Staged changes"
-									empty="No staged changes."
-									diffs={reviewPanel.value.stagedDiffs}
-									scope="head-to-staged"
-									selectedEntry={reviewPanel.value.selectedEntry}
-									selectReviewEntry={selectReviewEntry}
-								/>
-							</ResizablePanel>
-						</ResizablePanelGroup>
+						<CommitActionForm
+							base={base}
+							cwd={input.cwd}
+							dirty={metadata.value.dirty}
+							hasWipCommits={hasWipCommits}
+							refreshReview={refreshReview}
+						/>
+						<div className="min-h-0 flex-[1.2] border-b">
+							<DiffList
+								diffs={reviewDiffs.value}
+								selectedEntry={selectedEntry}
+								selectReviewEntry={setSelectedFilePath}
+							/>
+						</div>
+						<div className="min-h-0 flex-1">
+							<CommitList
+								commits={metadata.value.commits}
+								selected={reviewTarget}
+								selectCommit={selectCommit}
+								selectHead={() => {
+									selectTarget({type: 'head-to-worktree'})
+								}}
+							/>
+						</div>
 					</div>
 				</ResizablePanel>
 				<ResizableHandle />
-				<ResizablePanel defaultSize="76%" minSize="36%">
+				<ResizablePanel defaultSize="66%" minSize="54%">
 					<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
-						<header className="flex min-h-8 items-center justify-between gap-2 border-b px-2">
-							<div className="flex min-w-0 items-center gap-1 overflow-hidden">
-								{Array.map(groupCommentsByFile(comments), group => (
-									<Button
-										key={group.key}
-										type="button"
-										variant="outline"
-										size="xs"
-										aria-label={`Delete ${group.comments.length} queued comments for ${group.filePath}`}
-										title={`Delete ${group.comments.length} comments for ${group.filePath}`}
-										onClick={() => {
-											deleteFileComments(group)
-										}}
-									>
-										<FileIcon filePath={group.filePath} />
-										<span className="max-w-32 truncate">{group.filePath.split('/').at(-1) ?? group.filePath}</span>
-									</Button>
-								))}
-							</div>
-							<div className="flex shrink-0 items-center gap-1">
-								<Button
-									type="button"
-									variant="destructive"
-									size="icon-xs"
-									aria-label="Delete all queued comments"
-									title="Delete all queued comments"
-									disabled={Array.isReadonlyArrayEmpty(comments)}
-									onClick={() => {
-										setComments(Array.empty())
-									}}
-								>
-									<TrashIcon />
-								</Button>
-								<Button
-									type="button"
-									variant="default"
-									size="icon-xs"
-									aria-label="Copy all queued comments"
-									title="Copy all queued comments"
-									disabled={Array.isReadonlyArrayEmpty(comments)}
-									onClick={() => void copyComments(comments)}
-								>
-									<ClipboardCopyIcon />
-								</Button>
-							</div>
-						</header>
 						<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-							{!reviewPanel.value.selectedEntry && (
+							{!selectedEntry && (
 								<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 									No changed files.
 								</div>
 							)}
-							{reviewPanel.value.selectedEntry && (
+							{selectedEntry && (
 								<div className="h-full min-h-0 min-w-0">
 									<PatchDiff
-										filePath={reviewPanel.value.selectedEntry.diff.filePath}
-										patch={reviewPanel.value.selectedEntry.diff.patch}
+										filePath={selectedEntry.filePath}
+										patch={selectedEntry.patch}
 										comments={Array.filter(
 											comments,
 											comment =>
-												comment.scope === reviewPanel.value.selectedEntry?.scope &&
-												comment.filePath === reviewPanel.value.selectedEntry.diff.filePath
+												comment.scope === targetKey(reviewTarget) && comment.filePath === selectedEntry.filePath
 										)}
 										onSaveComment={comment => {
 											setComments(current =>
@@ -423,13 +296,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 													current,
 													Array.filter(
 														currentComment =>
-															currentComment.scope !== reviewPanel.value.selectedEntry?.scope ||
+															currentComment.scope !== targetKey(reviewTarget) ||
 															currentComment.filePath !== comment.filePath ||
 															currentComment.lineNumber !== comment.lineNumber ||
 															(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
 																(comment.side === 'deletions' ? 'deletions' : 'file')
 													),
-													Array.append({...comment, scope: reviewPanel.value.selectedEntry?.scope ?? ''})
+													Array.append({...comment, scope: targetKey(reviewTarget)})
 												)
 											)
 										}}
@@ -438,7 +311,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 												Array.filter(
 													current,
 													currentComment =>
-														currentComment.scope !== reviewPanel.value.selectedEntry?.scope ||
+														currentComment.scope !== targetKey(reviewTarget) ||
 														currentComment.filePath !== comment.filePath ||
 														currentComment.lineNumber !== comment.lineNumber ||
 														(currentComment.side === 'deletions' ? 'deletions' : 'file') !==
@@ -450,6 +323,58 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								</div>
 							)}
 						</div>
+						{!Array.isReadonlyArrayEmpty(comments) && (
+							<footer className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t px-2">
+								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
+									{Array.map(groupCommentsByFile(comments), group => (
+										<Button
+											key={group.key}
+											type="button"
+											variant="outline"
+											size="xs"
+											aria-label={`Delete ${group.comments.length} queued comments for ${group.filePath}`}
+											title={`Delete ${group.comments.length} comments for ${group.filePath}`}
+											onClick={() => {
+												setComments(current =>
+													Array.filter(
+														current,
+														comment => comment.scope !== group.scope || comment.filePath !== group.filePath
+													)
+												)
+											}}
+										>
+											<FileIcon filePath={group.filePath} />
+											<span className="max-w-32 truncate">{group.filePath.split('/').at(-1) ?? group.filePath}</span>
+										</Button>
+									))}
+								</div>
+								<div className="flex h-8 shrink-0 items-center gap-1">
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label="Copy all queued comments"
+										title="Copy all queued comments"
+										onClick={() => void copyComments(comments)}
+									>
+										<CopyIcon />
+									</Button>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										className="text-destructive hover:text-destructive"
+										aria-label="Delete all queued comments"
+										title="Delete all queued comments"
+										onClick={() => {
+											setComments(Array.empty())
+										}}
+									>
+										<TrashIcon />
+									</Button>
+								</div>
+							</footer>
+						)}
 					</div>
 				</ResizablePanel>
 			</ResizablePanelGroup>
@@ -457,83 +382,259 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	)
 }
 
-function DiffList(input: {
-	readonly title: string
-	readonly empty: string
-	readonly diffs: readonly GitDiff[]
-	readonly scope: string
-	readonly selectedEntry?: {readonly scope: string; readonly diff: GitDiff}
-	readonly selectReviewEntry: (selection: {readonly scope: string; readonly filePath: string}) => void
+function CommitActionForm(input: {
+	readonly base: string
+	readonly cwd: string
+	readonly dirty: boolean
+	readonly hasWipCommits: boolean
+	readonly refreshReview: () => void
+}) {
+	const [commitMessage, setCommitMessage] = useState('')
+	const createWipCommit = useAtomSet(RpcClient.mutation('review.createWipCommit'), {mode: 'promise'})
+	const commitAndPush = useAtomSet(RpcClient.mutation('review.commitAndPush'), {mode: 'promise'})
+	const trimmedCommitMessage = pipe(commitMessage, String.trim)
+	const disabled = String.isEmpty(trimmedCommitMessage) || (!input.dirty && !input.hasWipCommits)
+	const title = input.dirty ? 'Create WIP commit' : 'Squash WIP commits and push'
+
+	async function submit() {
+		if (disabled) return
+
+		try {
+			if (input.dirty) {
+				await createWipCommit({payload: {cwd: input.cwd, message: trimmedCommitMessage}})
+			} else {
+				await commitAndPush({payload: {base: input.base, cwd: input.cwd, message: trimmedCommitMessage}})
+			}
+			setCommitMessage('')
+			input.refreshReview()
+		} catch {
+			toast.error(input.dirty ? 'Failed to create WIP commit.' : 'Failed to commit and push.')
+		}
+	}
+
+	return (
+		<form
+			className="grid gap-1 border-b p-2"
+			onSubmit={event => {
+				event.preventDefault()
+				void submit()
+			}}
+		>
+			<InputGroup>
+				<InputGroupInput
+					autoComplete="off"
+					value={commitMessage}
+					placeholder="commit message"
+					onChange={event => {
+						setCommitMessage(event.currentTarget.value)
+					}}
+				/>
+				<InputGroupAddon align="inline-end">
+					<InputGroupButton
+						type="submit"
+						variant="ghost"
+						size="xs"
+						aria-label={title}
+						disabled={disabled}
+						title={title}
+					>
+						{input.dirty ? <GitCompareIcon /> : <UploadIcon />}
+						{input.dirty ? 'WIP' : 'Commit'}
+					</InputGroupButton>
+				</InputGroupAddon>
+			</InputGroup>
+		</form>
+	)
+}
+
+function CommitList(input: {
+	readonly commits: readonly GitCommit[]
+	readonly selected: ReviewTarget
+	readonly selectCommit: (commit: GitCommit) => void
+	readonly selectHead: () => void
 }) {
 	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
+				<TreeExplorerSection label="History" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+					<li className="w-full min-w-0">
+						<button
+							type="button"
+							aria-current={input.selected.type === 'head-to-worktree' ? 'page' : undefined}
+							onClick={input.selectHead}
+							className={cn(
+								'text-muted-foreground hover:bg-muted hover:text-foreground grid h-8 w-full min-w-0 grid-cols-[minmax(0,1fr)_52px] items-center gap-2 px-2 text-left text-xs',
+								input.selected.type === 'head-to-worktree' && 'bg-primary/15 text-primary'
+							)}
+						>
+							<span className="min-w-0 truncate">HEAD</span>
+							<span className="text-muted-foreground font-mono">worktree</span>
+						</button>
+					</li>
+					{Array.map(input.commits, commit => {
+						const selected = input.selected.type === 'commit-to-worktree' && input.selected.commit === commit.hash
+
+						return (
+							<li key={commit.hash} className="w-full min-w-0">
+								<button
+									type="button"
+									aria-current={selected ? 'page' : undefined}
+									onClick={() => {
+										input.selectCommit(commit)
+									}}
+									className={cn(
+										'text-muted-foreground hover:bg-muted hover:text-foreground grid h-8 w-full min-w-0 grid-cols-[minmax(0,1fr)_52px] items-center gap-2 px-2 text-left text-xs',
+										selected && 'bg-primary/15 text-primary'
+									)}
+								>
+									<span className="min-w-0 truncate">
+										<span className={cn(commit.wip && 'text-amber-600 dark:text-amber-400')}>{commit.subject}</span>
+									</span>
+									<span className="text-muted-foreground font-mono">{commit.shortHash}</span>
+								</button>
+							</li>
+						)
+					})}
+				</TreeExplorerSection>
+			</TreeExplorer>
+		</div>
+	)
+}
+
+type FileTreeNode =
+	| {readonly children: FileTreeNode[]; readonly name: string; readonly path: string; readonly type: 'directory'}
+	| {readonly diff: GitDiff; readonly name: string; readonly path: string; readonly type: 'file'}
+
+function buildFileTree(diffs: readonly GitDiff[]) {
+	const root = {children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory' as const}
+
+	for (const diff of diffs) {
+		const parts = diff.filePath.split('/')
+		let directory = root
+
+		for (const part of Array.dropRight(parts, 1)) {
+			const path = directory.path ? `${directory.path}/${part}` : part
+			const current = pipe(
+				directory.children,
+				Array.findFirst(child => child.name === part),
+				Option.getOrUndefined
+			)
+
+			if (current?.type === 'directory') {
+				directory = current
+			} else {
+				const next = {children: Array.empty<FileTreeNode>(), name: part, path, type: 'directory' as const}
+				directory.children.push(next)
+				directory = next
+			}
+		}
+
+		directory.children.push({diff, name: parts.at(-1) ?? diff.filePath, path: diff.filePath, type: 'file'})
+	}
+
+	return pipe(
+		root.children,
+		Array.map(node => (node.type === 'directory' ? collapseSingleChildDirectory(node) : node))
+	)
+}
+
+function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly type: 'directory'}>) {
+	const child = directory.children[0]
+
+	if (Array.length(directory.children) === 1 && child?.type === 'directory') {
+		return collapseSingleChildDirectory({
+			children: child.children,
+			name: `${directory.name}/${child.name}`,
+			path: child.path,
+			type: 'directory'
+		})
+	}
+
+	return directory
+}
+
+function DiffList(input: {
+	readonly diffs: readonly GitDiff[]
+	readonly selectedEntry?: GitDiff
+	readonly selectReviewEntry: (filePath: string) => void
+}) {
+	const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set())
+
+	function toggleFolder(path: string) {
+		setCollapsedFolders(current => {
+			const next = new Set(current)
+			if (next.has(path)) {
+				next.delete(path)
+			} else {
+				next.add(path)
+			}
+			return next
+		})
+	}
+
+	function renderNode(node: FileTreeNode) {
+		if (node.type === 'directory') {
+			const collapsed = collapsedFolders.has(node.path)
+
+			return (
+				<li key={node.path} className="w-full min-w-0">
+					<TreeExplorerRow
+						icon={<FolderIcon className="size-3.5 shrink-0" />}
+						onClick={() => {
+							toggleFolder(node.path)
+						}}
+						actions={<span className="text-muted-foreground text-[10px]">{Array.length(node.children)}</span>}
+					>
+						{node.name}
+					</TreeExplorerRow>
+					{!collapsed && (
+						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+							{Array.map(node.children, renderNode)}
+						</ul>
+					)}
+				</li>
+			)
+		}
+
+		return (
+			<li key={node.path} className="w-full min-w-0">
+				<TreeExplorerRow
+					selected={input.selectedEntry?.filePath === node.diff.filePath}
+					icon={<FileIcon filePath={node.diff.filePath} className="size-3" />}
+					actions={<DiffStatus status={node.diff.status} />}
+					onClick={() => {
+						input.selectReviewEntry(node.diff.filePath)
+					}}
+				>
+					{node.name}
+				</TreeExplorerRow>
+			</li>
+		)
+	}
+
+	return (
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
-			<TreeExplorerSection label={input.title} className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-				<DiffListEntries
-					diffs={input.diffs}
-					empty={input.empty}
-					scope={input.scope}
-					selectedEntry={input.selectedEntry}
-					selectReviewEntry={input.selectReviewEntry}
-				/>
+			<TreeExplorerSection label="Changed files" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+				{Array.isReadonlyArrayEmpty(input.diffs) ? (
+					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2 text-xs">
+						No changed files.
+					</li>
+				) : (
+					Array.map(buildFileTree(input.diffs), renderNode)
+				)}
 			</TreeExplorerSection>
 		</TreeExplorer>
 	)
 }
 
-function DiffListEntries(input: {
-	readonly empty: string
-	readonly diffs: readonly GitDiff[]
-	readonly scope: string
-	readonly selectedEntry?: {readonly scope: string; readonly diff: GitDiff}
-	readonly selectReviewEntry: (selection: {readonly scope: string; readonly filePath: string}) => void
-}) {
-	if (Array.isReadonlyArrayEmpty(input.diffs)) {
-		return (
-			<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2 text-xs">{input.empty}</li>
-		)
-	}
-
-	return Array.map(input.diffs, diff => (
-		<li key={diff.filePath} className="w-full min-w-0">
-			<button
-				type="button"
-				aria-current={
-					Predicate.isNotUndefined(input.selectedEntry) &&
-					input.selectedEntry.scope === input.scope &&
-					input.selectedEntry.diff.filePath === diff.filePath
-						? 'page'
-						: undefined
-				}
-				onClick={() => {
-					input.selectReviewEntry({filePath: diff.filePath, scope: input.scope})
-				}}
-				className={cn(
-					'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full grid-cols-[18px_14px_minmax(0,1fr)] items-center gap-1.5 px-2 text-left text-xs',
-					Predicate.isNotUndefined(input.selectedEntry) &&
-						input.selectedEntry.scope === input.scope &&
-						input.selectedEntry.diff.filePath === diff.filePath &&
-						'bg-primary/15 text-primary'
-				)}
-			>
-				{pipe(
-					Match.value(diff.status),
-					Match.when('added', () => (
-						<span className="text-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
-					)),
-					Match.when('deleted', () => (
-						<span className="text-center text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>
-					)),
-					Match.when('renamed', () => (
-						<span className="text-center text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>
-					)),
-					Match.when('modified', () => (
-						<span className="text-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>
-					)),
-					Match.exhaustive
-				)}
-				<FileIcon filePath={diff.filePath} className="size-3" />
-				<span className="min-w-0 truncate">{diff.filePath}</span>
-			</button>
-		</li>
-	))
+function DiffStatus(input: {readonly status: GitDiff['status']}) {
+	return pipe(
+		Match.value(input.status),
+		Match.when('added', () => (
+			<span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
+		)),
+		Match.when('deleted', () => <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>),
+		Match.when('renamed', () => <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>),
+		Match.orElse(() => <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>)
+	)
 }

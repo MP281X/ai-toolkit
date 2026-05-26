@@ -23,7 +23,7 @@ export function resolveLanguage(lang = '') {
 		Match.when(Match.is('ts', 'tsx', 'js', 'jsx', 'javascript', 'typescript'), () => 'tsx' as const),
 		Match.when(Match.is('sh', 'bash', 'zsh', 'shell'), () => 'shell' as const),
 		Match.when(Match.is('md', 'markdown'), () => 'markdown' as const),
-		Match.when(Match.is('json', 'jsonc', 'json5'), () => 'jsonc' as const),
+		Match.when(Match.is('json', 'jsonc', 'json5', 'lock'), () => 'jsonc' as const),
 		Match.orElse(() => 'text' as const)
 	)
 }

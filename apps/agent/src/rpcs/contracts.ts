@@ -4,7 +4,16 @@ import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 import {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
 import {AgentEvent, AgentKey, AgentStatus} from '@ai-toolkit/ai/schema'
-import {GitBranchesSnapshot, GitDiff, GitDiffScope, GitError, GitProject} from '@ai-toolkit/git/schema'
+import {
+	GitBranchesSnapshot,
+	GitDiff,
+	GitDiffScope,
+	GitError,
+	GitProject,
+	GitReviewFrom,
+	GitReviewMetadata,
+	GitReviewTo
+} from '@ai-toolkit/git/schema'
 import {TerminalError, TerminalEvent} from '@ai-toolkit/terminal/schema'
 
 export class RpcContracts extends RpcGroup.make(
@@ -19,6 +28,25 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({cwd: Schema.String, scope: GitDiffScope}),
 		stream: true,
 		success: Schema.Array(GitDiff)
+	}),
+	Rpc.make('review.metadata', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.optional(Schema.String), cwd: Schema.String}),
+		success: GitReviewMetadata
+	}),
+	Rpc.make('review.watchRange', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, from: GitReviewFrom, to: GitReviewTo}),
+		stream: true,
+		success: Schema.Array(GitDiff)
+	}),
+	Rpc.make('review.createWipCommit', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, message: Schema.String})
+	}),
+	Rpc.make('review.commitAndPush', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, message: Schema.String})
 	}),
 	Rpc.make('review.stageFile', {
 		error: GitError,

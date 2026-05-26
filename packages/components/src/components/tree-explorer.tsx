@@ -18,7 +18,7 @@ export function TreeExplorerSection(props: {
 					{props.label}
 				</div>
 			)}
-			<ul className="flex flex-col gap-px px-0">{props.children}</ul>
+			<ul className="flex flex-col px-0">{props.children}</ul>
 		</section>
 	)
 }
@@ -36,7 +36,7 @@ export function TreeExplorerRow(props: {
 			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
 	)
 	const label = (
-		<span className="flex min-w-0 flex-1 items-center gap-1.5">
+		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
 			{Predicate.isNotUndefined(props.icon) && (
 				<span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>
 			)}
