@@ -241,13 +241,13 @@ function ToolPart(input: {
 	if (input.resultPart) state = input.resultPart.isFailure ? 'failed' : 'done'
 
 	return (
-		<Collapsible className="group bg-muted/10 border">
-			<CollapsibleTrigger className="text-muted-foreground flex min-h-6 w-full items-center gap-1.5 px-1.5 py-0.5 text-left font-mono text-[10px]">
+		<Collapsible className="group bg-muted/5 border">
+			<CollapsibleTrigger className="text-muted-foreground hover:bg-muted/40 flex min-h-7 w-full items-center gap-2 px-2 py-1 text-left font-mono text-[11px]">
 				<Wrench className="size-3 shrink-0" />
-				<span className="text-foreground border px-1 leading-none">{part.name}</span>
+				<span className="text-foreground leading-none">{part.name}</span>
 				<span>{state}</span>
 				{input.resultPart?.preliminary && <span>preliminary</span>}
-				<span className="text-foreground/80 min-w-0 flex-1 truncate">{summary}</span>
+				{String.isNonEmpty(summary) && <span className="min-w-0 flex-1 truncate">{summary}</span>}
 				<ChevronRight className="size-3 shrink-0 transition-transform duration-150 group-data-open:rotate-90" />
 			</CollapsibleTrigger>
 			<CollapsibleContent>
@@ -306,9 +306,11 @@ function summarizeToolPayload(name: string, payload: unknown, inputPayload: unkn
 }
 
 function getErrorText(value: unknown) {
-	return formatError(
-		getStringField(value, 'description') ?? getStringField(value, 'message') ?? getStringField(value, '_tag') ?? value
-	)
+	if (Predicate.isNullish(value)) return
+	const error =
+		getStringField(value, 'description') ?? getStringField(value, 'message') ?? getStringField(value, '_tag')
+	if (Predicate.isUndefined(error)) return
+	return formatError(error)
 }
 
 function ToolField(input: {readonly label: string; readonly value: unknown}) {
