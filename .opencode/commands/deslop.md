@@ -65,7 +65,7 @@ For Effect:
 
 ## Static Rules
 
-Do not duplicate oxlint or oxfmt policy in this manual pass. If static analysis already covers something, let `bun run check` enforce it.
+Do not duplicate oxlint or oxfmt policy in this manual pass. If static analysis already covers something, let `vp run check` enforce it.
 
 Treat TypeScript, oxlint, and formatter diagnostics as design feedback. Rewrite the code instead of suppressing, bypassing, or working around diagnostics.
 
@@ -73,7 +73,7 @@ Treat TypeScript, oxlint, and formatter diagnostics as design feedback. Rewrite 
 
 1. Inspect every changed source file.
 2. Apply the simplifications above.
-3. Run `bun run check`.
+3. Run `vp run check`.
 4. Repeat until a full round finds no behavior-preserving, reviewability-improving simplification.
 
 ## Constraints
@@ -98,5 +98,5 @@ If a simplification is blocked, leave that specific code unchanged and continue 
 
 - Every changed file has gone through at least two simplification rounds.
 - A final round finds no further behavior-preserving, reviewability-improving simplification.
-- `bun run check` passes.
+- `vp run check` passes.
 - Remaining blockers are documented with the required details.

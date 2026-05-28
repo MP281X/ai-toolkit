@@ -36,5 +36,5 @@
 
 ## Verification
 
-- After code changes, run `bun run check`, then `bun run test`, before yielding back
+- After code changes, run `vp run check` before yielding back
 - Treat TypeScript and Biome diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them

@@ -383,8 +383,7 @@ Core cases:
 Run repo verification after implementation:
 
 ```txt
-bun run check
-bun run test
+vp run check
 ```
 
 ## Implementation Order
@@ -396,7 +395,7 @@ bun run test
 5. Add a minimal checkpoint route or panel in `apps/agent`.
 6. Render Mermaid graph with `Mermaid` component.
 7. Add create and restore actions.
-8. Run `bun run check` and `bun run test`.
+8. Run `vp run check`.
 
 ## Open Implementation Detail
 

@@ -18,11 +18,7 @@
 	},
 
 	"scripts": {
-		"codegen:codex-app-server": "bun run codegen/codex-app-server.ts",
-
-		"test": "bun test --concurrent",
-		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check . && oxlint ."
+		"codegen:codex-app-server": "vp node codegen/codex-app-server.ts"
 	},
 
 	"dependencies": {

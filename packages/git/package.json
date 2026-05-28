@@ -10,10 +10,5 @@
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts"
-	},
-
-	"scripts": {
-		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check . && oxlint ."
 	}
 }

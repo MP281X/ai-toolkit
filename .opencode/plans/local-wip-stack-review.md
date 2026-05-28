@@ -305,8 +305,7 @@ Do not make this required in the first implementation.
 7. Add WIP commit button.
 8. Add safe restore-from-commit action.
 9. Remove staged/unstaged UI and shortcuts.
-10. Run `bun run check`.
-11. Run `bun run test`.
+10. Run `vp run check`.
 
 ## Open Decisions
 

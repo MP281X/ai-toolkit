@@ -2,10 +2,7 @@
   "type": "module",
   "sideEffects": false,
   "name": "@ai-toolkit/.opencode",
-  "scripts": {
-    "fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-    "check": "oxfmt --check . && oxlint ."
-  },
+
   "dependencies": {
     "@opencode-ai/plugin": "1.4.6",
     "@ai-toolkit/git": "workspace:*"
