@@ -19,7 +19,7 @@ You are an app generator. Copy `@apps/portfolio/` and apply systematic transform
      ! -path "*/.git/*" \
      -exec cp --parents {} apps/{name}/ \;
    ```
-5. Run `bun install` from repo root to update lockfile with new workspace member
+5. Run `vp install` from repo root to update lockfile with new workspace member
 6. Apply all transformations
 7. Delete all route files except `(home)/index.tsx` and `__root.tsx`
 8. Replace `(home)/index.tsx` with placeholder content
@@ -93,7 +93,7 @@ function RouteComponent() {
 ## Definition of done
 
 - `@apps/{name}/` exists with all template files copied
-- `bun install` run to update workspace lockfile
+- `vp install` run to update workspace lockfile
 - package.json has correct name and ports
 - vite.config.ts proxy points to correct server port
 - index.html has correct title
@@ -101,4 +101,4 @@ function RouteComponent() {
 - lib files reference correct telemetry names
 - Only home route exists with placeholder content
 - No portfolio-specific code remains
-- `bun run type-check` passes
+- `vp run type-check` passes

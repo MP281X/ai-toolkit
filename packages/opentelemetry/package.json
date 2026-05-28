@@ -8,11 +8,6 @@
 		"./server": "./src/server.ts"
 	},
 
-	"scripts": {
-		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check . && oxlint ."
-	},
-
 	"dependencies": {
 		"@effect/opentelemetry": "^4.0.0-beta",
 

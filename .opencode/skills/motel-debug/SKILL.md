@@ -38,7 +38,7 @@ motel start
 `motel start` ensures a managed daemon process is running, writes a
 lockfile under `.motel-data/`, and returns a JSON status blob. It's
 idempotent — safe to call repeatedly. If motel isn't on `PATH`, fall
-back to `bunx @kitlangton/motel start`.
+back to `vp dlx @kitlangton/motel start`.
 
 After starting, re-check `GET /api/health` (may take 1–2s to become
 ready). If it still fails, read `.motel-data/daemon.log` for the error

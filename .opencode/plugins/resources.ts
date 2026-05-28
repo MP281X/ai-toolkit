@@ -25,7 +25,8 @@ export const plugin = (async context => {
 					{name: 'effect-lsp', url: 'https://github.com/Effect-TS/language-service'},
 					{name: 'codex', url: 'https://github.com/openai/codex'},
 					{name: 'opencode', url: 'https://github.com/anomalyco/opencode'},
-					{name: 'react-doctor', url: 'https://github.com/millionco/react-doctor'}
+					{name: 'react-doctor', url: 'https://github.com/millionco/react-doctor'},
+					{name: 'portless', url: 'https://github.com/vercel-labs/portless'}
 				] as const,
 				Effect.fnUntraced(function* (resource) {
 					yield* GitWorkspace.use(git =>

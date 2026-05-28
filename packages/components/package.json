@@ -15,11 +15,6 @@
 		"./theme.css": "./src/theme.css"
 	},
 
-	"scripts": {
-		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check . && oxlint ."
-	},
-
 	"dependencies": {
 		"cmdk": "latest",
 		"sonner": "latest",
@@ -54,7 +49,7 @@
 		"react": "^19",
 		"react-dom": "^19",
 
-		"shadcn": "latest",
+		"shadcn": "^4",
 		"tailwindcss": "^4"
 	}
 }

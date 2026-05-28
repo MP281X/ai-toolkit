@@ -2,7 +2,7 @@ import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import {tanstackRouter} from '@tanstack/router-plugin/vite'
 import react, {reactCompilerPreset} from '@vitejs/plugin-react'
-import {defineConfig} from 'vite'
+import {defineConfig} from 'vite-plus'
 
 export default defineConfig({
 	build: {
@@ -11,6 +11,7 @@ export default defineConfig({
 		outDir: 'dist/client',
 		rolldownOptions: {experimental: {lazyBarrel: true}}
 	},
+	clearScreen: false,
 	plugins: [
 		tanstackRouter({autoCodeSplitting: true, target: 'react'}),
 		react(),

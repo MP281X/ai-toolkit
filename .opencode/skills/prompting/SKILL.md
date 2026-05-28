@@ -72,7 +72,7 @@ Inline single-use helpers. Match existing naming conventions. Never add new abst
 ## Rules
 - Follow existing codebase patterns
 - Type-check must pass before returning
-- Run `bun run type-check` after changes
+- Run `vp run type-check` after changes
 ```
 
 ## OpenCode specifics

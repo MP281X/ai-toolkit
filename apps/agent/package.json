@@ -10,14 +10,11 @@
 	},
 
 	"scripts": {
-		"dev:client": "vite dev --port 3020",
+		"dev:client": "vp dev --port 3020",
 		"dev:server": "bun --watch --port 3021 ./src/main.server.tsx",
 
-		"build:client": "vite build",
-		"build:server": "bun build ./src/main.server.tsx --target=bun --outfile ./dist/server.js",
-
-		"fix": "oxlint --fix-dangerously --silent . || true; oxfmt . || true",
-		"check": "oxfmt --check . && oxlint ."
+		"build:client": "vp build",
+		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
 	},
 
 	"dependencies": {
@@ -35,12 +32,13 @@
 	},
 
 	"devDependencies": {
-		"vite": "latest",
+		"vite": "catalog:",
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",
 		"babel-plugin-react-compiler": "latest",
 
 		"tailwindcss": "latest",
-		"@tailwindcss/vite": "latest"
+		"@tailwindcss/vite": "latest",
+		"vite-plus": "catalog:"
 	}
 }
