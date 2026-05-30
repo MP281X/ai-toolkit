@@ -17,25 +17,22 @@
 		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
 	},
 
-	"dependencies": {
+	"devDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
+
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/components": "workspace:*",
-		"@deslop/opentelemetry": "workspace:*"
-	},
+		"@deslop/opentelemetry": "workspace:*",
 
-	"devDependencies": {
-		"vite": "catalog:",
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",
 		"babel-plugin-react-compiler": "latest",
 
 		"tailwindcss": "latest",
-		"@tailwindcss/vite": "latest",
-		"vite-plus": "catalog:"
+		"@tailwindcss/vite": "latest"
 	}
 }
