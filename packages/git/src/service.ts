@@ -56,7 +56,7 @@ const makeGitExecutor = Effect.gen(function* () {
 	return {lines, string}
 })
 
-export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/git/service/GitWorkspace', {
+export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/service/GitWorkspace', {
 	make: Effect.gen(function* () {
 		const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 		const git = yield* makeGitExecutor
@@ -350,7 +350,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 			}) {
 				const targetDirectory = path.join(
 					Bun.env['HOME'] ?? input.cwd,
-					'.ai-toolkit',
+					'.deslop',
 					'worktrees',
 					`${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(path.basename(input.cwd))}-${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`
 				)
@@ -443,7 +443,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@ai-toolkit/g
 	public static layer = Layer.effect(this, this.make)
 }
 
-export class GitWorktree extends Context.Service<GitWorktree>()('@ai-toolkit/git/service/GitWorktree', {
+export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/service/GitWorktree', {
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		const git = yield* makeGitExecutor
 		const fs = yield* FileSystem.FileSystem

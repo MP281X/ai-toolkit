@@ -6,7 +6,7 @@ import * as Rpc from 'effect/unstable/rpc'
 import {Socket} from 'effect/unstable/socket'
 
 import {RpcContracts} from '#rpcs/contracts.ts'
-import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
+import {OtelLayer} from '@deslop/opentelemetry/client'
 
 export const LiveLayers = pipe(
 	Layer.empty,

@@ -1,8 +1,8 @@
 import {Context, Duration, Effect, Layer, RcMap, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {RpcContracts} from '#rpcs/contracts.ts'
-import {GitWorkspace, GitWorktree} from '@ai-toolkit/git/service'
-import {Terminal} from '@ai-toolkit/terminal/service'
+import {GitWorkspace, GitWorktree} from '@deslop/git/service'
+import {Terminal} from '@deslop/terminal/service'
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,

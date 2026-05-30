@@ -4,7 +4,7 @@ import {Function} from 'effect'
 
 import {HeadContent, Scripts, createRootRoute} from '@tanstack/react-router'
 
-import {Toaster} from '@ai-toolkit/components/ui/sonner'
+import {Toaster} from '@deslop/components/ui/sonner'
 
 export const Route = createRootRoute({
 	head: Function.constant({

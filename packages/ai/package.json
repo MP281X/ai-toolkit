@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/ai",
+	"name": "@deslop/ai",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",

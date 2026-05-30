@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/opentelemetry",
+	"name": "@deslop/opentelemetry",
 
 	"exports": {
 		"./client": "./src/client.ts",

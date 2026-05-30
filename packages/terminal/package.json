@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/terminal",
+	"name": "@deslop/terminal",
 
 	"exports": {
 		"./schema": "./src/schema.ts",

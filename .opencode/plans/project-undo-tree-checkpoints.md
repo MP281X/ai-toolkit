@@ -143,7 +143,7 @@ The hidden Git directory is app-owned and local-only.
 It should live under the app data directory, for example:
 
 ```txt
-~/.ai-toolkit/git-checkpoints/<hash(cwd)>/
+~/.deslop/git-checkpoints/<hash(cwd)>/
 ```
 
 Snapshot operations should run Git with:
@@ -187,7 +187,7 @@ Add a cwd-scoped service in `@packages/git`, following the current `GitWorktree.
 Proposed service:
 
 ```ts
-export class GitCheckpoint extends Context.Service<GitCheckpoint>()('@ai-toolkit/git/service/GitCheckpoint', {
+export class GitCheckpoint extends Context.Service<GitCheckpoint>()('@deslop/git/service/GitCheckpoint', {
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		return {checkpoint, restore, state, mermaid}
 	})

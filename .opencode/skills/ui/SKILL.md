@@ -5,7 +5,7 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 ## Rules
 
-- Use `@ai-toolkit/components` components directly before writing custom UI
+- Use `@deslop/components` components directly before writing custom UI
 - Compose available components instead of wrapping them or creating app-specific abstractions
 - Reduce custom code to the smallest glue needed for layout, state, and data
 - Install useful missing shadcn components instead of creating custom components
@@ -19,7 +19,7 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 ## Component priority
 
-1. Use existing `@ai-toolkit/components` components directly
+1. Use existing `@deslop/components` components directly
 2. Compose available components with minimal glue code
 3. Install missing shadcn components with `vp dlx shadcn@latest add <name>`
 4. Install logos from `@svgl` when needed
@@ -27,7 +27,7 @@ description: Component styling with Tailwind, shadcn primitives, theme tokens, a
 
 ## Available components
 
-Import from `@ai-toolkit/components/<name>`.
+Import from `@deslop/components/<name>`.
 
 <available_components>
 !`rg --files packages/components/src/components | sort | while read -r path; do component="${path#packages/components/src/components/}"; printf '%s\n' "${component%.tsx}"; done`
@@ -46,7 +46,7 @@ Import from `@ai-toolkit/components/<name>`.
 
 ## DevTools
 
-Import: `import {DevTools} from '@ai-toolkit/components/dev-tools'`
+Import: `import {DevTools} from '@deslop/components/dev-tools'`
 
 DevTools components explore possibilities — not production code. Design rules apply loosely. Be creative, try different directions.
 

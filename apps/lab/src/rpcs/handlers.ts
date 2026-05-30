@@ -3,13 +3,13 @@ import {Cause, Context, Duration, Effect, FiberHandle, Layer, RcMap, Stream, Sub
 import {Prompt, Response} from 'effect/unstable/ai'
 
 import {RpcContracts} from '#rpcs/contracts.ts'
-import type {ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import type {AgentEvent} from '@ai-toolkit/ai/schema'
-import {AgentKey} from '@ai-toolkit/ai/schema'
-import {Agent} from '@ai-toolkit/ai/service'
-import {makeResumableStream} from '@ai-toolkit/ai/utils'
+import type {ModelId, ProviderId} from '@deslop/ai/catalog'
+import type {AgentEvent} from '@deslop/ai/schema'
+import {AgentKey} from '@deslop/ai/schema'
+import {Agent} from '@deslop/ai/service'
+import {makeResumableStream} from '@deslop/ai/utils'
 
-const systemPrompt = Prompt.makeMessage('system', {content: 'You are running inside @ai-toolkit/lab.'})
+const systemPrompt = Prompt.makeMessage('system', {content: 'You are running inside @deslop/lab.'})
 
 const AgentSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(10),

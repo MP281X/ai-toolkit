@@ -184,7 +184,7 @@ const makeCodexClient = Effect.fnUntraced(function* (config: {readonly cwd: stri
 
 	yield* request('initialize', {
 		capabilities: {experimentalApi: true, optOutNotificationMethods: null},
-		clientInfo: {name: '@ai-toolkit/ai', title: 'AI Toolkit', version: '0.0.0'}
+		clientInfo: {name: '@deslop/ai', title: 'AI Toolkit', version: '0.0.0'}
 	})
 	yield* pipe(writeJson(child, {method: 'initialized'}), Effect.orDie)
 

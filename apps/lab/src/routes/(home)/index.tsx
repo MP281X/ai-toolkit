@@ -7,11 +7,11 @@ import {Atom} from 'effect/unstable/reactivity'
 import {useRef, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {AgentId} from '@ai-toolkit/ai/catalog'
-import {AgentId as AgentIdSchema, models} from '@ai-toolkit/ai/catalog'
-import type {AgentEvent, AgentKey} from '@ai-toolkit/ai/schema'
-import {compactAiParts} from '@ai-toolkit/ai/utils'
-import {Conversation} from '@ai-toolkit/components/conversation'
+import type {AgentId} from '@deslop/ai/catalog'
+import {AgentId as AgentIdSchema, models} from '@deslop/ai/catalog'
+import type {AgentEvent, AgentKey} from '@deslop/ai/schema'
+import {compactAiParts} from '@deslop/ai/utils'
+import {Conversation} from '@deslop/components/conversation'
 import {
 	AgentIcon,
 	ArrowUpIcon,
@@ -21,13 +21,13 @@ import {
 	Square,
 	UserIcon,
 	Wrench
-} from '@ai-toolkit/components/icons'
-import {Markdown} from '@ai-toolkit/components/render/markdown'
-import {RichTextArea} from '@ai-toolkit/components/rich-text-area'
-import {Button} from '@ai-toolkit/components/ui/button'
-import {Input} from '@ai-toolkit/components/ui/input'
-import {Select, SelectContent, SelectItem, SelectTrigger} from '@ai-toolkit/components/ui/select'
-import {formatNumber} from '@ai-toolkit/components/utils'
+} from '@deslop/components/icons'
+import {Markdown} from '@deslop/components/render/markdown'
+import {RichTextArea} from '@deslop/components/rich-text-area'
+import {Button} from '@deslop/components/ui/button'
+import {Input} from '@deslop/components/ui/input'
+import {Select, SelectContent, SelectItem, SelectTrigger} from '@deslop/components/ui/select'
+import {formatNumber} from '@deslop/components/utils'
 
 export const Route = createFileRoute('/(home)/')({component: LabPage})
 

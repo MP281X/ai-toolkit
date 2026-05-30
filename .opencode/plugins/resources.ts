@@ -4,7 +4,7 @@ import {Effect, pipe} from 'effect'
 
 import type {Plugin} from '@opencode-ai/plugin'
 
-import {GitWorkspace} from '@ai-toolkit/git/service'
+import {GitWorkspace} from '@deslop/git/service'
 
 export const plugin = (async context => {
 	void Effect.runPromise(

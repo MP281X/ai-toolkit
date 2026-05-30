@@ -17,9 +17,9 @@ import {
 	Square,
 	TerminalIcon,
 	Trash
-} from '@ai-toolkit/components/icons'
-import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@ai-toolkit/components/tree-explorer'
-import {Button} from '@ai-toolkit/components/ui/button'
+} from '@deslop/components/icons'
+import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
+import {Button} from '@deslop/components/ui/button'
 import {
 	Command,
 	CommandDialog,
@@ -29,10 +29,10 @@ import {
 	CommandItem,
 	CommandList,
 	CommandShortcut
-} from '@ai-toolkit/components/ui/command'
-import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@ai-toolkit/components/ui/resizable'
-import type {GitProject} from '@ai-toolkit/git/schema'
-import {GitBranchesSnapshot} from '@ai-toolkit/git/schema'
+} from '@deslop/components/ui/command'
+import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
+import type {GitProject} from '@deslop/git/schema'
+import {GitBranchesSnapshot} from '@deslop/git/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,

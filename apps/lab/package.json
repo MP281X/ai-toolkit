@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/lab",
+	"name": "@deslop/lab",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -24,9 +24,9 @@
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
-		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/components": "workspace:*",
-		"@ai-toolkit/opentelemetry": "workspace:*"
+		"@deslop/ai": "workspace:*",
+		"@deslop/components": "workspace:*",
+		"@deslop/opentelemetry": "workspace:*"
 	},
 
 	"devDependencies": {

@@ -6,7 +6,7 @@ import {Terminal as HeadlessTerminal} from '@xterm/headless'
 import type {TerminalEvent} from './schema.ts'
 import {TerminalError} from './schema.ts'
 
-export class Terminal extends Context.Service<Terminal>()('@ai-toolkit/terminal/service/Terminal', {
+export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		let cols = 120
 		let rows = 32
