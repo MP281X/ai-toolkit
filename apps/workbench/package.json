@@ -32,6 +32,7 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/git": "workspace:*",
+		"@deslop/browser": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",

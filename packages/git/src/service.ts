@@ -277,7 +277,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			pipe(
 				fs.watch(Bun.env['HOME'] ?? process.cwd()),
 				Stream.debounce(Duration.millis(250)),
-				Stream.tap(() => refreshProjects()),
+				Stream.mapEffect(() => listProjectsFrom(Bun.env['HOME'] ?? process.cwd())),
+				Stream.changes,
+				Stream.tap(projectsSnapshot => SubscriptionRef.set(projects, projectsSnapshot)),
 				Stream.runDrain
 			)
 		)
@@ -449,7 +451,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 
-		const hasWorktreeChanges = Effect.fnUntraced(function* () {
+		const hasWorktreeChanges = Effect.gen(function* () {
 			return yield* pipe(
 				git.lines(config.cwd, ['status', '--porcelain']),
 				Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
@@ -478,7 +480,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
 		}
 
-		const untrackedDiffs = Effect.fnUntraced(function* () {
+		const untrackedDiffs = Effect.gen(function* () {
 			return yield* Effect.forEach(
 				yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
 				filePath =>
@@ -536,7 +538,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			if (scope === 'head-to-staged') return diffs
 
-			return yield* pipe(untrackedDiffs(), Effect.map(Array.appendAll(diffs)))
+			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
 		})
 
 		const reviewRangeDiffs = Effect.fnUntraced(function* (input: {
@@ -585,7 +587,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			if (input.to.type === 'ref') return diffs
 
-			return yield* pipe(untrackedDiffs(), Effect.map(Array.appendAll(diffs)))
+			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
 		})
 
 		const suggestBase = Effect.gen(function* () {
@@ -594,10 +596,9 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				Effect.map(flow(String.trim, String.replace(/^origin\//u, 'origin/'))),
 				Effect.orElseSucceed(() => 'origin/main')
 			)
-			const candidates = [defaultBranch, 'origin/main', 'origin/master', 'main', 'master']
 
 			return yield* pipe(
-				candidates,
+				[defaultBranch, 'origin/main', 'origin/master', 'main', 'master'],
 				Effect.findFirst(candidate =>
 					pipe(
 						git.string(config.cwd, ['rev-parse', '--verify', candidate]),
@@ -636,7 +637,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		return {
 			commitAndPush: Effect.fnUntraced(function* (input: {readonly base: string; readonly message: string}) {
-				if (yield* hasWorktreeChanges()) {
+				if (yield* hasWorktreeChanges) {
 					return yield* Effect.fail(new GitError({message: 'Create a WIP commit before squashing.'}))
 				}
 
@@ -667,7 +668,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			}),
 			commits,
 			createWipCommit: Effect.fnUntraced(function* (message: string) {
-				if (!(yield* hasWorktreeChanges())) {
+				if (!(yield* hasWorktreeChanges)) {
 					return yield* Effect.fail(new GitError({message: 'No changes to commit.'}))
 				}
 
@@ -682,7 +683,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			metadata: Effect.fnUntraced(function* (input?: {readonly base?: string}) {
 				const base = input?.base ?? (yield* suggestBase)
 
-				return new GitReviewMetadata({base, commits: yield* commits(base), dirty: yield* hasWorktreeChanges()})
+				return new GitReviewMetadata({base, commits: yield* commits(base), dirty: yield* hasWorktreeChanges})
 			}),
 			reviewDiffs,
 			reviewRangeDiffs,

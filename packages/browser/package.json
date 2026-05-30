@@ -1,0 +1,9 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/browser",
+
+	"exports": {
+		"./http": "./src/http.ts"
+	}
+}

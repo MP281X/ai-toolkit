@@ -18,5 +18,15 @@ export default defineConfig({
 		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
 	],
-	server: {proxy: {'/api/rpc': {changeOrigin: true, target: 'http://localhost:3021', ws: true}}}
+	server: {
+		proxy: {
+			'/api/rpc': {changeOrigin: true, target: 'http://localhost:3021', ws: true},
+			'^/.*': {
+				bypass: request => (/^\d+\.localhost(?::\d+)?$/u.test(request.headers.host ?? '') ? undefined : request.url),
+				changeOrigin: false,
+				target: 'http://localhost:3021',
+				ws: true
+			}
+		}
+	}
 })
