@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/agent",
+	"name": "@ai-toolkit/lab",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -10,8 +10,8 @@
 	},
 
 	"scripts": {
-		"dev:client": "vp dev --port 3020",
-		"dev:server": "bun --watch --port 3021 ./src/main.server.tsx",
+		"dev:client": "vp dev --port 3030",
+		"dev:server": "bun --watch --port 3031 ./src/main.server.tsx",
 
 		"build:client": "vp build",
 		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
@@ -25,8 +25,6 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@ai-toolkit/ai": "workspace:*",
-		"@ai-toolkit/git": "workspace:*",
-		"@ai-toolkit/terminal": "workspace:*",
 		"@ai-toolkit/components": "workspace:*",
 		"@ai-toolkit/opentelemetry": "workspace:*"
 	},

@@ -11,7 +11,7 @@ import {OtelLayer} from '@ai-toolkit/opentelemetry/client'
 export const LiveLayers = pipe(
 	Layer.empty,
 	// Base layers
-	Layer.provideMerge(OtelLayer('agent-client')),
+	Layer.provideMerge(OtelLayer('lab-client')),
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
 	// Envs

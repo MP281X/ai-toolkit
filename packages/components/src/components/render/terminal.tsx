@@ -21,7 +21,7 @@ export function Terminal(input: {
 		if (!elementRef.current) return
 
 		const terminal = new XTerm({
-			customGlyphs: false,
+			customGlyphs: true,
 			fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono Variable", monospace',
 			scrollback: 10_000,
 			theme: {background: getComputedStyle(elementRef.current).backgroundColor}
