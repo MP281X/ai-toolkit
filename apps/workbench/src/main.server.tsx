@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import {BunHttpServer, BunRuntime} from '@effect/platform-bun'
 
 import {Layer, pipe} from 'effect'
@@ -13,7 +15,7 @@ BunRuntime.runMain(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				RpcServer.layerHttp({group: RpcGroup.make().merge(RpcContracts), path: '/api/rpc', protocol: 'websocket'}),
-				HttpStaticServer.layer({index: 'index.html', root: './dist/client', spa: true}),
+				HttpStaticServer.layer({index: 'index.html', root: new URL('./client', import.meta.url).pathname, spa: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)
 		),

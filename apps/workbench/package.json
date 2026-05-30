@@ -3,6 +3,12 @@
 	"sideEffects": false,
 	"name": "@deslop/workbench",
 
+	"version": "0.0.0",
+	"files": ["dist"],
+	"publishConfig": {"access": "public"},
+	"bin": {"workbench": "dist/server.js"},
+  "repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
+
 	"imports": {
 		"#lib/*": "./src/lib/*",
 		"#rpcs/*": "./src/rpcs/*",
@@ -17,9 +23,10 @@
 		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
 	},
 
-	"dependencies": {
+	"devDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
+
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
@@ -27,17 +34,13 @@
 		"@deslop/git": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
-		"@deslop/opentelemetry": "workspace:*"
-	},
+		"@deslop/opentelemetry": "workspace:*",
 
-	"devDependencies": {
-		"vite": "catalog:",
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",
 		"babel-plugin-react-compiler": "latest",
 
 		"tailwindcss": "latest",
-		"@tailwindcss/vite": "latest",
-		"vite-plus": "catalog:"
+		"@tailwindcss/vite": "latest"
 	}
 }
