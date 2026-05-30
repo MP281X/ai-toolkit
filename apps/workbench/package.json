@@ -6,7 +6,7 @@
 	"version": "0.0.0",
 	"files": ["dist"],
 	"publishConfig": {"access": "public"},
-	"bin": {"workbench": "dist/server.js"},
+	"bin": {"workbench": "dist/workbench"},
   "repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
 
 	"imports": {
@@ -20,7 +20,7 @@
 		"dev:server": "bun --watch --port 3021 ./src/main.server.tsx",
 
 		"build:client": "vp build",
-		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
+		"build:server": "bun build ./src/main.server.tsx --production --target=bun --compile --outfile ./dist/workbench"
 	},
 
 	"devDependencies": {

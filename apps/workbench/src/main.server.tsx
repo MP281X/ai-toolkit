@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 
+import {realpathSync} from 'node:fs'
+import {pathToFileURL} from 'node:url'
+
 import {BunHttpServer, BunRuntime} from '@effect/platform-bun'
 
 import {Layer, pipe} from 'effect'
@@ -15,7 +18,11 @@ BunRuntime.runMain(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				RpcServer.layerHttp({group: RpcGroup.make().merge(RpcContracts), path: '/api/rpc', protocol: 'websocket'}),
-				HttpStaticServer.layer({index: 'index.html', root: new URL('./client', import.meta.url).pathname, spa: true}),
+				HttpStaticServer.layer({
+					index: 'index.html',
+					root: new URL('./client', pathToFileURL(realpathSync(process.execPath))).pathname,
+					spa: true
+				}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)
 		),
