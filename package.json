@@ -7,7 +7,7 @@
   "workspaces": ["apps/*", "packages/*", ".opencode"],
 
   "scripts": {
-    "dev": "vp run -r dev:server & vp run -r dev:client",
+    "dev": "mprocs 'vp run @ai-toolkit/agent#dev:client' 'vp run @ai-toolkit/agent#dev:server' 'vp run @ai-toolkit/portfolio#dev:client' 'vp run @ai-toolkit/portfolio#dev:server'",
     "build": "vp run -r build:client && vp run -r build:server",
 
     "fix": "vp check --fix",
@@ -27,6 +27,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
 
+    "mprocs": "latest",
     "typescript": "latest",
     "vite-plus": "catalog:"
   },
