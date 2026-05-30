@@ -1,0 +1,15 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@ai-toolkit/terminal",
+
+	"exports": {
+		"./schema": "./src/schema.ts",
+		"./service": "./src/service.ts"
+	},
+
+	"dependencies": {
+		"@xterm/headless": "latest",
+		"@xterm/addon-serialize": "latest"
+	}
+}

@@ -16,9 +16,9 @@ description: Patterns for routes, search params, atoms, streams, and RPC client 
 
 ```typescript
 export const Route = createFileRoute('/items')({
-  validateSearch: Schema.toStandardSchemaV1(
-    Schema.Struct({id: Schema.optional(Schema.String), query: Schema.optional(Schema.String)})
-  )
+	validateSearch: Schema.toStandardSchemaV1(
+		Schema.Struct({id: Schema.optional(Schema.String), query: Schema.optional(Schema.String)})
+	)
 })
 ```
 
@@ -30,13 +30,13 @@ const items = AtomRuntime.atom(RpcClient.use(client => client('list', request)))
 
 // Good
 const items = Atom.keepAlive(
-  AtomRuntime.atom(
-    pipe(
-      RpcClient.asEffect(),
-      Effect.map(client => client('list', request)),
-      Stream.unwrap
-    )
-  )
+	AtomRuntime.atom(
+		pipe(
+			RpcClient.asEffect(),
+			Effect.map(client => client('list', request)),
+			Stream.unwrap
+		)
+	)
 )
 ```
 

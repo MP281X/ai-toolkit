@@ -1,6 +1,0 @@
-engine biome(1.0)
-language js(typescript, jsx)
-
-`if ($cond) { $body } else { $elseBody }` as $match where {
-	register_diagnostic(span=$match, message="Do not use `else`. Rewrite with early returns, `switch`, or `Match` so the control flow stays flat and each branch can exit immediately.")
-}

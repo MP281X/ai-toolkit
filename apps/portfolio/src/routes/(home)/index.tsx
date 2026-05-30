@@ -1,9 +1,7 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
-import {Array, Effect, Match, Number, Option, pipe, Stream, String} from 'effect'
 
-import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
-import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
-import {cn} from '@ai-toolkit/components/utils'
+import {Array, Effect, Match, Number, Option, Predicate, Stream, String, pipe} from 'effect'
+
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
@@ -12,6 +10,9 @@ import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
 import {PortfolioState} from '#rpcs/contracts.ts'
+import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@ai-toolkit/components/icons'
+import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@ai-toolkit/components/ui/dialog'
+import {cn} from '@ai-toolkit/components/utils'
 
 const cursorPalette = [
 	'oklch(0.74 0.19 118)',
@@ -46,22 +47,20 @@ function pickNextCursorColor(currentColor: string) {
 }
 
 function getIdentity() {
-	const existingId = window.sessionStorage.getItem('portfolio.id')
-	const existingName = window.sessionStorage.getItem('portfolio.name')
+	const existingId = sessionStorage.getItem('portfolio.id')
+	const existingName = sessionStorage.getItem('portfolio.name')
 
-	if (existingId && existingName) return {id: existingId, name: existingName, color: pickRandomCursorColor()}
+	if (Predicate.isNotNullish(existingId) && Predicate.isNotNullish(existingName)) {
+		return {color: pickRandomCursorColor(), id: existingId, name: existingName}
+	}
 
 	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
 
-	const next = {
-		id: `v-${seed}`,
-		name: `Guest-${pipe(seed, String.slice(0, 3))}`,
-		color: pickRandomCursorColor()
-	}
+	const next = {color: pickRandomCursorColor(), id: `v-${seed}`, name: `Guest-${pipe(seed, String.slice(0, 3))}`}
 
-	window.sessionStorage.setItem('portfolio.id', next.id)
-	window.sessionStorage.setItem('portfolio.name', next.name)
-	window.sessionStorage.removeItem('portfolio.color')
+	sessionStorage.setItem('portfolio.id', next.id)
+	sessionStorage.setItem('portfolio.name', next.name)
+	sessionStorage.removeItem('portfolio.color')
 
 	return next
 }
@@ -69,7 +68,7 @@ function getIdentity() {
 const identity = getIdentity()
 
 function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
-	for (let index = 0; index < visitors.length; index++) {
+	for (let index = 0; index < visitors.length; index += 1) {
 		if (visitors[index]?.id !== visitor.id) continue
 
 		const nextVisitors = Array.copy(visitors)
@@ -77,7 +76,7 @@ function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: Portfolio
 		return nextVisitors
 	}
 
-	return Array.appendAll(visitors, [visitor])
+	return Array.append(visitors, visitor)
 }
 
 function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
@@ -99,30 +98,18 @@ function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
 function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 	return pipe(
 		Match.value(event),
-		Match.tag('snapshot', next => new PortfolioState({visitors: next.visitors, trails: next.trails})),
+		Match.tag('snapshot', next => new PortfolioState({trails: next.trails, visitors: next.visitors})),
 		Match.tag(
 			'visitor-upserted',
-			next =>
-				new PortfolioState({
-					visitors: upsertVisitor(state.visitors, next.visitor),
-					trails: state.trails
-				})
+			next => new PortfolioState({trails: state.trails, visitors: upsertVisitor(state.visitors, next.visitor)})
 		),
 		Match.tag(
 			'visitor-removed',
-			next =>
-				new PortfolioState({
-					visitors: removeVisitor(state.visitors, next.id),
-					trails: state.trails
-				})
+			next => new PortfolioState({trails: state.trails, visitors: removeVisitor(state.visitors, next.id)})
 		),
 		Match.tag(
 			'trail-added',
-			next =>
-				new PortfolioState({
-					visitors: state.visitors,
-					trails: appendTrail(state.trails, next.trail)
-				})
+			next => new PortfolioState({trails: appendTrail(state.trails, next.trail), visitors: state.visitors})
 		),
 		Match.exhaustive
 	)
@@ -131,8 +118,8 @@ function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 const portfolioAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
-			RpcClient.asEffect(),
-			Effect.map(client => client('portfolio.join', {id: identity.id, name: identity.name, color: identity.color})),
+			RpcClient,
+			Effect.map(client => client('portfolio.join', {color: identity.color, id: identity.id, name: identity.name})),
 			Stream.unwrap,
 			Stream.scan(new PortfolioState({}), applyPortfolioEvent)
 		)
@@ -142,52 +129,47 @@ const portfolioAtom = Atom.keepAlive(
 const frameListeners = new Set<(now: number) => void>()
 let frameId = 0
 
-type Viewport = {
-	width: number
-	height: number
-}
+type Viewport = {readonly width: number; readonly height: number}
 
 type CursorMotion = {
-	x: number
-	y: number
-	targetX: number
-	targetY: number
-	lastFrameAt: number
-	viewportWidth: number
-	viewportHeight: number
+	readonly x: number
+	readonly y: number
+	readonly targetX: number
+	readonly targetY: number
+	readonly lastFrameAt: number
+	readonly viewportWidth: number
+	readonly viewportHeight: number
 }
 
-let localPointer: {x: number; y: number; updatedAt: number} | undefined
+type Point = {readonly x: number; readonly y: number}
+
+let localPointer: Point | undefined
 const SUMMARY_LINES = [
-	"I'm a full-stack TypeScript developer with production experience building real-time, type-safe web applications using React, Node.js, and PostgreSQL.",
+	"I'm a frontend TypeScript developer with production experience building real-time, type-safe web applications using React and modern frontend tooling.",
 	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
 	'I use AI coding agents daily to accelerate development, refactoring, and testing while maintaining manual code review to ensure consistency and quality.'
 ]
 
 const TECHNICAL_SKILLS = [
-	{
-		area: 'Frontend',
-		icon: Monitor,
-		items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'
-	},
+	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
 	{area: 'Backend', icon: Server, items: 'Node.js, Effect-TS (functional TypeScript library), RESTful API'},
 	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
 	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
 	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{
-		area: 'AI Tooling',
-		icon: Sparkles,
-		items: 'OpenCode, Github Copilot, Claude Code'
-	}
+	{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
 ]
 
 const WORK_EXPERIENCE = [
 	{
-		company: 'Tinexta Cyber',
-		role: 'Full-Stack Developer',
-		period: 'Oct 2024 – Present',
-		location: 'Udine, Italy',
+		company: 'Humans.Tech',
+		highlights: [],
+		location: 'Frosinone, Italy',
 		note: '',
+		period: 'Apr 2026 – Present',
+		role: 'Frontend Developer'
+	},
+	{
+		company: 'Tinexta Cyber',
 		highlights: [
 			'Developed a real-time network inventory application for a major telecommunications company',
 			'Built the real-time frontend in React with ElectricSQL for live updates across all users',
@@ -195,50 +177,54 @@ const WORK_EXPERIENCE = [
 			'Gathered requirements directly from end users and iterated through feedback rounds',
 			'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
 			'Used AI coding agents daily with project-specific guidelines for development'
-		]
+		],
+		location: 'Udine, Italy',
+		note: '',
+		period: 'Oct 2024 – Mar 2026',
+		role: 'Full-Stack Developer'
 	},
 	{
 		company: 'Altitudo',
-		role: 'Frontend Developer',
-		period: 'Jan 2024 – Mar 2024',
-		location: 'Salzburg, Austria',
-		note: 'Erasmus Internship',
 		highlights: [
 			'Migrated the build system from Create React App to Vite',
 			'Improved rendering performance by adding proper memoization',
 			'Migrated legacy class components to modern functional components using React hooks',
 			'Recreated and restyled multiple pages using React and Tailwind CSS'
-		]
+		],
+		location: 'Salzburg, Austria',
+		note: 'Erasmus Internship',
+		period: 'Jan 2024 – Mar 2024',
+		role: 'Frontend Developer'
 	},
 	{
 		company: 'BizAway',
-		role: 'Backend Developer',
-		period: 'Jun 2023 – Aug 2023',
-		location: 'Spilimbergo, Italy',
-		note: 'Internship',
 		highlights: [
 			'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
 			'Built a type-safe email template framework using TSX-style components',
 			'Migrated API endpoints from the old OpenAPI version to the new specification',
 			'Built and updated multiple Angular components and features'
-		]
+		],
+		location: 'Spilimbergo, Italy',
+		note: 'Internship',
+		period: 'Jun 2023 – Aug 2023',
+		role: 'Backend Developer'
 	}
 ]
 
 const EDUCATION_DATA = [
 	{
-		school: 'ITS Alto Adriatico',
 		degree: 'Cloud Developer Diploma',
+		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
 		grade: '95/100',
 		period: '2022 – 2024',
-		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.'
+		school: 'ITS Alto Adriatico'
 	},
 	{
-		school: 'ISIS A. Malignani',
 		degree: 'High School Diploma – IT and Telecommunications',
+		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
 		grade: '',
 		period: '2017 – 2022',
-		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.'
+		school: 'ISIS A. Malignani'
 	}
 ]
 
@@ -249,17 +235,10 @@ const LANGUAGES_DATA = [
 ]
 
 const CONTACT_ITEMS = [
-	{label: 'Email', value: 'paludgnachmatteo.dev@gmail.com', href: 'mailto:paludgnachmatteo.dev@gmail.com'},
-	{label: 'Phone', value: '+39 351 885 3376', href: 'tel:+393518853376'},
-	{label: 'GitHub', value: 'github.com/MP281X', href: 'https://github.com/MP281X'}
+	{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
+	{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
+	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
 ]
-
-function getViewport() {
-	return {
-		width: window.innerWidth,
-		height: window.innerHeight
-	} satisfies Viewport
-}
 
 function subscribeFrame(listener: (now: number) => void) {
 	frameListeners.add(listener)
@@ -287,42 +266,28 @@ function subscribeFrame(listener: (now: number) => void) {
 	}
 }
 
-function getDisplayCursorTarget(cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+function getDisplayCursorTarget(cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
 	if (isMe && localPointer) {
-		return {
-			x: localPointer.x * viewport.width,
-			y: localPointer.y * viewport.height
-		}
+		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
 	}
 
-	return {
-		x: cursor.x * viewport.width,
-		y: cursor.y * viewport.height
-	}
+	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
 }
 
 function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
 	Reflect.set(node.style, 'transform', `translate3d(${x}px, ${y}px, 0)`)
 }
 
-function createCursorMotion(target: {x: number; y: number}, viewport: Viewport) {
+function createCursorMotion(target: Point, viewport: Viewport) {
 	return {
-		x: target.x,
-		y: target.y,
+		lastFrameAt: 0,
 		targetX: target.x,
 		targetY: target.y,
-		lastFrameAt: 0,
+		viewportHeight: viewport.height,
 		viewportWidth: viewport.width,
-		viewportHeight: viewport.height
+		x: target.x,
+		y: target.y
 	} satisfies CursorMotion
-}
-
-function updateCursorMotion(motion: CursorMotion, target: {x: number; y: number}) {
-	return {
-		...motion,
-		targetX: target.x,
-		targetY: target.y
-	}
 }
 
 function stepCursorMotion(motion: CursorMotion, now: number) {
@@ -335,13 +300,13 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 
 	return {
 		...motion,
+		lastFrameAt: now,
 		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Math.max(0, Math.min(motion.viewportWidth, nextX)),
-		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY)),
-		lastFrameAt: now
+		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY))
 	}
 }
 
-function syncCursorMotion(motion: CursorMotion, cursor: PortfolioVisitor, isMe: boolean, viewport: Viewport) {
+function syncCursorMotion(motion: CursorMotion, cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
 	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
@@ -350,211 +315,42 @@ function syncCursorMotion(motion: CursorMotion, cursor: PortfolioVisitor, isMe: 
 
 	if (motion.targetX === nextTarget.x && motion.targetY === nextTarget.y) return motion
 
-	return updateCursorMotion(motion, nextTarget)
+	return {...motion, targetX: nextTarget.x, targetY: nextTarget.y}
 }
 
 function getViewportSnapshot() {
-	const viewport = getViewport()
-	return `${viewport.width}:${viewport.height}`
+	return `${window.innerWidth}:${window.innerHeight}`
 }
 
 function useViewport() {
 	const snapshot = useSyncExternalStore(
 		onStoreChange => {
 			window.addEventListener('resize', onStoreChange)
-			return () => window.removeEventListener('resize', onStoreChange)
+			return () => {
+				window.removeEventListener('resize', onStoreChange)
+			}
 		},
 		getViewportSnapshot,
 		getViewportSnapshot
 	)
 
-	const [width = '0', height = '0'] = pipe(snapshot, String.split(':'))
+	const [width, height] = pipe(snapshot, String.split(':'))
 
 	return {
-		width: Option.getOrElse(Number.parse(width), () => 0),
-		height: Option.getOrElse(Number.parse(height), () => 0)
+		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0),
+		width: Option.getOrElse(Number.parse(width), () => 0)
 	} satisfies Viewport
-}
-
-function getTrailCell(trail: PortfolioTrail, viewport: Viewport) {
-	return {
-		col: Math.floor((trail.x * viewport.width) / 26),
-		row: Math.floor((trail.y * viewport.height) / 26)
-	}
 }
 
 function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
 	return (
-		<div className={cn('border border-border/70 bg-background/88 backdrop-blur-sm', input.className)}>
+		<div className={cn('border-border/70 bg-background/88 border backdrop-blur-sm', input.className)}>
 			{input.children}
 		</div>
 	)
 }
 
-export const Route = createFileRoute('/(home)/')({
-	component: PortfolioRoute
-})
-
-function PortfolioRoute() {
-	const viewport = useViewport()
-	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
-	const currentSectionRef = useRef(0)
-	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
-	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(undefined)
-	const lastSentPointerRef = useRef<{x: number; y: number; sentAt: number} | undefined>(undefined)
-	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [showShortcuts, setShowShortcuts] = useState(false)
-
-	useEffect(
-		() => () => {
-			if (pointerFrameRef.current) cancelAnimationFrame(pointerFrameRef.current)
-		},
-		[]
-	)
-
-	function scrollTo(index: number) {
-		const target = sectionRefs.current[index]
-		if (!target) return
-
-		target.scrollIntoView({block: 'start', behavior: 'smooth'})
-		currentSectionRef.current = index
-	}
-
-	function updateColor() {
-		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
-
-		identity.color = nextColor
-		setIdentityColor(nextColor)
-		lastSentPointerRef.current = {x: currentPointer.x, y: currentPointer.y, sentAt: performance.now()}
-
-		moveRpc({
-			payload: {
-				id: identity.id,
-				x: currentPointer.x,
-				y: currentPointer.y,
-				color: nextColor
-			}
-		})
-	}
-
-	useHotkey('J', () => scrollTo(Math.min(currentSectionRef.current + 1, 5)))
-	useHotkey('K', () => scrollTo(Math.max(currentSectionRef.current - 1, 0)))
-	useHotkey('1', () => scrollTo(0))
-	useHotkey('2', () => scrollTo(1))
-	useHotkey('3', () => scrollTo(2))
-	useHotkey('4', () => scrollTo(3))
-	useHotkey('5', () => scrollTo(4))
-	useHotkey('6', () => scrollTo(5))
-	useHotkey('R', updateColor)
-	useHotkey({key: '?', shift: true}, () => setShowShortcuts(show => !show))
-	useHotkey('Escape', () => setShowShortcuts(false), {enabled: showShortcuts})
-
-	return (
-		<div
-			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
-			onPointerMove={event => {
-				if (!(viewport.width && viewport.height)) return
-
-				const nextPointer = {
-					x: Math.max(0, Math.min(0.999999, event.clientX / viewport.width)),
-					y: Math.max(0, Math.min(0.999999, event.clientY / viewport.height))
-				}
-
-				localPointer = {x: nextPointer.x, y: nextPointer.y, updatedAt: performance.now()}
-				queuedPointerRef.current = nextPointer
-
-				if (pointerFrameRef.current) return
-
-				pointerFrameRef.current = requestAnimationFrame(() => {
-					pointerFrameRef.current = 0
-
-					if (!queuedPointerRef.current) return
-
-					const now = performance.now()
-
-					if (lastSentPointerRef.current) {
-						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
-						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
-
-						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-							queuedPointerRef.current = undefined
-							return
-						}
-					}
-
-					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
-
-					lastSentPointerRef.current = {
-						x: queuedPointerRef.current.x,
-						y: queuedPointerRef.current.y,
-						sentAt: now
-					}
-
-					moveRpc({
-						payload: {
-							id: identity.id,
-							x: queuedPointerRef.current.x,
-							y: queuedPointerRef.current.y,
-							color: identityColor
-						}
-					})
-
-					queuedPointerRef.current = undefined
-				})
-			}}
-			onScroll={event => {
-				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
-			}}
-		>
-			<HeroSection sectionRefs={sectionRefs} />
-			<AboutSection sectionRefs={sectionRefs} />
-			<SkillsSection sectionRefs={sectionRefs} />
-			<ExperienceSection sectionRefs={sectionRefs} />
-			<EducationSection sectionRefs={sectionRefs} />
-			<ContactSection sectionRefs={sectionRefs} />
-
-			<Suspense fallback={null}>
-				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
-			</Suspense>
-
-			<button
-				type="button"
-				aria-expanded={showShortcuts}
-				aria-haspopup="dialog"
-				aria-label="Toggle keyboard shortcuts"
-				onClick={() => setShowShortcuts(show => !show)}
-				className="fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border border-border/70 bg-background/95 font-mono text-muted-foreground text-xs backdrop-blur-sm transition-colors hover:border-primary/50 hover:text-primary sm:right-4 sm:bottom-4"
-			>
-				?
-			</button>
-
-			{showShortcuts && <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />}
-		</div>
-	)
-}
-
-function RealtimeLayer(input: {readonly identityColor: string; readonly viewport: Viewport}) {
-	const {value: state} = useAtomSuspense(portfolioAtom)
-
-	return (
-		<>
-			<GridOverlay />
-			<TrailCanvas trails={state.trails} viewport={input.viewport} />
-
-			{Array.map(state.visitors, cursor => (
-				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
-			))}
-
-			<div className="pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border border-border/70 bg-background/95 px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
-				<span className="size-2" style={{backgroundColor: input.identityColor}} />
-				<span className="text-primary">{state.visitors.length}</span>
-				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
-			</div>
-		</>
-	)
-}
+export const Route = createFileRoute('/(home)/')({component: PortfolioRoute})
 
 function GridOverlay() {
 	return (
@@ -596,7 +392,11 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 		const previousByVisitor = new Map<string, {trail: PortfolioTrail; col: number; row: number}>()
 
 		for (const trail of input.trails) {
-			const current = {...getTrailCell(trail, input.viewport), trail}
+			const current = {
+				col: Math.floor((trail.x * input.viewport.width) / 26),
+				row: Math.floor((trail.y * input.viewport.height) / 26),
+				trail
+			}
 			const previous = previousByVisitor.get(trail.visitorId)
 
 			if (!previous) {
@@ -608,7 +408,7 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 
 			const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
 
-			for (let step = 0; step <= stepCount; step++) {
+			for (let step = 0; step <= stepCount; step += 1) {
 				const progress = stepCount === 0 ? 1 : step / stepCount
 				const col = Math.round(previous.col + (current.col - previous.col) * progress)
 				const row = Math.round(previous.row + (current.row - previous.row) * progress)
@@ -666,14 +466,12 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 		<div
 			ref={nodeRef}
 			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
-			style={{
-				transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`
-			}}
+			style={{transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
 				<span
-					className="whitespace-nowrap border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
+					className="bg-background text-foreground border px-1.5 py-1 font-mono text-[10px] whitespace-nowrap"
 					style={{borderColor: input.cursor.color}}
 				>
 					{input.cursor.name}
@@ -693,6 +491,7 @@ function Section(input: {
 	return (
 		<section
 			ref={node => {
+				// oxlint-disable-next-line no-param-reassign
 				input.sectionRefs.current[input.id] = node
 			}}
 			data-section={input.id}
@@ -709,11 +508,11 @@ function Section(input: {
 function SectionLabel(input: {readonly title: string}) {
 	return (
 		<div className="mb-8 flex w-full max-w-5xl items-center gap-4 sm:mb-10">
-			<div className="h-px flex-1 bg-primary/25" />
-			<h2 className="border border-primary/30 bg-background/88 px-5 py-2 font-bold font-mono text-primary text-xs uppercase tracking-[0.35em] backdrop-blur-sm sm:text-sm">
+			<div className="bg-primary/25 h-px flex-1" />
+			<h2 className="border-primary/30 bg-background/88 text-primary border px-5 py-2 font-mono text-xs font-bold tracking-[0.35em] uppercase backdrop-blur-sm sm:text-sm">
 				{input.title}
 			</h2>
-			<div className="h-px flex-1 bg-primary/25" />
+			<div className="bg-primary/25 h-px flex-1" />
 		</div>
 	)
 }
@@ -723,27 +522,27 @@ function HeroSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement 
 		<Section id={0} sectionRefs={input.sectionRefs}>
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
 				<div className="space-y-1 text-center">
-					<h1 className="font-black font-mono text-4xl text-foreground uppercase tracking-[0.15em] sm:text-5xl md:text-6xl">
+					<h1 className="text-foreground font-mono text-4xl font-black tracking-[0.15em] uppercase sm:text-5xl md:text-6xl">
 						Matteo
 					</h1>
-					<h2 className="font-mono text-2xl text-foreground/50 uppercase tracking-[0.25em] sm:text-3xl md:text-4xl">
+					<h2 className="text-foreground/50 font-mono text-2xl tracking-[0.25em] uppercase sm:text-3xl md:text-4xl">
 						Paludgnach
 					</h2>
 				</div>
 
-				<p className="text-center font-mono text-foreground/70 text-xs uppercase tracking-[0.25em] sm:text-sm sm:tracking-[0.3em]">
+				<p className="text-foreground/70 text-center font-mono text-xs tracking-[0.25em] uppercase sm:text-sm sm:tracking-[0.3em]">
 					Full-Stack TypeScript Developer
 				</p>
 
-				<div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-[10px] text-muted-foreground/60 sm:text-[11px]">
+				<div className="text-muted-foreground/60 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-[10px] sm:text-[11px]">
 					<span>Moimacco (UD), Italy</span>
 					<span className="text-border/60">|</span>
 					<span>React · TypeScript · Effect · Real-time</span>
 				</div>
 			</Panel>
 
-			<div className="absolute bottom-8 flex flex-col items-center gap-1 text-muted-foreground/35">
-				<span className="font-mono text-[10px] uppercase tracking-[0.3em]">scroll</span>
+			<div className="text-muted-foreground/35 absolute bottom-8 flex flex-col items-center gap-1">
+				<span className="font-mono text-[10px] tracking-[0.3em] uppercase">scroll</span>
 				<span className="text-[12px]">↓</span>
 			</div>
 		</Section>
@@ -758,7 +557,7 @@ function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement
 				<Panel className="p-5 sm:p-6">
 					<div className="flex flex-col gap-4">
 						{Array.map(SUMMARY_LINES, line => (
-							<p key={line} className="font-mono text-foreground/90 text-sm leading-7 sm:text-base">
+							<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
 								{line}
 							</p>
 						))}
@@ -777,12 +576,12 @@ function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElemen
 				{Array.map(TECHNICAL_SKILLS, skill => (
 					<Panel key={skill.area} className="p-4 sm:p-5">
 						<div className="mb-3 flex items-center gap-3">
-							<skill.icon className="size-4 text-primary" />
-							<h3 className="font-mono font-semibold text-foreground text-sm uppercase tracking-[0.18em]">
+							<skill.icon className="text-primary size-4" />
+							<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
 								{skill.area}
 							</h3>
 						</div>
-						<p className="font-mono text-muted-foreground text-xs leading-6 sm:text-sm">{skill.items}</p>
+						<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
 					</Panel>
 				))}
 			</div>
@@ -799,29 +598,31 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 					<Panel key={job.company} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 							<div className="space-y-1">
-								<p className="font-mono font-semibold text-foreground text-sm uppercase tracking-[0.08em]">
+								<p className="text-foreground font-mono text-sm font-semibold tracking-[0.08em] uppercase">
 									{job.company}
 								</p>
-								<div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-muted-foreground text-xs sm:text-sm">
+								<div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs sm:text-sm">
 									<span>{job.role}</span>
 									{job.note && <span className="text-muted-foreground/80">· {job.note}</span>}
 								</div>
 							</div>
-							<p className="font-mono text-[11px] text-muted-foreground sm:text-right">
+							<p className="text-muted-foreground font-mono text-[11px] sm:text-right">
 								{job.period} · {job.location}
 							</p>
 						</div>
-						<ul className="mt-3 flex flex-col gap-1.5">
-							{Array.map(job.highlights, highlight => (
-								<li
-									key={highlight}
-									className="flex items-start gap-2 font-mono text-foreground/85 text-xs leading-6 sm:text-sm"
-								>
-									<span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-foreground/50" aria-hidden="true" />
-									<span>{highlight}</span>
-								</li>
-							))}
-						</ul>
+						{job.highlights.length > 0 && (
+							<ul className="mt-3 flex flex-col gap-1.5">
+								{Array.map(job.highlights, highlight => (
+									<li
+										key={highlight}
+										className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
+									>
+										<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
+										<span>{highlight}</span>
+									</li>
+								))}
+							</ul>
+						)}
 					</Panel>
 				))}
 			</div>
@@ -838,20 +639,20 @@ function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLEle
 					<Panel key={entry.school} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 							<div className="flex flex-wrap items-baseline gap-x-3">
-								<span className="font-mono font-semibold text-foreground text-sm">{entry.school}</span>
-								<span className="font-mono text-muted-foreground text-xs sm:text-sm">{entry.degree}</span>
-								{entry.grade && <span className="font-mono text-[10px] text-muted-foreground/80">({entry.grade})</span>}
+								<span className="text-foreground font-mono text-sm font-semibold">{entry.school}</span>
+								<span className="text-muted-foreground font-mono text-xs sm:text-sm">{entry.degree}</span>
+								{entry.grade && <span className="text-muted-foreground/80 font-mono text-[10px]">({entry.grade})</span>}
 							</div>
-							<span className="font-mono text-[10px] text-muted-foreground/80">{entry.period}</span>
+							<span className="text-muted-foreground/80 font-mono text-[10px]">{entry.period}</span>
 						</div>
-						<p className="mt-2 font-mono text-foreground/85 text-xs leading-6 sm:text-sm">{entry.description}</p>
+						<p className="text-foreground/85 mt-2 font-mono text-xs leading-6 sm:text-sm">{entry.description}</p>
 					</Panel>
 				))}
 				<div className="grid gap-3 sm:grid-cols-3">
 					{Array.map(LANGUAGES_DATA, lang => (
 						<Panel key={lang.language} className="px-4 py-3">
-							<span className="font-mono font-semibold text-foreground text-xs">{lang.language}</span>
-							<span className="ml-2 font-mono text-[10px] text-muted-foreground/80">{lang.level}</span>
+							<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
+							<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
 						</Panel>
 					))}
 				</div>
@@ -869,16 +670,16 @@ function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLEleme
 					<a
 						key={item.label}
 						href={item.href}
-						className="flex flex-col gap-2 border border-border/70 bg-background/90 px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors hover:border-primary/50 hover:text-primary sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+						className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
-						<span className="text-[10px] text-muted-foreground uppercase tracking-[0.15em]">{item.label}</span>
-						<span className="break-all text-foreground">{item.value}</span>
+						<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
+						<span className="text-foreground break-all">{item.value}</span>
 					</a>
 				))}
 			</div>
-			<p className="mt-6 font-mono text-[10px] text-muted-foreground/70">
+			<p className="text-muted-foreground/70 mt-6 font-mono text-[10px]">
 				© 2026 Matteo Paludgnach · Moimacco (UD), Italy
 			</p>
 		</Section>
@@ -887,14 +688,19 @@ function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLEleme
 
 function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 	return (
-		<Dialog open onOpenChange={open => !open && input.onClose()}>
+		<Dialog
+			open
+			onOpenChange={open => {
+				if (!open) input.onClose()
+			}}
+		>
 			<DialogContent className="border-border/70 bg-background p-6 font-mono sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle className="font-mono text-foreground text-sm uppercase tracking-[0.2em]">
+					<DialogTitle className="text-foreground font-mono text-sm tracking-[0.2em] uppercase">
 						Keyboard Shortcuts
 					</DialogTitle>
 				</DialogHeader>
-				<div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-muted-foreground text-xs sm:gap-x-8">
+				<div className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-xs sm:gap-x-8">
 					<span className="text-foreground">j / k</span>
 					<span>next / prev section</span>
 					<span className="text-foreground">1 – 6</span>
@@ -908,5 +714,187 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 				</div>
 			</DialogContent>
 		</Dialog>
+	)
+}
+
+function RealtimeLayer(input: {readonly identityColor: string; readonly viewport: Viewport}) {
+	const {value: state} = useAtomSuspense(portfolioAtom)
+
+	return (
+		<>
+			<GridOverlay />
+			<TrailCanvas trails={state.trails} viewport={input.viewport} />
+
+			{Array.map(state.visitors, cursor => (
+				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
+			))}
+
+			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
+				<span className="size-2" style={{backgroundColor: input.identityColor}} />
+				<span className="text-primary">{state.visitors.length}</span>
+				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
+			</div>
+		</>
+	)
+}
+
+function PortfolioRoute() {
+	const viewport = useViewport()
+	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
+	const currentSectionRef = useRef(0)
+	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
+	const pointerFrameRef = useRef(0)
+	const queuedPointerRef = useRef<Point | undefined>(undefined)
+	const lastSentPointerRef = useRef<(Point & {readonly sentAt: number}) | undefined>(undefined)
+	const [identityColor, setIdentityColor] = useState(identity.color)
+	const [showShortcuts, setShowShortcuts] = useState(false)
+
+	useEffect(
+		() => () => {
+			if (pointerFrameRef.current) cancelAnimationFrame(pointerFrameRef.current)
+		},
+		[]
+	)
+
+	function scrollTo(index: number) {
+		const target = sectionRefs.current[index]
+		if (!target) return
+
+		target.scrollIntoView({behavior: 'smooth', block: 'start'})
+		currentSectionRef.current = index
+	}
+
+	function updateColor() {
+		const nextColor = pickNextCursorColor(identityColor)
+		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
+
+		identity.color = nextColor
+		setIdentityColor(nextColor)
+		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
+
+		moveRpc({payload: {color: nextColor, id: identity.id, x: currentPointer.x, y: currentPointer.y}})
+	}
+
+	useHotkey('J', () => {
+		scrollTo(Math.min(currentSectionRef.current + 1, 5))
+	})
+	useHotkey('K', () => {
+		scrollTo(Math.max(currentSectionRef.current - 1, 0))
+	})
+	useHotkey('1', () => {
+		scrollTo(0)
+	})
+	useHotkey('2', () => {
+		scrollTo(1)
+	})
+	useHotkey('3', () => {
+		scrollTo(2)
+	})
+	useHotkey('4', () => {
+		scrollTo(3)
+	})
+	useHotkey('5', () => {
+		scrollTo(4)
+	})
+	useHotkey('6', () => {
+		scrollTo(5)
+	})
+	useHotkey('R', updateColor)
+	useHotkey({key: '?', shift: true}, () => {
+		setShowShortcuts(show => !show)
+	})
+	useHotkey(
+		'Escape',
+		() => {
+			setShowShortcuts(false)
+		},
+		{enabled: showShortcuts}
+	)
+
+	return (
+		<div
+			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
+			onPointerMove={event => {
+				if (!(viewport.width && viewport.height)) return
+
+				const nextPointer = {
+					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
+					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
+				}
+
+				localPointer = nextPointer
+				queuedPointerRef.current = nextPointer
+
+				if (pointerFrameRef.current) return
+
+				pointerFrameRef.current = requestAnimationFrame(() => {
+					pointerFrameRef.current = 0
+
+					if (!queuedPointerRef.current) return
+
+					const now = performance.now()
+
+					if (lastSentPointerRef.current) {
+						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
+						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
+
+						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
+							queuedPointerRef.current = undefined
+							return
+						}
+					}
+
+					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
+
+					lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
+
+					moveRpc({
+						payload: {
+							color: identityColor,
+							id: identity.id,
+							x: queuedPointerRef.current.x,
+							y: queuedPointerRef.current.y
+						}
+					})
+
+					queuedPointerRef.current = undefined
+				})
+			}}
+			onScroll={event => {
+				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
+			}}
+		>
+			<HeroSection sectionRefs={sectionRefs} />
+			<AboutSection sectionRefs={sectionRefs} />
+			<SkillsSection sectionRefs={sectionRefs} />
+			<ExperienceSection sectionRefs={sectionRefs} />
+			<EducationSection sectionRefs={sectionRefs} />
+			<ContactSection sectionRefs={sectionRefs} />
+
+			<Suspense fallback={null}>
+				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
+			</Suspense>
+
+			<button
+				type="button"
+				aria-expanded={showShortcuts}
+				aria-haspopup="dialog"
+				aria-label="Toggle keyboard shortcuts"
+				onClick={() => {
+					setShowShortcuts(show => !show)
+				}}
+				className="border-border/70 bg-background/95 text-muted-foreground hover:border-primary/50 hover:text-primary fixed right-3 bottom-3 z-50 flex size-8 items-center justify-center border font-mono text-xs backdrop-blur-sm transition-colors sm:right-4 sm:bottom-4"
+			>
+				?
+			</button>
+
+			{showShortcuts && (
+				<ShortcutsOverlay
+					onClose={() => {
+						setShowShortcuts(false)
+					}}
+				/>
+			)}
+		</div>
 	)
 }

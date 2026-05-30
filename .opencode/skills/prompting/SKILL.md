@@ -72,12 +72,12 @@ Inline single-use helpers. Match existing naming conventions. Never add new abst
 ## Rules
 - Follow existing codebase patterns
 - Type-check must pass before returning
-- Run `bun run type-check` after changes
+- Run `vp run type-check` after changes
 ```
 
 ## OpenCode specifics
 
-### Commands (.opencode/commands/*.md)
+### Commands (.opencode/commands/\*.md)
 
 Frontmatter: `description` (required), `agent` (optional), `subtask` (optional), `model` (optional)
 
@@ -85,14 +85,14 @@ Frontmatter: `description` (required), `agent` (optional), `subtask` (optional),
 - `` !`command` `` — inject shell output into prompt
 - `@file` — inject file content into prompt
 
-### Skills (.opencode/skills/*/SKILL.md)
+### Skills (.opencode/skills/\*/SKILL.md)
 
 Frontmatter: `name` (required), `description` (required)
 
 - Domain-specific rules and conventions
 - Good/bad examples for ambiguous patterns
 
-### Agents (.opencode/agents/*.md)
+### Agents (.opencode/agents/\*.md)
 
 Frontmatter: `description` (required), `mode` (required), `model` (optional), `permission` (optional)
 

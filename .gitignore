@@ -12,11 +12,9 @@
 # packages
 **/node_modules
 
-# application data
-**/.data
-
-# opencode
+# tools
 .opencode/resources
+.motel-data
 
 # nix
 result

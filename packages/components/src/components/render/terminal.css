@@ -1,0 +1,17 @@
+@import '@xterm/xterm/css/xterm.css';
+
+.terminal-renderer {
+	background: var(--background);
+}
+
+.terminal-renderer .xterm-viewport,
+.terminal-renderer .xterm-scrollable-element {
+	scrollbar-width: none;
+}
+
+.terminal-renderer .xterm-viewport::-webkit-scrollbar,
+.terminal-renderer .xterm-scrollable-element::-webkit-scrollbar,
+.terminal-renderer .xterm .xterm-scrollable-element > .xterm-scrollbar,
+.terminal-renderer .xterm .xterm-scrollable-element > .scrollbar {
+	display: none;
+}

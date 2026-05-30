@@ -1,21 +1,5 @@
 {
 	"compilerOptions": {
-		// effect-ts
-		"plugins": [
-			{
-				"name": "@effect/language-service",
-				"diagnosticSeverity": {
-					"anyUnknownInErrorContext": "error",
-					"deterministicKeys": "error",
-					"extendsNativeError": "error",
-					"instanceOfSchema": "error",
-					"missedPipeableOpportunity": "error",
-					"nodeBuiltinImport": "error",
-					"serviceNotAsClass": "error"
-				}
-			}
-		],
-
 		// type checking
 		"strict": true,
 		"noUnusedLocals": true,
@@ -54,5 +38,5 @@
 	},
 
 	"exclude": ["${configDir}/**/node_modules", "${configDir}/**/dist", "${configDir}/**/.output"],
-	"include": ["${configDir}/src/**/*", "${configDir}/*.config.*"]
+	"include": ["${configDir}/src/**/*", "${configDir}/codegen/**/*", "${configDir}/*.config.*"]
 }

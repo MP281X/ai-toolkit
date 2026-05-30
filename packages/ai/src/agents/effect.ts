@@ -1,39 +1,48 @@
 import type {Layer} from 'effect'
-import {Effect, Option, pipe, Queue, Ref, Stream, Struct} from 'effect'
+import {Cause, DateTime, Effect, Option, Queue, Ref, Stream, SubscriptionRef, flow, pipe} from 'effect'
 
-import type {AiError, LanguageModel, Response} from 'effect/unstable/ai'
-import {Chat, Prompt} from 'effect/unstable/ai'
+import {Chat, Prompt, Response, Toolkit} from 'effect/unstable/ai'
 import type {HttpClient} from 'effect/unstable/http'
 
-import {partsStreamSanitizer} from '#lib/utils.ts'
-import {AgentToolKit} from '#tools/contracts.ts'
-import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 import {Agent} from '../service.ts'
 
-export const makeLayerEffect = pipe(
-	Effect.gen(function* () {
-		const services = yield* Effect.context<
-			| LanguageModel.LanguageModel
-			| Layer.Success<typeof WebSearchToolKitLayer>
-			| Layer.Success<typeof WebFetchToolKitLayer>
-			| HttpClient.HttpClient
-		>()
+import {resolveLanguageModel} from '#lib/language-model.ts'
+import {partsStreamSanitizer} from '#lib/utils.ts'
+import {WebFetchToolKit, WebSearchToolKit} from '#tools/contracts.ts'
+import {WebFetchToolKitLayer, WebSearchToolKitLayer} from '#tools/handlers.ts'
 
+export const makeLayerEffect = Effect.fnUntraced(
+	function* (config: {readonly cwd: string; readonly systemPrompt: Prompt.SystemMessage}) {
+		const services = yield* Effect.context<
+			Layer.Success<typeof WebSearchToolKitLayer> | Layer.Success<typeof WebFetchToolKitLayer> | HttpClient.HttpClient
+		>()
 		const chat = yield* Chat.empty
+		const toolkit = Toolkit.merge(WebSearchToolKit, WebFetchToolKit)
+		const status = yield* SubscriptionRef.make<{
+			readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
+			readonly updatedAt: DateTime.Utc
+		}>({state: 'idle', updatedAt: yield* DateTime.now})
 
 		return Agent.of({
-			history: pipe(Ref.get(chat.history), Effect.map(Struct.get('content'))),
-			streamText: messages =>
-				Stream.callback<Response.StreamPart<typeof AgentToolKit.tools>, AiError.AiError>(
+			history: Effect.map(Ref.get(chat.history), history => history.content),
+			status,
+			streamText: input =>
+				Stream.callback(
 					Effect.fnUntraced(function* (queue) {
-						let prompt = Prompt.fromMessages(messages)
+						yield* pipe(
+							DateTime.now,
+							Effect.flatMap(updatedAt => SubscriptionRef.set(status, {state: 'running', updatedAt} as const))
+						)
+						let prompt = Prompt.prependSystem(Prompt.fromMessages(input.messages), config.systemPrompt.content)
 
 						while (true) {
 							const last = yield* pipe(
-								chat.streamText({prompt, toolkit: AgentToolKit}),
+								chat.streamText({prompt, toolkit}),
 								partsStreamSanitizer,
 								Stream.tap(part => Queue.offer(queue, part)),
+								Stream.provide(resolveLanguageModel({model: input.model, provider: input.provider})),
 								Stream.provideContext(services),
+								Stream.catchCause(cause => Stream.make(Response.makePart('error', {error: Cause.pretty(cause)}))),
 								Stream.runLast
 							)
 
@@ -42,12 +51,15 @@ export const makeLayerEffect = pipe(
 								continue
 							}
 
+							yield* pipe(
+								DateTime.now,
+								Effect.flatMap(updatedAt => SubscriptionRef.set(status, {state: 'idle', updatedAt} as const))
+							)
 							return yield* Queue.end(queue)
 						}
 					})
 				)
 		})
-	}),
-	Effect.provide(WebSearchToolKitLayer),
-	Effect.provide(WebFetchToolKitLayer)
+	},
+	flow(Effect.provide(WebSearchToolKitLayer), Effect.provide(WebFetchToolKitLayer))
 )

@@ -5,26 +5,24 @@
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
-		"#tools/*": "./src/tools/*"
+		"#tools/*": "./src/tools/*",
+		"#codegen/*": "./codegen/*"
 	},
 
 	"exports": {
 		"./service": "./src/service.ts",
+		"./schema": "./src/schema.ts",
 		"./tools": "./src/tools/contracts.ts",
 		"./utils": "./src/lib/utils.ts",
 		"./catalog": "./src/catalog.ts"
 	},
 
 	"scripts": {
-		"fix": "biome check --write --unsafe || true",
-		"lint": "biome check",
-		"type-check": "tsgo --noEmit"
+		"codegen:codex-app-server": "vp node codegen/codex-app-server.ts"
 	},
 
 	"dependencies": {
 		"exa-js": "latest",
-
-		"@opencode-ai/sdk": "latest",
 
 		"@effect/ai-openai": "^4.0.0-beta",
 		"@effect/ai-anthropic": "^4.0.0-beta",

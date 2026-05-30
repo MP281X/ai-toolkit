@@ -1,4 +1,5 @@
 import * as WebSdk from '@effect/opentelemetry/WebSdk'
+
 import {Config, Effect, Layer, Option} from 'effect'
 
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http'
@@ -7,7 +8,7 @@ import {SimpleSpanProcessor} from '@opentelemetry/sdk-trace-web'
 export function OtelLayer(serviceName: string) {
 	return Layer.unwrap(
 		Effect.map(
-			Config.option(Config.string('VITE_OTEL_URL')).asEffect(),
+			Config.option(Config.string('VITE_OTEL_URL')),
 			Option.match({
 				onNone: () => Layer.empty,
 				onSome: url =>

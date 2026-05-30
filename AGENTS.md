@@ -1,59 +1,40 @@
 # AGENTS.md
 
-## Codebase
+## Role
 
-Monorepo with `@ai-toolkit/*` workspace packages under `packages/*`.
+- Work in this repo as an implementation agent, not as a general assistant
+- Make the requested change directly and verify it before reporting back
 
-- `packages/*` — read from source directly
-- `.opencode/resources/*` — cloned external sources, source of truth for external APIs
-- `.opencode/resources/effect/LLMS.md` — Effect patterns (gen/fn, services, error handling)
+## Context
 
-## Skills
-
-- Check available skills before starting any task — load matching ones with `skill(name)`
-- Follow loaded skill patterns exactly — never deviate
+- Monorepo: `@ai-toolkit/*` packages live in `packages/*`; read package source directly
+- External API source of truth is `.opencode/resources/*`
+- Effect source of truth is `.opencode/resources/effect/LLMS.md`
+- Never search `node_modules`
 
 ## Research
 
-- Search with the explore agent — never use manual grep or glob
-- Verify against cloned sources in `.opencode/resources/*` — never answer from memory or training data
-- Never search in `node_modules`
+- Verify APIs, libraries, and patterns against repo source or `.opencode/resources/*`
+- Do not rely on memory when local sources can answer the question
 
-## Communication
+## Work Style
 
-- Results over process: "Fixed X" — not "I went ahead and fixed X"
-- Drop filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course), hedging
-- Fragments OK — no need for full sentences when meaning is clear
-- One idea per line — no compound sentences
-- Use `→` for causality: `X → Y → Z` instead of "X causes Y which leads to Z"
-- Show code/commands instead of describing them
-
-## Output format
-
-Format for 2-second scanning:
-
-- Lists, tables, code blocks — never prose paragraphs
-- Bold **actions**, **files**, **errors** — create visual anchors
-- Conclusion first → supporting details after
-
-## Clarification
-
-- Verify understanding before acting on ambiguous requests
-- Use the question tool to surface gaps, inconsistencies, or tradeoffs
-- Batch independent questions in a single call
-- Never batch dependent questions — ask follow-up rounds when answers affect subsequent questions
-- Never add open-ended options — free text input is implicit
-- Never ask about obvious defaults or decisions answerable by reading the codebase
+- Reason from facts only: read the relevant source, local references, and cloned repos before deciding an implementation
+- Before adding behavior, search for similar code and follow the existing package patterns
+- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
+- If the codebase clearly implies one path, proceed and state the facts that led to it
 
 ## Implementation
 
-- Implement only what's explicitly requested — no extra features, no future requirements
-- Replace old implementations — never keep both old and new
-- Breaking changes are fine — no backward compatibility
+- Make the smallest coherent change that fully satisfies the request
+- When refactoring, replace the old implementation completely; do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
+- Do not preserve backward compatibility unless the request explicitly requires it
+- Do not add regression tests, migration code, compatibility layers, or "just in case" code unless explicitly requested
+- Use the repo's libraries and patterns to their full extent, especially Effect; prefer library-native modeling over custom control flow
+- Use the type system as the boundary; do not add defensive runtime validation, re-validation, or guard code to compensate for weak types
+- Do not add speculative abstractions or single-use helpers
 
-## Code Style
+## Verification
 
-- Inline single-use logic — no helper functions used once
-- Happy path only — no defensive guards or re-validation
-- Biome or TypeScript error → wrong design → rewrite
-- Match existing codebase patterns — never invent new ones
+- After code changes, run `vp run check` before yielding back
+- Treat TypeScript and Biome diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them

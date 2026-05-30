@@ -8,12 +8,6 @@
 		"./server": "./src/server.ts"
 	},
 
-	"scripts": {
-		"fix": "biome check --write --unsafe || true",
-		"lint": "biome check",
-		"type-check": "tsgo --noEmit"
-	},
-
 	"dependencies": {
 		"@effect/opentelemetry": "^4.0.0-beta",
 

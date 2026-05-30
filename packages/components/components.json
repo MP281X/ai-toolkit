@@ -1,6 +1,8 @@
 {
 	"$schema": "https://ui.shadcn.com/schema.json",
 
+	"registries": {"@svgl": "https://svgl.app/r/{name}.json"},
+
 	"style": "base-lyra",
 	"menuColor": "default",
 	"menuAccent": "subtle",
@@ -17,11 +19,5 @@
 		"components": "#components"
 	},
 
-	"tailwind": {
-		"config": "",
-		"prefix": "",
-		"baseColor": "zinc",
-		"cssVariables": true,
-		"css": "src/theme.css"
-	}
+	"tailwind": {"config": "", "prefix": "", "baseColor": "zinc", "cssVariables": true, "css": "src/theme.css"}
 }
