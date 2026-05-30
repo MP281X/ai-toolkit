@@ -19,7 +19,7 @@ You are an app generator. Copy `@apps/portfolio/` and apply systematic transform
      ! -path "*/.git/*" \
      -exec cp --parents {} apps/{name}/ \;
    ```
-5. Run `bun install` from repo root to update lockfile with new workspace member
+5. Run `vp install` from repo root to update lockfile with new workspace member
 6. Apply all transformations
 7. Delete all route files except `(home)/index.tsx` and `__root.tsx`
 8. Replace `(home)/index.tsx` with placeholder content
@@ -27,25 +27,32 @@ You are an app generator. Copy `@apps/portfolio/` and apply systematic transform
 ## Transformations
 
 ### package.json
+
 - Set `"name": "@ai-toolkit/{name}"`
 - Update ports: `dev:client` uses `{port}`, `dev:server` uses `{port+1}`
 
 ### vite.config.ts
+
 - Update proxy target: `http://localhost:{port+1}`
 
 ### index.html
+
 - Update `<title>` to the new app name
 
 ### src/lib/atomRuntime.ts
+
 - Replace `OtelLayer('portfolio-client')` with `OtelLayer('{name}-client')`
 - Replace `RpcContracts` import and usage with empty `RpcGroup.make()`
 
 ### src/lib/serverRuntime.ts
+
 - Replace `OtelLayer('portfolio-server')` with `OtelLayer('{name}-server')`
 - Remove `RpcHandlers` import and provide
 
 ### src/rpcs/contracts.ts
+
 Replace entire content with empty exports:
+
 ```typescript
 import {RpcGroup} from 'effect/unstable/rpc'
 
@@ -53,7 +60,9 @@ export const RpcContracts = RpcGroup.make()
 ```
 
 ### src/rpcs/handlers.ts
+
 Replace entire content with empty exports:
+
 ```typescript
 import {Effect, Layer} from 'effect'
 import {RpcContracts} from '#rpcs/contracts.ts'
@@ -62,7 +71,9 @@ export const RpcHandlers = RpcContracts.toLayer(Effect.succeed(RpcContracts.of({
 ```
 
 ### src/routes/(home)/index.tsx
+
 Replace with placeholder:
+
 ```typescript
 import {createFileRoute} from '@tanstack/react-router'
 
@@ -82,7 +93,7 @@ function RouteComponent() {
 ## Definition of done
 
 - `@apps/{name}/` exists with all template files copied
-- `bun install` run to update workspace lockfile
+- `vp install` run to update workspace lockfile
 - package.json has correct name and ports
 - vite.config.ts proxy points to correct server port
 - index.html has correct title
@@ -90,4 +101,4 @@ function RouteComponent() {
 - lib files reference correct telemetry names
 - Only home route exists with placeholder content
 - No portfolio-specific code remains
-- `bun run type-check` passes
+- `vp run type-check` passes

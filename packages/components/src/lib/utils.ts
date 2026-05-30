@@ -1,15 +1,15 @@
-import {Array, Cause, DateTime, Match, Predicate, pipe, String} from 'effect'
+import {Array, Cause, DateTime, Match, Predicate, String, pipe} from 'effect'
 
 import type {ClassValue} from 'clsx'
 import {clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
 
-export function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: readonly ClassValue[]) {
 	return twMerge(clsx(inputs))
 }
 
 export const formatError = pipe(
-	Match.type<unknown>(),
+	Match.type(),
 	Match.when(Predicate.isError, error => {
 		if (String.isEmpty(error.message) || error.message === 'Error') return error.name
 		return error.message
@@ -24,30 +24,29 @@ export const formatError = pipe(
 	),
 	Match.when(Predicate.hasProperty('message'), error => String.String(error.message)),
 	Match.when(Predicate.isString, string => string),
-	Match.when(Predicate.isNullish, () => 'Error'),
-	Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, null, 2)),
-	Match.orElse(() => 'Unknown Error')
+	Match.when(Predicate.isNullish, () => 'Error' as const),
+	Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, undefined, 2)),
+	Match.orElse(() => 'Unknown Error' as const)
 )
 
 export const formatTimestamp = pipe(
 	Match.type<DateTime.DateTime>(),
 	Match.when(
 		DateTime.isDateTime,
-		DateTime.format({minute: '2-digit', hour: '2-digit', day: '2-digit', month: 'short'})
+		DateTime.format({day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short'})
 	),
 	Match.exhaustive
 )
 
 export function formatNumber(number: number) {
-	const formatter = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1})
-	return formatter.format(number)
+	return new Intl.NumberFormat(undefined, {maximumFractionDigits: 1, notation: 'compact'}).format(number)
 }
 
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,
-		String.replace(/[-_]+/g, ' '),
-		String.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+		String.replaceAll(/[-_]+/gu, ' '),
+		String.replaceAll(/([a-z0-9])([A-Z])/gu, '$1 $2'),
 		String.trim,
 		String.toLowerCase,
 		String.capitalize

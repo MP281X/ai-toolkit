@@ -2,11 +2,7 @@
   "type": "module",
   "sideEffects": false,
   "name": "@ai-toolkit/.opencode",
-  "scripts": {
-    "fix": "biome check --write --unsafe || true",
-    "lint": "biome check",
-    "type-check": "tsgo --noEmit"
-  },
+
   "dependencies": {
     "@opencode-ai/plugin": "1.4.6",
     "@ai-toolkit/git": "workspace:*"

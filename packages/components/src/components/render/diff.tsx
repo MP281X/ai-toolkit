@@ -1,148 +1,347 @@
-import {Array, pipe, String} from 'effect'
+import {Array, String} from 'effect'
 
-import {getSingularPatch} from '@pierre/diffs'
-import * as Pierre from '@pierre/diffs/react'
+import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
+import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
+import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
+import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
 const DIFF_CSS = `
-	:host {
-		--diffs-font-family: "JetBrains Mono Variable", monospace;
-		--diffs-header-font-family: "JetBrains Mono Variable", monospace;
-		--diffs-font-size: 14px;
-		--diffs-line-height: 1.5;
-		--gutter: light-dark(oklch(0.967 0.001 286.375), oklch(0.22 0.007 285.885));
-		--muted: light-dark(oklch(0.967 0.001 286.375), oklch(0.25 0.006 286.033));
-		--border: light-dark(oklch(0.92 0.004 286.32), oklch(1 0 0 / 12%));
-		--diffs-addition-color-override: light-dark(#16a34a, #22c55e);
-		--diffs-deletion-color-override: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
-		--diffs-bg-separator-override: var(--gutter);
-		--diffs-gap-block: 0px;
-		--diffs-gap-inline: 0px;
-		--diffs-gap-fallback: 0px;
-		user-select: text;
+	:host,
+	pre {
+		--diffs-bg: var(--background) !important;
 	}
 
 	pre {
-		--diffs-bg: light-dark(oklch(1 0 0), oklch(0.18 0.006 285.885)) !important;
 		background-color: transparent !important;
-		overflow-x: auto !important;
 	}
 
-	[data-code] {
-		padding-top: 0 !important;
-		padding-bottom: 0 !important;
-	}
-
-	[data-content-buffer],
-	[data-gutter-buffer] {
-		display: none !important;
-	}
-
-	[data-column-content],
-	[data-column-content] * {
-		user-select: text;
-	}
-
-	[data-gutter] {
-		background: var(--gutter) !important;
-	}
-
-	[data-column-number] {
-		background: var(--gutter) !important;
-		position: sticky !important;
-		left: 0 !important;
-		z-index: 1 !important;
-		user-select: none;
-	}
-
-	[data-separator],
-	[data-separator='line-info'],
-	[data-separator='line-info-basic'],
-	[data-separator='metadata'],
-	[data-separator='simple'] {
-		background: var(--gutter) !important;
-		margin-block: 0 !important;
-		padding: 0 !important;
-	}
-
-	[data-separator-content],
-	[data-separator-wrapper],
-	[data-expand-button],
-	[data-separator-wrapper] [data-expand-up],
-	[data-separator-wrapper] [data-expand-down],
-	[data-separator-wrapper] [data-expand-both] {
+	*,
+	::before,
+	::after {
 		border-radius: 0 !important;
-		overflow: visible !important;
-		background-clip: border-box !important;
-	}
-
-	[data-separator-wrapper] {
-		background: var(--gutter) !important;
-	}
-
-	[data-expand-button] {
-		background: var(--gutter) !important;
-		border: none !important;
-	}
-
-	[data-expand-button] [data-icon] {
-		width: 12px !important;
-		height: 12px !important;
 	}
 `
 
-export function PatchDiff(props: {patch: string}) {
+type DiffComment = {
+	readonly filePath: string
+	readonly lineNumber: number
+	readonly side?: AnnotationSide
+	readonly body: string
+}
+
+function captureScrollAnchor(container: HTMLElement, clientY: number) {
+	const lineElement = [
+		...(container
+			.querySelector('diffs-container')
+			?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? [])
+	].find(element => {
+		const rect = element.getBoundingClientRect()
+		return clientY >= rect.top && clientY <= rect.bottom
+	})
+
+	if (!lineElement || lineElement.dataset['lineType'] === 'change-deletion') return undefined
+
+	const lineNumber = lineElement.dataset['line']
+	if (!lineNumber) return undefined
+
+	return {clientY, lineNumber, offsetWithinLine: clientY - lineElement.getBoundingClientRect().top}
+}
+
+function restoreScrollAnchor(
+	container: HTMLElement,
+	anchor: {readonly clientY: number; readonly offsetWithinLine: number; readonly lineNumber: string},
+	mode: 'diff' | 'file'
+) {
+	const targetLine = container
+		.querySelector('diffs-container')
+		?.shadowRoot?.querySelector(
+			mode === 'diff'
+				? `[data-line="${CSS.escape(anchor.lineNumber)}"]:not([data-line-type="change-deletion"])`
+				: `[data-line="${CSS.escape(anchor.lineNumber)}"]`
+		)
+
+	if (!(targetLine instanceof HTMLElement)) return
+
+	container.scrollTo({
+		behavior: 'instant',
+		top: container.scrollTop + targetLine.getBoundingClientRect().top - (anchor.clientY - anchor.offsetWithinLine)
+	})
+}
+
+function CommentAnnotation(props: {
+	readonly comment: DiffComment
+	readonly isDraft?: boolean
+	readonly onSaveComment?: (comment: DiffComment) => void
+	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onCloseDraft?: () => void
+}) {
+	const inputRef = useRef<HTMLTextAreaElement>(null)
+	const [editing, setEditing] = useState(String.isEmpty(props.comment.body))
+	const [body, setBody] = useState(props.comment.body)
+
+	useEffect(() => {
+		if (editing) inputRef.current?.focus()
+	}, [editing])
+
+	function saveDraft() {
+		if (String.isEmpty(String.trim(body))) {
+			if (props.isDraft) {
+				props.onCloseDraft?.()
+				return
+			}
+
+			props.onDeleteComment?.({...props.comment, body})
+			setEditing(false)
+			props.onCloseDraft?.()
+			return
+		}
+
+		props.onSaveComment?.({...props.comment, body: String.trim(body)})
+		setEditing(false)
+		props.onCloseDraft?.()
+	}
+
+	if (editing) {
+		return (
+			<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
+				<textarea
+					ref={inputRef}
+					value={body}
+					placeholder="Add comment"
+					className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
+					onChange={event => {
+						setBody(event.currentTarget.value)
+					}}
+					onClick={event => {
+						event.stopPropagation()
+					}}
+					onKeyDown={event => {
+						if (event.key === 'Escape') {
+							event.preventDefault()
+
+							if (props.isDraft) props.onCloseDraft?.()
+							else setEditing(false)
+						}
+
+						if (event.key === 'Enter' && !event.shiftKey) {
+							event.preventDefault()
+							saveDraft()
+						}
+					}}
+				/>
+			</div>
+		)
+	}
+
 	return (
-		<Pierre.PatchDiff
-			patch={props.patch}
-			options={{
-				overflow: 'scroll',
-				themeType: 'system',
-				unsafeCSS: DIFF_CSS,
-				diffStyle: 'unified',
-				lineDiffType: 'char',
-				diffIndicators: 'bars',
-				disableFileHeader: true,
-				theme: HIGHLIGHT_THEMES,
-				disableLineNumbers: false
-			}}
-		/>
+		<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
+			<button
+				type="button"
+				className="block w-full bg-transparent p-0 text-left leading-relaxed whitespace-pre-wrap"
+				onClick={event => {
+					event.stopPropagation()
+					setEditing(true)
+				}}
+			>
+				{props.comment.body}
+			</button>
+		</div>
 	)
 }
 
-export function PatchResult(props: {filePath: string; patch: string}) {
-	const fileDiff = getSingularPatch(props.patch)
+function patchResultContent(fileDiff: FileDiffMetadata) {
+	if (fileDiff.type === 'deleted') return ''
 
-	const content = pipe(
-		fileDiff.hunks,
-		Array.flatMap(hunk => hunk.hunkContent),
-		Array.flatMap(part =>
-			pipe(
-				fileDiff.additionLines,
-				Array.drop(part.additionLineIndex),
-				Array.take(part.type === 'context' ? part.lines : part.additions)
+	return Array.join(
+		Array.flatMap(fileDiff.hunks, hunk =>
+			Array.flatMap(hunk.hunkContent, part =>
+				Array.take(
+					Array.drop(fileDiff.additionLines, part.additionLineIndex),
+					part.type === 'context' ? part.lines : part.additions
+				)
 			)
 		),
-		Array.join(''),
-		String.trim
+		''
 	)
+}
+
+export function PatchDiff(props: {
+	readonly filePath: string
+	readonly patch: string
+	readonly comments?: readonly DiffComment[]
+	readonly onSaveComment?: (comment: DiffComment) => void
+	readonly onDeleteComment?: (comment: DiffComment) => void
+}) {
+	const containerRef = useRef<HTMLElement>(null)
+	const pointerClientYRef = useRef<number | undefined>(undefined)
+	const scrollAnchorRef = useRef<ReturnType<typeof captureScrollAnchor>>(undefined)
+	const [mode, setMode] = useState<'diff' | 'file'>('diff')
+	const [draftComment, setDraftComment] = useState<DiffComment>()
+	const language = resolveLanguage(props.filePath)
+	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
+
+	useEffect(() => {
+		containerRef.current?.focus()
+	}, [mode, props.filePath, props.patch])
+
+	useLayoutEffect(() => {
+		const container = containerRef.current
+		const anchor = scrollAnchorRef.current
+		if (!container || !anchor) return
+
+		restoreScrollAnchor(container, anchor, mode)
+		scrollAnchorRef.current = undefined
+	}, [mode])
+
+	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
+		if (!props.onSaveComment) return
+
+		if (
+			draftComment &&
+			draftComment.filePath === props.filePath &&
+			draftComment.lineNumber === line.lineNumber &&
+			(draftComment.side === 'deletions') === (line.side === 'deletions')
+		) {
+			return
+		}
+
+		if (draftComment) return
+
+		if (
+			!Array.some(
+				props.comments ?? Array.empty(),
+				current =>
+					current.filePath === props.filePath &&
+					current.lineNumber === line.lineNumber &&
+					(current.side === 'deletions') === (line.side === 'deletions')
+			)
+		) {
+			setDraftComment({
+				body: '',
+				filePath: props.filePath,
+				lineNumber: line.lineNumber,
+				side: line.side === 'deletions' ? line.side : undefined
+			})
+		}
+	}
 
 	return (
-		<Pierre.File
-			file={{
-				name: props.filePath,
-				contents: fileDiff.type === 'deleted' || String.isEmpty(content) ? '' : content,
-				lang: resolveLanguage(props.filePath)
+		<section
+			ref={containerRef}
+			tabIndex={-1}
+			aria-label="Diff viewer"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
+			onPointerMoveCapture={event => {
+				pointerClientYRef.current = event.clientY
 			}}
-			options={{
-				overflow: 'scroll',
-				themeType: 'system',
-				unsafeCSS: DIFF_CSS,
-				disableFileHeader: true,
-				theme: HIGHLIGHT_THEMES,
-				disableLineNumbers: false
+			onPointerDownCapture={event => {
+				pointerClientYRef.current = event.clientY
+
+				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
+					event.currentTarget.focus()
+				}
 			}}
-		/>
+			onKeyDownCapture={event => {
+				if (event.key === 'Tab') {
+					event.preventDefault()
+					event.stopPropagation()
+
+					const rect = event.currentTarget.getBoundingClientRect()
+					const clientY =
+						pointerClientYRef.current !== undefined
+							? Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
+							: rect.top + rect.height / 2
+					scrollAnchorRef.current = captureScrollAnchor(event.currentTarget, clientY)
+					setMode(current => (current === 'diff' ? 'file' : 'diff'))
+				}
+			}}
+		>
+			{mode === 'diff' ? (
+				<PierreFileDiff<DiffComment>
+					key={props.patch}
+					fileDiff={fileDiff}
+					options={{
+						diffIndicators: 'bars',
+						diffStyle: 'unified',
+						disableBackground: false,
+						disableFileHeader: true,
+						disableLineNumbers: false,
+						lineDiffType: 'word-alt',
+						onLineNumberClick: line => {
+							openComment({lineNumber: line.lineNumber, side: line.annotationSide})
+						},
+						overflow: 'scroll',
+						theme: HIGHLIGHT_THEMES,
+						themeType: 'system',
+						unsafeCSS: DIFF_CSS
+					}}
+					lineAnnotations={Array.map(
+						draftComment
+							? Array.append(props.comments ?? Array.empty(), draftComment)
+							: (props.comments ?? Array.empty()),
+						comment => ({lineNumber: comment.lineNumber, metadata: comment, side: comment.side ?? 'additions'})
+					)}
+					renderAnnotation={annotation => (
+						<CommentAnnotation
+							comment={annotation.metadata}
+							isDraft={
+								draftComment &&
+								annotation.metadata.filePath === draftComment.filePath &&
+								annotation.metadata.lineNumber === draftComment.lineNumber &&
+								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
+							}
+							onSaveComment={props.onSaveComment}
+							onDeleteComment={props.onDeleteComment}
+							onCloseDraft={() => {
+								setDraftComment(undefined)
+							}}
+						/>
+					)}
+				/>
+			) : (
+				<File<DiffComment>
+					key={props.patch}
+					file={{contents: patchResultContent(fileDiff), lang: language, name: props.filePath}}
+					options={{
+						disableFileHeader: true,
+						disableLineNumbers: false,
+						onLineNumberClick: line => {
+							openComment({lineNumber: line.lineNumber})
+						},
+						overflow: 'scroll',
+						theme: HIGHLIGHT_THEMES,
+						themeType: 'system',
+						unsafeCSS: DIFF_CSS
+					}}
+					lineAnnotations={Array.map(
+						Array.filter(
+							draftComment
+								? Array.append(props.comments ?? Array.empty(), draftComment)
+								: (props.comments ?? Array.empty()),
+							comment => comment.side !== 'deletions'
+						),
+						comment => ({lineNumber: comment.lineNumber, metadata: comment})
+					)}
+					renderAnnotation={annotation => (
+						<CommentAnnotation
+							comment={annotation.metadata}
+							isDraft={
+								draftComment &&
+								annotation.metadata.filePath === draftComment.filePath &&
+								annotation.metadata.lineNumber === draftComment.lineNumber &&
+								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
+							}
+							onSaveComment={props.onSaveComment}
+							onDeleteComment={props.onDeleteComment}
+							onCloseDraft={() => {
+								setDraftComment(undefined)
+							}}
+						/>
+					)}
+				/>
+			)}
+		</section>
 	)
 }

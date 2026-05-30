@@ -1,37 +1,40 @@
 {
-	"type": "module",
-	"name": "@ai-toolkit",
-	"sideEffects": false,
-	"packageManager": "bun@1.3.10",
-	"workspaces": ["apps/*", "packages/*", ".opencode"],
+  "name": "@ai-toolkit",
+  "type": "module",
+  "sideEffects": false,
 
-	"scripts": {
-		"dev": "turbo run dev:server dev:client",
-		"build": "NODE_ENV=production turbo run build:server build:client",
+  "packageManager": "bun@1.3.14",
+  "workspaces": ["apps/*", "packages/*", ".opencode"],
 
-		"shadcn": "cd packages/components && bunx shadcn@latest",
+  "scripts": {
+    "dev": "mprocs 'vp run @ai-toolkit/workbench#dev:client' 'vp run @ai-toolkit/workbench#dev:server' 'vp run @ai-toolkit/lab#dev:client' 'vp run @ai-toolkit/lab#dev:server' 'vp run @ai-toolkit/portfolio#dev:client' 'vp run @ai-toolkit/portfolio#dev:server'",
+    "build": "vp run -r build:client && vp run -r build:server",
 
-		"fix": "turbo run fix",
-		"lint": "turbo run lint",
-		"type-check": "turbo run type-check"
-	},
+    "fix": "vp check --fix",
+    "check": "vp check",
 
-	"dependencies": {
-		"effect": "^4.0.0-beta",
-		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-bun": "^4.0.0-beta"
-	},
+    "shadcn": "cd packages/components && vp dlx shadcn@latest"
+  },
 
-	"devDependencies": {
-		"turbo": "latest",
-		"@biomejs/biome": "latest",
-		"@effect/language-service": "latest",
+  "dependencies": {
+    "effect": "^4.0.0-beta",
+    "@effect/atom-react": "^4.0.0-beta",
+    "@effect/platform-bun": "^4.0.0-beta",
+    "@effect/openapi-generator": "^4.0.0-beta"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
 
-		"typescript": "latest",
-		"@typescript/native-preview": "latest",
+    "mprocs": "latest",
+    "typescript": "latest",
+    "vite-plus": "catalog:"
+  },
 
-		"@types/bun": "latest",
-		"@types/react": "^19",
-		"@types/react-dom": "^19"
-	}
+  "catalog": {
+    "vite-plus": "latest",
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+  }
 }

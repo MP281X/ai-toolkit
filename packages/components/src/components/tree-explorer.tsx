@@ -1,51 +1,87 @@
+import {Predicate} from 'effect'
+
 import {cn} from '#lib/utils.ts'
 
-type TreeExplorerProps = {
-	className?: string
-	children: React.ReactNode
-}
-
-export function TreeExplorer(props: TreeExplorerProps) {
+export function TreeExplorer(props: {readonly className?: string; readonly children: React.ReactNode}) {
 	return <div className={cn('flex min-h-0 flex-1 flex-col', props.className)}>{props.children}</div>
 }
 
-type TreeExplorerSectionProps = {
-	label: string
-	className?: string
-	children: React.ReactNode
-}
-
-export function TreeExplorerSection(props: TreeExplorerSectionProps) {
+export function TreeExplorerSection(props: {
+	readonly label?: React.ReactNode
+	readonly className?: string
+	readonly children: React.ReactNode
+}) {
 	return (
-		<section className={cn('flex flex-col gap-1', props.className)}>
-			<div className="px-3 pt-2 font-semibold text-[11px] text-muted-foreground uppercase">{props.label}</div>
-			<ul className="flex flex-col gap-0.5 px-1">{props.children}</ul>
+		<section className={cn('flex flex-col gap-1.5', props.className)}>
+			{Predicate.isNotUndefined(props.label) && (
+				<div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 text-[11px] font-semibold tracking-wide uppercase">
+					{props.label}
+				</div>
+			)}
+			<ul className="flex flex-col px-0">{props.children}</ul>
 		</section>
 	)
 }
 
-type TreeExplorerItemProps = {
-	selected?: boolean
-	onClick?: () => void
-	icon?: React.ReactNode
-	children: React.ReactNode
-}
+export function TreeExplorerRow(props: {
+	readonly selected?: boolean
+	readonly onClick?: () => void
+	readonly icon?: React.ReactNode
+	readonly actions?: React.ReactNode
+	readonly children: React.ReactNode
+}) {
+	const className = cn(
+		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-xs',
+		props.selected === true &&
+			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
+	)
+	const label = (
+		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
+			{Predicate.isNotUndefined(props.icon) && (
+				<span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>
+			)}
+			<span className="min-w-0 flex-1 truncate">{props.children}</span>
+		</span>
+	)
 
-export function TreeExplorerItem(props: TreeExplorerItemProps) {
-	return (
-		<li className="w-full min-w-0">
+	if (Predicate.isNotUndefined(props.onClick) && Predicate.isNotUndefined(props.actions)) {
+		return (
+			<div
+				aria-current={props.selected === true ? 'page' : undefined}
+				className={className}
+				style={{paddingLeft: 12, paddingRight: 8}}
+			>
+				<button
+					type="button"
+					onClick={props.onClick}
+					className="flex h-full min-w-0 items-center border-0 bg-transparent p-0 text-left text-inherit"
+				>
+					{label}
+				</button>
+				{props.actions}
+			</div>
+		)
+	}
+
+	if (Predicate.isNotUndefined(props.onClick)) {
+		return (
 			<button
 				type="button"
-				aria-current={props.selected ? 'page' : undefined}
+				aria-current={props.selected === true ? 'page' : undefined}
 				onClick={props.onClick}
-				className={cn(
-					'flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground',
-					props.selected && 'bg-primary/15 text-primary'
-				)}
+				className={className}
+				style={{paddingLeft: 12, paddingRight: 8}}
 			>
-				{props.icon && <span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>}
-				<span className="min-w-0 flex-1 truncate">{props.children}</span>
+				{label}
+				{props.actions}
 			</button>
-		</li>
+		)
+	}
+
+	return (
+		<div className={className} style={{paddingLeft: 12, paddingRight: 8}}>
+			{label}
+			{props.actions}
+		</div>
 	)
 }

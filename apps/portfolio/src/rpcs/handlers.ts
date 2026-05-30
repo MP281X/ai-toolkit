@@ -1,4 +1,4 @@
-import {Array, Duration, Effect, Option, PubSub, pipe, Schedule, Stream, SubscriptionRef} from 'effect'
+import {Array, Duration, Effect, Option, PubSub, Schedule, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {
 	PortfolioSnapshot,
@@ -35,22 +35,14 @@ const botPalette = [
 ] as const
 
 const SERVER_BOTS = [
+	{color: botPalette[3], id: 'server-alpha', name: 'server-alpha', xFreq: 0.47, xPhase: 0, yFreq: 0.71, yPhase: 0},
 	{
-		id: 'server-alpha',
-		name: 'server-alpha',
-		color: botPalette[3],
-		xFreq: 0.47,
-		yFreq: 0.71,
-		xPhase: 0,
-		yPhase: 0
-	},
-	{
+		color: botPalette[17],
 		id: 'server-beta',
 		name: 'server-beta',
-		color: botPalette[17],
 		xFreq: 0.83,
-		yFreq: 0.53,
 		xPhase: Math.PI,
+		yFreq: 0.53,
 		yPhase: Math.PI / 2
 	}
 ] as const
@@ -67,7 +59,10 @@ function appendTrail(trails: PortfolioState['trails'], trail: PortfolioTrail) {
 	return allTrails.length > 180 ? Array.drop(allTrails, allTrails.length - 180) : allTrails
 }
 
-function hasMeaningfulMove(current: {x: number; y: number}, next: {x: number; y: number}) {
+function hasMeaningfulMove(
+	current: {readonly x: number; readonly y: number},
+	next: {readonly x: number; readonly y: number}
+) {
 	const deltaX = next.x - current.x
 	const deltaY = next.y - current.y
 
@@ -81,7 +76,7 @@ function findVisitor(visitors: PortfolioState['visitors'], id: string) {
 }
 
 function upsertVisitor(visitors: PortfolioState['visitors'], visitor: PortfolioVisitor) {
-	for (let index = 0; index < visitors.length; index++) {
+	for (let index = 0; index < visitors.length; index += 1) {
 		if (visitors[index]?.id !== visitor.id) continue
 
 		const nextVisitors = Array.copy(visitors)
@@ -109,14 +104,14 @@ function removeVisitor(visitors: PortfolioState['visitors'], id: string) {
 }
 
 function createVisitorTrailUpdate(state: PortfolioState, visitor: PortfolioVisitor) {
-	const trail = new PortfolioTrail({visitorId: visitor.id, x: visitor.x, y: visitor.y, color: visitor.color})
+	const trail = new PortfolioTrail({color: visitor.color, visitorId: visitor.id, x: visitor.x, y: visitor.y})
 
 	return {
-		trail,
 		state: new PortfolioState({
-			visitors: upsertVisitor(state.visitors, visitor),
-			trails: appendTrail(state.trails, trail)
-		})
+			trails: appendTrail(state.trails, trail),
+			visitors: upsertVisitor(state.visitors, visitor)
+		}),
+		trail
 	}
 }
 
@@ -133,7 +128,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Effect.repeat(
 					Effect.gen(function* () {
 						const pos = botPosition(bot, (Date.now() - start) / 1000)
-						const visitor = new PortfolioVisitor({id: bot.id, name: bot.name, color: bot.color, x: pos.x, y: pos.y})
+						const visitor = new PortfolioVisitor({color: bot.color, id: bot.id, name: bot.name, x: pos.x, y: pos.y})
 						const next = yield* SubscriptionRef.modifySome(state, currentState => {
 							const currentBot = findVisitor(currentState.visitors, bot.id)
 							if (currentBot && !hasMeaningfulMove(currentBot, pos)) return [undefined, Option.none()] as const
@@ -156,16 +151,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					Effect.gen(function* () {
 						const visitor = new PortfolioVisitor({
+							color: payload.color,
 							id: payload.id,
 							name: payload.name,
-							color: payload.color,
 							x: 0.5,
 							y: 0.5
 						})
 						const joinedState = yield* SubscriptionRef.modify(state, currentState => {
 							const nextState = new PortfolioState({
-								visitors: upsertVisitor(currentState.visitors, visitor),
-								trails: currentState.trails
+								trails: currentState.trails,
+								visitors: upsertVisitor(currentState.visitors, visitor)
 							})
 
 							return [nextState, nextState] as const
@@ -173,7 +168,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						yield* PubSub.publish(events, new PortfolioVisitorUpserted({visitor}))
 
 						return pipe(
-							Stream.make(new PortfolioSnapshot({visitors: joinedState.visitors, trails: joinedState.trails})),
+							Stream.make(new PortfolioSnapshot({trails: joinedState.trails, visitors: joinedState.visitors})),
 							Stream.concat(Stream.fromPubSub(events)),
 							Stream.ensuring(
 								Effect.gen(function* () {
@@ -182,8 +177,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 										if (!removedVisitors.removed) return [removedVisitors, latestState] as const
 
 										const nextState = new PortfolioState({
-											visitors: removedVisitors.visitors,
-											trails: latestState.trails
+											trails: latestState.trails,
+											visitors: removedVisitors.visitors
 										})
 
 										return [removedVisitors, nextState] as const
@@ -202,9 +197,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (found && !hasMeaningfulMove(found, payload)) return [undefined, Option.none()] as const
 
 						const nextVisitor = new PortfolioVisitor({
+							color: payload.color,
 							id: payload.id,
 							name: found?.name ?? 'Unknown',
-							color: payload.color,
 							x: payload.x,
 							y: payload.y
 						})
