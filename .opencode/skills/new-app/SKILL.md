@@ -28,7 +28,7 @@ You are an app generator. Copy `@apps/portfolio/` and apply systematic transform
 
 ### package.json
 
-- Set `"name": "@ai-toolkit/{name}"`
+- Set `"name": "@deslop/{name}"`
 - Update ports: `dev:client` uses `{port}`, `dev:server` uses `{port+1}`
 
 ### vite.config.ts

@@ -3,7 +3,7 @@ import {useAtomSuspense} from '@effect/atom-react'
 import {createFileRoute, Navigate} from '@tanstack/react-router'
 
 import {activeHomeAtom} from '#lib/state.ts'
-import {Browser} from '@ai-toolkit/components/render/browser'
+import {Browser} from '@deslop/components/render/browser'
 
 export const Route = createFileRoute('/(home)/$worktree/browser')({component: BrowserPage})
 

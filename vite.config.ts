@@ -19,7 +19,7 @@ export default defineConfig({
 			customGroups: [
 				{elementNamePattern: ['@effect/**'], groupName: 'effectPackages', selector: 'external'},
 				{elementNamePattern: ['effect'], groupName: 'effect', selector: 'external'},
-				{elementNamePattern: ['@ai-toolkit/**'], groupName: 'aiToolkit', selector: 'external'},
+				{elementNamePattern: ['@deslop/**'], groupName: 'aiToolkit', selector: 'external'},
 				{elementNamePattern: ['@/**', '#*', '~/**'], groupName: 'aliases', selector: 'internal'}
 			],
 			groups: [
@@ -40,7 +40,7 @@ export default defineConfig({
 				'sibling',
 				'index'
 			],
-			internalPattern: ['@/', '~/', '#', '@ai-toolkit/']
+			internalPattern: ['@/', '~/', '#', '@deslop/']
 		}
 	},
 	lint: {

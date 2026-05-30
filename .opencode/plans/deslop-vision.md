@@ -206,7 +206,7 @@ Everything persists across restarts:
 - Prompt drafts (including stashed)
 - User preferences, hotkeys, theme
 
-Storage: Effect KeyValueStore on filesystem, app data dir (`~/.ai-toolkit/`).
+Storage: Effect KeyValueStore on filesystem, app data dir (`~/.deslop/`).
 
 ## Performance
 

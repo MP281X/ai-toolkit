@@ -28,7 +28,7 @@ export class Agent extends Context.Service<
 			readonly messages: readonly Prompt.Message[]
 		}) => Stream.Stream<Response.StreamPart<Toolkit.Tools<typeof AgentToolKit>>>
 	}
->()('@ai-toolkit/ai/service/Agent') {
+>()('@deslop/ai/service/Agent') {
 	public static layer(config: {
 		readonly agent: AgentId
 		readonly cwd: string
@@ -46,7 +46,7 @@ export class Agent extends Context.Service<
 	public static layerCodex = flow(makeLayerCodex, Layer.effect(this))
 }
 
-export class Compaction extends Context.Service<Compaction>()('@ai-toolkit/ai/service/Compaction', {
+export class Compaction extends Context.Service<Compaction>()('@deslop/ai/service/Compaction', {
 	make: Effect.fnUntraced(function* (config: {readonly model: ModelId; readonly provider: ProviderId}) {
 		return {
 			compact: (input: {readonly intent: string; readonly messages: readonly Prompt.Message[]}) =>

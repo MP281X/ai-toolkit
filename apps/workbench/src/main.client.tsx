@@ -4,7 +4,7 @@ import {createRoot} from 'react-dom/client'
 
 import {routeTree} from './routeTree.gen.ts'
 
-import {Error, Loading, NotFound} from '@ai-toolkit/components/fallbacks'
+import {Error, Loading, NotFound} from '@deslop/components/fallbacks'
 
 const router = createRouter({
 	defaultErrorComponent: Error,

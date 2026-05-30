@@ -2,8 +2,8 @@ import {Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {AgentId, ModelId, ProviderId} from '@ai-toolkit/ai/catalog'
-import {AgentEvent, AgentKey, AgentStatus} from '@ai-toolkit/ai/schema'
+import {AgentId, ModelId, ProviderId} from '@deslop/ai/catalog'
+import {AgentEvent, AgentKey, AgentStatus} from '@deslop/ai/schema'
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('lab.cwd', {success: Schema.String}),

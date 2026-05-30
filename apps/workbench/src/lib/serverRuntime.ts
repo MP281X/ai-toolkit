@@ -4,8 +4,8 @@ import {FetchHttpClient} from 'effect/unstable/http'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
-import {GitWorkspace} from '@ai-toolkit/git/service'
-import {OtelLayer} from '@ai-toolkit/opentelemetry/server'
+import {GitWorkspace} from '@deslop/git/service'
+import {OtelLayer} from '@deslop/opentelemetry/server'
 
 export const LiveLayers = pipe(
 	Layer.empty,

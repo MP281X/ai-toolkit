@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@ai-toolkit/workbench",
+	"name": "@deslop/workbench",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -24,10 +24,10 @@
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
-		"@ai-toolkit/git": "workspace:*",
-		"@ai-toolkit/terminal": "workspace:*",
-		"@ai-toolkit/components": "workspace:*",
-		"@ai-toolkit/opentelemetry": "workspace:*"
+		"@deslop/git": "workspace:*",
+		"@deslop/terminal": "workspace:*",
+		"@deslop/components": "workspace:*",
+		"@deslop/opentelemetry": "workspace:*"
 	},
 
 	"devDependencies": {

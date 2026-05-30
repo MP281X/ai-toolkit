@@ -7,7 +7,7 @@
 
 ## Context
 
-- Monorepo: `@ai-toolkit/*` packages live in `packages/*`; read package source directly
+- Monorepo: `@deslop/*` packages live in `packages/*`; read package source directly
 - External API source of truth is `.opencode/resources/*`
 - Effect source of truth is `.opencode/resources/effect/LLMS.md`
 - Never search `node_modules`

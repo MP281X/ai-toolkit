@@ -7,8 +7,8 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
-import {Terminal} from '@ai-toolkit/components/render/terminal'
-import type {TerminalEvent} from '@ai-toolkit/terminal/schema'
+import {Terminal} from '@deslop/components/render/terminal'
+import type {TerminalEvent} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/terminal')({component: TerminalPage})
 

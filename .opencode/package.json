@@ -1,10 +1,10 @@
 {
   "type": "module",
   "sideEffects": false,
-  "name": "@ai-toolkit/.opencode",
+  "name": "@deslop/.opencode",
 
   "dependencies": {
     "@opencode-ai/plugin": "1.4.6",
-    "@ai-toolkit/git": "workspace:*"
+    "@deslop/git": "workspace:*"
   }
 }

@@ -11,8 +11,8 @@ import {
 	GitReviewFrom,
 	GitReviewMetadata,
 	GitReviewTo
-} from '@ai-toolkit/git/schema'
-import {TerminalError, TerminalEvent} from '@ai-toolkit/terminal/schema'
+} from '@deslop/git/schema'
+import {TerminalError, TerminalEvent} from '@deslop/terminal/schema'
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.watch', {stream: true, success: Schema.Array(GitProject)}),
