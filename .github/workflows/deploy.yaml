@@ -40,13 +40,13 @@ jobs:
           context: ./apps/portfolio
           tags: ghcr.io/mp281x/${{ github.event.repository.name }}-portfolio:latest
 
-      - name: Docker Build and Push Agent
+      - name: Docker Build and Push Workbench
         if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v7
         with:
           push: true
-          context: ./apps/agent
-          tags: ghcr.io/mp281x/${{ github.event.repository.name }}-agent:latest
+          context: ./apps/workbench
+          tags: ghcr.io/mp281x/${{ github.event.repository.name }}-workbench:latest
 
       - name: Dokploy Portfolio
         if: github.ref == 'refs/heads/main'
@@ -56,7 +56,7 @@ jobs:
             -H "x-api-key: ${{ secrets.DOKPLOY_AUTH_TOKEN }}" \
             -d '{"applicationId": "EuAZczmhLkuLvASm3QRTz"}'
 
-      - name: Dokploy Agent
+      - name: Dokploy Workbench
         if: github.ref == 'refs/heads/main'
         run: |
           curl -X POST https://dev.mp281x.xyz/api/application.deploy \

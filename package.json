@@ -7,7 +7,7 @@
   "workspaces": ["apps/*", "packages/*", ".opencode"],
 
   "scripts": {
-    "dev": "mprocs 'vp run @ai-toolkit/agent#dev:client' 'vp run @ai-toolkit/agent#dev:server' 'vp run @ai-toolkit/portfolio#dev:client' 'vp run @ai-toolkit/portfolio#dev:server'",
+    "dev": "mprocs 'vp run @ai-toolkit/workbench#dev:client' 'vp run @ai-toolkit/workbench#dev:server' 'vp run @ai-toolkit/lab#dev:client' 'vp run @ai-toolkit/lab#dev:server' 'vp run @ai-toolkit/portfolio#dev:client' 'vp run @ai-toolkit/portfolio#dev:server'",
     "build": "vp run -r build:client && vp run -r build:server",
 
     "fix": "vp check --fix",
