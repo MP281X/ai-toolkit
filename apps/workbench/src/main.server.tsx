@@ -12,6 +12,7 @@ import {RpcGroup, RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
+import {BrowserProxyMiddleware} from '@deslop/browser/http'
 
 BunRuntime.runMain(
 	pipe(
@@ -23,11 +24,12 @@ BunRuntime.runMain(
 					root: new URL('./client', pathToFileURL(realpathSync(process.execPath))).pathname,
 					spa: true
 				}),
+				HttpRouter.middleware(BrowserProxyMiddleware, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)
 		),
 		Layer.provide(LiveLayers),
-		Layer.provide(BunHttpServer.layer({hostname: '0.0.0.0'})),
+		Layer.provide(BunHttpServer.layer({hostname: 'localhost'})),
 		Layer.launch
 	)
 )

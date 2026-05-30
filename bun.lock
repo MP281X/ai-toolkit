@@ -66,9 +66,10 @@
       "name": "@deslop/workbench",
       "version": "0.0.0",
       "bin": {
-        "workbench": "./dist/server.js",
+        "workbench": "dist/workbench",
       },
       "devDependencies": {
+        "@deslop/browser": "workspace:*",
         "@deslop/components": "workspace:*",
         "@deslop/git": "workspace:*",
         "@deslop/opentelemetry": "workspace:*",
@@ -94,6 +95,9 @@
         "@effect/ai-openrouter": "^4.0.0-beta",
         "exa-js": "latest",
       },
+    },
+    "packages/browser": {
+      "name": "@deslop/browser",
     },
     "packages/components": {
       "name": "@deslop/components",
@@ -225,6 +229,8 @@
     "@deslop/.opencode": ["@deslop/.opencode@workspace:.opencode"],
 
     "@deslop/ai": ["@deslop/ai@workspace:packages/ai"],
+
+    "@deslop/browser": ["@deslop/browser@workspace:packages/browser"],
 
     "@deslop/components": ["@deslop/components@workspace:packages/components"],
 

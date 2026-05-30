@@ -98,6 +98,22 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.flatMap(terminal => terminal.write(payload.data)),
 					Effect.asVoid
 				),
+			'terminal.killPort': payload =>
+				pipe(
+					RcMap.get(terminals, payload.cwd),
+					Effect.flatMap(terminal => terminal.killPort(payload.port))
+				),
+			'terminal.ports': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(terminals, payload.cwd),
+						Effect.map(terminal =>
+							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(terminal.ports)))(
+								Stream.fromEffect(SubscriptionRef.get(terminal.ports))
+							)
+						)
+					)
+				),
 			'terminal.resize': payload =>
 				pipe(
 					RcMap.get(terminals, payload.cwd),

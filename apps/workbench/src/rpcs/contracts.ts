@@ -79,6 +79,16 @@ export class RpcContracts extends RpcGroup.make(
 		success: TerminalEvent
 	}),
 	Rpc.make('terminal.input', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, data: Schema.String})}),
+	Rpc.make('terminal.killPort', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String, port: Schema.Number})
+	}),
+	Rpc.make('terminal.ports', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String}),
+		stream: true,
+		success: Schema.Array(Schema.Number)
+	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
 		payload: Schema.Struct({cols: Schema.Number, cwd: Schema.String, rows: Schema.Number})
