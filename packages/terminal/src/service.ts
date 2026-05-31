@@ -345,12 +345,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
 					yield* Ref.set(sizeRef, nextSize)
-					yield* Semaphore.withPermit(
+					const snapshot = yield* Semaphore.withPermit(
 						screenLock,
 						Effect.sync(() => {
 							screen.resize(nextSize.cols, nextSize.rows)
+							return serialize.serialize({scrollback: 10_000})
 						})
 					)
+					yield* publish({data: snapshot, type: 'snapshot'})
 
 					const process = yield* Ref.get(processRef)
 					if (!process) return

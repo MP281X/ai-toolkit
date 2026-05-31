@@ -9,14 +9,17 @@ import {startTransition, useEffect, useState} from 'react'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom, projectsAtom} from '#lib/state.ts'
 import {
+	AgentIcon,
+	BotIcon,
+	CircleIcon,
 	GitBranch,
 	GitBranchPlus,
-	CircleIcon,
 	GlobeIcon,
 	Layers,
 	PackageIcon,
 	PanelTop,
 	PlayIcon,
+	SparklesIcon,
 	Square,
 	TerminalIcon,
 	Trash
@@ -104,6 +107,7 @@ function HomeLayout() {
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
 				Match.when(String.endsWith('/browser'), () => 'browser' as const),
 				Match.when(String.endsWith('/run'), () => 'run' as const),
+				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
 			)
 
@@ -142,6 +146,15 @@ function HomeLayout() {
 								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
 									to: '/$worktree/browser'
+								})
+							})
+						}}
+						selectAgent={(worktreeRoot, sessionId, command, args) => {
+							startTransition(() => {
+								void navigate({
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									search: {args, command, sessionId},
+									to: '/$worktree/agent'
 								})
 							})
 						}}
@@ -427,14 +440,124 @@ function RunTaskStatus(input: {
 	return <StatusDot state={staleFinalState ? 'running' : state} />
 }
 
+const agentProfiles = [
+	{args: ['--model', 'openai/gpt-5.5'], command: 'opencode', icon: 'opencode', label: 'opencode'},
+	{
+		args: ['--model', 'gpt-5.5', '-c', 'model_reasoning_effort=low', '--dangerously-bypass-approvals-and-sandbox'],
+		command: 'codex',
+		icon: 'codex',
+		label: 'codex'
+	},
+	{args: ['--model', 'openai/gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
+] as const
+
+type AgentSession = {
+	readonly args: readonly string[]
+	readonly command: string
+	readonly id: string
+	readonly icon: (typeof agentProfiles)[number]['icon']
+	readonly label: string
+}
+
+function WorktreeAgents(input: {
+	readonly cwd: string
+	readonly selectAgent: (cwd: string, sessionId: string, command: string, args: readonly string[]) => void
+}) {
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const [sessions, setSessions] = useState<readonly AgentSession[]>([])
+
+	function startAgent(profile: (typeof agentProfiles)[number]) {
+		const session: AgentSession = {
+			args: profile.args,
+			command: profile.command,
+			icon: profile.icon,
+			id: `agent:${profile.label}:${crypto.randomUUID()}`,
+			label: `${profile.label} ${sessions.filter(session => session.command === profile.command).length + 1}`
+		}
+		setSessions(current => [...current, session])
+		input.selectAgent(input.cwd, session.id, session.command, session.args)
+	}
+
+	function stopAgent(session: AgentSession) {
+		setSessions(current => current.filter(candidate => candidate.id !== session.id))
+		void stop({payload: {args: session.args, command: session.command, cwd: input.cwd, sessionId: session.id}})
+	}
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow icon={<BotIcon className="size-3.5" />} selected={false} onClick={() => {}}>
+				agents
+			</TreeExplorerRow>
+			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+				{agentProfiles.map(profile => {
+					const profileSessions = sessions.filter(session => session.command === profile.command)
+					return (
+						<li key={profile.command} className="w-full min-w-0">
+							<TreeExplorerRow
+								actions={
+									<button
+										type="button"
+										className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+										onClick={event => {
+											event.stopPropagation()
+											startAgent(profile)
+										}}
+										title={`Start ${profile.label}`}
+									>
+										<SparklesIcon className="size-3" />
+									</button>
+								}
+								icon={<AgentIcon layer={profile.icon} />}
+								selected={false}
+								onClick={() => {}}
+							>
+								{profile.label}
+							</TreeExplorerRow>
+							{profileSessions.length > 0 && (
+								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+									{profileSessions.map(session => (
+										<li key={session.id} className="w-full min-w-0">
+											<TreeExplorerRow
+												actions={
+													<button
+														type="button"
+														className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+														onClick={event => {
+															event.stopPropagation()
+															stopAgent(session)
+														}}
+														title={`Stop ${session.label}`}
+													>
+														<Square className="size-3" />
+													</button>
+												}
+												icon={<AgentIcon layer={session.icon} />}
+												selected={false}
+												onClick={() => input.selectAgent(input.cwd, session.id, session.command, session.args)}
+											>
+												{session.label}
+											</TreeExplorerRow>
+										</li>
+									))}
+								</ul>
+							)}
+						</li>
+					)
+				})}
+			</ul>
+		</li>
+	)
+}
+
 function WorktreeManager(input: {
 	readonly activeProject?: GitProject
 	readonly activeWorktree?: GitProject['worktrees'][number]
-	readonly activeView: 'diff' | 'terminal' | 'browser' | 'run'
+	readonly activeView: 'agent' | 'diff' | 'terminal' | 'browser' | 'run'
 	readonly projects: readonly GitProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectBrowser: (worktreeRoot: string) => void
+	readonly selectAgent: (worktreeRoot: string, sessionId: string, command: string, args: readonly string[]) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, command: string, inactive?: boolean) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
@@ -655,6 +778,7 @@ function WorktreeManager(input: {
 												{worktree.branch ?? pathLabel(worktree.root)}
 											</TreeExplorerRow>
 											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+												<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
 												<li className="w-full min-w-0">
 													<TreeExplorerRow
 														icon={<TerminalIcon className="size-3.5" />}
