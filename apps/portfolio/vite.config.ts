@@ -25,5 +25,15 @@ export default defineConfig({
 		react(),
 		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
-	]
+	],
+	server: {
+		watch: {
+			ignored: [
+				/(^|[/\\])\.git([/\\]|$)/u,
+				/(^|[/\\])\.opencode([/\\]|$)/u,
+				/(^|[/\\])node_modules([/\\]|$)/u,
+				/(^|[/\\])dist([/\\]|$)/u
+			]
+		}
+	}
 })

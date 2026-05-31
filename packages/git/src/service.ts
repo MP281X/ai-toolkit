@@ -1,3 +1,5 @@
+import * as NodeFs from 'node:fs'
+
 import {
 	Array,
 	Config,
@@ -65,6 +67,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const path = yield* Path.Path
 		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
+		const run = Effect.runForkWith(yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>())
 
 		const getDefaultBranch = Effect.fnUntraced(function* (cwd: string) {
 			return yield* pipe(
@@ -275,15 +278,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		})
 
 		yield* refreshProjects()
-		yield* Effect.forkScoped(
-			pipe(
-				fs.watch(home),
-				Stream.debounce(Duration.millis(250)),
-				Stream.mapEffect(() => listProjectsFrom(home)),
-				Stream.changes,
-				Stream.tap(projectsSnapshot => SubscriptionRef.set(projects, projectsSnapshot)),
-				Stream.runDrain
-			)
+		yield* Effect.acquireRelease(
+			Effect.sync(() => NodeFs.watch(home, () => run(refreshProjects()))),
+			watcher => Effect.sync(() => watcher.close())
 		)
 
 		return {
