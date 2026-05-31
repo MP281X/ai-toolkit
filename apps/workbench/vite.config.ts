@@ -11,7 +11,16 @@ export default defineConfig({
 		outDir: 'dist/client',
 		rolldownOptions: {experimental: {lazyBarrel: true}}
 	},
-	clearScreen: false,
+	pack: {
+		clean: false,
+		entry: ['src/main.server.ts'],
+		format: 'esm',
+		inputOptions: {external: ['@lydell/node-pty']},
+		outDir: 'dist',
+		outputOptions: {banner: '#!/usr/bin/env node', entryFileNames: 'server.js'},
+		platform: 'node',
+		target: 'node24'
+	},
 	plugins: [
 		tanstackRouter({autoCodeSplitting: true, target: 'react'}),
 		react(),
@@ -19,14 +28,13 @@ export default defineConfig({
 		tailwindcss({optimize: true})
 	],
 	server: {
-		proxy: {
-			'/api/rpc': {changeOrigin: true, target: 'http://localhost:3021', ws: true},
-			'^/.*': {
-				bypass: request => (/^\d+\.localhost(?::\d+)?$/u.test(request.headers.host ?? '') ? undefined : request.url),
-				changeOrigin: false,
-				target: 'http://localhost:3021',
-				ws: true
-			}
+		watch: {
+			ignored: [
+				/(^|[/\\])\.git([/\\]|$)/u,
+				/(^|[/\\])\.opencode([/\\]|$)/u,
+				/(^|[/\\])node_modules([/\\]|$)/u,
+				/(^|[/\\])dist([/\\]|$)/u
+			]
 		}
 	}
 })

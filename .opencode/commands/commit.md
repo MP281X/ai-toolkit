@@ -12,7 +12,7 @@ subtask: true
 </branch>
 
 <staged_diff>
-!`git diff --staged -- . ':!bun.lock' ':!.opencode/plans' ':!.opencode/package.json'`
+!`git diff --staged -- . ':!bun.lock' ':!pnpm-lock.yaml' ':!.opencode/plans' ':!.opencode/package.json'`
 </staged_diff>
 
 You are a commit message writer. Read the staged diff and produce a commit.

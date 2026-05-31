@@ -11,12 +11,29 @@ export default defineConfig({
 		outDir: 'dist/client',
 		rolldownOptions: {experimental: {lazyBarrel: true}}
 	},
-	clearScreen: false,
+	pack: {
+		clean: false,
+		entry: ['src/main.server.ts'],
+		format: 'esm',
+		outDir: 'dist',
+		outputOptions: {banner: '#!/usr/bin/env node', entryFileNames: 'server.js'},
+		platform: 'node',
+		target: 'node24'
+	},
 	plugins: [
 		tanstackRouter({autoCodeSplitting: true, target: 'react'}),
 		react(),
 		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
 	],
-	server: {proxy: {'/api/rpc': {changeOrigin: true, target: 'http://localhost:3001', ws: true}}}
+	server: {
+		watch: {
+			ignored: [
+				/(^|[/\\])\.git([/\\]|$)/u,
+				/(^|[/\\])\.opencode([/\\]|$)/u,
+				/(^|[/\\])node_modules([/\\]|$)/u,
+				/(^|[/\\])dist([/\\]|$)/u
+			]
+		}
+	}
 })

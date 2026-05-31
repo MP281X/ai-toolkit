@@ -43,9 +43,10 @@ function WorktreeTerminal(input: {readonly cwd: string}) {
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent"
 				onData={data => void writeInput({payload: {...input, data}})}
 				onResize={size => void resize({payload: {...input, ...size}})}
-				write={writer => {
+				write={terminal => {
 					for (const event of terminalEvents.value) {
-						writer(event.data)
+						if (event.type === 'reset') terminal.reset()
+						else void terminal.write(event.data)
 					}
 				}}
 			/>

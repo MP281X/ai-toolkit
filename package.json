@@ -3,12 +3,14 @@
   "type": "module",
   "sideEffects": false,
 
-  "packageManager": "bun@1.3.14",
+  "engines": {"node": ">=24"},
+  "packageManager": "pnpm@11.5.0",
   "workspaces": ["apps/*", "packages/*", ".opencode"],
 
   "scripts": {
-    "dev": "mprocs 'vp run @deslop/workbench#dev:client' 'vp run @deslop/workbench#dev:server' 'vp run @deslop/portfolio#dev:client' 'vp run @deslop/portfolio#dev:server'",
-    "build": "vp run -r build:client && vp run -r build:server",
+		"dev": "mprocs 'vp run @deslop/workbench#dev' 'vp run @deslop/portfolio#dev'",
+		"build": "vp run -r build",
+    "preview": "mprocs 'vp run @deslop/workbench#preview' 'vp run @deslop/portfolio#preview'",
 
     "fix": "vp check --fix",
     "check": "vp check",
@@ -19,23 +21,17 @@
   "dependencies": {
     "effect": "^4.0.0-beta",
     "@effect/atom-react": "^4.0.0-beta",
-    "@effect/platform-bun": "^4.0.0-beta",
+    "@effect/platform-node": "^4.0.0-beta",
     "@effect/openapi-generator": "^4.0.0-beta"
   },
   "devDependencies": {
     "typescript": "latest",
-    "@types/bun": "latest",
+    "@types/node": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",
 
     "mprocs": "latest",
     "vite": "catalog:",
     "vite-plus": "catalog:"
-  },
-
-  "catalog": {
-    "vite-plus": "latest",
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
   }
 }

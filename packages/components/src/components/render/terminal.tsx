@@ -9,22 +9,24 @@ export function Terminal(input: {
 	readonly className?: string
 	readonly onData: (data: string) => void
 	readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
-	readonly write: (writer: (data: string) => void) => void
+	readonly write: (terminal: {readonly reset: () => void; readonly write: (data: string) => Promise<void>}) => void
 }) {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<XTerm>(null)
+	const writeQueueRef = useRef(Promise.resolve())
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
 
 	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
 
 	useEffect(() => {
-		if (!elementRef.current) return
+		const element = elementRef.current
+		if (!element) return
 
 		const terminal = new XTerm({
 			customGlyphs: true,
 			fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono Variable", monospace',
 			scrollback: 10_000,
-			theme: {background: getComputedStyle(elementRef.current).backgroundColor}
+			theme: {background: getComputedStyle(element).backgroundColor}
 		})
 		const fit = new FitAddon()
 
@@ -34,7 +36,7 @@ export function Terminal(input: {
 		}
 
 		terminal.loadAddon(fit)
-		terminal.open(elementRef.current)
+		terminal.open(element)
 		try {
 			const webgl = new WebglAddon()
 			terminal.loadAddon(webgl)
@@ -49,8 +51,8 @@ export function Terminal(input: {
 		})
 
 		const observer = new ResizeObserver(resize)
-		observer.observe(elementRef.current)
-		void elementRef.current.ownerDocument.fonts.ready.then(resize)
+		observer.observe(element)
+		void element.ownerDocument.fonts.ready.then(resize)
 		resize()
 		terminalRef.current = terminal
 
@@ -61,8 +63,34 @@ export function Terminal(input: {
 		}
 	}, [])
 	useEffect(() => {
-		input.write(data => terminalRef.current?.write(data))
-	}, [input.write, input])
+		input.write({
+			reset: () => {
+				writeQueueRef.current = writeQueueRef.current.then(() => {
+					const terminal = terminalRef.current
+					if (!terminal) return
+
+					terminal.reset()
+					terminal.clear()
+				})
+			},
+			write: data => {
+				writeQueueRef.current = writeQueueRef.current.then(
+					() =>
+						new Promise<void>(resolve => {
+							const terminal = terminalRef.current
+							if (!terminal) {
+								resolve()
+								return
+							}
+
+							terminal.write(data, resolve)
+						})
+				)
+
+				return writeQueueRef.current
+			}
+		})
+	}, [input.write])
 
 	return (
 		<div

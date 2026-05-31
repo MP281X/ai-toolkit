@@ -1,6 +1,7 @@
 import {Effect} from 'effect'
 
 import {HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
+import {Socket} from 'effect/unstable/socket'
 
 const INJECTED_HEAD = `<script>
 (() => {
@@ -55,7 +56,15 @@ function injectScripts(html: string) {
 const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, port: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
 	const [pathname = '/', search = ''] = request.url.split('?')
-	const upstreamRequest = new Request(`http://localhost:${port}${pathname}${search ? `?${search}` : ''}`, webRequest)
+	const upstreamHeaders = new Headers(webRequest.headers)
+	upstreamHeaders.set('host', `localhost:${port}`)
+	const upstreamRequest = new Request(`http://localhost:${port}${pathname}${search ? `?${search}` : ''}`, {
+		body: webRequest.body,
+		headers: upstreamHeaders,
+		method: webRequest.method,
+		redirect: webRequest.redirect,
+		signal: webRequest.signal
+	})
 	const upstreamResponse = yield* Effect.tryPromise(() => fetch(upstreamRequest))
 	const shouldRewriteHtml =
 		request.method === 'GET' && (upstreamResponse.headers.get('content-type') ?? '').includes('text/html')
@@ -85,11 +94,35 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	)
 })
 
+const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, port: string) {
+	const [pathname = '/', search = ''] = request.url.split('?')
+	const protocols = request.headers['sec-websocket-protocol']
+		?.split(',')
+		.map(protocol => protocol.trim())
+		.filter(protocol => protocol.length > 0)
+	const clientSocket = yield* request.upgrade
+	const upstreamSocket = yield* Socket.makeWebSocket(`ws://localhost:${port}${pathname}${search ? `?${search}` : ''}`, {
+		protocols
+	}).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+	const clientWriter = yield* clientSocket.writer
+	const upstreamWriter = yield* upstreamSocket.writer
+
+	yield* Effect.all([clientSocket.runRaw(upstreamWriter), upstreamSocket.runRaw(clientWriter)], {
+		concurrency: 'unbounded'
+	}).pipe(
+		Effect.scoped,
+		Effect.catch(() => Effect.void)
+	)
+
+	return HttpServerResponse.empty()
+})
+
 export function BrowserProxyMiddleware<E, R>(app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) {
 	return Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
 		const port = /^(\d+)\.localhost(?::\d+)?$/u.exec(request.headers['host'] ?? '')?.[1]
 		if (!port) return yield* app
+		if (request.headers['upgrade']?.toLowerCase() === 'websocket') return yield* proxyWebSocket(request, port)
 
 		return yield* proxy(request, port)
 	})

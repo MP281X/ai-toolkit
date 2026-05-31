@@ -107,11 +107,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						RcMap.get(terminals, payload.cwd),
-						Effect.map(terminal =>
-							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(terminal.ports)))(
-								Stream.fromEffect(SubscriptionRef.get(terminal.ports))
-							)
-						)
+						Effect.map(terminal => terminal.ports)
 					)
 				),
 			'terminal.resize': payload =>
