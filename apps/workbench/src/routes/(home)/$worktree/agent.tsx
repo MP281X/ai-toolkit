@@ -10,11 +10,11 @@ import {activeHomeAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
 import type {TerminalEvent} from '@deslop/terminal/schema'
 
-const AgentSearch = Schema.Struct({args: Schema.Array(Schema.String), command: Schema.String, sessionId: Schema.String})
-
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
-	validateSearch: Schema.toStandardSchemaV1(AgentSearch)
+	validateSearch: Schema.toStandardSchemaV1(
+		Schema.Struct({args: Schema.Array(Schema.String), command: Schema.String, sessionId: Schema.String})
+	)
 })
 
 const terminalEventsAtom = Atom.family(
@@ -67,15 +67,29 @@ function AgentTerminal(input: {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const terminalEvents = useAtomSuspense(terminalEventsAtom(input))
-	const payload = {args: input.args, command: input.command, cwd: input.cwd, sessionId: input.sessionId}
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0 p-2">
 			<Terminal
 				key={input.sessionId}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent"
-				onData={data => void writeInput({payload: {...payload, data}})}
-				onResize={size => void resize({payload: {...payload, ...size}})}
+				onData={data =>
+					void writeInput({
+						payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}
+					})
+				}
+				onResize={size =>
+					void resize({
+						payload: {
+							args: input.args,
+							cols: size.cols,
+							command: input.command,
+							cwd: input.cwd,
+							rows: size.rows,
+							sessionId: input.sessionId
+						}
+					})
+				}
 				write={terminal => {
 					for (const event of terminalEvents.value) {
 						if (event.type === 'reset') terminal.reset()

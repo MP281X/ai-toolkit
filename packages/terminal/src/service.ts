@@ -116,13 +116,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		screen.loadAddon(serialize)
 
-		function publish(event: TerminalEvent) {
-			return pipe(
+		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
+			return yield* pipe(
 				Ref.updateAndGet(sequenceRef, sequence => sequence + 1),
 				Effect.flatMap(sequence => PubSub.publish(events, {event, sequence})),
 				Effect.asVoid
 			)
-		}
+		})
 
 		const requestSnapshot = Semaphore.withPermit(
 			screenLock,
@@ -134,20 +134,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			})
 		)
 
-		function resetScreen() {
-			return Semaphore.withPermit(
-				screenLock,
-				pipe(
-					Effect.sync(() => {
-						screen.reset()
-					}),
-					Effect.andThen(publish({type: 'reset'}))
-				)
+		const resetScreen = Semaphore.withPermit(
+			screenLock,
+			pipe(
+				Effect.sync(() => {
+					screen.reset()
+				}),
+				Effect.andThen(publish({type: 'reset'}))
 			)
-		}
+		)
 
-		function writeScreen(data: string) {
-			return Semaphore.withPermit(
+		const writeScreen = Effect.fnUntraced(function* (data: string) {
+			return yield* Semaphore.withPermit(
 				screenLock,
 				pipe(
 					Effect.callback<void>(resume => {
@@ -158,7 +156,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Effect.andThen(publish({data, type: 'data'}))
 				)
 			)
-		}
+		})
 
 		yield* Effect.addFinalizer(() =>
 			Effect.all([Queue.shutdown(controls), Queue.shutdown(dataQueue), PubSub.shutdown(events)], {discard: true})
@@ -222,20 +220,19 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.gen(function* () {
 				let restart = true
 				while (restart) {
-					yield* resetScreen()
+					yield* resetScreen
 					yield* SubscriptionRef.set(statusRef, {state: 'starting'})
 					const action = yield* pipe(
 						Effect.scoped(
-							Effect.gen(function* () {
-								const subprocess = yield* spawnProcess
-								return yield* Effect.raceFirst(
+							Effect.flatMap(spawnProcess, subprocess =>
+								Effect.raceFirst(
 									pipe(
 										Deferred.await(subprocess.exited),
 										Effect.map(event => ({event, type: 'exit'}) as const)
 									),
 									Queue.take(controls)
 								)
-							})
+							)
 						),
 						Effect.catch(error => Effect.succeed({error, type: 'error'} as const))
 					)
@@ -325,60 +322,57 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					})
 				)
 			),
-			killPort: (port: number) =>
-				Effect.gen(function* () {
-					const owners = yield* Ref.get(portOwners)
-					const pid = owners.get(port)
-					if (!pid) return
+			killPort: Effect.fnUntraced(function* (port: number) {
+				const owners = yield* Ref.get(portOwners)
+				const pid = owners.get(port)
+				if (!pid) return
 
-					yield* Effect.try({
-						catch: cause => new TerminalError({cause, message: `failed to kill process on port ${port}`}),
-						try: () => {
-							process.kill(pid)
-						}
-					})
-				}),
+				yield* Effect.try({
+					catch: cause => new TerminalError({cause, message: `failed to kill process on port ${port}`}),
+					try: () => {
+						process.kill(pid)
+					}
+				})
+			}),
 			ports: SubscriptionRef.changes(portsRef),
-			resize: (nextSize: {readonly cols: number; readonly rows: number}) =>
-				Effect.gen(function* () {
-					const size = yield* Ref.get(sizeRef)
-					if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
+			resize: Effect.fnUntraced(function* (nextSize: {readonly cols: number; readonly rows: number}) {
+				const size = yield* Ref.get(sizeRef)
+				if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
-					yield* Ref.set(sizeRef, nextSize)
-					const snapshot = yield* Semaphore.withPermit(
-						screenLock,
-						Effect.sync(() => {
-							screen.resize(nextSize.cols, nextSize.rows)
-							return serialize.serialize({scrollback: 10_000})
-						})
-					)
-					yield* publish({data: snapshot, type: 'snapshot'})
-
-					const process = yield* Ref.get(processRef)
-					if (!process) return
-
-					yield* Effect.try({
-						catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
-						try: () => {
-							process.resize(nextSize.cols, nextSize.rows)
-						}
+				yield* Ref.set(sizeRef, nextSize)
+				const snapshot = yield* Semaphore.withPermit(
+					screenLock,
+					Effect.sync(() => {
+						screen.resize(nextSize.cols, nextSize.rows)
+						return serialize.serialize({scrollback: 10_000})
 					})
-				}),
+				)
+				yield* publish({data: snapshot, type: 'snapshot'})
+
+				const process = yield* Ref.get(processRef)
+				if (!process) return
+
+				yield* Effect.try({
+					catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
+					try: () => {
+						process.resize(nextSize.cols, nextSize.rows)
+					}
+				})
+			}),
 			restart: Queue.offer(controls, {type: 'restart'}),
 			status: SubscriptionRef.changes(statusRef),
 			stop: Queue.offer(controls, {type: 'stop'}),
-			write: (data: string) =>
-				Effect.gen(function* () {
-					const process = yield* Ref.get(processRef)
-					if (!process) return
+			write: Effect.fnUntraced(function* (data: string) {
+				const process = yield* Ref.get(processRef)
+				if (!process) return
 
-					yield* Effect.try({
-						catch: cause => new TerminalError({cause, message: 'failed to write to terminal'}),
-						try: () => {
-							process.write(data)
-						}
-					})
+				yield* Effect.try({
+					catch: cause => new TerminalError({cause, message: 'failed to write to terminal'}),
+					try: () => {
+						process.write(data)
+					}
 				})
+			})
 		}
 	})
 }) {

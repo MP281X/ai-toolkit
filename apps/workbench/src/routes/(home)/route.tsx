@@ -101,18 +101,17 @@ const branchesAtom = Atom.family((cwd: string) =>
 function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const homeRouteState = useRouterState({
-		select: state => {
-			const activeView = pipe(
+		select: state => ({
+			activeView: pipe(
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
 				Match.when(String.endsWith('/browser'), () => 'browser' as const),
 				Match.when(String.endsWith('/run'), () => 'run' as const),
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
-			)
-
-			return {activeView, activeWorktreeId: String.split('/')(state.location.pathname)[1]}
-		}
+			),
+			activeWorktreeId: String.split('/')(state.location.pathname)[1]
+		})
 	})
 	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
 
@@ -227,15 +226,11 @@ function WorktreeRuns(input: {
 	const [expandedScripts, setExpandedScripts] = useState<ReadonlySet<string>>(new Set())
 	const [lastStates, setLastStates] = useState<ReadonlyMap<string, TerminalStatus['state']>>(new Map())
 
-	function payload(scriptName: string, taskIndex: number, command: string) {
-		return {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId: runSessionId(scriptName, taskIndex)}
-	}
-
 	function startTask(scriptName: string, taskIndex: number, command: string, focus = true) {
 		const sessionId = runSessionId(scriptName, taskIndex)
 		setActiveSessions(current => new Set(current).add(sessionId))
 		setLastStates(current => new Map(current).set(sessionId, 'starting'))
-		void restart({payload: payload(scriptName, taskIndex, command)})
+		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
 		if (focus) input.selectRun(input.cwd, sessionId, command)
 	}
 
@@ -256,7 +251,7 @@ function WorktreeRuns(input: {
 		const sessionId = runSessionId(scriptName, taskIndex)
 		setLastStates(current => new Map(current).set(sessionId, 'stopped'))
 		deactivateTask(sessionId)
-		void stop({payload: payload(scriptName, taskIndex, command)})
+		void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
 	}
 
 	if (scripts.value.length === 0) return null
@@ -278,11 +273,9 @@ function WorktreeRuns(input: {
 						const parallel = script.tasks.length > 1
 						const groupCommands = script.tasks.map((_, taskIndex) => runTaskCommand(script, taskIndex))
 						const firstSessionId = runSessionId(script.name, 0)
-						const scriptExpanded = expandedScripts.has(script.name)
 						const active = groupCommands.some((_, taskIndex) =>
 							activeSessions.has(runSessionId(script.name, taskIndex))
 						)
-						const groupState = active ? 'running' : lastStates.get(firstSessionId)
 						const groupIcon =
 							!parallel && activeSessions.has(firstSessionId) ? (
 								<RunTaskStatus
@@ -292,7 +285,7 @@ function WorktreeRuns(input: {
 									sessionId={firstSessionId}
 								/>
 							) : (
-								<StatusDot state={groupState} />
+								<StatusDot state={active ? 'running' : lastStates.get(firstSessionId)} />
 							)
 						return (
 							<li key={script.name} className="w-full min-w-0">
@@ -335,7 +328,7 @@ function WorktreeRuns(input: {
 								>
 									{script.name}
 								</TreeExplorerRow>
-								{parallel && scriptExpanded && (
+								{parallel && expandedScripts.has(script.name) && (
 									<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 										{groupCommands.map((command, taskIndex) => (
 											<RunTaskRow
@@ -373,9 +366,6 @@ function RunTaskRow(input: {
 	readonly start: () => void
 	readonly stop: () => void
 }) {
-	const status = input.active ? (
-		<RunTaskStatus command={input.command} cwd={input.cwd} onState={input.onState} sessionId={input.sessionId} />
-	) : null
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -393,7 +383,18 @@ function RunTaskRow(input: {
 						{input.active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={status ?? <StatusDot state={input.lastState} />}
+				icon={
+					input.active ? (
+						<RunTaskStatus
+							command={input.command}
+							cwd={input.cwd}
+							onState={input.onState}
+							sessionId={input.sessionId}
+						/>
+					) : (
+						<StatusDot state={input.lastState} />
+					)
+				}
 				selected={false}
 				onClick={() => {
 					if (input.active || input.lastState) input.selectRun(input.cwd, input.sessionId, input.command)
@@ -467,7 +468,7 @@ function WorktreeAgents(input: {
 	const [sessions, setSessions] = useState<readonly AgentSession[]>([])
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
-		const session: AgentSession = {
+		const session = {
 			args: profile.args,
 			command: profile.command,
 			icon: profile.icon,
@@ -652,9 +653,7 @@ function WorktreeManager(input: {
 
 			<CommandDialog
 				open={actionsOpen}
-				onOpenChange={open => {
-					setActionsOpen(open)
-				}}
+				onOpenChange={setActionsOpen}
 				title="Create worktree"
 				description="Create or open a worktree branch."
 				className="sm:max-w-2xl"
@@ -668,9 +667,7 @@ function WorktreeManager(input: {
 					<CommandInput
 						placeholder={`Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
 						value={branch}
-						onValueChange={value => {
-							setBranch(value)
-						}}
+						onValueChange={setBranch}
 						onKeyDown={event => {
 							if (event.key === 'Enter' && branch !== '' && createWorktreeProject) {
 								event.preventDefault()
