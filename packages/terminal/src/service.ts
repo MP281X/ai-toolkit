@@ -23,7 +23,7 @@ import {SerializeAddon} from '@xterm/addon-serialize'
 import xtermHeadless from '@xterm/headless'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import type {TerminalEvent} from './schema.ts'
+import type {TerminalEvent, TerminalStatus} from './schema.ts'
 import {TerminalError} from './schema.ts'
 
 function parseProcessParents(output: string) {
@@ -88,9 +88,17 @@ const readListeningPorts = pipe(
 	Effect.map(parseListeningPorts)
 )
 
+type TerminalControl = {readonly type: 'restart'} | {readonly type: 'stop'}
+
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
-	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
+	make: Effect.fnUntraced(function* (config: {
+		readonly args?: readonly string[]
+		readonly command?: string
+		readonly cwd: string
+		readonly restart?: 'always' | 'failed' | 'never'
+	}) {
 		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
+		const controls = yield* Queue.unbounded<TerminalControl>()
 		const dataQueue = yield* Queue.unbounded<string>()
 		const portsRef = yield* SubscriptionRef.make<readonly number[]>([])
 		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
@@ -98,7 +106,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
 		const sizeRef = yield* Ref.make({cols: 120, rows: 32})
+		const statusRef = yield* SubscriptionRef.make<TerminalStatus>({state: 'starting'})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
+		const processCommand = config.command ?? shell
+		const processArgs = config.args ?? []
+		const restartPolicy = config.restart ?? (config.command ? 'never' : 'always')
 		const screen = new xtermHeadless.Terminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 10_000})
 		const serialize = new SerializeAddon()
 
@@ -148,14 +160,16 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		yield* Effect.addFinalizer(() => Effect.all([Queue.shutdown(dataQueue), PubSub.shutdown(events)], {discard: true}))
+		yield* Effect.addFinalizer(() =>
+			Effect.all([Queue.shutdown(controls), Queue.shutdown(dataQueue), PubSub.shutdown(events)], {discard: true})
+		)
 
 		yield* pipe(Stream.fromQueue(dataQueue), Stream.runForEach(writeScreen), Effect.forkScoped)
 
 		const spawnProcess = Effect.acquireRelease(
 			Effect.gen(function* () {
 				const size = yield* Ref.get(sizeRef)
-				const exited = yield* Deferred.make<void>()
+				const exited = yield* Deferred.make<{readonly exitCode: number; readonly signal?: number}>()
 				let didExit = false
 				const nodePty = yield* Effect.tryPromise({
 					catch: cause => new TerminalError({cause, message: 'failed to load terminal process runtime'}),
@@ -164,7 +178,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const subprocess = yield* Effect.try({
 					catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 					try: () =>
-						nodePty.spawn(shell, [], {
+						nodePty.spawn(processCommand, [...processArgs], {
 							cols: size.cols,
 							cwd: config.cwd,
 							env: {...process.env, TERM: 'xterm-256color'},
@@ -175,12 +189,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const data = subprocess.onData(data => {
 					Queue.offerUnsafe(dataQueue, data)
 				})
-				const exit = subprocess.onExit(() => {
+				const exit = subprocess.onExit(event => {
 					didExit = true
-					Deferred.doneUnsafe(exited, Effect.void)
+					Deferred.doneUnsafe(exited, Effect.succeed(event))
 				})
 
 				yield* Ref.set(processRef, subprocess)
+				yield* SubscriptionRef.set(statusRef, {pid: subprocess.pid, state: 'running'})
 
 				return {
 					data,
@@ -204,21 +219,57 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		)
 
 		yield* pipe(
-			Effect.scoped(
-				Effect.gen(function* () {
-					const subprocess = yield* spawnProcess
-					yield* Deferred.await(subprocess.exited)
-				})
-			),
-			Effect.ignore,
-			Effect.andThen(Ref.set(portOwners, new Map())),
-			Effect.andThen(
-				SubscriptionRef.updateSome(portsRef, ports =>
-					ports.length === 0 ? Option.none() : Option.some<readonly number[]>([])
-				)
-			),
-			Effect.andThen(resetScreen()),
-			Effect.repeat(Schedule.spaced('250 millis')),
+			Effect.gen(function* () {
+				let restart = true
+				while (restart) {
+					yield* resetScreen()
+					yield* SubscriptionRef.set(statusRef, {state: 'starting'})
+					const action = yield* pipe(
+						Effect.scoped(
+							Effect.gen(function* () {
+								const subprocess = yield* spawnProcess
+								return yield* Effect.raceFirst(
+									pipe(
+										Deferred.await(subprocess.exited),
+										Effect.map(event => ({event, type: 'exit'}) as const)
+									),
+									Queue.take(controls)
+								)
+							})
+						),
+						Effect.catch(error => Effect.succeed({error, type: 'error'} as const))
+					)
+
+					yield* Ref.set(portOwners, new Map())
+					yield* SubscriptionRef.updateSome(portsRef, ports =>
+						ports.length === 0 ? Option.none() : Option.some<readonly number[]>([])
+					)
+
+					if (action.type === 'stop') {
+						yield* SubscriptionRef.set(statusRef, {state: 'stopped'})
+						const control = yield* Queue.take(controls)
+						restart = control.type === 'restart'
+						if (restart) yield* Effect.sleep('250 millis')
+						continue
+					} else if (action.type === 'restart') {
+						restart = true
+					} else if (action.type === 'error') {
+						yield* SubscriptionRef.set(statusRef, {state: 'failed'})
+						restart = restartPolicy === 'always' || restartPolicy === 'failed'
+					} else {
+						const failed = action.event.exitCode !== 0
+						yield* SubscriptionRef.set(statusRef, {state: failed ? 'failed' : 'exited'})
+						restart = restartPolicy === 'always' || (restartPolicy === 'failed' && failed)
+					}
+
+					if (!restart) {
+						const control = yield* Queue.take(controls)
+						restart = control.type === 'restart'
+					}
+
+					if (restart) yield* Effect.sleep('250 millis')
+				}
+			}),
 			Effect.forkScoped
 		)
 
@@ -311,6 +362,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						}
 					})
 				}),
+			restart: Queue.offer(controls, {type: 'restart'}),
+			status: SubscriptionRef.changes(statusRef),
+			stop: Queue.offer(controls, {type: 'stop'}),
 			write: (data: string) =>
 				Effect.gen(function* () {
 					const process = yield* Ref.get(processRef)

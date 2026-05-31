@@ -11,3 +11,9 @@ export const TerminalEvent = Schema.Union([
 	Schema.Struct({data: Schema.String, type: Schema.Literal('snapshot')}),
 	Schema.Struct({type: Schema.Literal('reset')})
 ])
+
+export type TerminalStatus = typeof TerminalStatus.Type
+export const TerminalStatus = Schema.Struct({
+	pid: Schema.optional(Schema.Number),
+	state: Schema.Literals(['starting', 'running', 'exited', 'failed', 'stopped'])
+})

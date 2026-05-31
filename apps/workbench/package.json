@@ -16,7 +16,7 @@
 	},
 
 	"scripts": {
-		"dev": "PORT=3010 node ./src/main.dev.ts",
+		"dev": "PORT=3070 node ./src/main.dev.ts",
 		"build": "vp build && vp pack",
 
 		"preview": "vp run build && PORT=4010 node ./dist/server.js"
