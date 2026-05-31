@@ -1,5 +1,8 @@
+import * as NodeFs from 'node:fs'
+
 import {
 	Array,
+	Config,
 	Context,
 	Duration,
 	Effect,
@@ -62,7 +65,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const git = yield* makeGitExecutor
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
+		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
+		const run = Effect.runForkWith(yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>())
 
 		const getDefaultBranch = Effect.fnUntraced(function* (cwd: string) {
 			return yield* pipe(
@@ -269,19 +274,13 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			)
 		})
 		const refreshProjects = Effect.fnUntraced(function* () {
-			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(Bun.env['HOME'] ?? process.cwd()))
+			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(home))
 		})
 
 		yield* refreshProjects()
-		yield* Effect.forkScoped(
-			pipe(
-				fs.watch(Bun.env['HOME'] ?? process.cwd()),
-				Stream.debounce(Duration.millis(250)),
-				Stream.mapEffect(() => listProjectsFrom(Bun.env['HOME'] ?? process.cwd())),
-				Stream.changes,
-				Stream.tap(projectsSnapshot => SubscriptionRef.set(projects, projectsSnapshot)),
-				Stream.runDrain
-			)
+		yield* Effect.acquireRelease(
+			Effect.sync(() => NodeFs.watch(home, () => run(refreshProjects()))),
+			watcher => Effect.sync(() => watcher.close())
 		)
 
 		return {
@@ -351,7 +350,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				readonly mode: 'existing-local' | 'existing-remote' | 'new-local'
 			}) {
 				const targetDirectory = path.join(
-					Bun.env['HOME'] ?? input.cwd,
+					home,
 					'.deslop',
 					'worktrees',
 					`${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(path.basename(input.cwd))}-${String.replaceAll(/[^a-zA-Z0-9._-]+/gu, '-')(input.branch)}-${yield* Random.nextIntBetween(100_000, 999_999)}`

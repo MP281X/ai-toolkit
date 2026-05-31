@@ -6,8 +6,8 @@
 	"version": "0.0.0",
 	"files": ["dist"],
 	"publishConfig": {"access": "public"},
-	"bin": {"workbench": "dist/workbench"},
-  "repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
+	"bin": {"workbench": "dist/server.js"},
+	"repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -16,11 +16,14 @@
 	},
 
 	"scripts": {
-		"dev:client": "vp dev --port 3020",
-		"dev:server": "bun --watch --port 3021 ./src/main.server.tsx",
+		"dev": "PORT=3010 node ./src/main.dev.ts",
+		"build": "vp build && vp pack",
 
-		"build:client": "vp build",
-		"build:server": "bun build ./src/main.server.tsx --production --target=bun --compile --outfile ./dist/workbench"
+		"preview": "vp run build && PORT=4010 node ./dist/server.js"
+	},
+
+	"dependencies": {
+		"@lydell/node-pty": "1.2.0-beta.12"
 	},
 
 	"devDependencies": {

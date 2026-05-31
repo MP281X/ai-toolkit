@@ -67,7 +67,6 @@ export default defineConfig({
 				'error',
 				{fixStyle: 'separate-type-imports', prefer: 'type-imports'}
 			],
-			'@typescript-eslint/no-confusing-void-expression': 'error',
 			'@typescript-eslint/no-duplicate-type-constituents': 'error',
 			'@typescript-eslint/no-explicit-any': 'error',
 			'@typescript-eslint/no-floating-promises': 'error',

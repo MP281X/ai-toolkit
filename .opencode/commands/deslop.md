@@ -4,7 +4,7 @@ subtask: true
 ---
 
 <changed_files>
-!`git diff --name-only HEAD | rg -v "bun.lock|components/ui|.opencode/plans|.opencode/package.json"`
+!`git diff --name-only HEAD | rg -v "bun.lock|pnpm-lock.yaml|components/ui|.opencode/plans|.opencode/package.json"`
 </changed_files>
 
 You are cleaning up code that already works.

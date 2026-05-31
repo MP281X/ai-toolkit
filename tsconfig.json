@@ -12,7 +12,7 @@
 
 		// ts version and module resolution (use the lasted ts/js features and types)
 		"lib": ["ESNext", "dom", "dom.iterable"],
-		"types": ["bun"],
+		"types": ["node"],
 		"jsx": "react-jsx",
 		"target": "ESNext",
 		"module": "ESNext",
