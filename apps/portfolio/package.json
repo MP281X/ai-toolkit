@@ -10,10 +10,10 @@
 	},
 
 	"scripts": {
-		"dev": "NODE_ENV=development PORT=3000 node ./src/main.server.ts",
+		"dev": "PORT=3000 node ./src/main.dev.ts",
 		"build": "vp build && vp pack",
 
-		"preview": "vp run build && NODE_ENV=production PORT=4000 node ./dist/server.js"
+		"preview": "vp run build && PORT=4000 node ./dist/server.js"
 	},
 
 	"devDependencies": {
@@ -24,9 +24,8 @@
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
-		"@deslop/server": "workspace:*",
-    "@deslop/components": "workspace:*",
-    "@deslop/opentelemetry": "workspace:*",
+		"@deslop/components": "workspace:*",
+		"@deslop/opentelemetry": "workspace:*",
 
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",

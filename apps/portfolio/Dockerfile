@@ -1,4 +1,4 @@
-FROM oven/bun:alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
@@ -6,4 +6,4 @@ ENV NODE_ENV=production
 
 COPY dist ./dist
 
-CMD ["bun", "./dist/server.js"]
+CMD ["node", "./dist/server.js"]

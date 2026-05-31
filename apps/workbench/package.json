@@ -16,10 +16,14 @@
 	},
 
 	"scripts": {
-		"dev": "NODE_ENV=development PORT=3010 node ./src/main.server.ts",
+		"dev": "PORT=3010 node ./src/main.dev.ts",
 		"build": "vp build && vp pack",
 
-		"preview": "vp run build && NODE_ENV=production PORT=4010 node ./dist/server.js"
+		"preview": "vp run build && PORT=4010 node ./dist/server.js"
+	},
+
+	"dependencies": {
+		"@lydell/node-pty": "1.2.0-beta.12"
 	},
 
 	"devDependencies": {
@@ -31,7 +35,6 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/git": "workspace:*",
-    "@deslop/server": "workspace:*",
 		"@deslop/browser": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",

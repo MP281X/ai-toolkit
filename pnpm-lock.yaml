@@ -70,9 +70,6 @@ importers:
       '@deslop/opentelemetry':
         specifier: workspace:*
         version: link:../../packages/opentelemetry
-      '@deslop/server':
-        specifier: workspace:*
-        version: link:../../packages/server
       '@rolldown/plugin-babel':
         specifier: latest
         version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.1.23(@types/node@25.9.1)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(rolldown@1.0.3)
@@ -105,6 +102,10 @@ importers:
         version: 4.3.0
 
   apps/workbench:
+    dependencies:
+      '@lydell/node-pty':
+        specifier: 1.2.0-beta.12
+        version: 1.2.0-beta.12
     devDependencies:
       '@deslop/browser':
         specifier: workspace:*
@@ -118,9 +119,6 @@ importers:
       '@deslop/opentelemetry':
         specifier: workspace:*
         version: link:../../packages/opentelemetry
-      '@deslop/server':
-        specifier: workspace:*
-        version: link:../../packages/server
       '@deslop/terminal':
         specifier: workspace:*
         version: link:../../packages/terminal
@@ -254,8 +252,6 @@ importers:
       '@opentelemetry/sdk-trace-web':
         specifier: latest
         version: 2.7.1(@opentelemetry/api@1.9.1)
-
-  packages/server: {}
 
   packages/terminal:
     dependencies:
