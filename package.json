@@ -7,7 +7,7 @@
   "workspaces": ["apps/*", "packages/*", ".opencode"],
 
   "scripts": {
-    "dev": "mprocs 'vp run @deslop/workbench#dev:client' 'vp run @deslop/workbench#dev:server' 'vp run @deslop/lab#dev:client' 'vp run @deslop/lab#dev:server' 'vp run @deslop/portfolio#dev:client' 'vp run @deslop/portfolio#dev:server'",
+    "dev": "mprocs 'vp run @deslop/workbench#dev:client' 'vp run @deslop/workbench#dev:server' 'vp run @deslop/portfolio#dev:client' 'vp run @deslop/portfolio#dev:server'",
     "build": "vp run -r build:client && vp run -r build:server",
 
     "fix": "vp check --fix",
