@@ -15,28 +15,47 @@ export function Terminal(input: {
 	const terminalRef = useRef<XTerm>(null)
 	const writeQueueRef = useRef(Promise.resolve())
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
+	const lastSizeRef = useRef<{cols: number; height: number; rows: number; width: number} | undefined>(undefined)
 
 	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
 
 	useEffect(() => {
 		const element = elementRef.current
 		if (!element) return
+		const container = element
+		const style = getComputedStyle(container)
+		const fontSize = Number.parseFloat(style.fontSize)
+		const fontWeight = Number.parseInt(style.fontWeight, 10)
 
 		const terminal = new XTerm({
 			customGlyphs: true,
-			fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono Variable", monospace',
+			fontFamily: style.fontFamily,
+			fontSize: Number.isNaN(fontSize) ? 14 : fontSize,
+			fontWeight: Number.isNaN(fontWeight) ? 400 : fontWeight,
+			fontWeightBold: 600,
+			letterSpacing: 0,
+			lineHeight: 1,
 			scrollback: 10_000,
-			theme: {background: getComputedStyle(element).backgroundColor}
+			theme: {background: style.backgroundColor}
 		})
 		const fit = new FitAddon()
 
-		function resize() {
+		function resize(force = false) {
+			const previous = lastSizeRef.current
+			const width = container.clientWidth
+			const height = container.clientHeight
+			if (!force && previous?.width === width && previous.height === height) return
+
 			fit.fit()
-			callbacksRef.current.onResize?.({cols: terminal.cols, rows: terminal.rows})
+			const next = {cols: terminal.cols, height, rows: terminal.rows, width}
+			lastSizeRef.current = next
+			if (previous?.cols === next.cols && previous.rows === next.rows) return
+
+			callbacksRef.current.onResize?.({cols: next.cols, rows: next.rows})
 		}
 
 		terminal.loadAddon(fit)
-		terminal.open(element)
+		terminal.open(container)
 		try {
 			const webgl = new WebglAddon()
 			terminal.loadAddon(webgl)
@@ -50,14 +69,19 @@ export function Terminal(input: {
 			callbacksRef.current.onData(data)
 		})
 
-		const observer = new ResizeObserver(resize)
-		observer.observe(element)
-		void element.ownerDocument.fonts.ready.then(resize)
-		resize()
+		const observer = new ResizeObserver(() => {
+			resize()
+		})
+		observer.observe(container)
+		void container.ownerDocument.fonts.ready.then(() => {
+			resize(true)
+		})
+		resize(true)
 		terminalRef.current = terminal
 
 		return () => {
 			terminalRef.current = null
+			lastSizeRef.current = undefined
 			observer.disconnect()
 			terminal.dispose()
 		}

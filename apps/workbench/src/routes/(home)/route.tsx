@@ -78,7 +78,7 @@ function HomeLayout() {
 	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
 
 	return (
-		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden font-mono">
+		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
 					<WorktreeManager
@@ -215,7 +215,7 @@ function WorktreeManager(input: {
 	}
 
 	return (
-		<div className="flex h-full flex-col border-r text-xs">
+		<div className="flex h-full flex-col border-r">
 			<div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center border-b">
 				<button
 					type="button"
@@ -320,7 +320,7 @@ function WorktreeManager(input: {
 						return (
 							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
 								<div
-									className={`text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left text-xs font-semibold hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
+									className={`text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
 								>
 									<span className="flex min-w-0 flex-1 items-center gap-1.5">
 										<span className="flex size-3.5 shrink-0 items-center justify-center">
