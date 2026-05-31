@@ -25,11 +25,12 @@ BunRuntime.runMain(
 					spa: true
 				}),
 				HttpRouter.middleware(BrowserProxyMiddleware, {global: true}),
+				HttpRouter.middleware(HttpMiddleware.withLoggerDisabled, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)
 		),
 		Layer.provide(LiveLayers),
-		Layer.provide(BunHttpServer.layer({hostname: 'localhost'})),
+		Layer.provide(BunHttpServer.layer({hostname: 'localhost', port: import.meta.env.PROD ? 4020 : undefined})),
 		Layer.launch
 	)
 )

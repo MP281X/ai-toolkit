@@ -14,11 +14,12 @@ BunRuntime.runMain(
 			Layer.mergeAll(
 				RpcServer.layerHttp({group: RpcGroup.make().merge(RpcContracts), path: '/api/rpc', protocol: 'websocket'}),
 				HttpStaticServer.layer({index: 'index.html', root: './dist/client', spa: true}),
+				HttpRouter.middleware(HttpMiddleware.withLoggerDisabled, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			)
 		),
 		Layer.provide(LiveLayers),
-		Layer.provide(BunHttpServer.layer({hostname: '0.0.0.0'})),
+		Layer.provide(BunHttpServer.layer({hostname: '0.0.0.0', port: import.meta.env.PROD ? 4000 : undefined})),
 		Layer.launch
 	)
 )

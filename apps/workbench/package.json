@@ -6,8 +6,8 @@
 	"version": "0.0.0",
 	"files": ["dist"],
 	"publishConfig": {"access": "public"},
-	"bin": {"workbench": "dist/workbench"},
-  "repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
+	"bin": {"workbench": "dist/server.js"},
+	"repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -16,11 +16,10 @@
 	},
 
 	"scripts": {
-		"dev:client": "vp dev --port 3020",
-		"dev:server": "bun --watch --port 3021 ./src/main.server.tsx",
+		"dev": "NODE_ENV=development PORT=3010 node ./src/main.server.ts",
+		"build": "vp build && vp pack",
 
-		"build:client": "vp build",
-		"build:server": "bun build ./src/main.server.tsx --production --target=bun --compile --outfile ./dist/workbench"
+		"preview": "vp run build && NODE_ENV=production PORT=4010 node ./dist/server.js"
 	},
 
 	"devDependencies": {
@@ -32,6 +31,7 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/git": "workspace:*",
+    "@deslop/server": "workspace:*",
 		"@deslop/browser": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",

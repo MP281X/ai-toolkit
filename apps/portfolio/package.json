@@ -10,11 +10,10 @@
 	},
 
 	"scripts": {
-		"dev:client": "vp dev --port 3000",
-		"dev:server": "bun --watch --port 3001 ./src/main.server.tsx",
+		"dev": "NODE_ENV=development PORT=3000 node ./src/main.server.ts",
+		"build": "vp build && vp pack",
 
-		"build:client": "vp build",
-		"build:server": "bun build ./src/main.server.tsx --production --target=bun --outfile ./dist/server.js"
+		"preview": "vp run build && NODE_ENV=production PORT=4000 node ./dist/server.js"
 	},
 
 	"devDependencies": {
@@ -25,8 +24,9 @@
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
-		"@deslop/components": "workspace:*",
-		"@deslop/opentelemetry": "workspace:*",
+		"@deslop/server": "workspace:*",
+    "@deslop/components": "workspace:*",
+    "@deslop/opentelemetry": "workspace:*",
 
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",

@@ -1,4 +1,4 @@
-import {BunServices} from '@effect/platform-bun'
+import {NodeServices} from '@effect/platform-node'
 
 import {Effect, pipe} from 'effect'
 
@@ -51,7 +51,7 @@ export const plugin = (async context => {
 				})
 			),
 			Effect.provide(GitWorkspace.layer),
-			Effect.provide(BunServices.layer)
+			Effect.provide(NodeServices.layer)
 		)
 	)
 

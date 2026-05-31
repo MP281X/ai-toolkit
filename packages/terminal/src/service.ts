@@ -1,7 +1,10 @@
-import {Array, Context, Effect, Layer, Queue, Stream, SubscriptionRef, flow, pipe} from 'effect'
+import {Array, Config, Context, Effect, Layer, Order, Queue, Stream, SubscriptionRef, flow, pipe} from 'effect'
 
 import {SerializeAddon} from '@xterm/addon-serialize'
 import {Terminal as HeadlessTerminal} from '@xterm/headless'
+import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import {spawn as spawnPty} from 'node-pty'
+import type {IPty} from 'node-pty'
 
 import type {TerminalEvent} from './schema.ts'
 import {TerminalError} from './schema.ts'
@@ -49,24 +52,36 @@ function isDescendant(pid: number, ancestorPid: number, parents: ReadonlyMap<num
 	return false
 }
 
-const readProcessParents = Effect.tryPromise({
-	catch: cause => new TerminalError({cause, message: 'failed to list terminal processes'}),
-	try: () => Bun.$`ps -eo pid=,ppid=`.quiet().text()
-}).pipe(Effect.map(parseProcessParents))
+const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[], message: string) {
+	const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 
-const readListeningPorts = Effect.tryPromise({
-	catch: cause => new TerminalError({cause, message: 'failed to list terminal ports'}),
-	try: () => Bun.$`ss -H -ltnp`.quiet().text()
-}).pipe(Effect.map(parseListeningPorts))
+	return yield* pipe(
+		execString(ChildProcess.make(command, args)),
+		Effect.mapError(cause => new TerminalError({cause, message}))
+	)
+})
+
+const readProcessParents = pipe(
+	commandString('ps', ['-eo', 'pid=,ppid='], 'failed to list terminal processes'),
+	Effect.map(parseProcessParents)
+)
+
+const readListeningPorts = pipe(
+	commandString('ss', ['-H', '-ltnp'], 'failed to list terminal ports'),
+	Effect.map(parseListeningPorts)
+)
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
 		let cols = 120
 		let rows = 32
-		let processHandle: ReturnType<typeof Bun.spawn> | undefined
+		let processHandle: IPty | undefined
 		const portOwners = new Map<number, number>()
 		const ports = yield* SubscriptionRef.make<readonly number[]>([])
-		const decoder = new TextDecoder()
+		const shell = yield* pipe(
+			Config.string('SHELL'),
+			Effect.orElseSucceed(() => 'bash')
+		)
 		let screenParsed = Promise.resolve()
 		const readySubscribers = new WeakSet<Queue.Queue<TerminalEvent>>()
 		const subscribers = new Set<Queue.Queue<TerminalEvent>>()
@@ -86,15 +101,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					nextPortOwners.set(port.port, port.pid)
 					return port.port
 				}),
-				Array.dedupe
+				Array.dedupe,
+				Array.sort(Order.Number)
 			)
-			nextPorts.sort((left, right) => left - right)
 
 			portOwners.clear()
 			for (const [port, pid] of nextPortOwners) portOwners.set(port, pid)
 
 			const currentPorts = yield* SubscriptionRef.get(ports)
-			if (currentPorts.length !== nextPorts.length || currentPorts.some((port, index) => port !== nextPorts[index])) {
+			if (
+				currentPorts.length !== nextPorts.length ||
+				Array.some(currentPorts, (port, index) => port !== nextPorts[index])
+			) {
 				yield* SubscriptionRef.set(ports, nextPorts)
 			}
 		})
@@ -111,27 +129,25 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						Effect.try({
 							catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 							try: () => {
-								const subprocess = Bun.spawn([Bun.env['SHELL'] ?? 'bash'], {
+								const subprocess = spawnPty(shell, [], {
+									cols,
 									cwd: config.cwd,
-									env: {...Bun.env, TERM: 'xterm-256color'},
-									terminal: {
-										cols,
-										data: (_terminal, data) => {
-											const text = decoder.decode(data, {stream: true})
-											screenParsed = Effect.runPromise(
-												Effect.callback<void>(resume => {
-													screen.write(text, () => {
-														resume(Effect.void)
-													})
-												})
-											)
-											for (const subscriber of subscribers) {
-												if (readySubscribers.has(subscriber)) {
-													Queue.offerUnsafe(subscriber, {data: text, type: 'data'})
-												}
-											}
-										},
-										rows
+									env: {...process.env, TERM: 'xterm-256color'},
+									name: 'xterm-256color',
+									rows
+								})
+								subprocess.onData(text => {
+									screenParsed = Effect.runPromise(
+										Effect.callback<void>(resume => {
+											screen.write(text, () => {
+												resume(Effect.void)
+											})
+										})
+									)
+									for (const subscriber of subscribers) {
+										if (readySubscribers.has(subscriber)) {
+											Queue.offerUnsafe(subscriber, {data: text, type: 'data'})
+										}
 									}
 								})
 								processHandle = subprocess
@@ -141,14 +157,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						subprocess =>
 							Effect.sync(() => {
 								if (processHandle === subprocess) processHandle = undefined
-								subprocess.terminal?.close()
 								subprocess.kill()
 							})
 					)
 
-					yield* Effect.promise(async () => {
-						await subprocess.exited
-					})
+					yield* Effect.promise(
+						() =>
+							new Promise<void>(resolve =>
+								subprocess.onExit(() => {
+									resolve()
+								})
+							)
+					)
 					yield* Effect.sleep('250 millis')
 				})
 			)
@@ -162,8 +182,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			)
 		)
-
-		yield* Effect.addFinalizer(() => Effect.sync(() => decoder.decode()))
 
 		return {
 			events: Stream.scoped(
@@ -210,9 +228,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					cols = nextSize.cols
 					rows = nextSize.rows
 					screen.resize(cols, rows)
-					processHandle?.terminal?.resize(cols, rows)
+					processHandle?.resize(cols, rows)
 				}),
-			write: (data: string) => Effect.sync(() => processHandle?.terminal?.write(data))
+			write: (data: string) => Effect.sync(() => processHandle?.write(data))
 		}
 	})
 }) {
