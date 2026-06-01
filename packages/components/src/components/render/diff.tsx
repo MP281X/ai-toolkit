@@ -11,6 +11,10 @@ const DIFF_CSS = `
 	:host,
 	pre {
 		--diffs-bg: var(--background) !important;
+		font-family: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono Variable', monospace !important;
+		font-size: inherit !important;
+		letter-spacing: 0 !important;
+		line-height: inherit !important;
 	}
 
 	pre {
@@ -105,7 +109,7 @@ function CommentAnnotation(props: {
 
 	if (editing) {
 		return (
-			<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
+			<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
 				<textarea
 					ref={inputRef}
 					value={body}
@@ -136,10 +140,10 @@ function CommentAnnotation(props: {
 	}
 
 	return (
-		<div className="text-foreground box-border w-full max-w-full bg-transparent px-3 py-2 text-xs">
+		<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
 			<button
 				type="button"
-				className="block w-full bg-transparent p-0 text-left leading-relaxed whitespace-pre-wrap"
+				className="block w-full bg-transparent p-0 text-left whitespace-pre-wrap"
 				onClick={event => {
 					event.stopPropagation()
 					setEditing(true)

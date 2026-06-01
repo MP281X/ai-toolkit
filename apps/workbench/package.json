@@ -16,14 +16,16 @@
 	},
 
 	"scripts": {
-		"dev": "PORT=3020 node ./src/main.dev.ts",
+		"dev": "vp dev --port 3010",
 		"build": "vp build && vp pack",
 
 		"preview": "vp run build && PORT=4010 node ./dist/server.js"
 	},
 
 	"dependencies": {
-		"@lydell/node-pty": "1.2.0-beta.12"
+		"@lydell/node-pty": "1.2.0-beta.12",
+		"@xterm/addon-serialize": "latest",
+		"@xterm/headless": "latest"
 	},
 
 	"devDependencies": {

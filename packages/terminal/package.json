@@ -5,12 +5,13 @@
 
 	"exports": {
 		"./schema": "./src/schema.ts",
+		"./utils": "./src/utils.ts",
 		"./service": "./src/service.ts"
 	},
 
 	"dependencies": {
-		"@xterm/headless": "latest",
+		"@lydell/node-pty": "1.2.0-beta.12",
 		"@xterm/addon-serialize": "latest",
-		"@lydell/node-pty": "1.2.0-beta.12"
+		"@xterm/headless": "latest"
 	}
 }
