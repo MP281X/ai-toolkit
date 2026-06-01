@@ -8,6 +8,7 @@ import {startTransition, useEffect, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom, projectsAtom} from '#lib/state.ts'
+import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
 	BotIcon,
@@ -39,7 +40,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
-import type {TerminalStatus} from '@deslop/terminal/schema'
+import type {TerminalState, TerminalStatus} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -53,7 +54,7 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.72_0.075_285)] [&_.tree-label]:text-[oklch(0.78_0.075_285)]',
 	'[&_svg]:text-[oklch(0.72_0.075_20)] [&_.tree-label]:text-[oklch(0.78_0.075_20)]',
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
-] as const
+]
 
 const runsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -72,7 +73,7 @@ const runStatusAtom = Atom.family(
 			pipe(
 				RpcClient,
 				Effect.map(client =>
-					client('terminal.status', {
+					client('terminal.state', {
 						args: ['-lc', input.command],
 						command: 'sh',
 						cwd: input.cwd,
@@ -81,7 +82,17 @@ const runStatusAtom = Atom.family(
 				),
 				Stream.unwrap
 			),
-			{initialValue: {state: 'starting'} as TerminalStatus}
+			{
+				initialValue: {
+					args: ['-lc', input.command],
+					command: 'sh',
+					cwd: input.cwd,
+					ports: [],
+					runId: 0,
+					size: {cols: 120, rows: 32},
+					status: {state: 'starting'}
+				} as TerminalState
+			}
 		)
 )
 
@@ -157,11 +168,11 @@ function HomeLayout() {
 								})
 							})
 						}}
-						selectRun={(worktreeRoot, sessionId, command, inactive) => {
+						selectRun={(worktreeRoot, sessionId, command, runId, inactive) => {
 							startTransition(() => {
 								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									search: {command, inactive, sessionId},
+									search: {command, inactive, runId, sessionId},
 									to: '/$worktree/run'
 								})
 							})
@@ -210,13 +221,17 @@ function runSessionId(scriptName: string, taskIndex: number) {
 	return `run:${scriptName}:${taskIndex}`
 }
 
+function agentSessionId(uuid: string) {
+	return `agent:${uuid}`
+}
+
 function runTaskCommand(script: {readonly name: string; readonly tasks: readonly string[]}, taskIndex: number) {
 	return script.tasks.length > 1 ? (script.tasks[taskIndex] ?? '') : `vp run ${script.name}`
 }
 
 function WorktreeRuns(input: {
 	readonly cwd: string
-	readonly selectRun: (cwd: string, sessionId: string, command: string, inactive?: boolean) => void
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
 }) {
 	const scripts = useAtomSuspense(runsAtom(input.cwd))
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
@@ -225,13 +240,16 @@ function WorktreeRuns(input: {
 	const [expanded, setExpanded] = useState(false)
 	const [expandedScripts, setExpandedScripts] = useState<ReadonlySet<string>>(new Set())
 	const [lastStates, setLastStates] = useState<ReadonlyMap<string, TerminalStatus['state']>>(new Map())
+	const [runIds, setRunIds] = useState<ReadonlyMap<string, number>>(new Map())
 
 	function startTask(scriptName: string, taskIndex: number, command: string, focus = true) {
 		const sessionId = runSessionId(scriptName, taskIndex)
 		setActiveSessions(current => new Set(current).add(sessionId))
 		setLastStates(current => new Map(current).set(sessionId, 'starting'))
-		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
-		if (focus) input.selectRun(input.cwd, sessionId, command)
+		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(state => {
+			setRunIds(current => new Map(current).set(sessionId, state.runId))
+			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
+		})
 	}
 
 	function updateTaskState(sessionId: string, state: TerminalStatus['state']) {
@@ -282,6 +300,7 @@ function WorktreeRuns(input: {
 									command={groupCommands[0] ?? ''}
 									cwd={input.cwd}
 									onState={state => updateTaskState(firstSessionId, state)}
+									runId={runIds.get(firstSessionId)}
 									sessionId={firstSessionId}
 								/>
 							) : (
@@ -320,9 +339,9 @@ function WorktreeRuns(input: {
 												return next
 											})
 										} else if (active || lastStates.has(firstSessionId)) {
-											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '')
+											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '', runIds.get(firstSessionId))
 										} else {
-											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '', true)
+											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '', undefined, true)
 										}
 									}}
 								>
@@ -338,6 +357,7 @@ function WorktreeRuns(input: {
 												cwd={input.cwd}
 												lastState={lastStates.get(runSessionId(script.name, taskIndex))}
 												onState={state => updateTaskState(runSessionId(script.name, taskIndex), state)}
+												runId={runIds.get(runSessionId(script.name, taskIndex))}
 												selectRun={input.selectRun}
 												sessionId={runSessionId(script.name, taskIndex)}
 												start={() => startTask(script.name, taskIndex, command)}
@@ -361,7 +381,8 @@ function RunTaskRow(input: {
 	readonly cwd: string
 	readonly lastState?: TerminalStatus['state']
 	readonly onState: (state: TerminalStatus['state']) => void
-	readonly selectRun: (cwd: string, sessionId: string, command: string, inactive?: boolean) => void
+	readonly runId?: number
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
 	readonly sessionId: string
 	readonly start: () => void
 	readonly stop: () => void
@@ -389,6 +410,7 @@ function RunTaskRow(input: {
 							command={input.command}
 							cwd={input.cwd}
 							onState={input.onState}
+							runId={input.runId}
 							sessionId={input.sessionId}
 						/>
 					) : (
@@ -397,8 +419,8 @@ function RunTaskRow(input: {
 				}
 				selected={false}
 				onClick={() => {
-					if (input.active || input.lastState) input.selectRun(input.cwd, input.sessionId, input.command)
-					else input.selectRun(input.cwd, input.sessionId, input.command, true)
+					if (input.active || input.lastState) input.selectRun(input.cwd, input.sessionId, input.command, input.runId)
+					else input.selectRun(input.cwd, input.sessionId, input.command, undefined, true)
 				}}
 			>
 				{input.command}
@@ -422,12 +444,16 @@ function RunTaskStatus(input: {
 	readonly command: string
 	readonly cwd: string
 	readonly onState: (state: TerminalStatus['state']) => void
+	readonly runId?: number
 	readonly sessionId: string
 }) {
 	const status = useAtomSuspense(runStatusAtom(input))
 	const [observedCurrentRun, setObservedCurrentRun] = useState(false)
-	const state = status.value.state
-	const staleFinalState = !observedCurrentRun && (state === 'exited' || state === 'failed' || state === 'stopped')
+	const state = input.runId !== undefined && status.value.runId < input.runId ? 'starting' : status.value.status.state
+	const staleFinalState =
+		input.runId === undefined &&
+		!observedCurrentRun &&
+		(state === 'exited' || state === 'failed' || state === 'stopped')
 
 	useEffect(() => {
 		if (state === 'running' || state === 'starting') {
@@ -452,36 +478,37 @@ const agentProfiles = [
 	{args: ['--model', 'openai/gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
 ] as const
 
-type AgentSession = {
-	readonly args: readonly string[]
-	readonly command: string
-	readonly id: string
-	readonly icon: (typeof agentProfiles)[number]['icon']
-	readonly label: string
-}
+const agentsAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('agents.watch', {cwd})),
+			Stream.unwrap
+		),
+		{initialValue: [] as readonly AgentSession[]}
+	)
+)
 
 function WorktreeAgents(input: {
 	readonly cwd: string
 	readonly selectAgent: (cwd: string, sessionId: string, command: string, args: readonly string[]) => void
 }) {
+	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
+	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const [sessions, setSessions] = useState<readonly AgentSession[]>([])
+	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
-		const session = {
-			args: profile.args,
-			command: profile.command,
-			icon: profile.icon,
-			id: `agent:${profile.label}:${crypto.randomUUID()}`,
-			label: `${profile.label} ${sessions.filter(session => session.command === profile.command).length + 1}`
-		}
-		setSessions(current => [...current, session])
-		input.selectAgent(input.cwd, session.id, session.command, session.args)
+		void create({payload: {...profile, cwd: input.cwd}}).then(session => {
+			input.selectAgent(input.cwd, agentSessionId(session.uuid), session.command, session.args)
+		})
 	}
 
 	function stopAgent(session: AgentSession) {
-		setSessions(current => current.filter(candidate => candidate.id !== session.id))
-		void stop({payload: {args: session.args, command: session.command, cwd: input.cwd, sessionId: session.id}})
+		void remove({payload: {cwd: input.cwd, uuid: session.uuid}})
+		void stop({
+			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: agentSessionId(session.uuid)}
+		})
 	}
 
 	return (
@@ -491,7 +518,7 @@ function WorktreeAgents(input: {
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 				{agentProfiles.map(profile => {
-					const profileSessions = sessions.filter(session => session.command === profile.command)
+					const profileSessions = sessions.value.filter(session => session.command === profile.command)
 					return (
 						<li key={profile.command} className="w-full min-w-0">
 							<TreeExplorerRow
@@ -517,7 +544,7 @@ function WorktreeAgents(input: {
 							{profileSessions.length > 0 && (
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 									{profileSessions.map(session => (
-										<li key={session.id} className="w-full min-w-0">
+										<li key={session.uuid} className="w-full min-w-0">
 											<TreeExplorerRow
 												actions={
 													<button
@@ -534,7 +561,9 @@ function WorktreeAgents(input: {
 												}
 												icon={<AgentIcon layer={session.icon} />}
 												selected={false}
-												onClick={() => input.selectAgent(input.cwd, session.id, session.command, session.args)}
+												onClick={() =>
+													input.selectAgent(input.cwd, agentSessionId(session.uuid), session.command, session.args)
+												}
 											>
 												{session.label}
 											</TreeExplorerRow>
@@ -559,7 +588,13 @@ function WorktreeManager(input: {
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectBrowser: (worktreeRoot: string) => void
 	readonly selectAgent: (worktreeRoot: string, sessionId: string, command: string, args: readonly string[]) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, command: string, inactive?: boolean) => void
+	readonly selectRun: (
+		worktreeRoot: string,
+		sessionId: string,
+		command: string,
+		runId?: number,
+		inactive?: boolean
+	) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})

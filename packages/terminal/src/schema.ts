@@ -13,7 +13,25 @@ export const TerminalEvent = Schema.Union([
 ])
 
 export type TerminalStatus = typeof TerminalStatus.Type
-export const TerminalStatus = Schema.Struct({
-	pid: Schema.optional(Schema.Number),
-	state: Schema.Literals(['starting', 'running', 'exited', 'failed', 'stopped'])
+export const TerminalStatus = Schema.Union([
+	Schema.Struct({state: Schema.Literal('starting')}),
+	Schema.Struct({pid: Schema.Number, state: Schema.Literal('running')}),
+	Schema.Struct({state: Schema.Literal('stopped')}),
+	Schema.Struct({exitCode: Schema.Number, signal: Schema.optional(Schema.Number), state: Schema.Literal('exited')}),
+	Schema.Struct({
+		exitCode: Schema.optional(Schema.Number),
+		signal: Schema.optional(Schema.Number),
+		state: Schema.Literal('failed')
+	})
+])
+
+export type TerminalState = typeof TerminalState.Type
+export const TerminalState = Schema.Struct({
+	args: Schema.Array(Schema.String),
+	command: Schema.String,
+	cwd: Schema.String,
+	ports: Schema.Array(Schema.Number),
+	runId: Schema.Number,
+	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number}),
+	status: TerminalStatus
 })

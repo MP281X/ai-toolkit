@@ -1,7 +1,8 @@
 import {readFile} from 'node:fs/promises'
 import {createServer} from 'node:http'
+import nodeProcess from 'node:process'
 
-import {NodeHttpServer, NodeRuntime} from '@effect/platform-node'
+import {NodeHttpServer, NodeRuntime, NodeServices} from '@effect/platform-node'
 import * as NodeHttpServerRequest from '@effect/platform-node/NodeHttpServerRequest'
 
 import {Config, Effect, Layer, pipe} from 'effect'
@@ -13,6 +14,28 @@ import {createServer as createViteServer} from 'vite-plus'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import {BrowserProxyMiddleware} from '@deslop/browser/http'
+
+const shutdownSignals = ['SIGINT', 'SIGTERM'] as const
+
+function forceCloseConnections(server: ReturnType<typeof createServer>) {
+	let exitTimer: NodeJS.Timeout | undefined
+
+	function close(signal: (typeof shutdownSignals)[number]) {
+		server.closeAllConnections()
+		server.closeIdleConnections()
+		exitTimer ??= setTimeout(() => {
+			nodeProcess.exit(signal === 'SIGINT' ? 130 : 143)
+		}, 1500)
+		exitTimer.unref()
+	}
+
+	for (const signal of shutdownSignals) nodeProcess.on(signal, close)
+
+	return Effect.sync(() => {
+		for (const signal of shutdownSignals) nodeProcess.off(signal, close)
+		if (exitTimer) clearTimeout(exitTimer)
+	})
+}
 
 function ViteRoute(vite: Awaited<ReturnType<typeof createViteServer>>) {
 	return HttpRouter.add('*', '/*', request => {
@@ -51,6 +74,8 @@ NodeRuntime.runMain(
 		Layer.unwrap(
 			Effect.gen(function* () {
 				const server = createServer()
+				const cleanupConnections = forceCloseConnections(server)
+				yield* Effect.addFinalizer(() => cleanupConnections)
 				const vite = yield* Effect.acquireRelease(
 					Effect.promise(() => createViteServer({appType: 'spa', server: {hmr: {server}, middlewareMode: true}})),
 					vite => Effect.promise(() => vite.close())
@@ -79,7 +104,8 @@ NodeRuntime.runMain(
 						{disableLogger: true}
 					),
 					Layer.provide(LiveLayers),
-					Layer.provide(NodeHttpServer.layer(() => server, {port: yield* Config.port('PORT')}))
+					Layer.provide(NodeHttpServer.layer(() => server, {port: yield* Config.port('PORT')})),
+					Layer.provide(NodeServices.layer)
 				)
 			})
 		)

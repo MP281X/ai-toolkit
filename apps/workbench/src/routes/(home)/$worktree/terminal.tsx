@@ -8,7 +8,7 @@ import {Atom} from 'effect/unstable/reactivity'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent} from '@deslop/terminal/schema'
+import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/terminal')({component: TerminalPage})
 
@@ -24,6 +24,27 @@ const terminalEventsAtom = Atom.family((cwd: string) =>
 	)
 )
 
+const terminalStateAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('terminal.state', {cwd})),
+			Stream.unwrap
+		),
+		{
+			initialValue: {
+				args: [],
+				command: '',
+				cwd,
+				ports: [],
+				runId: 0,
+				size: {cols: 120, rows: 32},
+				status: {state: 'starting'}
+			} as TerminalState
+		}
+	)
+)
+
 function TerminalPage() {
 	const params = Route.useParams()
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
@@ -36,13 +57,15 @@ function WorktreeTerminal(input: {readonly cwd: string}) {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const terminalEvents = useAtomSuspense(terminalEventsAtom(input.cwd))
+	const terminalState = useAtomSuspense(terminalStateAtom(input.cwd))
 
 	return (
-		<div className="bg-background h-full min-h-0 min-w-0 p-2">
+		<div className="bg-background h-full min-h-0 min-w-0">
 			<Terminal
-				className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent"
-				onData={data => void writeInput({payload: {...input, data}})}
-				onResize={size => void resize({payload: {...input, ...size}})}
+				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
+				onData={data => void writeInput({payload: {cwd: input.cwd, data}})}
+				onResize={size => void resize({payload: {cols: size.cols, cwd: input.cwd, rows: size.rows}})}
+				status={terminalState.value.status}
 				write={terminal => {
 					for (const event of terminalEvents.value) {
 						if (event.type === 'reset') terminal.reset()

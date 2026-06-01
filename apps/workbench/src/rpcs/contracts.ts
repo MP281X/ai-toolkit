@@ -12,7 +12,7 @@ import {
 	GitReviewMetadata,
 	GitReviewTo
 } from '@deslop/git/schema'
-import {TerminalError, TerminalEvent, TerminalStatus} from '@deslop/terminal/schema'
+import {TerminalError, TerminalEvent, TerminalState, TerminalStatus} from '@deslop/terminal/schema'
 
 const TerminalPayload = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
@@ -21,7 +21,35 @@ const TerminalPayload = Schema.Struct({
 	sessionId: Schema.optional(Schema.String)
 })
 
+export const AgentSession = Schema.Struct({
+	args: Schema.Array(Schema.String),
+	command: Schema.String,
+	cwd: Schema.String,
+	icon: Schema.Literals(['opencode', 'codex', 'pi']),
+	label: Schema.String,
+	uuid: Schema.String
+})
+export type AgentSession = typeof AgentSession.Type
+
 export class RpcContracts extends RpcGroup.make(
+	Rpc.make('agents.create', {
+		error: TerminalError,
+		payload: Schema.Struct({
+			args: Schema.Array(Schema.String),
+			command: Schema.String,
+			cwd: Schema.String,
+			icon: Schema.Literals(['opencode', 'codex', 'pi']),
+			label: Schema.String
+		}),
+		success: AgentSession
+	}),
+	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
+	Rpc.make('agents.watch', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String}),
+		stream: true,
+		success: Schema.Array(AgentSession)
+	}),
 	Rpc.make('projects.watch', {stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {
 		error: GitError,
@@ -118,7 +146,8 @@ export class RpcContracts extends RpcGroup.make(
 			sessionId: Schema.optional(Schema.String)
 		})
 	}),
-	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload}),
+	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
+	Rpc.make('terminal.state', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalState}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload})
 ) {}

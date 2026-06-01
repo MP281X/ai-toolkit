@@ -1,3 +1,5 @@
+import nodeProcess from 'node:process'
+
 import {
 	Array,
 	Config,
@@ -18,12 +20,13 @@ import {
 	pipe
 } from 'effect'
 
+import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
 import {SerializeAddon} from '@xterm/addon-serialize'
 import xtermHeadless from '@xterm/headless'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import type {TerminalEvent, TerminalStatus} from './schema.ts'
+import type {TerminalEvent, TerminalState, TerminalStatus} from './schema.ts'
 import {TerminalError} from './schema.ts'
 
 function parseProcessParents(output: string) {
@@ -69,6 +72,14 @@ function isDescendant(pid: number, ancestorPid: number, parents: ReadonlyMap<num
 	return false
 }
 
+function descendantsOf(ancestorPid: number, parents: ReadonlyMap<number, number>) {
+	const descendants: number[] = []
+	for (const pid of parents.keys()) {
+		if (pid !== ancestorPid && isDescendant(pid, ancestorPid, parents)) descendants.push(pid)
+	}
+	return descendants
+}
+
 const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[], message: string) {
 	const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 
@@ -90,6 +101,21 @@ const readListeningPorts = pipe(
 
 type TerminalControl = {readonly type: 'restart'} | {readonly type: 'stop'}
 
+const initialSize = {cols: 120, rows: 32} as const
+const scrollback = 10_000
+const snapshotChunkSize = 64 * 1024
+const cleanupSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
+
+function snapshotEvents(data: string) {
+	if (data === '') return [{data, type: 'snapshot'} as const]
+
+	const events: TerminalEvent[] = []
+	for (let index = 0; index < data.length; index += snapshotChunkSize) {
+		events.push({data: data.slice(index, index + snapshotChunkSize), type: 'snapshot'})
+	}
+	return events
+}
+
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {
 		readonly args?: readonly string[]
@@ -100,21 +126,62 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
 		const controls = yield* Queue.unbounded<TerminalControl>()
 		const dataQueue = yield* Queue.unbounded<string>()
-		const portsRef = yield* SubscriptionRef.make<readonly number[]>([])
 		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
 		const processRef = yield* Ref.make<IPty | undefined>(undefined)
 		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
-		const sizeRef = yield* Ref.make({cols: 120, rows: 32})
-		const statusRef = yield* SubscriptionRef.make<TerminalStatus>({state: 'starting'})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command ?? shell
 		const processArgs = config.args ?? []
 		const restartPolicy = config.restart ?? (config.command ? 'never' : 'always')
-		const screen = new xtermHeadless.Terminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 10_000})
+		const stateRef = yield* SubscriptionRef.make<TerminalState>({
+			args: [...processArgs],
+			command: processCommand,
+			cwd: config.cwd,
+			ports: [],
+			runId: 0,
+			size: initialSize,
+			status: {state: 'starting'}
+		})
+		const screen = new xtermHeadless.Terminal({
+			allowProposedApi: true,
+			cols: initialSize.cols,
+			rows: initialSize.rows,
+			scrollback
+		})
 		const serialize = new SerializeAddon()
+		let currentProcess: IPty | undefined
 
 		screen.loadAddon(serialize)
+
+		function killProcessSync(subprocess: IPty | undefined, signal: NodeJS.Signals) {
+			if (!subprocess?.pid) return
+
+			try {
+				if (nodeProcess.platform !== 'win32') nodeProcess.kill(-subprocess.pid, signal)
+			} catch {}
+			try {
+				subprocess.kill(signal)
+			} catch {}
+		}
+
+		function cleanupProcessSync() {
+			killProcessSync(currentProcess, 'SIGKILL')
+		}
+
+		for (const signal of cleanupSignals) {
+			nodeProcess.on(signal, cleanupProcessSync)
+		}
+		nodeProcess.on('exit', cleanupProcessSync)
+
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				for (const signal of cleanupSignals) {
+					nodeProcess.off(signal, cleanupProcessSync)
+				}
+				nodeProcess.off('exit', cleanupProcessSync)
+			})
+		)
 
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
 			return yield* pipe(
@@ -127,12 +194,65 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const requestSnapshot = Semaphore.withPermit(
 			screenLock,
 			Effect.gen(function* () {
-				const data = serialize.serialize({scrollback: 10_000})
+				const data = serialize.serialize({scrollback})
 				const sequence = yield* Ref.get(sequenceRef)
 
 				return {data, sequence}
 			})
 		)
+
+		function setStatus(status: TerminalStatus) {
+			return SubscriptionRef.update(stateRef, state => ({...state, status}))
+		}
+
+		const startRun = Effect.gen(function* () {
+			yield* SubscriptionRef.update(stateRef, state => ({
+				...state,
+				ports: [],
+				runId: state.runId + 1,
+				status: {state: 'starting' as const}
+			}))
+
+			return yield* SubscriptionRef.get(stateRef)
+		})
+
+		function setPorts(ports: readonly number[]) {
+			return SubscriptionRef.updateSome(stateRef, state =>
+				state.ports.length === ports.length && state.ports.every((port, index) => port === ports[index])
+					? Option.none()
+					: Option.some({...state, ports: [...ports]})
+			)
+		}
+
+		const interruptProcessTree = Effect.fnUntraced(function* (subprocess: IPty, signal: NodeJS.Signals) {
+			const descendants = yield* pipe(
+				readProcessParents,
+				Effect.map(parents => descendantsOf(subprocess.pid, parents)),
+				Effect.timeoutOption('250 millis'),
+				Effect.map(option => Option.getOrElse(option, () => [] as number[])),
+				Effect.catch(() => Effect.succeed([] as number[]))
+			)
+
+			yield* Effect.sync(() => {
+				for (const pid of descendants.toReversed()) {
+					try {
+						nodeProcess.kill(pid, signal)
+					} catch {}
+				}
+				try {
+					if (nodeProcess.platform !== 'win32') nodeProcess.kill(-subprocess.pid, signal)
+				} catch {}
+				try {
+					subprocess.kill(signal)
+				} catch {}
+			})
+		})
+
+		const terminateProcess = Effect.fnUntraced(function* (subprocess: IPty) {
+			yield* interruptProcessTree(subprocess, 'SIGTERM')
+			yield* Effect.sleep('250 millis')
+			yield* interruptProcessTree(subprocess, 'SIGKILL')
+		})
 
 		const resetScreen = Semaphore.withPermit(
 			screenLock,
@@ -166,13 +286,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const spawnProcess = Effect.acquireRelease(
 			Effect.gen(function* () {
-				const size = yield* Ref.get(sizeRef)
+				const size = (yield* SubscriptionRef.get(stateRef)).size
 				const exited = yield* Deferred.make<{readonly exitCode: number; readonly signal?: number}>()
 				let didExit = false
-				const nodePty = yield* Effect.tryPromise({
-					catch: cause => new TerminalError({cause, message: 'failed to load terminal process runtime'}),
-					try: () => import('@lydell/node-pty')
-				})
 				const subprocess = yield* Effect.try({
 					catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 					try: () =>
@@ -192,17 +308,17 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Deferred.doneUnsafe(exited, Effect.succeed(event))
 				})
 
+				currentProcess = subprocess
 				yield* Ref.set(processRef, subprocess)
-				yield* SubscriptionRef.set(statusRef, {pid: subprocess.pid, state: 'running'})
+				yield* setStatus({pid: subprocess.pid, state: 'running'})
 
 				return {
 					data,
+					didExit: () => didExit,
 					exit,
 					exited,
-					kill: () => {
-						if (!didExit) subprocess.kill()
-					},
-					process: subprocess
+					process: subprocess,
+					terminate: terminateProcess(subprocess)
 				}
 			}),
 			subprocess =>
@@ -210,8 +326,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					yield* Effect.sync(() => {
 						subprocess.data.dispose()
 						subprocess.exit.dispose()
-						subprocess.kill()
 					})
+					if (!subprocess.didExit()) yield* pipe(subprocess.terminate, Effect.ignore)
+					if (currentProcess === subprocess.process) currentProcess = undefined
 					yield* Ref.update(processRef, current => (current === subprocess.process ? undefined : current))
 				})
 		)
@@ -221,7 +338,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				let restart = true
 				while (restart) {
 					yield* resetScreen
-					yield* SubscriptionRef.set(statusRef, {state: 'starting'})
+					yield* setStatus({state: 'starting'})
 					const action = yield* pipe(
 						Effect.scoped(
 							Effect.flatMap(spawnProcess, subprocess =>
@@ -238,12 +355,10 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					)
 
 					yield* Ref.set(portOwners, new Map())
-					yield* SubscriptionRef.updateSome(portsRef, ports =>
-						ports.length === 0 ? Option.none() : Option.some<readonly number[]>([])
-					)
+					yield* setPorts([])
 
 					if (action.type === 'stop') {
-						yield* SubscriptionRef.set(statusRef, {state: 'stopped'})
+						yield* setStatus({state: 'stopped'})
 						const control = yield* Queue.take(controls)
 						restart = control.type === 'restart'
 						if (restart) yield* Effect.sleep('250 millis')
@@ -251,11 +366,15 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					} else if (action.type === 'restart') {
 						restart = true
 					} else if (action.type === 'error') {
-						yield* SubscriptionRef.set(statusRef, {state: 'failed'})
+						yield* setStatus({state: 'failed'})
 						restart = restartPolicy === 'always' || restartPolicy === 'failed'
 					} else {
 						const failed = action.event.exitCode !== 0
-						yield* SubscriptionRef.set(statusRef, {state: failed ? 'failed' : 'exited'})
+						yield* setStatus({
+							exitCode: action.event.exitCode,
+							...(action.event.signal === undefined ? {} : {signal: action.event.signal}),
+							state: failed ? 'failed' : 'exited'
+						})
 						restart = restartPolicy === 'always' || (restartPolicy === 'failed' && failed)
 					}
 
@@ -275,9 +394,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const process = yield* Ref.get(processRef)
 				if (!process?.pid) {
 					yield* Ref.set(portOwners, new Map())
-					yield* SubscriptionRef.updateSome(portsRef, ports =>
-						ports.length === 0 ? Option.none() : Option.some<readonly number[]>([])
-					)
+					yield* setPorts([])
 					return
 				}
 
@@ -295,11 +412,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 
 				yield* Ref.set(portOwners, nextPortOwners)
-				yield* SubscriptionRef.updateSome(portsRef, currentPorts =>
-					currentPorts.length === nextPorts.length && currentPorts.every((port, index) => port === nextPorts[index])
-						? Option.none()
-						: Option.some(nextPorts)
-				)
+				yield* setPorts(nextPorts)
 			}),
 			Effect.ignore,
 			Effect.repeat(Schedule.spaced('1 second')),
@@ -316,7 +429,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						const initialEvents = pending.filter(event => event.sequence > snapshot.sequence).map(event => event.event)
 
 						return pipe(
-							Stream.fromIterable([{data: snapshot.data, type: 'snapshot'} as const, ...initialEvents]),
+							Stream.fromIterable([...snapshotEvents(snapshot.data), ...initialEvents]),
 							Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)).pipe(Stream.map(event => event.event)))
 						)
 					})
@@ -330,24 +443,21 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				yield* Effect.try({
 					catch: cause => new TerminalError({cause, message: `failed to kill process on port ${port}`}),
 					try: () => {
-						process.kill(pid)
+						nodeProcess.kill(pid)
 					}
 				})
 			}),
-			ports: SubscriptionRef.changes(portsRef),
 			resize: Effect.fnUntraced(function* (nextSize: {readonly cols: number; readonly rows: number}) {
-				const size = yield* Ref.get(sizeRef)
+				const size = (yield* SubscriptionRef.get(stateRef)).size
 				if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
-				yield* Ref.set(sizeRef, nextSize)
-				const snapshot = yield* Semaphore.withPermit(
+				yield* SubscriptionRef.update(stateRef, state => ({...state, size: nextSize}))
+				yield* Semaphore.withPermit(
 					screenLock,
 					Effect.sync(() => {
 						screen.resize(nextSize.cols, nextSize.rows)
-						return serialize.serialize({scrollback: 10_000})
 					})
 				)
-				yield* publish({data: snapshot, type: 'snapshot'})
 
 				const process = yield* Ref.get(processRef)
 				if (!process) return
@@ -359,8 +469,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					}
 				})
 			}),
-			restart: Queue.offer(controls, {type: 'restart'}),
-			status: SubscriptionRef.changes(statusRef),
+			restart: pipe(
+				startRun,
+				Effect.tap(() => Queue.offer(controls, {type: 'restart'}))
+			),
+			state: stateRef,
 			stop: Queue.offer(controls, {type: 'stop'}),
 			write: Effect.fnUntraced(function* (data: string) {
 				const process = yield* Ref.get(processRef)

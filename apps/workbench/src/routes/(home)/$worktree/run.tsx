@@ -7,19 +7,20 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
-import {Error as ErrorFallback} from '@deslop/components/fallbacks'
+import {Fallback} from '@deslop/components/fallbacks'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent} from '@deslop/terminal/schema'
-
-const RunSearch = Schema.Struct({
-	command: Schema.String,
-	inactive: Schema.optional(Schema.Boolean),
-	sessionId: Schema.String
-})
+import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/run')({
 	component: RunPage,
-	validateSearch: Schema.toStandardSchemaV1(RunSearch)
+	validateSearch: Schema.toStandardSchemaV1(
+		Schema.Struct({
+			command: Schema.String,
+			inactive: Schema.optional(Schema.Boolean),
+			runId: Schema.optional(Schema.Number),
+			sessionId: Schema.String
+		})
+	)
 })
 
 const terminalEventsAtom = Atom.family(
@@ -42,6 +43,35 @@ const terminalEventsAtom = Atom.family(
 		)
 )
 
+const terminalStateAtom = Atom.family(
+	(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) =>
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient,
+				Effect.map(client =>
+					client('terminal.state', {
+						args: ['-lc', input.command],
+						command: 'sh',
+						cwd: input.cwd,
+						sessionId: input.sessionId
+					})
+				),
+				Stream.unwrap
+			),
+			{
+				initialValue: {
+					args: ['-lc', input.command],
+					command: 'sh',
+					cwd: input.cwd,
+					ports: [],
+					runId: 0,
+					size: {cols: 120, rows: 32},
+					status: {state: 'starting'}
+				} as TerminalState
+			}
+		)
+)
+
 function RunPage() {
 	const params = Route.useParams()
 	const search = Route.useSearch()
@@ -51,32 +81,59 @@ function RunPage() {
 	if (search.inactive === true) {
 		return (
 			<div className="bg-background h-full min-h-0 min-w-0 p-2">
-				<ErrorFallback
-					error={new Error('This script has not been started yet. Use the play button to start it.')}
-					reset={() => {}}
-				/>
+				<Fallback message="This script has not been started yet. Use the play button to start it." />
 			</div>
 		)
 	}
 
 	return (
-		<RunTerminal command={search.command} cwd={activeHome.value.activeWorktree.root} sessionId={search.sessionId} />
+		<RunTerminal
+			command={search.command}
+			cwd={activeHome.value.activeWorktree.root}
+			runId={search.runId}
+			sessionId={search.sessionId}
+		/>
 	)
 }
 
-function RunTerminal(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) {
+function RunTerminal(input: {
+	readonly command: string
+	readonly cwd: string
+	readonly runId?: number
+	readonly sessionId: string
+}) {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const terminalEvents = useAtomSuspense(terminalEventsAtom(input))
-	const payload = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
+	const terminalState = useAtomSuspense(terminalStateAtom(input))
 
 	return (
-		<div className="bg-background h-full min-h-0 min-w-0 p-2">
+		<div className="bg-background h-full min-h-0 min-w-0">
 			<Terminal
 				key={input.sessionId}
-				className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent"
-				onData={data => void writeInput({payload: {...payload, data}})}
-				onResize={size => void resize({payload: {...payload, ...size}})}
+				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
+				onData={data =>
+					void writeInput({
+						payload: {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, data, sessionId: input.sessionId}
+					})
+				}
+				onResize={size =>
+					void resize({
+						payload: {
+							args: ['-lc', input.command],
+							cols: size.cols,
+							command: 'sh',
+							cwd: input.cwd,
+							rows: size.rows,
+							sessionId: input.sessionId
+						}
+					})
+				}
+				status={
+					input.runId !== undefined && terminalState.value.runId < input.runId
+						? {state: 'starting'}
+						: terminalState.value.status
+				}
 				write={terminal => {
 					for (const event of terminalEvents.value) {
 						if (event.type === 'reset') terminal.reset()

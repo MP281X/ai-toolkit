@@ -8,7 +8,7 @@ import {Atom} from 'effect/unstable/reactivity'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent} from '@deslop/terminal/schema'
+import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
@@ -42,6 +42,40 @@ const terminalEventsAtom = Atom.family(
 		)
 )
 
+const terminalStateAtom = Atom.family(
+	(input: {
+		readonly args: readonly string[]
+		readonly command: string
+		readonly cwd: string
+		readonly sessionId: string
+	}) =>
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient,
+				Effect.map(client =>
+					client('terminal.state', {
+						args: input.args,
+						command: input.command,
+						cwd: input.cwd,
+						sessionId: input.sessionId
+					})
+				),
+				Stream.unwrap
+			),
+			{
+				initialValue: {
+					args: [...input.args],
+					command: input.command,
+					cwd: input.cwd,
+					ports: [],
+					runId: 0,
+					size: {cols: 120, rows: 32},
+					status: {state: 'starting'}
+				} as TerminalState
+			}
+		)
+)
+
 function AgentPage() {
 	const params = Route.useParams()
 	const search = Route.useSearch()
@@ -67,12 +101,13 @@ function AgentTerminal(input: {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const terminalEvents = useAtomSuspense(terminalEventsAtom(input))
+	const terminalState = useAtomSuspense(terminalStateAtom(input))
 
 	return (
-		<div className="bg-background h-full min-h-0 min-w-0 p-2">
+		<div className="bg-background h-full min-h-0 min-w-0">
 			<Terminal
 				key={input.sessionId}
-				className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent"
+				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				onData={data =>
 					void writeInput({
 						payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}
@@ -90,6 +125,7 @@ function AgentTerminal(input: {
 						}
 					})
 				}
+				status={terminalState.value.status}
 				write={terminal => {
 					for (const event of terminalEvents.value) {
 						if (event.type === 'reset') terminal.reset()

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
-import {Error as ErrorFallback, Loading} from '#components/fallbacks.tsx'
+import {Fallback, Loading} from '#components/fallbacks.tsx'
 import {Button} from '#components/ui/button.tsx'
 import {InputGroup, InputGroupInput} from '#components/ui/input-group.tsx'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/ui/resizable.tsx'
@@ -59,20 +59,6 @@ function isIgnoredBrowserLog(message: string) {
 		lower.includes('react-scan') ||
 		lower.includes('react grab') ||
 		lower.includes('react-grab')
-	)
-}
-
-function BrowserLogsHeader(props: {readonly count: number; readonly onClear: () => void}) {
-	return (
-		<div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
-			<div className="flex items-center gap-2 font-mono text-xs">
-				<FileClockIcon className="size-3.5" />
-				<span>{props.count}</span>
-			</div>
-			<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear browser logs" onClick={props.onClear}>
-				<Trash2Icon className="size-3.5" />
-			</Button>
-		</div>
 	)
 }
 
@@ -247,10 +233,7 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 			</form>
 			<div className="flex min-h-0 flex-1 flex-col">
 				{props.ports.length === 0 ? (
-					<ErrorFallback
-						error={new Error('Start a dev server in this worktree terminal to open a browser preview.')}
-						reset={() => {}}
-					/>
+					<Fallback message="Start a dev server in this worktree terminal to open a browser preview." />
 				) : (
 					<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
 						<ResizablePanel defaultSize="100%" minSize="40%">
@@ -293,12 +276,23 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				)}
-				<BrowserLogsHeader
-					count={logs.length}
-					onClear={() => {
-						setLogs([])
-					}}
-				/>
+				<div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
+					<div className="flex items-center gap-2 font-mono text-xs">
+						<FileClockIcon className="size-3.5" />
+						<span>{logs.length}</span>
+					</div>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Clear browser logs"
+						onClick={() => {
+							setLogs([])
+						}}
+					>
+						<Trash2Icon className="size-3.5" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	)
