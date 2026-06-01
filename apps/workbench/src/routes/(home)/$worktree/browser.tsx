@@ -2,7 +2,7 @@ import {useAtomSuspense} from '@effect/atom-react'
 
 import {createFileRoute, Navigate} from '@tanstack/react-router'
 
-import {activeHomeAtom, terminalStateAtom} from '#lib/state.ts'
+import {activeHomeAtom, terminalPortsAtom} from '#lib/state.ts'
 import {Browser} from '@deslop/components/render/browser'
 
 export const Route = createFileRoute('/(home)/$worktree/browser')({component: BrowserPage})
@@ -15,12 +15,12 @@ function BrowserPage() {
 	return <WorktreeBrowser cwd={activeHome.value.activeWorktree.root} />
 }
 
-function WorktreeBrowser(props: {readonly cwd: string}) {
-	const terminalState = useAtomSuspense(terminalStateAtom({cwd: props.cwd}))
+function WorktreeBrowser(input: {readonly cwd: string}) {
+	const ports = useAtomSuspense(terminalPortsAtom(input.cwd))
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0 p-2">
-			<Browser className="h-full min-h-0 w-full min-w-0" ports={terminalState.value.ports} />
+			<Browser className="h-full min-h-0 w-full min-w-0" ports={ports.value} />
 		</div>
 	)
 }

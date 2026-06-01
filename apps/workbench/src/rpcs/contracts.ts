@@ -139,5 +139,11 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
+	Rpc.make('terminal.ports', {
+		error: TerminalError,
+		payload: TerminalPayload,
+		stream: true,
+		success: Schema.Array(Schema.Number)
+	}),
 	Rpc.make('terminal.watch', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalUpdate})
 ) {}

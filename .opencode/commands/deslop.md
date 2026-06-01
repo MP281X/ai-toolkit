@@ -15,6 +15,7 @@ Working code is unfinished when it preserves incidental complexity or misses an 
 - Make the implementation smaller, more direct, more inferred, more functional, more composable, more pipeable, and more Effect-native.
 - Prefer rewrites that make branches, props, helpers, config objects, floating types, casts, assertions, nullability, duplicated state, wrappers, and compatibility paths disappear.
 - Do not stop at a cleaner version of the same messy idea. A refactor succeeds only when it reduces the number of concepts the reader must hold in their head.
+- Repetition is cheaper than indirection when the repeated code is direct and local. Do not extract a helper just to avoid repeating a constructor call, property access, tiny predicate, equality check, or one-line expression.
 - Keep simplifying until the remaining structure is forced by the domain, Effect, React, or an external boundary.
 
 ## Scope
@@ -30,10 +31,11 @@ Working code is unfinished when it preserves incidental complexity or misses an 
 
 - Inline aliases for properties, comparisons, casts, assertions, fallbacks, nullable checks, literals, config values, class names, access paths, state constants, and nearby expressions.
 - Inline object and array config containers unless they are domain data, external API input, or real shared policy.
-- Remove pass-through helpers, wrappers, facades, signature-changing helpers, one-use functions, duplicate implementations, compatibility branches, bridge props, and old signatures.
+- Remove pass-through helpers, wrappers, facades, signature-changing helpers, tiny predicate helpers, one-use functions, duplicate implementations, compatibility branches, bridge props, and old signatures.
+- Inline helpers that only change call shape, hide a constructor, hide a module call, hide a simple comparison, or make the caller inspect another function to understand one expression.
 - Remove props that can be inferred from another prop, unused props, derived props, parallel props, and nullability that is not required by the current dataflow.
 - Change local and internal signatures when that deletes slop.
-- Keep helpers only when they encode real policy, real reuse, a domain concept, or an external boundary.
+- Keep helpers only when they encode real policy, real reuse across distance, a domain concept, or an external boundary. Multiple nearby call sites do not prove real reuse.
 
 ## Effect And Functional Idioms
 

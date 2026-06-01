@@ -57,6 +57,17 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 	)
 )
 
+export const terminalPortsAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('terminal.ports', {cwd})),
+			Stream.unwrap
+		),
+		{initialValue: Array.empty<number>()}
+	)
+)
+
 export const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
@@ -77,15 +88,16 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 						projects,
 						Array.findFirst(project =>
 							Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-						),
-						Option.getOrUndefined
+						)
 					)
 
 					return {
-						activeProject,
+						activeProject: Option.getOrUndefined(activeProject),
 						activeWorktree: pipe(
-							activeProject?.worktrees ?? [],
-							Array.findFirst(worktree => worktreeRouteId(worktree.root) === worktreeId),
+							activeProject,
+							Option.flatMap(project =>
+								Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+							),
 							Option.getOrUndefined
 						),
 						projects

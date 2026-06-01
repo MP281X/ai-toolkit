@@ -9,12 +9,14 @@ import {
 	Order,
 	Option,
 	PubSub,
+	Queue,
 	Ref,
 	Result,
 	Schedule,
 	Stream,
 	String,
 	SubscriptionRef,
+	Tuple,
 	flow,
 	pipe
 } from 'effect'
@@ -42,7 +44,7 @@ function parseProcessParents(output: string) {
 				const pid = Number(columns[0] ?? Number.NaN)
 				const ppid = Number(columns[1] ?? Number.NaN)
 
-				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed([pid, ppid] as const) : Result.failVoid
+				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed(Tuple.make(pid, ppid)) : Result.failVoid
 			})
 		)
 	)
@@ -79,11 +81,10 @@ function isDescendant(pid: number, ancestorPid: number, parents: ReadonlyMap<num
 }
 
 function descendantsOf(ancestorPid: number, parents: ReadonlyMap<number, number>) {
-	const descendants: number[] = []
-	for (const pid of parents.keys()) {
-		if (pid !== ancestorPid && isDescendant(pid, ancestorPid, parents)) descendants.push(pid)
-	}
-	return descendants
+	return pipe(
+		Array.fromIterable(parents.keys()),
+		Array.filter(pid => pid !== ancestorPid && isDescendant(pid, ancestorPid, parents))
+	)
 }
 
 const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[], message: string) {
@@ -107,6 +108,10 @@ const readListeningPorts = pipe(
 
 const initialSize = {cols: 120, rows: 32}
 const maxHistoryEvents = 10_000
+
+function samePorts(left: readonly number[], right: readonly number[]) {
+	return left.length === right.length && Array.every(left, (leftPort, index) => leftPort === right[index])
+}
 
 function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'> {
 	const trimmed = String.trim(title)
@@ -135,14 +140,29 @@ function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'>
 	return {state: 'idle', title: ''}
 }
 
+function completeSignalData(input: string) {
+	if (input.endsWith('\x1b')) return {complete: input.slice(0, -1), pending: '\x1b'}
+
+	const start = input.lastIndexOf('\x1b]')
+	if (start === -1) return {complete: input, pending: ''}
+
+	const tail = input.slice(start)
+	if (tail.includes('\x07') || tail.includes('\x1b\\')) return {complete: input, pending: ''}
+
+	return {complete: input.slice(0, start), pending: tail}
+}
+
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {
 		readonly args?: readonly string[]
 		readonly command?: string
 		readonly cwd: string
 	}) {
-		const events = yield* PubSub.bounded<TerminalEvent>({capacity: 256})
-		const history = yield* Ref.make<readonly TerminalEvent[]>([])
+		const dataQueue = yield* Queue.unbounded<string>()
+		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
+		const history = yield* Ref.make<readonly {readonly event: TerminalEvent; readonly sequence: number}[]>([])
+		const sequenceRef = yield* Ref.make(0)
+		const signalBuffer = yield* Ref.make('')
 		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
 		const processRef = yield* Ref.make<RunningProcess | undefined>(undefined)
 		const sizeRef = yield* Ref.make(initialSize)
@@ -157,10 +177,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			title: ''
 		})
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
+			const sequence = yield* Ref.updateAndGet(sequenceRef, sequence => sequence + 1)
+			const published = {event, sequence}
 			yield* Ref.update(history, current =>
-				event.type === 'reset' ? [] : [...current, event].slice(-maxHistoryEvents)
+				event.type === 'reset' ? [] : [...current, published].slice(-maxHistoryEvents)
 			)
-			yield* PubSub.publish(events, event)
+			yield* PubSub.publish(events, published)
 		})
 
 		function setState(state: TerminalState['state']) {
@@ -181,23 +203,20 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			})
 		}
 
-		const startRun = Effect.gen(function* () {
-			yield* SubscriptionRef.update(stateRef, state => ({
+		const startRun = pipe(
+			SubscriptionRef.update(stateRef, state => ({
 				...state,
 				ports: [],
 				runId: state.runId + 1,
 				state: 'starting' as const,
 				title: ''
-			}))
-
-			return yield* SubscriptionRef.get(stateRef)
-		})
+			})),
+			Effect.andThen(SubscriptionRef.get(stateRef))
+		)
 
 		function setPorts(ports: readonly number[]) {
 			return SubscriptionRef.updateSome(stateRef, state =>
-				state.ports.length === ports.length && state.ports.every((port, index) => port === ports[index])
-					? Option.none()
-					: Option.some({...state, ports: [...ports]})
+				samePorts(state.ports, ports) ? Option.none() : Option.some({...state, ports: [...ports]})
 			)
 		}
 
@@ -211,6 +230,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			}
 		}
 
+		const readBufferedSignals = Effect.fnUntraced(function* (data: string) {
+			const pending = yield* Ref.get(signalBuffer)
+			const next = completeSignalData(`${pending}${data}`)
+			yield* Ref.set(signalBuffer, next.pending)
+			readSignals(next.complete)
+		})
+
 		const interruptProcessTree = Effect.fnUntraced(function* (subprocess: IPty, signal: NodeJS.Signals) {
 			const descendants = yield* pipe(
 				Effect.all([readProcessParents, Ref.get(portOwners)]),
@@ -218,8 +244,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Array.dedupe([...descendantsOf(subprocess.pid, parents), ...Array.fromIterable(owners.values())])
 				),
 				Effect.timeoutOption('250 millis'),
-				Effect.map(option => Option.getOrElse(option, () => [] as number[])),
-				Effect.catch(() => Effect.succeed([] as number[]))
+				Effect.map(option => Option.getOrElse(option, Array.empty<number>)),
+				Effect.catch(() => Effect.succeed(Array.empty<number>()))
 			)
 
 			yield* Effect.sync(() => {
@@ -244,7 +270,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const writeScreen = Effect.fnUntraced(function* (data: string) {
-			readSignals(data)
+			yield* readBufferedSignals(data)
 			yield* publish({data, type: 'data'})
 		})
 
@@ -287,7 +313,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					})
 			})
 			const data = subprocess.onData(data => {
-				Effect.runFork(writeScreen(data))
+				Queue.offerUnsafe(dataQueue, data)
 			})
 			const exit = subprocess.onExit(event => {
 				Effect.runFork(
@@ -316,8 +342,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			return yield* spawnProcess()
 		})
 
+		yield* pipe(Stream.fromQueue(dataQueue), Stream.runForEach(writeScreen), Effect.forkScoped)
+
 		yield* Effect.addFinalizer(() =>
-			Effect.all([stopProcess(), PubSub.shutdown(events)], {concurrency: 'unbounded', discard: true})
+			Effect.all([stopProcess(), PubSub.shutdown(events), Queue.shutdown(dataQueue)], {
+				concurrency: 'unbounded',
+				discard: true
+			})
 		)
 		if (autostart) {
 			yield* pipe(
@@ -388,21 +419,28 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				Effect.gen(function* () {
 					const subscription = yield* PubSub.subscribe(events)
 					const replay = yield* Ref.get(history)
+					const lastReplaySequence = replay.at(-1)?.sequence ?? 0
 					const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
 
 					return pipe(
-						Stream.fromIterable([...replay, ...pending]),
+						Stream.fromIterable([...replay, ...Array.filter(pending, event => event.sequence > lastReplaySequence)]),
 						Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))
 					)
 				})
 			)
 		)
+		const ports = pipe(
+			SubscriptionRef.changes(stateRef),
+			Stream.map(state => state.ports),
+			Stream.changesWith(samePorts)
+		)
 		const updates = Stream.merge(
 			SubscriptionRef.changes(stateRef).pipe(Stream.map(state => ({state, type: 'state' as const}))),
-			eventsStream.pipe(Stream.map(event => ({event, type: 'event' as const})))
+			eventsStream.pipe(Stream.map(published => ({event: published.event, type: 'event' as const})))
 		)
 
 		return {
+			ports,
 			resize: Effect.fnUntraced(function* (size: {readonly cols: number; readonly rows: number}) {
 				yield* resize(size)
 				return yield* SubscriptionRef.get(stateRef)
