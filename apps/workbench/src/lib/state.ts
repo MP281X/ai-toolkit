@@ -3,7 +3,6 @@ import {Array, Duration, Effect, Hash, Option, Result, Stream, pipe} from 'effec
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {AgentSession} from '#rpcs/contracts.ts'
 import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
@@ -114,7 +113,6 @@ export const agentsAtom = Atom.family((cwd: string) =>
 			RpcClient,
 			Effect.map(client => client('agents.watch', {cwd})),
 			Stream.unwrap
-		),
-		{initialValue: Array.empty<AgentSession>()}
+		)
 	)
 )
