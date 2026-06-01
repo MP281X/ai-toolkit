@@ -171,6 +171,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 	}) {
 		const dataQueue = yield* Queue.unbounded<string>()
 		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
+		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
 		const signalBuffer = yield* Ref.make('')
@@ -362,17 +363,24 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			})
 			const exit = subprocess.onExit(event => {
 				Effect.runFork(
-					Effect.gen(function* () {
-						const current = yield* Ref.get(processRef)
-						if (current !== handle) return
+					Semaphore.withPermit(
+						lifecycleLock,
+						Effect.gen(function* () {
+							const current = yield* Ref.get(processRef)
+							if (current !== handle) return
 
-						yield* clearProcess(handle)
-						if (autostart) {
-							yield* spawnProcess()
-							return
-						}
-						yield* setState(event.exitCode === 0 ? 'exited' : 'failed')
-					})
+							yield* clearProcess(handle)
+							if (autostart) {
+								yield* pipe(
+									Effect.sleep('1 second'),
+									Effect.andThen(spawnProcess()),
+									Effect.catch(() => setState('failed'))
+								)
+								return
+							}
+							yield* setState(event.exitCode === 0 ? 'exited' : 'failed')
+						})
+					)
 				)
 			})
 			const handle = {data, exit, process: subprocess}
@@ -398,6 +406,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		if (autostart) {
 			yield* pipe(
 				startProcess(),
+				Semaphore.withPermit(lifecycleLock),
 				Effect.catch(() => setState('failed'))
 			)
 		}
@@ -501,11 +510,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			restart: Effect.fnUntraced(function* () {
 				return yield* pipe(
 					startProcess(),
+					Semaphore.withPermit(lifecycleLock),
 					Effect.catch(() => pipe(setState('failed'), Effect.andThen(SubscriptionRef.get(stateRef))))
 				)
 			}),
 			stop: Effect.fnUntraced(function* () {
-				yield* stopProcess('stopped')
+				yield* pipe(stopProcess('stopped'), Semaphore.withPermit(lifecycleLock))
 				return yield* SubscriptionRef.get(stateRef)
 			}),
 			updates,
