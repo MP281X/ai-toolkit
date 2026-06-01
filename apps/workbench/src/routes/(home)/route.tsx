@@ -1,13 +1,13 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Hash, Match, Option, Schema, String, pipe} from 'effect'
+import {Array, Effect, Match, Option, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
@@ -19,9 +19,9 @@ import {
 	PackageIcon,
 	PanelTop,
 	PlayIcon,
+	ProcessStateIcon,
 	SparklesIcon,
 	Square,
-	TerminalStatusIcon,
 	TerminalIcon,
 	Trash
 } from '@deslop/components/icons'
@@ -40,7 +40,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
-import type {TerminalState} from '@deslop/terminal/schema'
+import {terminalStateActive} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -108,32 +108,23 @@ function HomeLayout() {
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
 							startTransition(() => {
-								void navigate({
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									to: '/$worktree/diff'
-								})
+								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/diff'})
 							})
 						}}
 						selectTerminal={worktreeRoot => {
 							startTransition(() => {
-								void navigate({
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									to: '/$worktree/terminal'
-								})
+								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
 							})
 						}}
 						selectBrowser={worktreeRoot => {
 							startTransition(() => {
-								void navigate({
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									to: '/$worktree/browser'
-								})
+								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/browser'})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
 							startTransition(() => {
 								void navigate({
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									params: {worktree: worktreeRouteId(worktreeRoot)},
 									search: {agentId},
 									to: '/$worktree/agent'
 								})
@@ -142,7 +133,7 @@ function HomeLayout() {
 						selectRun={(worktreeRoot, sessionId, command, runId, inactive) => {
 							startTransition(() => {
 								void navigate({
-									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									params: {worktree: worktreeRouteId(worktreeRoot)},
 									search: {command, inactive, runId, sessionId},
 									to: '/$worktree/run'
 								})
@@ -194,10 +185,6 @@ function runSessionId(scriptName: string, taskIndex: number) {
 
 function agentSessionId(uuid: string) {
 	return `agent:${uuid}`
-}
-
-function runTaskCommand(script: {readonly name: string; readonly tasks: readonly string[]}, taskIndex: number) {
-	return script.tasks.length > 1 ? (script.tasks[taskIndex] ?? '') : `vp run ${script.name}`
 }
 
 function WorktreeRuns(input: {
@@ -256,22 +243,13 @@ function RunScriptRow(input: {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const parallel = input.script.tasks.length > 1
-	const commands = input.script.tasks.map((_, taskIndex) => runTaskCommand(input.script, taskIndex))
+	const commands = input.script.tasks.map(task => (parallel ? task : `vp run ${input.script.name}`))
 	const firstCommand = commands[0] ?? ''
 	const firstSessionId = runSessionId(input.script.name, 0)
-	const firstSession = {args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId}
-	const firstState = useAtomSuspense(terminalStateAtom(firstSession))
-	const active = firstState.value.status.state === 'running' || firstState.value.status.state === 'starting'
-
-	function startTask(command: string, sessionId: string, focus: boolean) {
-		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(state => {
-			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
-		})
-	}
-
-	function stopTask(command: string, sessionId: string) {
-		void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
-	}
+	const firstState = useAtomSuspense(
+		terminalStateAtom({args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId})
+	)
+	const active = firstState.value.runId > 0 && terminalStateActive(firstState.value.state)
 
 	return (
 		<li className="w-full min-w-0">
@@ -284,8 +262,15 @@ function RunScriptRow(input: {
 							event.stopPropagation()
 							commands.forEach((command, taskIndex) => {
 								const sessionId = runSessionId(input.script.name, taskIndex)
-								if (active) stopTask(command, sessionId)
-								else startTask(command, sessionId, taskIndex === 0)
+								if (active) {
+									void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
+								} else {
+									void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(
+										state => {
+											if (taskIndex === 0) input.selectRun(input.cwd, sessionId, command, state.runId)
+										}
+									)
+								}
 							})
 						}}
 						title={active ? 'Stop script' : 'Start script'}
@@ -293,11 +278,20 @@ function RunScriptRow(input: {
 						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={<TerminalStatusIcon state={firstState.value.status.state} />}
+				icon={<ProcessStateIcon state={firstState.value.state} />}
 				selected={false}
 				onClick={() => {
-					if (parallel) input.onToggleExpanded()
-					else input.selectRun(input.cwd, firstSessionId, firstCommand, firstState.value.runId)
+					if (parallel) {
+						input.onToggleExpanded()
+					} else {
+						input.selectRun(
+							input.cwd,
+							firstSessionId,
+							firstCommand,
+							firstState.value.runId,
+							firstState.value.runId === 0
+						)
+					}
 				}}
 			>
 				{input.script.name}
@@ -329,7 +323,7 @@ function RunTaskRow(input: {
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
 	const state = useAtomSuspense(terminalStateAtom(session))
-	const active = state.value.status.state === 'running' || state.value.status.state === 'starting'
+	const active = state.value.runId > 0 && terminalStateActive(state.value.state)
 
 	return (
 		<li className="w-full min-w-0">
@@ -353,10 +347,10 @@ function RunTaskRow(input: {
 						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={<TerminalStatusIcon state={state.value.status.state} />}
+				icon={<ProcessStateIcon state={state.value.state} />}
 				selected={false}
 				onClick={() => {
-					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId)
+					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId, state.value.runId === 0)
 				}}
 			>
 				{input.command}
@@ -376,62 +370,19 @@ const agentProfiles = [
 	{args: ['--provider', 'openai-codex', '--model', 'gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
 ] as const
 
-function agentActivityLabel(activity: TerminalState['signals']['activity']) {
-	return pipe(
-		Match.value(activity),
-		Match.when('starting', () => 'Starting'),
-		Match.when('working', () => 'Working'),
-		Match.when('thinking', () => 'Thinking'),
-		Match.when('waiting', () => 'Waiting'),
-		Match.when('needs_input', () => 'Needs input'),
-		Match.orElse(() => undefined)
-	)
-}
-
-function terminalStatusLabel(status: TerminalState['status']) {
-	return pipe(
-		Match.value(status.state),
-		Match.when('starting', () => 'Starting'),
-		Match.when('stopped', () => 'Stopped'),
-		Match.when('exited', () => 'Exited'),
-		Match.when('failed', () => 'Failed'),
-		Match.orElse(() => undefined)
-	)
-}
-
-function agentStateIndicatorClassName(state: TerminalState) {
-	if (state.status.state === 'failed' || state.status.state === 'stopped') return 'bg-destructive'
-	if (state.status.state === 'exited') return 'bg-emerald-500'
-	if (state.signals.notification !== null || state.signals.activity === 'needs_input') return 'bg-amber-500'
-	if (state.status.state === 'starting') return 'bg-primary'
-	if (state.signals.activity === 'thinking') return 'bg-sky-500'
-	if (state.signals.activity === 'waiting') return 'bg-violet-500'
-	if (state.signals.activity === 'working' || state.signals.activity === 'starting') return 'bg-primary'
-	return 'bg-muted-foreground/50'
-}
-
-function agentTooltip(session: AgentSession, state: TerminalState) {
-	const lines = [
-		state.signals.title ? `Title: ${state.signals.title}` : session.label,
-		state.signals.notification?.message ? `Notification: ${state.signals.notification.message}` : undefined
-	]
-	return lines.filter((line): line is string => line !== undefined && String.isNonEmpty(line)).join('\n')
-}
-
 function AgentSessionRow(input: {
 	readonly onSelect: () => void
 	readonly onStop: () => void
 	readonly session: AgentSession
 }) {
-	const terminalSession = {
-		args: input.session.args,
-		command: input.session.command,
-		cwd: input.session.cwd,
-		sessionId: agentSessionId(input.session.uuid)
-	}
-	const state = useAtomSuspense(terminalStateAtom(terminalSession))
-	const stateLabel = agentActivityLabel(state.value.signals.activity) ?? terminalStatusLabel(state.value.status)
-	const title = state.value.signals.displayTitle ?? state.value.signals.title ?? input.session.label
+	const state = useAtomSuspense(
+		terminalStateAtom({
+			args: input.session.args,
+			command: input.session.command,
+			cwd: input.session.cwd,
+			sessionId: agentSessionId(input.session.uuid)
+		})
+	)
 
 	return (
 		<li className="w-full min-w-0">
@@ -449,16 +400,12 @@ function AgentSessionRow(input: {
 						<Square className="size-3" />
 					</button>
 				}
-				icon={<AgentIcon layer={input.session.icon} />}
+				icon={<ProcessStateIcon state={state.value.state} />}
 				selected={false}
-				title={agentTooltip(input.session, state.value)}
+				title={state.value.title ? `Title: ${state.value.title}` : input.session.label}
 				onClick={input.onSelect}
 			>
-				<span className="flex min-w-0 items-center gap-1.5">
-					<span className={`size-1.5 shrink-0 rounded-full ${agentStateIndicatorClassName(state.value)}`} />
-					<span className="min-w-0 flex-1 truncate">{title}</span>
-					{stateLabel && <span className="text-muted-foreground/80 shrink-0 text-[10px]">{stateLabel}</span>}
-				</span>
+				{state.value.title === '' ? input.session.label : state.value.title}
 			</TreeExplorerRow>
 		</li>
 	)
@@ -467,7 +414,7 @@ function AgentSessionRow(input: {
 function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd: string, agentId: string) => void}) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
-	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const stopTerminal = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
@@ -478,7 +425,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 
 	function stopAgent(session: AgentSession) {
 		void remove({payload: {cwd: input.cwd, uuid: session.uuid}})
-		void stop({
+		void stopTerminal({
 			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: agentSessionId(session.uuid)}
 		})
 	}

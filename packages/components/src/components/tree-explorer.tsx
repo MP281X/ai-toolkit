@@ -39,7 +39,7 @@ export function TreeExplorerRow(props: {
 	const label = (
 		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
 			{Predicate.isNotUndefined(props.icon) && (
-				<span className="flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5">{props.icon}</span>
+				<span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>
 			)}
 			<span className="min-w-0 flex-1 truncate">{props.children}</span>
 		</span>

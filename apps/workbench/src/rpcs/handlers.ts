@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto'
 import {readFile} from 'node:fs/promises'
 import {join} from 'node:path'
 
-import {Array, Context, Duration, Effect, Layer, RcMap, Schema, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array, Context, Duration, Effect, Layer, RcMap, Result, Schema, Stream, SubscriptionRef, pipe} from 'effect'
 
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
@@ -19,8 +19,13 @@ const TerminalSessionKey = Schema.Struct({
 })
 type TerminalSessionKey = typeof TerminalSessionKey.Type
 
-function terminalSessionKey(input: TerminalSessionKey) {
-	return JSON.stringify({args: input.args, command: input.command, cwd: input.cwd, sessionId: input.sessionId})
+function terminalSession(input: TerminalSessionKey): TerminalSessionKey {
+	return {
+		...(input.args === undefined ? {} : {args: input.args}),
+		...(input.command === undefined ? {} : {command: input.command}),
+		cwd: input.cwd,
+		...(input.sessionId === undefined ? {} : {sessionId: input.sessionId})
+	}
 }
 
 function agentSessionId(uuid: string) {
@@ -33,11 +38,7 @@ function agentSessionKey(input: {readonly cwd: string; readonly uuid: string}) {
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (key: string) {
-		const config = yield* Effect.try({
-			catch: cause => new TerminalError({cause, message: 'invalid terminal session key'}),
-			try: () => Schema.decodeUnknownSync(TerminalSessionKey)(JSON.parse(key))
-		})
+	lookup: Effect.fnUntraced(function* (config: TerminalSessionKey) {
 		const context = yield* Layer.buildWithScope(
 			Terminal.layer({args: config.args, command: config.command, cwd: config.cwd}),
 			yield* Effect.scope
@@ -87,20 +88,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 						next.set(agentSessionKey({cwd: session.cwd, uuid: session.uuid}), session)
 						return next
 					})
-					const terminal = yield* RcMap.get(
-						terminals,
-						terminalSessionKey({
-							args: session.args,
-							command: session.command,
-							cwd: session.cwd,
-							sessionId: agentSessionId(session.uuid)
-						})
-					)
-					yield* terminal.restart
+					const terminal = yield* RcMap.get(terminals, {
+						args: session.args,
+						command: session.command,
+						cwd: session.cwd,
+						sessionId: agentSessionId(session.uuid)
+					})
+					yield* terminal.restart()
 					yield* pipe(
 						pipe(
-							SubscriptionRef.changes(terminal.state),
-							Stream.map(state => state.status.state),
+							terminal.updates,
+							Stream.filterMap(update =>
+								update.type === 'state' ? Result.succeed(update.state.state) : Result.failVoid
+							),
 							Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
 							Stream.take(1),
 							Stream.runDrain
@@ -211,70 +211,32 @@ export const RpcHandlers = RpcContracts.toLayer(
 						}))
 					)
 				),
-			'terminal.events': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, terminalSessionKey(payload)),
-						Effect.map(terminal => terminal.events)
-					)
-				),
-			'terminal.input': payload =>
-				pipe(
-					RcMap.get(terminals, terminalSessionKey(payload)),
-					Effect.flatMap(terminal => terminal.write(payload.data)),
-					Effect.asVoid
-				),
-			'terminal.killPort': payload =>
-				pipe(
-					RcMap.get(terminals, terminalSessionKey({cwd: payload.cwd})),
-					Effect.flatMap(terminal => terminal.killPort(payload.port))
-				),
-			'terminal.ports': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, terminalSessionKey(payload)),
-						Effect.map(terminal =>
-							pipe(
-								SubscriptionRef.changes(terminal.state),
-								Stream.map(state => state.ports)
-							)
-						)
-					)
-				),
 			'terminal.resize': payload =>
 				pipe(
-					RcMap.get(terminals, terminalSessionKey(payload)),
+					RcMap.get(terminals, terminalSession(payload)),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
 			'terminal.restart': payload =>
 				pipe(
-					RcMap.get(terminals, terminalSessionKey(payload)),
-					Effect.flatMap(terminal => terminal.restart)
-				),
-			'terminal.state': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, terminalSessionKey(payload)),
-						Effect.map(terminal => SubscriptionRef.changes(terminal.state))
-					)
-				),
-			'terminal.status': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, terminalSessionKey(payload)),
-						Effect.map(terminal =>
-							pipe(
-								SubscriptionRef.changes(terminal.state),
-								Stream.map(state => state.status)
-							)
-						)
-					)
+					RcMap.get(terminals, terminalSession(payload)),
+					Effect.flatMap(terminal => terminal.restart())
 				),
 			'terminal.stop': payload =>
 				pipe(
-					RcMap.get(terminals, terminalSessionKey(payload)),
-					Effect.flatMap(terminal => terminal.stop),
-					Effect.asVoid
+					RcMap.get(terminals, terminalSession(payload)),
+					Effect.flatMap(terminal => terminal.stop())
+				),
+			'terminal.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(terminals, terminalSession(payload)),
+						Effect.map(terminal => terminal.updates)
+					)
+				),
+			'terminal.write': payload =>
+				pipe(
+					RcMap.get(terminals, terminalSession(payload)),
+					Effect.flatMap(terminal => terminal.write(payload.data))
 				)
 		})
 	})
