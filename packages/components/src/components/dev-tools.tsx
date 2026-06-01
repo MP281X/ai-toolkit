@@ -32,7 +32,7 @@ export namespace DevTools {
 
 		return (
 			<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
-				<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5 font-mono text-xs">
+				<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5">
 					{Array.map(props.routes, (route, index) => (
 						<Button
 							key={route}
@@ -44,7 +44,7 @@ export namespace DevTools {
 								select(index)
 							}}
 							className={cn(
-								'h-7 w-auto min-w-7 px-2 text-xs',
+								'h-7 w-auto min-w-7 px-2',
 								index === value && 'bg-primary/15 text-primary',
 								index !== value && 'text-muted-foreground hover:bg-muted hover:text-foreground'
 							)}
@@ -81,7 +81,7 @@ export namespace DevTools {
 			<>
 				{props.children[value] ?? props.children[0]}
 				<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
-					<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5 font-mono text-xs">
+					<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5">
 						{Array.map(props.children, (_child, index) => (
 							<Button
 								key={index}
@@ -93,7 +93,7 @@ export namespace DevTools {
 									setValue(index)
 								}}
 								className={cn(
-									'h-7 w-auto min-w-7 px-2 text-xs',
+									'h-7 w-auto min-w-7 px-2',
 									index === value && 'bg-primary/15 text-primary',
 									index !== value && 'text-muted-foreground hover:bg-muted hover:text-foreground'
 								)}

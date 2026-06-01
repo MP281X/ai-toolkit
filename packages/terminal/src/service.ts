@@ -1,10 +1,10 @@
+import {createRequire} from 'node:module'
 import nodeProcess from 'node:process'
 
 import {
 	Array,
 	Config,
 	Context,
-	Deferred,
 	Effect,
 	Layer,
 	Order,
@@ -18,18 +18,25 @@ import {
 	Stream,
 	String,
 	SubscriptionRef,
+	Tuple,
 	flow,
 	pipe
 } from 'effect'
 
 import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
-import {SerializeAddon} from '@xterm/addon-serialize'
-import xtermHeadless from '@xterm/headless'
+import type * as SerializeModule from '@xterm/addon-serialize'
+import type * as HeadlessModule from '@xterm/headless'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import type {TerminalEvent, TerminalSignals, TerminalState, TerminalStatus} from './schema.ts'
-import {TerminalError} from './schema.ts'
+import type {TerminalEvent, TerminalState} from './schema.ts'
+import {TerminalError, terminalStateActive} from './schema.ts'
+
+type RunningProcess = {
+	readonly data: {readonly dispose: () => void}
+	readonly exit: {readonly dispose: () => void}
+	readonly process: IPty
+}
 
 function parseProcessParents(output: string) {
 	return new Map(
@@ -38,10 +45,10 @@ function parseProcessParents(output: string) {
 			Array.fromIterable,
 			Array.filterMap(line => {
 				const columns = String.split(/\s+/)(String.trim(line))
-				const pid = Number(columns[0] ?? Number.NaN)
-				const ppid = Number(columns[1] ?? Number.NaN)
+				const pid = Number(columns[0])
+				const ppid = Number(columns[1])
 
-				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed([pid, ppid] as const) : Result.failVoid
+				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed(Tuple.make(pid, ppid)) : Result.failVoid
 			})
 		)
 	)
@@ -78,11 +85,10 @@ function isDescendant(pid: number, ancestorPid: number, parents: ReadonlyMap<num
 }
 
 function descendantsOf(ancestorPid: number, parents: ReadonlyMap<number, number>) {
-	const descendants: number[] = []
-	for (const pid of parents.keys()) {
-		if (pid !== ancestorPid && isDescendant(pid, ancestorPid, parents)) descendants.push(pid)
-	}
-	return descendants
+	return pipe(
+		Array.fromIterable(parents.keys()),
+		Array.filter(pid => pid !== ancestorPid && isDescendant(pid, ancestorPid, parents))
+	)
 }
 
 const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[], message: string) {
@@ -104,53 +110,57 @@ const readListeningPorts = pipe(
 	Effect.map(parseListeningPorts)
 )
 
-type TerminalControl = {readonly type: 'restart'} | {readonly type: 'stop'}
-type TerminalSignalEvent =
-	| {readonly activity: 'idle' | 'working'; readonly type: 'activity'}
-	| {readonly title: string; readonly type: 'title'}
-	| {readonly message: string | null; readonly type: 'notification'}
+function snapshotEvents(data: string) {
+	if (data === '') return Array.empty<TerminalEvent>()
 
-const initialSize = {cols: 120, rows: 32} as const
-const initialSignals: TerminalSignals = {activity: 'idle', displayTitle: null, notification: null, title: null}
-const scrollback = 10_000
-const snapshotChunkSize = 64 * 1024
+	const events: TerminalEvent[] = []
+	for (let index = 0; index < data.length; index += 64 * 1024) {
+		events.push({data: data.slice(index, index + 64 * 1024), type: 'data'})
+	}
+	return events
+}
 
-function parseTitleSignal(title: string): Pick<TerminalSignals, 'activity' | 'displayTitle' | 'title'> {
+function samePorts(left: readonly number[], right: readonly number[]) {
+	return left.length === right.length && Array.every(left, (leftPort, index) => leftPort === right[index])
+}
+
+function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'> {
 	const trimmed = String.trim(title)
 	const actionRequired = /^\[\s*[!.]\s*\]\s*Action Required\b/i
 	if (actionRequired.test(trimmed)) {
-		return {activity: 'needs_input', displayTitle: trimmed.replace(/^\[\s*[!.]\s*\]\s*/i, '') || trimmed, title}
+		return {state: 'needs_input', title: trimmed.replace(/^\[\s*[!.]\s*\]\s*/i, '') || trimmed}
 	}
 
+	const spinner = /^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-])(?:\s|\s*\|)/u.test(trimmed)
 	const withoutKnownPrefix = trimmed
 		.replace(/^OC\s*\|\s*/i, '')
 		.replace(/^π\s*-\s*/i, '')
 		.replace(/^\[\s*[^\]]+\s*\]\s*/, '')
 		.replace(/^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-]\s*)+/, '')
+		.replace(/^\|\s*/, '')
 		.trim()
-	const displayTitle = withoutKnownPrefix || (trimmed === '' ? null : trimmed)
-	const segment = displayTitle?.match(/^(Starting|Working|Thinking|Waiting|Ready)\b/i)?.[1]?.toLowerCase()
+	const nextTitle = withoutKnownPrefix || trimmed
+	const segment = nextTitle.match(/^(Idle|Ready|Starting|Working|Thinking|Waiting)\b/i)?.[1]?.toLowerCase()
 
-	if (segment === 'starting') return {activity: 'starting', displayTitle, title}
-	if (segment === 'working') return {activity: 'working', displayTitle, title}
-	if (segment === 'thinking') return {activity: 'thinking', displayTitle, title}
-	if (segment === 'waiting') return {activity: 'waiting', displayTitle, title}
-	if (segment === 'ready') return {activity: 'idle', displayTitle, title}
-	if (/^\[\s*[^\]]+\s*\]/.test(trimmed) || /^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-]\s*)+/.test(trimmed)) {
-		return {activity: 'working', displayTitle, title}
-	}
+	if (segment === 'idle' || segment === 'ready') return {state: 'idle', title: nextTitle}
+	if (segment === 'starting') return {state: 'starting', title: nextTitle}
+	if (segment === 'waiting') return {state: 'waiting', title: nextTitle}
+	if (segment === 'working' || segment === 'thinking' || spinner) return {state: 'running', title: nextTitle}
+	if (String.isNonEmpty(trimmed)) return {state: 'idle', title: nextTitle}
 
-	return {activity: String.isNonEmpty(trimmed) ? 'unknown' : 'idle', displayTitle, title}
+	return {state: 'idle', title: ''}
 }
 
-function snapshotEvents(data: string) {
-	if (data === '') return [{data, type: 'snapshot'} as const]
+function completeSignalData(input: string) {
+	if (input.endsWith('\x1b')) return {complete: input.slice(0, -1), pending: '\x1b'}
 
-	const events: TerminalEvent[] = []
-	for (let index = 0; index < data.length; index += snapshotChunkSize) {
-		events.push({data: data.slice(index, index + snapshotChunkSize), type: 'snapshot'})
-	}
-	return events
+	const start = input.lastIndexOf('\x1b]')
+	if (start === -1) return {complete: input, pending: ''}
+
+	const tail = input.slice(start)
+	if (tail.includes('\x07') || tail.includes('\x1b\\')) return {complete: input, pending: ''}
+
+	return {complete: input.slice(0, start), pending: tail}
 }
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
@@ -158,108 +168,112 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		readonly args?: readonly string[]
 		readonly command?: string
 		readonly cwd: string
-		readonly restart?: 'always' | 'failed' | 'never'
 	}) {
-		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
-		const controls = yield* Queue.unbounded<TerminalControl>()
 		const dataQueue = yield* Queue.unbounded<string>()
-		const signalQueue = yield* Queue.unbounded<TerminalSignalEvent>()
-		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
-		const processRef = yield* Ref.make<IPty | undefined>(undefined)
+		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
+		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
+		const signalBuffer = yield* Ref.make('')
+		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
+		const processRef = yield* Ref.make<RunningProcess | undefined>(undefined)
+		const sizeRef = yield* Ref.make({cols: 120, rows: 32})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command ?? shell
 		const processArgs = config.args ?? []
 		const autostart = config.command === undefined
-		const restartPolicy = config.restart ?? (config.command ? 'never' : 'always')
 		const stateRef = yield* SubscriptionRef.make<TerminalState>({
-			args: [...processArgs],
-			command: processCommand,
-			cwd: config.cwd,
 			ports: [],
 			runId: 0,
-			signals: initialSignals,
-			size: initialSize,
-			status: autostart ? {state: 'starting'} : {state: 'stopped'}
+			state: autostart ? 'starting' : 'idle',
+			title: ''
 		})
-		const screen = new xtermHeadless.Terminal({
+		const screen = new (createRequire(import.meta.url)('@xterm/headless') as typeof HeadlessModule).Terminal({
 			allowProposedApi: true,
-			cols: initialSize.cols,
-			rows: initialSize.rows,
-			scrollback
+			cols: 120,
+			rows: 32,
+			scrollback: 10_000
 		})
-		const serialize = new SerializeAddon()
-
+		const serialize = new (
+			createRequire(import.meta.url)('@xterm/addon-serialize') as typeof SerializeModule
+		).SerializeAddon()
 		screen.loadAddon(serialize)
-		screen.onTitleChange(title => {
-			Queue.offerUnsafe(signalQueue, {title, type: 'title'})
-		})
-		screen.onBell(() => {
-			Queue.offerUnsafe(signalQueue, {message: null, type: 'notification'})
-		})
-		screen.parser.registerOscHandler(9, data => {
-			const [kind, value] = String.split(';')(data)
-			if (kind === '4') {
-				Queue.offerUnsafe(signalQueue, {activity: value === '0' ? 'idle' : 'working', type: 'activity'})
-				return true
-			}
-
-			Queue.offerUnsafe(signalQueue, {message: data, type: 'notification'})
-			return true
-		})
 
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
-			return yield* pipe(
-				Ref.updateAndGet(sequenceRef, sequence => sequence + 1),
-				Effect.flatMap(sequence => PubSub.publish(events, {event, sequence})),
-				Effect.asVoid
-			)
+			const sequence = yield* Ref.updateAndGet(sequenceRef, sequence => sequence + 1)
+			yield* PubSub.publish(events, {event, sequence})
 		})
-
 		const requestSnapshot = Semaphore.withPermit(
 			screenLock,
 			Effect.gen(function* () {
-				const data = serialize.serialize({scrollback})
+				const data = serialize.serialize({scrollback: 10_000})
 				const sequence = yield* Ref.get(sequenceRef)
 
 				return {data, sequence}
 			})
 		)
 
-		function setStatus(status: TerminalStatus) {
-			return SubscriptionRef.update(stateRef, state => ({...state, status}))
+		function setState(state: TerminalState['state']) {
+			return SubscriptionRef.update(stateRef, current => ({...current, state}))
 		}
 
-		const resetSignals = SubscriptionRef.update(stateRef, state => ({...state, signals: initialSignals}))
+		function setActiveState(state: 'idle' | 'running') {
+			return SubscriptionRef.update(stateRef, current => {
+				if (current.state !== 'idle' && current.state !== 'starting' && current.state !== 'running') return current
+				return {...current, state}
+			})
+		}
 
-		const startRun = Effect.gen(function* () {
-			yield* SubscriptionRef.update(stateRef, state => ({
+		function setTitle(title: string) {
+			return SubscriptionRef.update(stateRef, current => {
+				if (!terminalStateActive(current.state)) return current
+				return {...current, ...parseTitleSignal(title)}
+			})
+		}
+
+		const startRun = pipe(
+			SubscriptionRef.update(stateRef, state => ({
 				...state,
 				ports: [],
 				runId: state.runId + 1,
-				signals: initialSignals,
-				status: {state: 'starting' as const}
-			}))
-
-			return yield* SubscriptionRef.get(stateRef)
-		})
+				state: 'starting' as const,
+				title: ''
+			})),
+			Effect.andThen(SubscriptionRef.get(stateRef))
+		)
 
 		function setPorts(ports: readonly number[]) {
 			return SubscriptionRef.updateSome(stateRef, state =>
-				state.ports.length === ports.length && state.ports.every((port, index) => port === ports[index])
-					? Option.none()
-					: Option.some({...state, ports: [...ports]})
+				samePorts(state.ports, ports) ? Option.none() : Option.some({...state, ports: [...ports]})
 			)
 		}
 
+		function readSignals(data: string) {
+			for (const match of data.matchAll(/\x1b\](?:0|2);([^\x07\x1b]*)(?:\x07|\x1b\\)/gu)) {
+				const title = match[1]
+				if (title !== undefined) Effect.runFork(setTitle(title))
+			}
+			for (const match of data.matchAll(/\x1b\]9;4;([^\x07\x1b]*)(?:\x07|\x1b\\)/gu)) {
+				Effect.runFork(setActiveState(match[1] === '0' ? 'idle' : 'running'))
+			}
+		}
+
+		const readBufferedSignals = Effect.fnUntraced(function* (data: string) {
+			const pending = yield* Ref.get(signalBuffer)
+			const next = completeSignalData(`${pending}${data}`)
+			yield* Ref.set(signalBuffer, next.pending)
+			readSignals(next.complete)
+		})
+
 		const interruptProcessTree = Effect.fnUntraced(function* (subprocess: IPty, signal: NodeJS.Signals) {
 			const descendants = yield* pipe(
-				readProcessParents,
-				Effect.map(parents => descendantsOf(subprocess.pid, parents)),
+				Effect.all([readProcessParents, Ref.get(portOwners)]),
+				Effect.map(([parents, owners]) =>
+					Array.dedupe([...descendantsOf(subprocess.pid, parents), ...Array.fromIterable(owners.values())])
+				),
 				Effect.timeoutOption('250 millis'),
-				Effect.map(option => Option.getOrElse(option, () => [] as number[])),
-				Effect.catch(() => Effect.succeed([] as number[]))
+				Effect.map(option => Option.getOrElse(option, Array.empty<number>)),
+				Effect.catch(() => Effect.succeed(Array.empty<number>()))
 			)
 
 			yield* Effect.sync(() => {
@@ -283,18 +297,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* interruptProcessTree(subprocess, 'SIGKILL')
 		})
 
-		const resetScreen = Semaphore.withPermit(
-			screenLock,
-			pipe(
-				Effect.sync(() => {
-					screen.reset()
-				}),
-				Effect.andThen(publish({type: 'reset'}))
-			)
-		)
-
 		const writeScreen = Effect.fnUntraced(function* (data: string) {
-			return yield* Semaphore.withPermit(
+			yield* Semaphore.withPermit(
 				screenLock,
 				pipe(
 					Effect.callback<void>(resume => {
@@ -302,154 +306,115 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							resume(Effect.void)
 						})
 					}),
+					Effect.andThen(readBufferedSignals(data)),
 					Effect.andThen(publish({data, type: 'data'}))
 				)
 			)
 		})
 
-		yield* Effect.addFinalizer(() =>
-			Effect.all(
-				[Queue.shutdown(controls), Queue.shutdown(dataQueue), Queue.shutdown(signalQueue), PubSub.shutdown(events)],
-				{discard: true}
+		const clearProcess = Effect.fnUntraced(function* (handle: RunningProcess) {
+			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
+			yield* Ref.set(portOwners, new Map())
+			yield* setPorts([])
+		})
+
+		const stopProcess = Effect.fnUntraced(function* (state?: TerminalState['state']) {
+			const handle = yield* Ref.get(processRef)
+			if (!handle) {
+				if (state) yield* setState(state)
+				return
+			}
+
+			yield* Effect.sync(() => {
+				handle.data.dispose()
+				handle.exit.dispose()
+			})
+			yield* clearProcess(handle)
+			yield* pipe(terminateProcess(handle.process), Effect.ignore)
+			if (state) yield* setState(state)
+		})
+
+		const spawnProcess = Effect.fnUntraced(function* () {
+			yield* Semaphore.withPermit(
+				screenLock,
+				pipe(
+					Effect.sync(() => {
+						screen.reset()
+					}),
+					Effect.andThen(publish({type: 'reset'}))
+				)
 			)
-		)
+			yield* startRun
+
+			const size = yield* Ref.get(sizeRef)
+			const subprocess = yield* Effect.try({
+				catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
+				try: () =>
+					nodePty.spawn(processCommand, [...processArgs], {
+						cols: size.cols,
+						cwd: config.cwd,
+						env: {...process.env, TERM: 'xterm-256color'},
+						name: 'xterm-256color',
+						rows: size.rows
+					})
+			})
+			const data = subprocess.onData(data => {
+				Queue.offerUnsafe(dataQueue, data)
+			})
+			const exit = subprocess.onExit(event => {
+				Effect.runFork(
+					Semaphore.withPermit(
+						lifecycleLock,
+						Effect.gen(function* () {
+							const current = yield* Ref.get(processRef)
+							if (current !== handle) return
+
+							yield* clearProcess(handle)
+							if (autostart) {
+								yield* pipe(
+									Effect.sleep('1 second'),
+									Effect.andThen(spawnProcess()),
+									Effect.catch(() => setState('failed'))
+								)
+								return
+							}
+							yield* setState(event.exitCode === 0 ? 'exited' : 'failed')
+						})
+					)
+				)
+			})
+			const handle = {data, exit, process: subprocess}
+			yield* Ref.set(processRef, handle)
+			yield* setState('running')
+
+			return yield* SubscriptionRef.get(stateRef)
+		})
+
+		const startProcess = Effect.fnUntraced(function* () {
+			yield* stopProcess()
+			return yield* spawnProcess()
+		})
 
 		yield* pipe(Stream.fromQueue(dataQueue), Stream.runForEach(writeScreen), Effect.forkScoped)
-		yield* pipe(
-			Stream.fromQueue(signalQueue),
-			Stream.runForEach(signal =>
-				SubscriptionRef.update(stateRef, state => {
-					if (signal.type === 'activity') {
-						const titleActivity = state.signals.title === null ? 'idle' : parseTitleSignal(state.signals.title).activity
-						if (titleActivity !== 'idle' && titleActivity !== 'unknown') return state
-						return {...state, signals: {...state.signals, activity: signal.activity}}
-					}
 
-					if (signal.type === 'title') {
-						return {...state, signals: {...state.signals, ...parseTitleSignal(signal.title)}}
-					}
-
-					return {
-						...state,
-						signals: {
-							...state.signals,
-							notification: {message: signal.message, sequence: (state.signals.notification?.sequence ?? 0) + 1}
-						}
-					}
-				})
-			),
-			Effect.forkScoped
+		yield* Effect.addFinalizer(() =>
+			Effect.all(
+				[stopProcess(), PubSub.shutdown(events), Queue.shutdown(dataQueue), Effect.sync(() => screen.dispose())],
+				{concurrency: 'unbounded', discard: true}
+			)
 		)
-
-		const spawnProcess = Effect.acquireRelease(
-			Effect.gen(function* () {
-				const size = (yield* SubscriptionRef.get(stateRef)).size
-				const exited = yield* Deferred.make<{readonly exitCode: number; readonly signal?: number}>()
-				let didExit = false
-				const subprocess = yield* Effect.try({
-					catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
-					try: () =>
-						nodePty.spawn(processCommand, [...processArgs], {
-							cols: size.cols,
-							cwd: config.cwd,
-							env: {...process.env, TERM: 'xterm-256color'},
-							name: 'xterm-256color',
-							rows: size.rows
-						})
-				})
-				const data = subprocess.onData(data => {
-					Queue.offerUnsafe(dataQueue, data)
-				})
-				const exit = subprocess.onExit(event => {
-					didExit = true
-					Deferred.doneUnsafe(exited, Effect.succeed(event))
-				})
-
-				yield* Ref.set(processRef, subprocess)
-				yield* setStatus({pid: subprocess.pid, state: 'running'})
-
-				return {
-					data,
-					didExit: () => didExit,
-					exit,
-					exited,
-					process: subprocess,
-					terminate: terminateProcess(subprocess)
-				}
-			}),
-			subprocess =>
-				Effect.gen(function* () {
-					yield* Effect.sync(() => {
-						subprocess.data.dispose()
-						subprocess.exit.dispose()
-					})
-					if (!subprocess.didExit()) yield* pipe(subprocess.terminate, Effect.ignore)
-					yield* Ref.update(processRef, current => (current === subprocess.process ? undefined : current))
-				})
-		)
-
-		yield* pipe(
-			Effect.gen(function* () {
-				let restart = autostart
-				while (true) {
-					if (!restart) {
-						const control = yield* Queue.take(controls)
-						restart = control.type === 'restart'
-						if (!restart) continue
-					}
-
-					yield* resetScreen
-					yield* resetSignals
-					yield* setStatus({state: 'starting'})
-					const action = yield* pipe(
-						Effect.scoped(
-							Effect.flatMap(spawnProcess, subprocess =>
-								Effect.raceFirst(
-									pipe(
-										Deferred.await(subprocess.exited),
-										Effect.map(event => ({event, type: 'exit'}) as const)
-									),
-									Queue.take(controls)
-								)
-							)
-						),
-						Effect.catch(error => Effect.succeed({error, type: 'error'} as const))
-					)
-
-					yield* Ref.set(portOwners, new Map())
-					yield* setPorts([])
-
-					if (action.type === 'stop') {
-						yield* setStatus({state: 'stopped'})
-						const control = yield* Queue.take(controls)
-						restart = control.type === 'restart'
-						if (restart) yield* Effect.sleep('250 millis')
-						continue
-					} else if (action.type === 'restart') {
-						restart = true
-					} else if (action.type === 'error') {
-						yield* setStatus({state: 'failed'})
-						restart = restartPolicy === 'always' || restartPolicy === 'failed'
-					} else {
-						const failed = action.event.exitCode !== 0
-						yield* setStatus({
-							exitCode: action.event.exitCode,
-							...(action.event.signal === undefined ? {} : {signal: action.event.signal}),
-							state: failed ? 'failed' : 'exited'
-						})
-						restart = restartPolicy === 'always' || (restartPolicy === 'failed' && failed)
-					}
-
-					if (restart) yield* Effect.sleep('250 millis')
-				}
-			}),
-			Effect.forkScoped
-		)
+		if (autostart) {
+			yield* pipe(
+				startProcess(),
+				Semaphore.withPermit(lifecycleLock),
+				Effect.catch(() => setState('failed'))
+			)
+		}
 
 		yield* pipe(
 			Effect.gen(function* () {
 				const process = yield* Ref.get(processRef)
-				if (!process?.pid) {
+				if (!process?.process.pid) {
 					yield* Ref.set(portOwners, new Map())
 					yield* setPorts([])
 					return
@@ -459,7 +424,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const nextPortOwners = new Map<number, number>()
 				const nextPorts = pipe(
 					listeningPorts,
-					Array.filter(port => isDescendant(port.pid, process.pid, parents)),
+					Array.filter(port => isDescendant(port.pid, process.process.pid, parents)),
 					Array.map(port => {
 						nextPortOwners.set(port.port, port.pid)
 						return port.port
@@ -476,72 +441,86 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.forkScoped
 		)
 
+		const resize = Effect.fnUntraced(function* (nextSize: {readonly cols: number; readonly rows: number}) {
+			const size = yield* Ref.get(sizeRef)
+			if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
+
+			yield* Ref.set(sizeRef, nextSize)
+			yield* Semaphore.withPermit(
+				screenLock,
+				Effect.sync(() => {
+					screen.resize(nextSize.cols, nextSize.rows)
+				})
+			)
+
+			const process = yield* Ref.get(processRef)
+			if (!process) return
+
+			yield* Effect.try({
+				catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
+				try: () => {
+					process.process.resize(nextSize.cols, nextSize.rows)
+				}
+			})
+		})
+		const write = Effect.fnUntraced(function* (data: string) {
+			const process = yield* Ref.get(processRef)
+			if (!process) return
+
+			yield* Effect.try({
+				catch: cause => new TerminalError({cause, message: 'failed to write to terminal'}),
+				try: () => {
+					process.process.write(data)
+				}
+			})
+		})
+		const eventsStream = Stream.scoped(
+			Stream.unwrap(
+				Effect.gen(function* () {
+					const subscription = yield* PubSub.subscribe(events)
+					const snapshot = yield* requestSnapshot
+					const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
+
+					return pipe(
+						Stream.fromIterable([
+							{event: {type: 'reset' as const}, sequence: snapshot.sequence},
+							...Array.map(snapshotEvents(snapshot.data), event => ({event, sequence: snapshot.sequence})),
+							...Array.filter(pending, event => event.sequence > snapshot.sequence)
+						]),
+						Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))
+					)
+				})
+			)
+		)
+		const ports = pipe(
+			SubscriptionRef.changes(stateRef),
+			Stream.map(state => state.ports),
+			Stream.changesWith(samePorts)
+		)
+		const updates = Stream.merge(
+			SubscriptionRef.changes(stateRef).pipe(Stream.map(state => ({state, type: 'state' as const}))),
+			eventsStream.pipe(Stream.map(published => ({event: published.event, type: 'event' as const})))
+		)
+
 		return {
-			events: Stream.scoped(
-				Stream.unwrap(
-					Effect.gen(function* () {
-						const subscription = yield* PubSub.subscribe(events)
-						const snapshot = yield* requestSnapshot
-						const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
-						const initialEvents = pending.filter(event => event.sequence > snapshot.sequence).map(event => event.event)
-
-						return pipe(
-							Stream.fromIterable([...snapshotEvents(snapshot.data), ...initialEvents]),
-							Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)).pipe(Stream.map(event => event.event)))
-						)
-					})
-				)
-			),
-			killPort: Effect.fnUntraced(function* (port: number) {
-				const owners = yield* Ref.get(portOwners)
-				const pid = owners.get(port)
-				if (!pid) return
-
-				yield* Effect.try({
-					catch: cause => new TerminalError({cause, message: `failed to kill process on port ${port}`}),
-					try: () => {
-						nodeProcess.kill(pid)
-					}
-				})
+			ports,
+			resize: Effect.fnUntraced(function* (size: {readonly cols: number; readonly rows: number}) {
+				return yield* pipe(resize(size), Effect.andThen(SubscriptionRef.get(stateRef)))
 			}),
-			resize: Effect.fnUntraced(function* (nextSize: {readonly cols: number; readonly rows: number}) {
-				const size = (yield* SubscriptionRef.get(stateRef)).size
-				if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
-
-				yield* SubscriptionRef.update(stateRef, state => ({...state, size: nextSize}))
-				yield* Semaphore.withPermit(
-					screenLock,
-					Effect.sync(() => {
-						screen.resize(nextSize.cols, nextSize.rows)
-					})
+			restart: Effect.fnUntraced(function* () {
+				return yield* pipe(
+					startProcess(),
+					Semaphore.withPermit(lifecycleLock),
+					Effect.catch(() => pipe(setState('failed'), Effect.andThen(SubscriptionRef.get(stateRef))))
 				)
-
-				const process = yield* Ref.get(processRef)
-				if (!process) return
-
-				yield* Effect.try({
-					catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
-					try: () => {
-						process.resize(nextSize.cols, nextSize.rows)
-					}
-				})
 			}),
-			restart: pipe(
-				startRun,
-				Effect.tap(() => Queue.offer(controls, {type: 'restart'}))
-			),
-			state: stateRef,
-			stop: Queue.offer(controls, {type: 'stop'}),
+			stop: Effect.fnUntraced(function* () {
+				yield* pipe(stopProcess('stopped'), Semaphore.withPermit(lifecycleLock))
+				return yield* SubscriptionRef.get(stateRef)
+			}),
+			updates,
 			write: Effect.fnUntraced(function* (data: string) {
-				const process = yield* Ref.get(processRef)
-				if (!process) return
-
-				yield* Effect.try({
-					catch: cause => new TerminalError({cause, message: 'failed to write to terminal'}),
-					try: () => {
-						process.write(data)
-					}
-				})
+				return yield* pipe(write(data), Effect.andThen(SubscriptionRef.get(stateRef)))
 			})
 		}
 	})

@@ -155,6 +155,5 @@ export default defineConfig({
 		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
 	],
-	server: {forwardConsole: true},
-	ssr: {external: ['@xterm/headless']}
+	server: {forwardConsole: true}
 })

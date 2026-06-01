@@ -106,6 +106,12 @@ importers:
       '@lydell/node-pty':
         specifier: 1.2.0-beta.12
         version: 1.2.0-beta.12
+      '@xterm/addon-serialize':
+        specifier: latest
+        version: 0.14.0
+      '@xterm/headless':
+        specifier: latest
+        version: 6.0.0
     devDependencies:
       '@deslop/browser':
         specifier: workspace:*
@@ -174,7 +180,7 @@ importers:
         version: 0.45.0
       '@pierre/diffs':
         specifier: latest
-        version: 1.2.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: 1.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@tanstack/react-form':
         specifier: latest
         version: 1.33.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1193,8 +1199,8 @@ packages:
     resolution: {integrity: sha512-nkOyZEF1vH527CkdQtOp1HMrVFEM4ResURvI2JFeGoup+h+43J/k/FgdOR9b9Isxg+Yae7qVDa7y3nssE8b3TQ==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@pierre/diffs@1.2.4':
-    resolution: {integrity: sha512-SEuYxGpSCHVvfoLly/Q/OYpJSBLWaVLV3M3wI/VBW7aZmzYenNe4aXjOf5sIKJMWW5gbZe9WdLvtKUt6cQ1k1A==}
+  '@pierre/diffs@1.2.5':
+    resolution: {integrity: sha512-uYOz3Kfs5ED0qY0VraUXzylsEKvZPTVdexboM3QKPx/qBZmTT9F3lKAFuPpY5aIrV04sdHtoFCKStyzEu99U2A==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -4972,7 +4978,7 @@ snapshots:
 
   '@oxlint/plugins@1.61.0': {}
 
-  '@pierre/diffs@1.2.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@pierre/diffs@1.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@pierre/theme': 1.0.3
       '@shikijs/transformers': 3.23.0
