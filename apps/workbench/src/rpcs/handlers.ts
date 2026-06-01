@@ -25,25 +25,18 @@ import {TerminalError} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 import {splitParallelCommands} from '@deslop/terminal/utils'
 
-class TerminalSessionKey extends Schema.Class<TerminalSessionKey>('TerminalSessionKey')({
+const TerminalSessionKey = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	sessionId: Schema.optional(Schema.String)
-}) {}
+})
 
-class AgentSessionKey extends Schema.Class<AgentSessionKey>('AgentSessionKey')({
-	cwd: Schema.String,
-	uuid: Schema.String
-}) {}
-
-function agentSessionId(uuid: string) {
-	return `agent:${uuid}`
-}
+const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (config: TerminalSessionKey) {
+	lookup: Effect.fnUntraced(function* (config: Schema.Schema.Type<typeof TerminalSessionKey>) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
@@ -64,7 +57,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const git = yield* GitWorkspace
 		const terminals = yield* TerminalSessions
 		const gitWorktrees = yield* GitWorktreeSessions
-		const agents = yield* SubscriptionRef.make<HashMap.HashMap<AgentSessionKey, AgentSession>>(HashMap.empty())
+		const agents = yield* SubscriptionRef.make<
+			HashMap.HashMap<Schema.Schema.Type<typeof AgentSessionKey>, AgentSession>
+		>(HashMap.empty())
 
 		return RpcContracts.of({
 			'agents.create': payload =>
@@ -86,15 +81,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 					}
 
 					yield* SubscriptionRef.update(agents, sessions =>
-						HashMap.set(sessions, new AgentSessionKey({cwd: session.cwd, uuid: session.uuid}), session)
+						HashMap.set(sessions, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}), session)
 					)
 					const terminal = yield* RcMap.get(
 						terminals,
-						new TerminalSessionKey({
+						TerminalSessionKey.make({
 							args: session.args,
 							command: session.command,
 							cwd: session.cwd,
-							sessionId: agentSessionId(session.uuid)
+							sessionId: session.uuid
 						})
 					)
 					yield* terminal.restart()
@@ -110,7 +105,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						),
 						Effect.andThen(
 							SubscriptionRef.update(agents, current =>
-								HashMap.remove(current, new AgentSessionKey({cwd: session.cwd, uuid: session.uuid}))
+								HashMap.remove(current, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}))
 							)
 						),
 						Effect.forkScoped
@@ -120,7 +115,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				}),
 			'agents.remove': payload =>
 				SubscriptionRef.update(agents, current =>
-					HashMap.remove(current, new AgentSessionKey({cwd: payload.cwd, uuid: payload.uuid}))
+					HashMap.remove(current, AgentSessionKey.make({cwd: payload.cwd, uuid: payload.uuid}))
 				),
 			'agents.watch': payload =>
 				Stream.unwrap(
@@ -219,35 +214,35 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'terminal.ports': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(terminals, new TerminalSessionKey(payload)),
+						RcMap.get(terminals, TerminalSessionKey.make(payload)),
 						Effect.map(terminal => terminal.ports)
 					)
 				),
 			'terminal.resize': payload =>
 				pipe(
-					RcMap.get(terminals, new TerminalSessionKey(payload)),
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
 			'terminal.restart': payload =>
 				pipe(
-					RcMap.get(terminals, new TerminalSessionKey(payload)),
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.restart())
 				),
 			'terminal.stop': payload =>
 				pipe(
-					RcMap.get(terminals, new TerminalSessionKey(payload)),
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.stop())
 				),
 			'terminal.watch': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(terminals, new TerminalSessionKey(payload)),
+						RcMap.get(terminals, TerminalSessionKey.make(payload)),
 						Effect.map(terminal => terminal.updates)
 					)
 				),
 			'terminal.write': payload =>
 				pipe(
-					RcMap.get(terminals, new TerminalSessionKey(payload)),
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.write(payload.data))
 				)
 		})

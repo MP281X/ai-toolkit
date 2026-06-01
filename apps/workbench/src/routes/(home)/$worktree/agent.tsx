@@ -32,7 +32,7 @@ function AgentPage() {
 			args={session.args}
 			command={session.command}
 			cwd={activeHome.value.activeWorktree.root}
-			sessionId={`agent:${search.agentId}`}
+			sessionId={search.agentId}
 		/>
 	)
 }

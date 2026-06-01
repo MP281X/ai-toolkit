@@ -183,10 +183,6 @@ function runSessionId(scriptName: string, taskIndex: number) {
 	return `run:${scriptName}:${taskIndex}`
 }
 
-function agentSessionId(uuid: string) {
-	return `agent:${uuid}`
-}
-
 function WorktreeRuns(input: {
 	readonly cwd: string
 	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
@@ -380,7 +376,7 @@ function AgentSessionRow(input: {
 			args: input.session.args,
 			command: input.session.command,
 			cwd: input.session.cwd,
-			sessionId: agentSessionId(input.session.uuid)
+			sessionId: input.session.uuid
 		})
 	)
 
@@ -426,7 +422,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 	function stopAgent(session: AgentSession) {
 		void remove({payload: {cwd: input.cwd, uuid: session.uuid}})
 		void stopTerminal({
-			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: agentSessionId(session.uuid)}
+			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: session.uuid}
 		})
 	}
 
