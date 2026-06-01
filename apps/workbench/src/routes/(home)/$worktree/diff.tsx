@@ -357,7 +357,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					<DialogHeader>
 						<DialogTitle>Shortcuts</DialogTitle>
 					</DialogHeader>
-					<div className="grid gap-2 text-xs">
+					<div className="grid gap-2">
 						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
 							<kbd className="border px-1.5 py-0.5 text-center">?</kbd>
 							<span>Show shortcuts</span>
@@ -588,12 +588,12 @@ function CommitList(input: {
 							aria-current={input.selected.type === 'head-to-worktree' ? 'page' : undefined}
 							onClick={input.selectHead}
 							className={cn(
-								'text-muted-foreground hover:bg-muted hover:text-foreground grid h-8 w-full min-w-0 grid-cols-[minmax(0,1fr)_52px] items-center gap-2 px-2 text-left text-xs',
+								'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
 								input.selected.type === 'head-to-worktree' && 'bg-primary/15 text-primary'
 							)}
 						>
 							<span className="min-w-0 truncate">HEAD</span>
-							<span className="text-muted-foreground font-mono">worktree</span>
+							<span className="text-muted-foreground min-w-0 truncate text-right">worktree</span>
 						</button>
 					</li>
 					{Array.map(input.commits, commit => {
@@ -608,14 +608,14 @@ function CommitList(input: {
 										input.selectCommit(commit)
 									}}
 									className={cn(
-										'text-muted-foreground hover:bg-muted hover:text-foreground grid h-8 w-full min-w-0 grid-cols-[minmax(0,1fr)_52px] items-center gap-2 px-2 text-left text-xs',
+										'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
 										selected && 'bg-primary/15 text-primary'
 									)}
 								>
 									<span className="min-w-0 truncate">
 										<span className={cn(commit.wip && 'text-amber-600 dark:text-amber-400')}>{commit.subject}</span>
 									</span>
-									<span className="text-muted-foreground font-mono">{commit.shortHash}</span>
+									<span className="text-muted-foreground min-w-0 truncate text-right">{commit.shortHash}</span>
 								</button>
 							</li>
 						)
@@ -715,11 +715,11 @@ function DiffList(input: {
 			return (
 				<li key={node.path} className="w-full min-w-0">
 					<TreeExplorerRow
-						icon={<FolderIcon className="size-3.5 shrink-0" />}
+						icon={<FolderIcon />}
 						onClick={() => {
 							toggleFolder(node.path)
 						}}
-						actions={<span className="text-muted-foreground text-[10px]">{Array.length(node.children)}</span>}
+						actions={<span className="text-muted-foreground">{Array.length(node.children)}</span>}
 					>
 						{node.name}
 					</TreeExplorerRow>
@@ -771,9 +771,7 @@ function DiffList(input: {
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
 			<TreeExplorerSection label="Changed files" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
 				{Array.isReadonlyArrayEmpty(input.diffs) ? (
-					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2 text-xs">
-						No changed files.
-					</li>
+					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2">No changed files.</li>
 				) : (
 					Array.map(fileTree, renderNode)
 				)}
@@ -835,11 +833,9 @@ function ReviewCheckbox(input: {
 function DiffStatus(input: {readonly status: GitDiff['status']}) {
 	return pipe(
 		Match.value(input.status),
-		Match.when('added', () => (
-			<span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">A</span>
-		)),
-		Match.when('deleted', () => <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">D</span>),
-		Match.when('renamed', () => <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400">R</span>),
-		Match.orElse(() => <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">M</span>)
+		Match.when('added', () => <span className="text-emerald-600 dark:text-emerald-400">A</span>),
+		Match.when('deleted', () => <span className="text-red-600 dark:text-red-400">D</span>),
+		Match.when('renamed', () => <span className="text-sky-600 dark:text-sky-400">R</span>),
+		Match.orElse(() => <span className="text-amber-600 dark:text-amber-400">M</span>)
 	)
 }

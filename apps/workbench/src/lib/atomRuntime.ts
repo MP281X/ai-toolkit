@@ -21,7 +21,7 @@ export const LiveLayers = pipe(
 )
 
 export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
-	group: Rpc.RpcGroup.make().merge(RpcContracts),
+	group: RpcContracts,
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
 		Layer.provideMerge(Socket.layerWebSocket(`${location.origin}/api/rpc`)),

@@ -1,16 +1,47 @@
-import {Array, Context, Duration, Effect, FileSystem, Layer, Option, RcMap, Stream, SubscriptionRef, pipe} from 'effect'
+import {randomUUID} from 'node:crypto'
+import {readFile} from 'node:fs/promises'
+import {join} from 'node:path'
+
+import {
+	Array,
+	Context,
+	Duration,
+	Effect,
+	FileSystem,
+	HashMap,
+	Layer,
+	Option,
+	RcMap,
+	Record,
+	Result,
+	Schema,
+	Stream,
+	SubscriptionRef,
+	pipe
+} from 'effect'
 
 import {KeyValueStore} from 'effect/unstable/persistence'
 
-import {ReviewState, RpcContracts} from '#rpcs/contracts.ts'
+import {ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
+import {TerminalError} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
+import {splitParallelCommands} from '@deslop/terminal/utils'
+
+const TerminalSessionKey = Schema.Struct({
+	args: Schema.optional(Schema.Array(Schema.String)),
+	command: Schema.optional(Schema.String),
+	cwd: Schema.String,
+	sessionId: Schema.optional(Schema.String)
+})
+
+const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (cwd: string) {
-		const context = yield* Layer.buildWithScope(Terminal.layer({cwd}), yield* Effect.scope)
+	lookup: Effect.fnUntraced(function* (config: typeof TerminalSessionKey.Type) {
+		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
 	})
@@ -89,8 +120,81 @@ export const RpcHandlers = RpcContracts.toLayer(
 		function markKey(input: {readonly filePath: string; readonly fingerprint: string; readonly segmentId: string}) {
 			return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
 		}
+		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
+			HashMap.empty()
+		)
 
 		return RpcContracts.of({
+			'agents.create': payload =>
+				Effect.gen(function* () {
+					const current = yield* SubscriptionRef.get(agents)
+					const labelCount = pipe(
+						Array.fromIterable(HashMap.values(current)),
+						Array.filter(session => session.cwd === payload.cwd && session.command === payload.command),
+						Array.length
+					)
+					const session = {
+						args: [...payload.args],
+						command: payload.command,
+						cwd: payload.cwd,
+						icon: payload.icon,
+						label: `${payload.label} ${labelCount + 1}`,
+						uuid: randomUUID()
+					}
+
+					yield* SubscriptionRef.update(agents, sessions =>
+						HashMap.set(sessions, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}), session)
+					)
+					const terminal = yield* RcMap.get(
+						terminals,
+						TerminalSessionKey.make({
+							args: session.args,
+							command: session.command,
+							cwd: session.cwd,
+							sessionId: session.uuid
+						})
+					)
+					yield* terminal.restart()
+					yield* pipe(
+						terminal.updates,
+						Stream.filterMap(update =>
+							update.type === 'state' ? Result.succeed(update.state.state) : Result.failVoid
+						),
+						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
+						Stream.take(1),
+						Stream.runDrain,
+						Effect.andThen(
+							SubscriptionRef.update(agents, current =>
+								HashMap.remove(current, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}))
+							)
+						),
+						Effect.forkDetach
+					)
+
+					return session
+				}),
+			'agents.remove': payload =>
+				SubscriptionRef.update(agents, current =>
+					HashMap.remove(current, AgentSessionKey.make({cwd: payload.cwd, uuid: payload.uuid}))
+				),
+			'agents.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						SubscriptionRef.get(agents),
+						Effect.map(current =>
+							pipe(
+								Stream.make(current),
+								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
+								Stream.map(sessions =>
+									pipe(
+										Array.fromIterable(HashMap.values(sessions)),
+										Array.filter(session => session.cwd === payload.cwd)
+									)
+								)
+							)
+						)
+					)
+				),
 			'projects.branches': payload => git.branches(payload.cwd),
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload => git.deleteWorktree(payload),
@@ -99,7 +203,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					pipe(
 						SubscriptionRef.get(git.projects),
 						Effect.map(projects =>
-							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects)))(Stream.make(projects))
+							pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
 						)
 					)
 				),
@@ -202,35 +306,60 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
 					)
 				),
-			'terminal.events': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, payload.cwd),
-						Effect.map(terminal => terminal.events)
+			'runs.scripts': payload =>
+				pipe(
+					Effect.tryPromise({
+						catch: cause => new TerminalError({cause, message: `failed to read package.json in ${payload.cwd}`}),
+						try: () => readFile(join(payload.cwd, 'package.json'), 'utf8')
+					}),
+					Effect.map(
+						Schema.decodeUnknownSync(
+							Schema.fromJsonString(
+								Schema.Struct({scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))})
+							)
+						)
+					),
+					Effect.map(packageJson =>
+						pipe(
+							packageJson.scripts ?? {},
+							Record.toEntries,
+							Array.map(([name, command]) => ({command, name, tasks: splitParallelCommands(command)}))
+						)
 					)
-				),
-			'terminal.input': payload =>
-				pipe(
-					RcMap.get(terminals, payload.cwd),
-					Effect.flatMap(terminal => terminal.write(payload.data)),
-					Effect.asVoid
-				),
-			'terminal.killPort': payload =>
-				pipe(
-					RcMap.get(terminals, payload.cwd),
-					Effect.flatMap(terminal => terminal.killPort(payload.port))
 				),
 			'terminal.ports': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(terminals, payload.cwd),
+						RcMap.get(terminals, TerminalSessionKey.make(payload)),
 						Effect.map(terminal => terminal.ports)
 					)
 				),
 			'terminal.resize': payload =>
 				pipe(
-					RcMap.get(terminals, payload.cwd),
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
+				),
+			'terminal.restart': payload =>
+				pipe(
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					Effect.flatMap(terminal => terminal.restart())
+				),
+			'terminal.stop': payload =>
+				pipe(
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					Effect.flatMap(terminal => terminal.stop())
+				),
+			'terminal.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(terminals, TerminalSessionKey.make(payload)),
+						Effect.map(terminal => terminal.updates)
+					)
+				),
+			'terminal.write': payload =>
+				pipe(
+					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					Effect.flatMap(terminal => terminal.write(payload.data))
 				)
 		})
 	})

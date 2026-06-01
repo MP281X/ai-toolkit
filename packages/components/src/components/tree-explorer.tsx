@@ -12,13 +12,13 @@ export function TreeExplorerSection(props: {
 	readonly children: React.ReactNode
 }) {
 	return (
-		<section className={cn('flex flex-col gap-1.5', props.className)}>
+		<section className={cn('flex flex-col gap-1', props.className)}>
 			{Predicate.isNotUndefined(props.label) && (
-				<div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 text-[11px] font-semibold tracking-wide uppercase">
+				<div className="text-muted-foreground grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pt-2 font-normal">
 					{props.label}
 				</div>
 			)}
-			<ul className="flex flex-col px-0">{props.children}</ul>
+			<ul className="flex flex-col gap-0.5 px-0">{props.children}</ul>
 		</section>
 	)
 }
@@ -28,17 +28,20 @@ export function TreeExplorerRow(props: {
 	readonly onClick?: () => void
 	readonly icon?: React.ReactNode
 	readonly actions?: React.ReactNode
+	readonly title?: string
 	readonly children: React.ReactNode
 }) {
 	const className = cn(
-		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left text-xs',
+		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
 		props.selected === true &&
 			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
 	)
 	const label = (
 		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
 			{Predicate.isNotUndefined(props.icon) && (
-				<span className="flex size-3.5 shrink-0 items-center justify-center">{props.icon}</span>
+				<span className="flex size-3 shrink-0 items-center justify-center [&_svg]:size-3 [&_svg]:shrink-0">
+					{props.icon}
+				</span>
 			)}
 			<span className="min-w-0 flex-1 truncate">{props.children}</span>
 		</span>
@@ -50,6 +53,7 @@ export function TreeExplorerRow(props: {
 				aria-current={props.selected === true ? 'page' : undefined}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}
+				title={props.title}
 			>
 				<button
 					type="button"
@@ -71,6 +75,7 @@ export function TreeExplorerRow(props: {
 				onClick={props.onClick}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}
+				title={props.title}
 			>
 				{label}
 				{props.actions}
@@ -79,7 +84,7 @@ export function TreeExplorerRow(props: {
 	}
 
 	return (
-		<div className={className} style={{paddingLeft: 12, paddingRight: 8}}>
+		<div className={className} style={{paddingLeft: 12, paddingRight: 8}} title={props.title}>
 			{label}
 			{props.actions}
 		</div>
