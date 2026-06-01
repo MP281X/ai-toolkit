@@ -451,9 +451,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 											props.children(option.entry)
 										) : (
 											<>
-												<span className="font-medium" style={{color: option.entry.color}}>
-													{option.entry.trigger}
-												</span>
+												<span style={{color: option.entry.color}}>{option.entry.trigger}</span>
 												<span className="text-foreground">{option.entry.value.label}</span>
 											</>
 										)}
@@ -543,10 +541,10 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 					<div className="relative max-h-90 min-h-24 overflow-y-auto">
 						<PlainTextPlugin
 							contentEditable={
-								<ContentEditable className="block min-h-24 w-full p-2 text-[13px] leading-relaxed wrap-break-word whitespace-pre-wrap outline-none" />
+								<ContentEditable className="block min-h-24 w-full p-2 wrap-break-word whitespace-pre-wrap outline-none" />
 							}
 							placeholder={
-								<div className="text-muted-foreground pointer-events-none absolute inset-x-2 top-2 text-[13px] select-none">
+								<div className="text-muted-foreground pointer-events-none absolute inset-x-2 top-2 select-none">
 									{props.placeholder ?? 'Write something...'}
 								</div>
 							}

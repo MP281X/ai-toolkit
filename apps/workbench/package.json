@@ -23,7 +23,9 @@
 	},
 
 	"dependencies": {
-		"@lydell/node-pty": "1.2.0-beta.12"
+		"@lydell/node-pty": "1.2.0-beta.12",
+		"@xterm/addon-serialize": "latest",
+		"@xterm/headless": "latest"
 	},
 
 	"devDependencies": {

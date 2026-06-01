@@ -28,44 +28,12 @@ pre.shiki span[style] {
 
 .markdown :where(h1, h2, h3, h4, h5, h6) {
 	font-weight: 600;
-	line-height: 1.2;
+	line-height: inherit;
+	margin: 0.5rem 0 0.25rem;
 }
 
 .markdown h1 {
-	font-size: 1.4rem;
 	font-weight: 700;
-	margin: 0.75rem 0 0.4rem;
-}
-
-.markdown h2 {
-	font-size: 1.15rem;
-	margin: 0.6rem 0 0.4rem;
-}
-
-.markdown h3,
-.markdown h4 {
-	margin: 0.45rem 0 0.25rem;
-}
-
-.markdown h3 {
-	font-size: 1.125rem;
-}
-
-.markdown h4 {
-	font-size: 1rem;
-}
-
-.markdown h5,
-.markdown h6 {
-	margin: 0.3rem 0 0.2rem;
-}
-
-.markdown h5 {
-	font-size: 0.875rem;
-}
-
-.markdown h6 {
-	font-size: 0.75rem;
 }
 
 .markdown p {
@@ -142,8 +110,8 @@ pre.shiki span[style] {
 	background-color: var(--muted);
 	border: 1px solid var(--border);
 	border-radius: 0;
-	font-size: 0.85em;
-	padding: 0.1rem 0.3rem;
+	font-size: inherit;
+	padding: 0 0.25rem;
 	-webkit-box-decoration-break: clone;
 	box-decoration-break: clone;
 	font-variant-ligatures: none;
@@ -153,11 +121,11 @@ pre.shiki span[style] {
 	background-color: var(--muted);
 	border: 1px solid var(--border);
 	border-radius: 0;
-	line-height: 1.4;
+	line-height: inherit;
 	margin: 0.5rem 0;
 	min-width: 100%;
 	overflow-x: auto;
-	padding: 0.65rem;
+	padding: 0.5rem;
 	white-space: pre;
 	width: 0;
 	font-variant-ligatures: none;
@@ -167,7 +135,7 @@ pre.shiki span[style] {
 	background-color: transparent;
 	border: none;
 	margin: 0;
-	padding: 0.5rem 0.75rem;
+	padding: 0.5rem;
 	width: auto;
 	min-width: 0;
 	--shiki-light-bg: transparent;
@@ -197,14 +165,14 @@ pre.shiki span[style] {
 	background-color: var(--muted);
 	border: 1px solid var(--border);
 	font-weight: 600;
-	padding: 0.5rem 0.75rem;
+	padding: 0.5rem;
 	text-align: left;
 }
 
 .markdown td {
 	background-color: var(--background);
 	border: 1px solid var(--border);
-	padding: 0.5rem 0.75rem;
+	padding: 0.5rem;
 	vertical-align: top;
 }
 

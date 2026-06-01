@@ -24,7 +24,7 @@ export function Mermaid(props: {readonly children: string; readonly className?: 
 		return (
 			<pre
 				className={cn(
-					'border-border bg-muted/30 text-destructive border px-3 py-2 text-sm whitespace-pre-wrap',
+					'border-border bg-muted/30 text-destructive border px-2 py-2 whitespace-pre-wrap',
 					props.className
 				)}
 			>

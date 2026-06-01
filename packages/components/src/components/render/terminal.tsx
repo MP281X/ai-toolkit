@@ -1,3 +1,5 @@
+import {Match, pipe} from 'effect'
+
 import {FitAddon} from '@xterm/addon-fit'
 import {WebglAddon} from '@xterm/addon-webgl'
 import {Terminal as XTerm} from '@xterm/xterm'
@@ -6,12 +8,9 @@ import {useEffect, useRef} from 'react'
 import {Fallback} from '#components/fallbacks.tsx'
 import {cn} from '#lib/utils.ts'
 
-type TerminalStatus =
-	| {readonly state: 'starting'}
-	| {readonly pid: number; readonly state: 'running'}
-	| {readonly state: 'stopped'}
-	| {readonly exitCode: number; readonly signal?: number; readonly state: 'exited'}
-	| {readonly exitCode?: number; readonly signal?: number; readonly state: 'failed'}
+type TerminalState = 'idle' | 'starting' | 'running' | 'waiting' | 'needs_input' | 'stopped' | 'exited' | 'failed'
+
+type TerminalEvent = {readonly data: string; readonly type: 'data'} | {readonly type: 'reset'}
 
 function terminalWriter(write: (data: string, done?: () => void) => void) {
 	let queue = Promise.resolve()
@@ -23,7 +22,6 @@ function terminalWriter(write: (data: string, done?: () => void) => void) {
 
 	return {
 		barrier: (fn: () => void) => enqueue(fn),
-		flush: () => queue,
 		push: (data: string) => {
 			if (data === '') return
 
@@ -60,10 +58,10 @@ function solidCssColor(element: HTMLElement) {
 
 export function Terminal(input: {
 	readonly className?: string
+	readonly events: readonly TerminalEvent[]
 	readonly onData: (data: string) => void
 	readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
-	readonly status?: TerminalStatus
-	readonly write: (terminal: {readonly reset: () => void; readonly write: (data: string) => Promise<void>}) => void
+	readonly state?: TerminalState
 }) {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<XTerm>(null)
@@ -77,11 +75,19 @@ export function Terminal(input: {
 		const element = elementRef.current
 		if (!element) return
 
+		const style = getComputedStyle(element)
+		const fontSize = Number.parseFloat(style.fontSize)
+		const fontWeight = Number.parseInt(style.fontWeight, 10)
 		const container = element
 		const background = solidCssColor(element)
 		const terminal = new XTerm({
 			customGlyphs: true,
-			fontFamily: '"JetBrainsMono Nerd Font Mono", "JetBrains Mono Variable", monospace',
+			fontFamily: style.fontFamily,
+			fontSize: Number.isNaN(fontSize) ? 14 : fontSize,
+			fontWeight: Number.isNaN(fontWeight) ? 400 : fontWeight,
+			fontWeightBold: 600,
+			letterSpacing: 0,
+			lineHeight: 1,
 			scrollback: 10_000,
 			smoothScrollDuration: 0,
 			theme: {background}
@@ -214,35 +220,31 @@ export function Terminal(input: {
 	}, [])
 	useEffect(() => {
 		resizeRef.current()
-		input.write({
-			reset: () => {
-				const writer = writerRef.current
-				void writer?.barrier(() => {
+		for (const event of input.events) {
+			const writer = writerRef.current
+			if (!writer) return
+
+			if (event.type === 'reset') {
+				void writer.barrier(() => {
 					const terminal = terminalRef.current
 					if (!terminal) return
 
 					terminal.reset()
 					terminal.clear()
 				})
-			},
-			write: data => {
-				const writer = writerRef.current
-				if (!writer) return Promise.resolve()
-
-				writer.push(data)
-				return writer.flush()
+			} else {
+				writer.push(event.data)
 			}
-		})
-	}, [input.write])
+		}
+	}, [input.events])
 
-	const terminalError =
-		input.status?.state === 'exited'
-			? `Terminal exited with code ${input.status.exitCode}.`
-			: input.status?.state === 'failed'
-				? `Terminal failed${input.status.exitCode === undefined ? '' : ` with code ${input.status.exitCode}`}.`
-				: input.status?.state === 'stopped'
-					? 'Terminal stopped.'
-					: undefined
+	const terminalError = pipe(
+		Match.value(input.state),
+		Match.when('exited', () => 'Terminal exited.'),
+		Match.when('failed', () => 'Terminal failed.'),
+		Match.when('stopped', () => 'Terminal stopped.'),
+		Match.orElse(() => undefined)
+	)
 
 	return (
 		<div className={cn('terminal-renderer relative h-full min-h-0 w-full min-w-0 overflow-hidden', input.className)}>
