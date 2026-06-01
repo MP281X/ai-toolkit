@@ -11,9 +11,17 @@ export const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'r
 export type GitDiffScope = typeof GitDiffScope.Type
 export const GitDiffScope = Schema.Literals(['staged-to-worktree', 'head-to-staged'])
 
+export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment')({
+	filePath: Schema.String,
+	fingerprint: Schema.String,
+	id: Schema.String,
+	type: Schema.Literals(['commit', 'worktree'])
+}) {}
+
 export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 	filePath: Schema.String,
 	patch: Schema.String,
+	segments: Schema.Array(GitDiffSegment),
 	status: GitDiffStatus
 }) {}
 

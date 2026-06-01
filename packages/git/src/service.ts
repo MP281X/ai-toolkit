@@ -29,6 +29,7 @@ import {
 	GitBranchesSnapshot,
 	GitCommit,
 	GitDiff,
+	GitDiffSegment,
 	GitError,
 	GitProject,
 	GitReviewMetadata,
@@ -479,6 +480,29 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
 		}
 
+		const gitDiff = Effect.fnUntraced(function* (input: {
+			readonly args: readonly string[]
+			readonly filePath: string
+			readonly segments: readonly GitDiffSegment[]
+			readonly status: GitDiff['status']
+		}) {
+			const patch = yield* git.string(config.cwd, [
+				'diff',
+				...input.args,
+				'--ignore-all-space',
+				'--ignore-blank-lines',
+				'--ignore-cr-at-eol',
+				'--patch',
+				'--find-renames',
+				'-U999999',
+				'--no-ext-diff',
+				'--',
+				input.filePath
+			])
+
+			return new GitDiff({filePath: input.filePath, patch, segments: input.segments, status: input.status})
+		})
+
 		const untrackedDiffs = Effect.gen(function* () {
 			return yield* Effect.forEach(
 				yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
@@ -495,6 +519,9 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 										Array.map(line => `+${line}`),
 										Array.join('\n')
 									)}`,
+									segments: [
+										new GitDiffSegment({filePath, fingerprint: content, id: 'HEAD->worktree', type: 'worktree'})
+									],
 									status: 'added'
 								})
 						)
@@ -514,21 +541,12 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					Effect.forEach(
 						line =>
 							pipe(
-								git.string(
-									config.cwd,
-									Array.appendAll(Array.dropRight(args, 1), [
-										'--patch',
-										'--find-renames',
-										'-U999999',
-										'--no-ext-diff',
-										'--',
-										filePathFromNameStatus(line)
-									])
-								),
-								Effect.map(
-									patch =>
-										new GitDiff({filePath: filePathFromNameStatus(line), patch, status: statusFromNameStatus(line)})
-								)
+								gitDiff({
+									args: Array.dropRight(Array.drop(args, 1), 1),
+									filePath: filePathFromNameStatus(line),
+									segments: Array.empty(),
+									status: statusFromNameStatus(line)
+								})
 							),
 						{concurrency: 'unbounded'}
 					)
@@ -540,11 +558,78 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
 		})
 
+		const segmentDiffs = Effect.fnUntraced(function* (input: {
+			readonly args: readonly string[]
+			readonly id: string
+			readonly type: GitDiffSegment['type']
+		}) {
+			return yield* pipe(
+				git.lines(config.cwd, [
+					'diff',
+					...input.args,
+					'--ignore-all-space',
+					'--ignore-blank-lines',
+					'--ignore-cr-at-eol',
+					'--name-status'
+				]),
+				Effect.flatMap(
+					Effect.forEach(
+						line => {
+							const filePath = filePathFromNameStatus(line)
+
+							return pipe(
+								gitDiff({args: input.args, filePath, segments: Array.empty(), status: statusFromNameStatus(line)}),
+								Effect.map(
+									diff => new GitDiffSegment({filePath, fingerprint: diff.patch, id: input.id, type: input.type})
+								)
+							)
+						},
+						{concurrency: 'unbounded'}
+					)
+				)
+			)
+		})
+
 		const reviewRangeDiffs = Effect.fnUntraced(function* (input: {
 			readonly from: GitReviewFrom
 			readonly to: GitReviewTo
 		}) {
 			const from = yield* resolveFrom(input.from)
+			const to = input.to.type === 'ref' ? input.to.ref : 'HEAD'
+			const commitHashes = yield* git.lines(config.cwd, ['log', '--reverse', '--format=%H', `${from}..${to}`])
+			const commitSegments = yield* pipe(
+				commitHashes,
+				Effect.forEach(
+					commit =>
+						pipe(
+							git.string(config.cwd, ['rev-parse', `${commit}^`]),
+							Effect.map(String.trim),
+							Effect.flatMap(parent =>
+								segmentDiffs({args: [parent, commit], id: `${parent}->${commit}`, type: 'commit'})
+							)
+						),
+					{concurrency: 'unbounded'}
+				),
+				Effect.map(Array.flatten)
+			)
+			const worktreeSegments =
+				input.to.type === 'worktree'
+					? yield* pipe(
+							segmentDiffs({args: ['HEAD'], id: 'HEAD->worktree', type: 'worktree'}),
+							Effect.flatMap(segments =>
+								pipe(
+									untrackedDiffs,
+									Effect.map(untracked =>
+										Array.appendAll(
+											segments,
+											Array.flatMap(untracked, diff => diff.segments)
+										)
+									)
+								)
+							)
+						)
+					: Array.empty<GitDiffSegment>()
+			const segments = Array.appendAll(commitSegments, worktreeSegments)
 			const args = [
 				'diff',
 				from,
@@ -560,24 +645,12 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					Effect.forEach(
 						line =>
 							pipe(
-								git.string(config.cwd, [
-									'diff',
-									from,
-									...toArgs(input.to),
-									'--ignore-all-space',
-									'--ignore-blank-lines',
-									'--ignore-cr-at-eol',
-									'--patch',
-									'--find-renames',
-									'-U999999',
-									'--no-ext-diff',
-									'--',
-									filePathFromNameStatus(line)
-								]),
-								Effect.map(
-									patch =>
-										new GitDiff({filePath: filePathFromNameStatus(line), patch, status: statusFromNameStatus(line)})
-								)
+								gitDiff({
+									args: [from, ...toArgs(input.to)],
+									filePath: filePathFromNameStatus(line),
+									segments: Array.filter(segments, segment => segment.filePath === filePathFromNameStatus(line)),
+									status: statusFromNameStatus(line)
+								})
 							),
 						{concurrency: 'unbounded'}
 					)

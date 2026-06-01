@@ -14,6 +14,24 @@ import {
 } from '@deslop/git/schema'
 import {TerminalError, TerminalEvent} from '@deslop/terminal/schema'
 
+export class ReviewMark extends Schema.Class<ReviewMark>('ReviewMark')({
+	filePath: Schema.String,
+	fingerprint: Schema.String,
+	segmentId: Schema.String
+}) {}
+
+export class ReviewComment extends Schema.Class<ReviewComment>('ReviewComment')({
+	body: Schema.String,
+	filePath: Schema.String,
+	lineNumber: Schema.Number,
+	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
+}) {}
+
+export class ReviewState extends Schema.Class<ReviewState>('ReviewState')({
+	comments: Schema.Array(ReviewComment),
+	marks: Schema.Array(ReviewMark)
+}) {}
+
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.watch', {stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {
@@ -37,6 +55,34 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({cwd: Schema.String, from: GitReviewFrom, to: GitReviewTo}),
 		stream: true,
 		success: Schema.Array(GitDiff)
+	}),
+	Rpc.make('review.state.watch', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.String, cwd: Schema.String}),
+		stream: true,
+		success: ReviewState
+	}),
+	Rpc.make('review.state.mark', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
+	}),
+	Rpc.make('review.state.unmark', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
+	}),
+	Rpc.make('review.comments.save', {
+		error: GitError,
+		payload: Schema.Struct({base: Schema.String, comment: ReviewComment, cwd: Schema.String})
+	}),
+	Rpc.make('review.comments.delete', {
+		error: GitError,
+		payload: Schema.Struct({
+			base: Schema.String,
+			cwd: Schema.String,
+			filePath: Schema.String,
+			lineNumber: Schema.Number,
+			side: Schema.optional(Schema.Literals(['additions', 'deletions']))
+		})
 	}),
 	Rpc.make('review.createWipCommit', {
 		error: GitError,
