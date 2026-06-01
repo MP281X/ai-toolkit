@@ -1,6 +1,6 @@
 import {Function, Match, pipe} from 'effect'
 
-import {Braces, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
+import {Braces, CircleIcon, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
 import {BashDark} from './ui/svgs/bashDark.tsx'
 import {CodexDark} from './ui/svgs/codexDark.tsx'
@@ -9,7 +9,7 @@ import {MarkdownDark} from './ui/svgs/markdownDark.tsx'
 import {OpenaiDark} from './ui/svgs/openaiDark.tsx'
 import {OpencodeDark} from './ui/svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './ui/svgs/openrouterDark.tsx'
-import {Pi} from './ui/svgs/pi.tsx'
+import {PiDark} from './ui/svgs/pi.tsx'
 import {ReactDark} from './ui/svgs/reactDark.tsx'
 
 import {resolveLanguage} from '#lib/shiki.ts'
@@ -26,8 +26,27 @@ export function AgentIcon(props: {
 		Match.when('codex', () => <CodexDark className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.when('effect', () => <EffectDark className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.when('opencode', () => <OpencodeDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('pi', () => <Pi className={cn('size-3.5 shrink-0', props.className)} />),
+		Match.when('pi', () => <PiDark className={cn('size-3.5 shrink-0', props.className)} />),
 		Match.exhaustive
+	)
+}
+
+export function TerminalStatusIcon(props: {
+	readonly state?: 'starting' | 'running' | 'stopped' | 'exited' | 'failed'
+	readonly className?: string
+}) {
+	return pipe(
+		Match.value(props.state),
+		Match.when(Match.is('running', 'starting'), () => (
+			<CircleIcon className={cn('fill-primary text-primary size-2.5', props.className)} />
+		)),
+		Match.when(Match.is('failed', 'stopped'), () => (
+			<CircleIcon className={cn('text-destructive fill-destructive size-2.5', props.className)} />
+		)),
+		Match.when('exited', () => (
+			<CircleIcon className={cn('size-2.5 fill-emerald-500 text-emerald-500', props.className)} />
+		)),
+		Match.orElse(() => <CircleIcon className={cn('text-muted-foreground size-2.5', props.className)} />)
 	)
 }
 

@@ -14,78 +14,25 @@ type TerminalStatus =
 	| {readonly exitCode?: number; readonly signal?: number; readonly state: 'failed'}
 
 function terminalWriter(write: (data: string, done?: () => void) => void) {
-	type Operation =
-		| {readonly data: string; readonly type: 'write'}
-		| {readonly run: () => void; readonly type: 'barrier'}
+	let queue = Promise.resolve()
 
-	const operations: Operation[] = []
-	let waits: (() => void)[] | undefined
-	let scheduled = false
-	let writing = false
-
-	function settle() {
-		if (scheduled || writing || operations.length > 0) return
-		const list = waits
-		if (!list?.length) return
-		waits = undefined
-		for (const fn of list) fn()
-	}
-
-	function run() {
-		if (writing) return
-		scheduled = false
-		const operation = operations.shift()
-		if (!operation) {
-			settle()
-			return
-		}
-
-		if (operation.type === 'barrier') {
-			operation.run()
-			run()
-			return
-		}
-
-		writing = true
-		write(operation.data, () => {
-			writing = false
-			if (operations.length > 0) {
-				if (!scheduled) {
-					scheduled = true
-					queueMicrotask(run)
-				}
-				return
-			}
-			settle()
-		})
+	function enqueue(task: () => Promise<void> | void) {
+		queue = queue.then(task, task)
+		return queue
 	}
 
 	return {
-		barrier: (fn: () => void) => {
-			operations.push({run: fn, type: 'barrier'})
-			if (scheduled || writing) return
-			scheduled = true
-			queueMicrotask(run)
-		},
-		flush: (done?: () => void) => {
-			if (!scheduled && !writing && operations.length === 0) {
-				done?.()
-				return
-			}
-			if (done) {
-				if (waits) waits.push(done)
-				else waits = [done]
-			}
-			run()
-		},
+		barrier: (fn: () => void) => enqueue(fn),
+		flush: () => queue,
 		push: (data: string) => {
 			if (data === '') return
-			const last = operations.at(-1)
-			if (last?.type === 'write') operations[operations.length - 1] = {...last, data: last.data + data}
-			else operations.push({data, type: 'write'})
-			if (scheduled || writing) return
-			scheduled = true
-			queueMicrotask(run)
+
+			void enqueue(
+				() =>
+					new Promise<void>(resolve => {
+						write(data, resolve)
+					})
+			)
 		}
 	}
 }
@@ -270,7 +217,7 @@ export function Terminal(input: {
 		input.write({
 			reset: () => {
 				const writer = writerRef.current
-				writer?.barrier(() => {
+				void writer?.barrier(() => {
 					const terminal = terminalRef.current
 					if (!terminal) return
 
@@ -283,9 +230,7 @@ export function Terminal(input: {
 				if (!writer) return Promise.resolve()
 
 				writer.push(data)
-				return new Promise<void>(resolve => {
-					writer.flush(resolve)
-				})
+				return writer.flush()
 			}
 		})
 	}, [input.write])

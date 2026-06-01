@@ -1,6 +1,6 @@
 import type {SVGProps} from 'react'
 
-export function Pi(props: SVGProps<SVGSVGElement>) {
+export function PiDark(props: SVGProps<SVGSVGElement>) {
 	return (
 		<svg {...props} viewBox="0 0 800 800" aria-hidden="true" focusable="false">
 			<path

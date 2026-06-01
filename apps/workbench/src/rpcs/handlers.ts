@@ -63,53 +63,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitWorktrees = yield* GitWorktreeSessions
 		const agents = yield* SubscriptionRef.make<ReadonlyMap<string, AgentSession>>(new Map())
 
-		function terminal(payload: TerminalSessionKey) {
-			return RcMap.get(terminals, terminalSessionKey(payload))
-		}
-
-		function agentList(cwd: string, sessions: ReadonlyMap<string, AgentSession>) {
-			return pipe(
-				Array.fromIterable(sessions.values()),
-				Array.filter(session => session.cwd === cwd)
-			)
-		}
-
-		function removeAgent(cwd: string, uuid: string) {
-			return SubscriptionRef.update(agents, current => {
-				const next = new Map(current)
-				next.delete(agentSessionKey({cwd, uuid}))
-				return next
-			})
-		}
-
-		function watchAgentTerminal(session: AgentSession) {
-			return pipe(
-				terminal({
-					args: session.args,
-					command: session.command,
-					cwd: session.cwd,
-					sessionId: agentSessionId(session.uuid)
-				}),
-				Effect.flatMap(terminal =>
-					pipe(
-						SubscriptionRef.changes(terminal.state),
-						Stream.map(state => state.status.state),
-						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
-						Stream.take(1),
-						Stream.runDrain
-					)
-				),
-				Effect.andThen(removeAgent(session.cwd, session.uuid)),
-				Effect.forkScoped
-			)
-		}
-
 		return RpcContracts.of({
 			'agents.create': payload =>
 				Effect.gen(function* () {
 					const current = yield* SubscriptionRef.get(agents)
 					const labelCount = pipe(
-						agentList(payload.cwd, current),
+						Array.fromIterable(current.values()),
+						Array.filter(session => session.cwd === payload.cwd),
 						Array.filter(session => session.command === payload.command),
 						Array.length
 					)
@@ -127,11 +87,43 @@ export const RpcHandlers = RpcContracts.toLayer(
 						next.set(agentSessionKey({cwd: session.cwd, uuid: session.uuid}), session)
 						return next
 					})
-					yield* watchAgentTerminal(session)
+					yield* pipe(
+						RcMap.get(
+							terminals,
+							terminalSessionKey({
+								args: session.args,
+								command: session.command,
+								cwd: session.cwd,
+								sessionId: agentSessionId(session.uuid)
+							})
+						),
+						Effect.flatMap(terminal =>
+							pipe(
+								SubscriptionRef.changes(terminal.state),
+								Stream.map(state => state.status.state),
+								Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
+								Stream.take(1),
+								Stream.runDrain
+							)
+						),
+						Effect.andThen(
+							SubscriptionRef.update(agents, current => {
+								const next = new Map(current)
+								next.delete(agentSessionKey({cwd: session.cwd, uuid: session.uuid}))
+								return next
+							})
+						),
+						Effect.forkScoped
+					)
 
 					return session
 				}),
-			'agents.remove': payload => removeAgent(payload.cwd, payload.uuid),
+			'agents.remove': payload =>
+				SubscriptionRef.update(agents, current => {
+					const next = new Map(current)
+					next.delete(agentSessionKey({cwd: payload.cwd, uuid: payload.uuid}))
+					return next
+				}),
 			'agents.watch': payload =>
 				Stream.unwrap(
 					pipe(
@@ -139,7 +131,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Effect.map(current =>
 							pipe(
 								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents)))(Stream.make(current)),
-								Stream.map(sessions => agentList(payload.cwd, sessions))
+								Stream.map(sessions =>
+									pipe(
+										Array.fromIterable(sessions.values()),
+										Array.filter(session => session.cwd === payload.cwd)
+									)
+								)
 							)
 						)
 					)
@@ -218,25 +215,25 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'terminal.events': payload =>
 				Stream.unwrap(
 					pipe(
-						terminal(payload),
+						RcMap.get(terminals, terminalSessionKey(payload)),
 						Effect.map(terminal => terminal.events)
 					)
 				),
 			'terminal.input': payload =>
 				pipe(
-					terminal(payload),
+					RcMap.get(terminals, terminalSessionKey(payload)),
 					Effect.flatMap(terminal => terminal.write(payload.data)),
 					Effect.asVoid
 				),
 			'terminal.killPort': payload =>
 				pipe(
-					terminal({cwd: payload.cwd}),
+					RcMap.get(terminals, terminalSessionKey({cwd: payload.cwd})),
 					Effect.flatMap(terminal => terminal.killPort(payload.port))
 				),
 			'terminal.ports': payload =>
 				Stream.unwrap(
 					pipe(
-						terminal(payload),
+						RcMap.get(terminals, terminalSessionKey(payload)),
 						Effect.map(terminal =>
 							pipe(
 								SubscriptionRef.changes(terminal.state),
@@ -247,25 +244,25 @@ export const RpcHandlers = RpcContracts.toLayer(
 				),
 			'terminal.resize': payload =>
 				pipe(
-					terminal(payload),
+					RcMap.get(terminals, terminalSessionKey(payload)),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
 			'terminal.restart': payload =>
 				pipe(
-					terminal(payload),
+					RcMap.get(terminals, terminalSessionKey(payload)),
 					Effect.flatMap(terminal => terminal.restart)
 				),
 			'terminal.state': payload =>
 				Stream.unwrap(
 					pipe(
-						terminal(payload),
+						RcMap.get(terminals, terminalSessionKey(payload)),
 						Effect.map(terminal => SubscriptionRef.changes(terminal.state))
 					)
 				),
 			'terminal.status': payload =>
 				Stream.unwrap(
 					pipe(
-						terminal(payload),
+						RcMap.get(terminals, terminalSessionKey(payload)),
 						Effect.map(terminal =>
 							pipe(
 								SubscriptionRef.changes(terminal.state),
@@ -276,7 +273,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				),
 			'terminal.stop': payload =>
 				pipe(
-					terminal(payload),
+					RcMap.get(terminals, terminalSessionKey(payload)),
 					Effect.flatMap(terminal => terminal.stop),
 					Effect.asVoid
 				)

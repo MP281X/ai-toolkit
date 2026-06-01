@@ -12,7 +12,6 @@ import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
 	BotIcon,
-	CircleIcon,
 	GitBranch,
 	GitBranchPlus,
 	GlobeIcon,
@@ -22,6 +21,7 @@ import {
 	PlayIcon,
 	SparklesIcon,
 	Square,
+	TerminalStatusIcon,
 	TerminalIcon,
 	Trash
 } from '@deslop/components/icons'
@@ -40,7 +40,6 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
-import type {TerminalStatus} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -246,14 +245,6 @@ function WorktreeRuns(input: {
 	)
 }
 
-function runTerminalSession(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) {
-	return {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
-}
-
-function isActiveStatus(state: TerminalStatus['state']) {
-	return state === 'running' || state === 'starting'
-}
-
 function RunScriptRow(input: {
 	readonly cwd: string
 	readonly expanded: boolean
@@ -267,18 +258,18 @@ function RunScriptRow(input: {
 	const commands = input.script.tasks.map((_, taskIndex) => runTaskCommand(input.script, taskIndex))
 	const firstCommand = commands[0] ?? ''
 	const firstSessionId = runSessionId(input.script.name, 0)
-	const firstSession = runTerminalSession({command: firstCommand, cwd: input.cwd, sessionId: firstSessionId})
+	const firstSession = {args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId}
 	const firstState = useAtomSuspense(terminalStateAtom(firstSession))
-	const active = isActiveStatus(firstState.value.status.state)
+	const active = firstState.value.status.state === 'running' || firstState.value.status.state === 'starting'
 
 	function startTask(command: string, sessionId: string, focus: boolean) {
-		void restart({payload: runTerminalSession({command, cwd: input.cwd, sessionId})}).then(state => {
+		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(state => {
 			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
 		})
 	}
 
 	function stopTask(command: string, sessionId: string) {
-		void stop({payload: runTerminalSession({command, cwd: input.cwd, sessionId})})
+		void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
 	}
 
 	return (
@@ -301,7 +292,7 @@ function RunScriptRow(input: {
 						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={<StatusDot state={firstState.value.status.state} />}
+				icon={<TerminalStatusIcon state={firstState.value.status.state} />}
 				selected={false}
 				onClick={() => {
 					if (parallel) input.onToggleExpanded()
@@ -335,9 +326,9 @@ function RunTaskRow(input: {
 }) {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const session = runTerminalSession(input)
+	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
 	const state = useAtomSuspense(terminalStateAtom(session))
-	const active = isActiveStatus(state.value.status.state)
+	const active = state.value.status.state === 'running' || state.value.status.state === 'starting'
 
 	return (
 		<li className="w-full min-w-0">
@@ -361,7 +352,7 @@ function RunTaskRow(input: {
 						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={<StatusDot state={state.value.status.state} />}
+				icon={<TerminalStatusIcon state={state.value.status.state} />}
 				selected={false}
 				onClick={() => {
 					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId)
@@ -371,17 +362,6 @@ function RunTaskRow(input: {
 			</TreeExplorerRow>
 		</li>
 	)
-}
-
-function StatusDot(input: {readonly state?: TerminalStatus['state']}) {
-	if (input.state === 'running' || input.state === 'starting') {
-		return <CircleIcon className="fill-primary text-primary size-2.5" />
-	}
-	if (input.state === 'failed' || input.state === 'stopped') {
-		return <CircleIcon className="text-destructive fill-destructive size-2.5" />
-	}
-	if (input.state === 'exited') return <CircleIcon className="size-2.5 fill-emerald-500 text-emerald-500" />
-	return <CircleIcon className="text-muted-foreground size-2.5" />
 }
 
 const agentProfiles = [

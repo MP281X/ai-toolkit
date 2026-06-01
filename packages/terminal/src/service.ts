@@ -12,9 +12,11 @@ import {
 	PubSub,
 	Queue,
 	Ref,
+	Result,
 	Schedule,
 	Semaphore,
 	Stream,
+	String,
 	SubscriptionRef,
 	flow,
 	pipe
@@ -30,30 +32,33 @@ import type {TerminalEvent, TerminalState, TerminalStatus} from './schema.ts'
 import {TerminalError} from './schema.ts'
 
 function parseProcessParents(output: string) {
-	const parents = new Map<number, number>()
+	return new Map(
+		pipe(
+			String.linesIterator(output),
+			Array.fromIterable,
+			Array.filterMap(line => {
+				const columns = String.split(/\s+/)(String.trim(line))
+				const pid = Number(columns[0] ?? Number.NaN)
+				const ppid = Number(columns[1] ?? Number.NaN)
 
-	for (const line of output.split('\n')) {
-		const columns = line.trim().split(/\s+/)
-		const pid = Number(columns[0])
-		const ppid = Number(columns[1])
-		if (Number.isFinite(pid) && Number.isFinite(ppid)) parents.set(pid, ppid)
-	}
-
-	return parents
+				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed([pid, ppid] as const) : Result.failVoid
+			})
+		)
+	)
 }
 
 function parseListeningPorts(output: string) {
-	const ports: {readonly pid: number; readonly port: number}[] = []
+	return pipe(
+		String.linesIterator(output),
+		Array.fromIterable,
+		Array.filterMap(line => {
+			const columns = String.split(/\s+/)(String.trim(line))
+			const port = Number(columns[3]?.match(/:(\d+)$/)?.[1])
+			const pid = Number(line.match(/pid=(\d+)/)?.[1])
 
-	for (const line of output.split('\n')) {
-		const columns = line.trim().split(/\s+/)
-		const port = Number(columns[3]?.match(/:(\d+)$/)?.[1])
-		const pid = Number(line.match(/pid=(\d+)/)?.[1])
-
-		if (Number.isFinite(port) && Number.isFinite(pid)) ports.push({pid, port})
-	}
-
-	return ports
+			return Number.isFinite(port) && Number.isFinite(pid) ? Result.succeed({pid, port}) : Result.failVoid
+		})
+	)
 }
 
 function isDescendant(pid: number, ancestorPid: number, parents: ReadonlyMap<number, number>) {
@@ -104,7 +109,6 @@ type TerminalControl = {readonly type: 'restart'} | {readonly type: 'stop'}
 const initialSize = {cols: 120, rows: 32} as const
 const scrollback = 10_000
 const snapshotChunkSize = 64 * 1024
-const cleanupSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
 
 function snapshotEvents(data: string) {
 	if (data === '') return [{data, type: 'snapshot'} as const]
@@ -151,38 +155,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			scrollback
 		})
 		const serialize = new SerializeAddon()
-		let currentProcess: IPty | undefined
 
 		screen.loadAddon(serialize)
-
-		function killProcessSync(subprocess: IPty | undefined, signal: NodeJS.Signals) {
-			if (!subprocess?.pid) return
-
-			try {
-				if (nodeProcess.platform !== 'win32') nodeProcess.kill(-subprocess.pid, signal)
-			} catch {}
-			try {
-				subprocess.kill(signal)
-			} catch {}
-		}
-
-		function cleanupProcessSync() {
-			killProcessSync(currentProcess, 'SIGKILL')
-		}
-
-		for (const signal of cleanupSignals) {
-			nodeProcess.on(signal, cleanupProcessSync)
-		}
-		nodeProcess.on('exit', cleanupProcessSync)
-
-		yield* Effect.addFinalizer(() =>
-			Effect.sync(() => {
-				for (const signal of cleanupSignals) {
-					nodeProcess.off(signal, cleanupProcessSync)
-				}
-				nodeProcess.off('exit', cleanupProcessSync)
-			})
-		)
 
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
 			return yield* pipe(
@@ -235,14 +209,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 
 			yield* Effect.sync(() => {
+				try {
+					if (nodeProcess.platform !== 'win32') nodeProcess.kill(-subprocess.pid, signal)
+				} catch {}
 				for (const pid of descendants.toReversed()) {
 					try {
 						nodeProcess.kill(pid, signal)
 					} catch {}
 				}
-				try {
-					if (nodeProcess.platform !== 'win32') nodeProcess.kill(-subprocess.pid, signal)
-				} catch {}
 				try {
 					subprocess.kill(signal)
 				} catch {}
@@ -309,7 +283,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Deferred.doneUnsafe(exited, Effect.succeed(event))
 				})
 
-				currentProcess = subprocess
 				yield* Ref.set(processRef, subprocess)
 				yield* setStatus({pid: subprocess.pid, state: 'running'})
 
@@ -329,7 +302,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						subprocess.exit.dispose()
 					})
 					if (!subprocess.didExit()) yield* pipe(subprocess.terminate, Effect.ignore)
-					if (currentProcess === subprocess.process) currentProcess = undefined
 					yield* Ref.update(processRef, current => (current === subprocess.process ? undefined : current))
 				})
 		)
