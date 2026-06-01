@@ -1,18 +1,6 @@
-import {
-	Array,
-	Config,
-	Context,
-	Duration,
-	Effect,
-	FileSystem,
-	Layer,
-	Path,
-	RcMap,
-	Schema,
-	Stream,
-	SubscriptionRef,
-	pipe
-} from 'effect'
+import {Array, Context, Duration, Effect, FileSystem, Layer, Option, RcMap, Stream, SubscriptionRef, pipe} from 'effect'
+
+import {KeyValueStore} from 'effect/unstable/persistence'
 
 import {ReviewState, RpcContracts} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
@@ -43,11 +31,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const terminals = yield* TerminalSessions
 		const gitWorktrees = yield* GitWorktreeSessions
 		const fs = yield* FileSystem.FileSystem
-		const path = yield* Path.Path
-		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
-		const reviewStateDirectory = path.join(home, '.deslop', 'review-state')
-		const encodeReviewState = Schema.encodeSync(ReviewState)
-		const decodeReviewState = Schema.decodeUnknownSync(ReviewState)
+		const reviewStore = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, ReviewState)
 
 		const reviewStateKey = Effect.fnUntraced(function* (input: {readonly base: string; readonly cwd: string}) {
 			const root = yield* pipe(
@@ -58,19 +42,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return Buffer.from(`${root}\u0000${input.base}`, 'utf8').toString('base64url')
 		})
 
-		function reviewStatePath(key: string) {
-			return path.join(reviewStateDirectory, `${key}.json`)
-		}
-
-		const persistReviewState = Effect.fnUntraced(function* (key: string, state: ReviewState) {
-			yield* pipe(fs.makeDirectory(reviewStateDirectory, {recursive: true}), Effect.ignore)
-			yield* fs.writeFileString(reviewStatePath(key), JSON.stringify(encodeReviewState(state), undefined, 2))
-		})
-
 		const readReviewState = Effect.fnUntraced(function* (key: string) {
 			return yield* pipe(
-				fs.readFileString(reviewStatePath(key)),
-				Effect.map(content => decodeReviewState(JSON.parse(content))),
+				reviewStore.get(`review-state/${key}`),
+				Effect.map(Option.getOrElse(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))),
 				Effect.orElseSucceed(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))
 			)
 		})
@@ -96,7 +71,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 							return [next, next] as const
 						})
-						yield* persistReviewState(key, state)
+						yield* reviewStore.set(`review-state/${key}`, state)
 					})
 				),
 				Effect.mapError(cause => new GitError({cause}))

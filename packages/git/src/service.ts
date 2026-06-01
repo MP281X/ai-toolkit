@@ -7,6 +7,7 @@ import {
 	Duration,
 	Effect,
 	FileSystem,
+	HashMap,
 	Layer,
 	Number,
 	Option,
@@ -468,23 +469,71 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return to.type === 'ref' ? [to.ref] : Array.empty<string>()
 		}
 
-		function statusFromNameStatus(line: string) {
-			if (String.startsWith('A')(line)) return 'added'
-			if (String.startsWith('D')(line)) return 'deleted'
-			if (String.startsWith('R')(line)) return 'renamed'
-
-			return 'modified'
+		function segmentsByFile(segments: readonly GitDiffSegment[]) {
+			return Array.reduce(segments, HashMap.empty<string, readonly GitDiffSegment[]>(), (groups, segment) =>
+				HashMap.modifyAt(groups, segment.filePath, current =>
+					Option.some(
+						Array.append(
+							Option.getOrElse(current, () => Array.empty<GitDiffSegment>()),
+							segment
+						)
+					)
+				)
+			)
 		}
 
-		function filePathFromNameStatus(line: string) {
-			return pipe(line, String.split('\t'), Array.last, Option.getOrUndefined) ?? ''
+		function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, readonly GitDiffSegment[]>) {
+			const deleted = /^deleted file mode /mu.test(chunk)
+			const filePath =
+				(deleted ? chunk.match(/^--- a\/(.+)$/mu)?.[1] : undefined) ??
+				chunk.match(/^\+\+\+ b\/(.+)$/mu)?.[1] ??
+				chunk.match(/^--- a\/(.+)$/mu)?.[1] ??
+				chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
+				''
+			const status = /^new file mode /mu.test(chunk)
+				? 'added'
+				: deleted
+					? 'deleted'
+					: /^rename (from|to) /mu.test(chunk)
+						? 'renamed'
+						: 'modified'
+
+			return new GitDiff({
+				filePath,
+				patch: chunk,
+				segments: Option.getOrElse(HashMap.get(segments, filePath), () => Array.empty()),
+				status
+			})
 		}
 
-		const gitDiff = Effect.fnUntraced(function* (input: {
+		function diffsFromPatch(patch: string, segments: readonly GitDiffSegment[]) {
+			const groupedSegments = segmentsByFile(segments)
+
+			return pipe(
+				patch.split(/(?=^diff --git )/mu),
+				Array.filter(String.isNonEmpty),
+				Array.map(chunk => diffFromPatchChunk(chunk, groupedSegments))
+			)
+		}
+
+		function attachSegments(diffs: readonly GitDiff[], segments: readonly GitDiffSegment[]) {
+			const groupedSegments = segmentsByFile(segments)
+
+			return Array.map(
+				diffs,
+				diff =>
+					new GitDiff({
+						filePath: diff.filePath,
+						patch: diff.patch,
+						segments: Option.getOrElse(HashMap.get(groupedSegments, diff.filePath), () => Array.empty()),
+						status: diff.status
+					})
+			)
+		}
+
+		const gitDiffs = Effect.fnUntraced(function* (input: {
 			readonly args: readonly string[]
-			readonly filePath: string
 			readonly segments: readonly GitDiffSegment[]
-			readonly status: GitDiff['status']
 		}) {
 			const patch = yield* git.string(config.cwd, [
 				'diff',
@@ -495,12 +544,10 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				'--patch',
 				'--find-renames',
 				'-U999999',
-				'--no-ext-diff',
-				'--',
-				input.filePath
+				'--no-ext-diff'
 			])
 
-			return new GitDiff({filePath: input.filePath, patch, segments: input.segments, status: input.status})
+			return diffsFromPatch(patch, input.segments)
 		})
 
 		const untrackedDiffs = Effect.gen(function* () {
@@ -531,62 +578,43 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 		})
 
 		const reviewDiffs = Effect.fnUntraced(function* (scope: 'staged-to-worktree' | 'head-to-staged') {
-			const args =
-				scope === 'head-to-staged'
-					? ['diff', '--cached', '--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol', '--name-status']
-					: ['diff', '--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol', '--name-status']
-			const diffs = yield* pipe(
-				git.lines(config.cwd, args),
-				Effect.flatMap(
-					Effect.forEach(
-						line =>
-							pipe(
-								gitDiff({
-									args: Array.dropRight(Array.drop(args, 1), 1),
-									filePath: filePathFromNameStatus(line),
-									segments: Array.empty(),
-									status: statusFromNameStatus(line)
-								})
-							),
-						{concurrency: 'unbounded'}
-					)
-				)
-			)
+			const diffs = yield* gitDiffs({
+				args: scope === 'head-to-staged' ? ['--cached'] : Array.empty(),
+				segments: Array.empty()
+			})
 
 			if (scope === 'head-to-staged') return diffs
 
 			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
 		})
 
-		const segmentDiffs = Effect.fnUntraced(function* (input: {
-			readonly args: readonly string[]
-			readonly id: string
-			readonly type: GitDiffSegment['type']
-		}) {
-			return yield* pipe(
-				git.lines(config.cwd, [
-					'diff',
-					...input.args,
-					'--ignore-all-space',
-					'--ignore-blank-lines',
-					'--ignore-cr-at-eol',
-					'--name-status'
-				]),
-				Effect.flatMap(
-					Effect.forEach(
-						line => {
-							const filePath = filePathFromNameStatus(line)
+		const commitSegmentDiffs = Effect.fnUntraced(function* (input: {readonly from: string; readonly to: string}) {
+			const log = yield* git.string(config.cwd, [
+				'log',
+				'--reverse',
+				'--format=%x00DESLOP-COMMIT%x00%H%x00%P',
+				'--find-renames',
+				'--name-only',
+				`${input.from}..${input.to}`
+			])
 
-							return pipe(
-								gitDiff({args: input.args, filePath, segments: Array.empty(), status: statusFromNameStatus(line)}),
-								Effect.map(
-									diff => new GitDiffSegment({filePath, fingerprint: diff.patch, id: input.id, type: input.type})
-								)
-							)
-						},
-						{concurrency: 'unbounded'}
+			return pipe(
+				log.split('\u0000DESLOP-COMMIT\u0000'),
+				Array.filter(String.isNonEmpty),
+				Array.flatMap(entry => {
+					const lines = String.split('\n')(entry)
+					const header = lines[0] ?? ''
+					const parts = String.split('\u0000')(header)
+					const commit = parts[0] ?? ''
+					const parent = pipe(parts[1] ?? '', String.split(' '), Array.filter(String.isNonEmpty))[0] ?? `${commit}^`
+					const id = `${parent}->${commit}`
+
+					return pipe(
+						Array.drop(lines, 1),
+						Array.filter(String.isNonEmpty),
+						Array.map(filePath => new GitDiffSegment({filePath, fingerprint: `${id}:${filePath}`, id, type: 'commit'}))
 					)
-				)
+				})
 			)
 		})
 
@@ -596,70 +624,56 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 		}) {
 			const from = yield* resolveFrom(input.from)
 			const to = input.to.type === 'ref' ? input.to.ref : 'HEAD'
-			const commitHashes = yield* git.lines(config.cwd, ['log', '--reverse', '--format=%H', `${from}..${to}`])
-			const commitSegments = yield* pipe(
-				commitHashes,
-				Effect.forEach(
-					commit =>
-						pipe(
-							git.string(config.cwd, ['rev-parse', `${commit}^`]),
-							Effect.map(String.trim),
-							Effect.flatMap(parent =>
-								segmentDiffs({args: [parent, commit], id: `${parent}->${commit}`, type: 'commit'})
-							)
-						),
-					{concurrency: 'unbounded'}
-				),
-				Effect.map(Array.flatten)
-			)
-			const worktreeSegments =
-				input.to.type === 'worktree'
-					? yield* pipe(
-							segmentDiffs({args: ['HEAD'], id: 'HEAD->worktree', type: 'worktree'}),
-							Effect.flatMap(segments =>
-								pipe(
-									untrackedDiffs,
-									Effect.map(untracked =>
-										Array.appendAll(
-											segments,
-											Array.flatMap(untracked, diff => diff.segments)
-										)
-									)
-								)
-							)
-						)
-					: Array.empty<GitDiffSegment>()
-			const segments = Array.appendAll(commitSegments, worktreeSegments)
-			const args = [
-				'diff',
-				from,
-				...toArgs(input.to),
-				'--ignore-all-space',
-				'--ignore-blank-lines',
-				'--ignore-cr-at-eol',
-				'--name-status'
-			]
-			const diffs = yield* pipe(
-				git.lines(config.cwd, args),
-				Effect.flatMap(
-					Effect.forEach(
-						line =>
-							pipe(
-								gitDiff({
-									args: [from, ...toArgs(input.to)],
-									filePath: filePathFromNameStatus(line),
-									segments: Array.filter(segments, segment => segment.filePath === filePathFromNameStatus(line)),
-									status: statusFromNameStatus(line)
-								})
-							),
-						{concurrency: 'unbounded'}
-					)
+
+			if (from === 'HEAD' && input.to.type === 'worktree') {
+				const trackedDiffs = yield* gitDiffs({args: ['HEAD'], segments: Array.empty()})
+				const diffs = pipe(
+					trackedDiffs,
+					Array.map(diff => {
+						const segment = new GitDiffSegment({
+							filePath: diff.filePath,
+							fingerprint: diff.patch,
+							id: 'HEAD->worktree',
+							type: 'worktree'
+						})
+
+						return new GitDiff({filePath: diff.filePath, patch: diff.patch, segments: [segment], status: diff.status})
+					})
 				)
+
+				return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
+			}
+
+			const [commitSegments, trackedWorktreeDiffs, untracked, diffs] = yield* Effect.all(
+				[
+					commitSegmentDiffs({from, to}),
+					input.to.type === 'worktree'
+						? gitDiffs({args: ['HEAD'], segments: Array.empty()})
+						: Effect.succeed(Array.empty<GitDiff>()),
+					input.to.type === 'worktree' ? untrackedDiffs : Effect.succeed(Array.empty<GitDiff>()),
+					gitDiffs({args: [from, ...toArgs(input.to)], segments: Array.empty()})
+				],
+				{concurrency: 'unbounded'}
 			)
+			const worktreeSegments = pipe(
+				trackedWorktreeDiffs,
+				Array.map(
+					diff =>
+						new GitDiffSegment({
+							filePath: diff.filePath,
+							fingerprint: diff.patch,
+							id: 'HEAD->worktree',
+							type: 'worktree'
+						})
+				),
+				Array.appendAll(Array.flatMap(untracked, diff => diff.segments))
+			)
+			const segments = Array.appendAll(commitSegments, worktreeSegments)
+			const diffsWithSegments = attachSegments(diffs, segments)
 
-			if (input.to.type === 'ref') return diffs
+			if (input.to.type === 'ref') return diffsWithSegments
 
-			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
+			return Array.appendAll(diffsWithSegments, untracked)
 		})
 
 		const suggestBase = Effect.gen(function* () {
@@ -706,6 +720,18 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				)
 			)
 		})
+
+		const worktreeChanges = pipe(
+			Stream.make(void 0),
+			Stream.merge(
+				pipe(
+					fs.watch(config.cwd),
+					Stream.catch(() => Stream.empty),
+					Stream.map(() => undefined)
+				)
+			),
+			Stream.debounce(Duration.millis(50))
+		)
 
 		return {
 			commitAndPush: Effect.fnUntraced(function* (input: {readonly base: string; readonly message: string}) {
@@ -767,10 +793,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			}),
 			watchReviewDiffs: (scope: 'staged-to-worktree' | 'head-to-staged') =>
 				pipe(
-					fs.watch(config.cwd),
-					Stream.catch(() => Stream.empty),
-					Stream.merge(Stream.tick(Duration.millis(250))),
-					Stream.debounce(Duration.millis(50)),
+					worktreeChanges,
 					Stream.mapEffect(() =>
 						pipe(
 							reviewDiffs(scope),
@@ -792,10 +815,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				),
 			watchReviewRangeDiffs: (input: {readonly from: GitReviewFrom; readonly to: GitReviewTo}) =>
 				pipe(
-					fs.watch(config.cwd),
-					Stream.catch(() => Stream.empty),
-					Stream.merge(Stream.tick(Duration.millis(250))),
-					Stream.debounce(Duration.millis(50)),
+					worktreeChanges,
 					Stream.mapEffect(() =>
 						pipe(
 							reviewRangeDiffs(input),

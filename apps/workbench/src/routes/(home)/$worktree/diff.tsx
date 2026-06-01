@@ -1,4 +1,4 @@
-import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
 import {Array, Effect, Match, Option, Schema, Stream, String, pipe} from 'effect'
 
@@ -9,7 +9,8 @@ import {startTransition, useEffect, useState, type MouseEvent} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
-import type {ReviewComment, ReviewMark} from '#rpcs/contracts.ts'
+import {ReviewState, type ReviewComment, type ReviewMark} from '#rpcs/contracts.ts'
+import {Loading} from '@deslop/components/fallbacks'
 import {
 	CheckIcon,
 	CopyIcon,
@@ -40,15 +41,6 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 		pipe(
 			RpcClient,
 			Effect.flatMap(client => client('review.metadata', {cwd}))
-		)
-	)
-)
-
-const metadataAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.flatMap(client => client('review.metadata', input))
 		)
 	)
 )
@@ -95,6 +87,96 @@ const reviewStateAtom = Atom.family((input: {readonly base: string; readonly cwd
 
 export type QueuedComment = typeof ReviewComment.Type
 
+function emptyReviewState() {
+	return new ReviewState({comments: Array.empty(), marks: Array.empty()})
+}
+
+const reviewStateValueAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.map(reviewStateAtom(input), result => (result._tag === 'Success' ? result.value : emptyReviewState()))
+)
+
+const optimisticReviewStateAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimistic(reviewStateValueAtom(input))
+)
+
+const saveQueuedCommentAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(optimisticReviewStateAtom(input), {
+		fn: RpcClient.runtime.fn<QueuedComment>()(
+			Effect.fnUntraced(function* (comment) {
+				const client = yield* RpcClient
+				return yield* client('review.comments.save', {base: input.base, comment, cwd: input.cwd})
+			})
+		),
+		reducer: (state, comment: QueuedComment) => {
+			const key = commentKey(comment)
+			return new ReviewState({
+				comments: Array.append(
+					Array.filter(state.comments, currentComment => commentKey(currentComment) !== key),
+					comment
+				),
+				marks: state.marks
+			})
+		}
+	})
+)
+
+const deleteQueuedCommentAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(optimisticReviewStateAtom(input), {
+		fn: RpcClient.runtime.fn<Omit<QueuedComment, 'body'>>()(
+			Effect.fnUntraced(function* (comment) {
+				const client = yield* RpcClient
+				return yield* client('review.comments.delete', {base: input.base, cwd: input.cwd, ...comment})
+			})
+		),
+		reducer: (state, comment: Omit<QueuedComment, 'body'>) => {
+			const key = commentKey(comment)
+			return new ReviewState({
+				comments: Array.filter(state.comments, currentComment => commentKey(currentComment) !== key),
+				marks: state.marks
+			})
+		}
+	})
+)
+
+const markReviewedAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(optimisticReviewStateAtom(input), {
+		fn: RpcClient.runtime.fn<readonly ReviewMark[]>()(
+			Effect.fnUntraced(function* (marks) {
+				const client = yield* RpcClient
+				return yield* client('review.state.mark', {base: input.base, cwd: input.cwd, marks})
+			})
+		),
+		reducer: (state, marks: readonly ReviewMark[]) => {
+			const keys = new Set(Array.map(marks, markKey))
+			return new ReviewState({
+				comments: state.comments,
+				marks: Array.appendAll(
+					Array.filter(state.marks, mark => !keys.has(markKey(mark))),
+					marks
+				)
+			})
+		}
+	})
+)
+
+const unmarkReviewedAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(optimisticReviewStateAtom(input), {
+		fn: RpcClient.runtime.fn<readonly ReviewMark[]>()(
+			Effect.fnUntraced(function* (marks) {
+				const client = yield* RpcClient
+				return yield* client('review.state.unmark', {base: input.base, cwd: input.cwd, marks})
+			})
+		),
+		reducer: (state, marks: readonly ReviewMark[]) => {
+			const keys = new Set(Array.map(marks, markKey))
+			return new ReviewState({
+				comments: state.comments,
+				marks: Array.filter(state.marks, mark => !keys.has(markKey(mark)))
+			})
+		}
+	})
+)
+
 function groupCommentsByFile(comments: readonly QueuedComment[]) {
 	const groups = new Map<string, {comments: QueuedComment[]; filePath: string; key: string}>()
 
@@ -125,9 +207,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
 	const [base] = useState(suggestedMetadata.value.base)
-	const metadata = useAtomSuspense(metadataAtom({base, cwd: input.cwd}))
-	const reviewState = useAtomSuspense(reviewStateAtom({base, cwd: input.cwd}))
-	const comments = reviewState.value.comments
+	const metadata = suggestedMetadata
+	const reviewStateResult = useAtomValue(reviewStateAtom({base, cwd: input.cwd}))
+	const reviewStateLoaded = reviewStateResult._tag === 'Success'
+	const reviewStateValue = useAtomValue(optimisticReviewStateAtom({base, cwd: input.cwd}))
+	const comments = reviewStateLoaded ? reviewStateValue.comments : Array.empty<QueuedComment>()
 	const [shortcutsOpen, setShortcutsOpen] = useState(false)
 	const selectedCommit = pipe(
 		metadata.value.commits,
@@ -142,50 +226,52 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			}
 		: {type: 'head-to-worktree'}
 	const [selectedFilePath, setSelectedFilePath] = useState('')
-	const reviewDiffs = useAtomSuspense(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const reviewDiffsResult = useAtomValue(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
+	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedEntry =
 		pipe(
-			reviewDiffs.value,
+			reviewDiffsValue,
 			Array.findFirst(diff => diff.filePath === selectedFilePath),
 			Option.getOrUndefined
-		) ?? reviewDiffs.value[0]
+		) ?? reviewDiffsValue[0]
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
-	const refreshMetadata = useAtomRefresh(metadataAtom({base, cwd: input.cwd}))
 	const refreshDiffs = useAtomRefresh(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
-	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
-	const deleteComment = useAtomSet(RpcClient.mutation('review.comments.delete'), {mode: 'promise'})
-	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
-	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
+	const saveComment = useAtomSet(saveQueuedCommentAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const deleteComment = useAtomSet(deleteQueuedCommentAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const markReviewed = useAtomSet(markReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const unmarkReviewed = useAtomSet(unmarkReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const hasWipCommits = Array.some(metadata.value.commits, commit => commit.wip)
-	const visibleSegmentMarks = pipe(
-		reviewDiffs.value,
-		Array.flatMap(diff =>
-			Array.map(
-				diff.segments,
-				(segment): ReviewMark => ({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
+	const effectiveComments = comments
+	const commentsByFile = groupCommentsByFile(effectiveComments)
+	const selectedEntryComments = selectedEntry
+		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
+		: Array.empty()
+	const visibleSegmentKeys = new Set(
+		pipe(
+			reviewDiffsValue,
+			Array.flatMap(diff =>
+				Array.map(diff.segments, segment =>
+					markKey({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
+				)
 			)
 		)
 	)
-	const validReviewMarks = Array.filter(reviewState.value.marks, mark =>
-		Array.some(
-			visibleSegmentMarks,
-			segment =>
-				segment.filePath === mark.filePath &&
-				segment.segmentId === mark.segmentId &&
-				segment.fingerprint === mark.fingerprint
-		)
-	)
+	const validReviewMarks = reviewStateLoaded
+		? Array.filter(reviewStateValue.marks, mark => visibleSegmentKeys.has(markKey(mark)))
+		: Array.empty()
+	const effectiveReviewMarks = validReviewMarks
 
 	useEffect(() => {
-		const firstFilePath = reviewDiffs.value[0]?.filePath
+		const firstFilePath = reviewDiffsValue[0]?.filePath
 
 		if (firstFilePath === undefined) {
 			if (String.isNonEmpty(selectedFilePath)) setSelectedFilePath('')
 			return
 		}
 
-		if (!Array.some(reviewDiffs.value, diff => diff.filePath === selectedFilePath)) setSelectedFilePath(firstFilePath)
-	}, [reviewDiffs.value, selectedFilePath])
+		if (!Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePath)) setSelectedFilePath(firstFilePath)
+	}, [reviewDiffsValue, selectedFilePath])
 
 	function selectTarget(target: ReviewTarget) {
 		startTransition(() => {
@@ -200,12 +286,35 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function refreshReview() {
 		refreshSuggestedMetadata()
-		refreshMetadata()
 		refreshDiffs()
 	}
 
-	useHotkey({key: 'C', shift: true}, () => void copyComments(comments), {
-		enabled: !Array.isReadonlyArrayEmpty(comments),
+	function markFileReviewed(marks: readonly ReviewMark[]) {
+		void markReviewed(marks).catch(() => {
+			toast.error('Failed to mark file reviewed.')
+		})
+	}
+
+	function unmarkFileReviewed(marks: readonly ReviewMark[]) {
+		void unmarkReviewed(marks).catch(() => {
+			toast.error('Failed to unmark file reviewed.')
+		})
+	}
+
+	function saveQueuedComment(comment: QueuedComment) {
+		void saveComment(comment).catch(() => {
+			toast.error('Failed to save comment.')
+		})
+	}
+
+	function deleteQueuedComment(comment: Omit<QueuedComment, 'body'>) {
+		void deleteComment(comment).catch(() => {
+			toast.error('Failed to delete comment.')
+		})
+	}
+
+	useHotkey({key: 'C', shift: true}, () => void copyComments(effectiveComments), {
+		enabled: !Array.isReadonlyArrayEmpty(effectiveComments),
 		preventDefault: true
 	})
 	useHotkey({key: '?', shift: true}, () => {
@@ -236,19 +345,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				Array.join('\n\n')
 			)
 		)
-		await Promise.all(
-			Array.map(commentsToCopy, comment =>
-				deleteComment({
-					payload: {
-						base,
-						cwd: input.cwd,
-						filePath: comment.filePath,
-						lineNumber: comment.lineNumber,
-						side: comment.side
-					}
-				})
-			)
-		)
+		for (const comment of commentsToCopy) {
+			deleteQueuedComment({filePath: comment.filePath, lineNumber: comment.lineNumber, side: comment.side})
+		}
 	}
 
 	return (
@@ -281,14 +380,18 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							refreshReview={refreshReview}
 						/>
 						<div className="min-h-0 flex-[1.2] border-b">
-							<DiffList
-								diffs={reviewDiffs.value}
-								marks={validReviewMarks}
-								markReviewed={marks => markReviewed({payload: {base, cwd: input.cwd, marks}})}
-								unmarkReviewed={marks => unmarkReviewed({payload: {base, cwd: input.cwd, marks}})}
-								selectedEntry={selectedEntry}
-								selectReviewEntry={setSelectedFilePath}
-							/>
+							{reviewDiffsLoaded ? (
+								<DiffList
+									diffs={reviewDiffsValue}
+									marks={effectiveReviewMarks}
+									markReviewed={markFileReviewed}
+									unmarkReviewed={unmarkFileReviewed}
+									selectedEntry={selectedEntry}
+									selectReviewEntry={setSelectedFilePath}
+								/>
+							) : (
+								<PaneLoading />
+							)}
 						</div>
 						<div className="min-h-0 flex-1">
 							<CommitList
@@ -306,39 +409,34 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				<ResizablePanel defaultSize="66%" minSize="54%">
 					<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
 						<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-							{!selectedEntry && (
+							{!reviewDiffsLoaded && <PaneLoading />}
+							{reviewDiffsLoaded && !selectedEntry && (
 								<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 									No changed files.
 								</div>
 							)}
-							{selectedEntry && (
+							{reviewDiffsLoaded && selectedEntry && (
 								<div className="h-full min-h-0 min-w-0">
 									<PatchDiff
 										filePath={selectedEntry.filePath}
 										patch={selectedEntry.patch}
-										comments={Array.filter(comments, comment => comment.filePath === selectedEntry.filePath)}
-										onSaveComment={comment => {
-											void saveComment({payload: {base, comment, cwd: input.cwd}})
-										}}
+										comments={selectedEntryComments}
+										onSaveComment={saveQueuedComment}
 										onDeleteComment={comment => {
-											void deleteComment({
-												payload: {
-													base,
-													cwd: input.cwd,
-													filePath: comment.filePath,
-													lineNumber: comment.lineNumber,
-													side: comment.side
-												}
+											deleteQueuedComment({
+												filePath: comment.filePath,
+												lineNumber: comment.lineNumber,
+												side: comment.side
 											})
 										}}
 									/>
 								</div>
 							)}
 						</div>
-						{!Array.isReadonlyArrayEmpty(comments) && (
+						{!Array.isReadonlyArrayEmpty(effectiveComments) && (
 							<footer className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t px-2">
 								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
-									{Array.map(groupCommentsByFile(comments), group => (
+									{Array.map(commentsByFile, group => (
 										<Button
 											key={group.key}
 											type="button"
@@ -347,19 +445,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											aria-label={`Delete ${group.comments.length} queued comments for ${group.filePath}`}
 											title={`Delete ${group.comments.length} comments for ${group.filePath}`}
 											onClick={() => {
-												void Promise.all(
-													Array.map(group.comments, comment =>
-														deleteComment({
-															payload: {
-																base,
-																cwd: input.cwd,
-																filePath: comment.filePath,
-																lineNumber: comment.lineNumber,
-																side: comment.side
-															}
-														})
-													)
-												)
+												for (const comment of group.comments) {
+													deleteQueuedComment({
+														filePath: comment.filePath,
+														lineNumber: comment.lineNumber,
+														side: comment.side
+													})
+												}
 											}}
 										>
 											<FileIcon filePath={group.filePath} />
@@ -374,7 +466,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										size="icon-sm"
 										aria-label="Copy all queued comments"
 										title="Copy all queued comments"
-										onClick={() => void copyComments(comments)}
+										onClick={() => void copyComments(effectiveComments)}
 									>
 										<CopyIcon />
 									</Button>
@@ -386,19 +478,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										aria-label="Delete all queued comments"
 										title="Delete all queued comments"
 										onClick={() => {
-											void Promise.all(
-												Array.map(comments, comment =>
-													deleteComment({
-														payload: {
-															base,
-															cwd: input.cwd,
-															filePath: comment.filePath,
-															lineNumber: comment.lineNumber,
-															side: comment.side
-														}
-													})
-												)
-											)
+											for (const comment of effectiveComments) {
+												deleteQueuedComment({
+													filePath: comment.filePath,
+													lineNumber: comment.lineNumber,
+													side: comment.side
+												})
+											}
 										}}
 									>
 										<TrashIcon />
@@ -475,6 +561,14 @@ function CommitActionForm(input: {
 				</InputGroupAddon>
 			</InputGroup>
 		</form>
+	)
+}
+
+function PaneLoading() {
+	return (
+		<div className="flex h-full min-h-0">
+			<Loading />
+		</div>
 	)
 }
 
@@ -586,13 +680,21 @@ function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly
 
 function DiffList(input: {
 	readonly diffs: readonly GitDiff[]
-	readonly markReviewed: (marks: readonly ReviewMark[]) => Promise<void>
+	readonly markReviewed: (marks: readonly ReviewMark[]) => void
 	readonly marks: readonly ReviewMark[]
 	readonly selectedEntry?: GitDiff
 	readonly selectReviewEntry: (filePath: string) => void
-	readonly unmarkReviewed: (marks: readonly ReviewMark[]) => Promise<void>
+	readonly unmarkReviewed: (marks: readonly ReviewMark[]) => void
 }) {
 	const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set())
+	const fileTree = buildFileTree(input.diffs)
+	const marksByDiff = new Map<string, readonly ReviewMark[]>()
+
+	for (const diff of input.diffs) {
+		marksByDiff.set(diff.filePath, marksForDiff(diff))
+	}
+
+	const reviewedKeys = new Set(Array.map(input.marks, markKey))
 
 	function toggleFolder(path: string) {
 		setCollapsedFolders(current => {
@@ -630,8 +732,8 @@ function DiffList(input: {
 			)
 		}
 
-		const marks = marksForDiff(node.diff)
-		const state = reviewStateForDiff(node.diff, input.marks)
+		const marks = marksByDiff.get(node.diff.filePath) ?? Array.empty()
+		const state = reviewStateForMarks(marks, reviewedKeys)
 
 		return (
 			<li key={node.path} className="w-full min-w-0">
@@ -645,7 +747,11 @@ function DiffList(input: {
 								onClick={event => {
 									event.stopPropagation()
 									if (Array.isReadonlyArrayEmpty(marks)) return
-									void (state === 'checked' ? input.unmarkReviewed(marks) : input.markReviewed(marks))
+									if (state === 'checked') {
+										input.unmarkReviewed(marks)
+									} else {
+										input.markReviewed(marks)
+									}
 								}}
 							/>
 							<DiffStatus status={node.diff.status} />
@@ -669,7 +775,7 @@ function DiffList(input: {
 						No changed files.
 					</li>
 				) : (
-					Array.map(buildFileTree(input.diffs), renderNode)
+					Array.map(fileTree, renderNode)
 				)}
 			</TreeExplorerSection>
 		</TreeExplorer>
@@ -684,17 +790,20 @@ function marksForDiff(diff: GitDiff): readonly ReviewMark[] {
 	}))
 }
 
-function reviewStateForDiff(diff: GitDiff, marks: readonly ReviewMark[]) {
-	const segments = marksForDiff(diff)
-	const reviewed = Array.filter(segments, segment =>
-		Array.some(
-			marks,
-			mark =>
-				mark.filePath === segment.filePath &&
-				mark.segmentId === segment.segmentId &&
-				mark.fingerprint === segment.fingerprint
-		)
-	)
+function markKey(input: {readonly filePath: string; readonly fingerprint: string; readonly segmentId: string}) {
+	return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
+}
+
+function commentKey(input: {
+	readonly filePath: string
+	readonly lineNumber: number
+	readonly side?: 'additions' | 'deletions'
+}) {
+	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
+}
+
+function reviewStateForMarks(segments: readonly ReviewMark[], reviewedKeys: ReadonlySet<string>) {
+	const reviewed = Array.filter(segments, segment => reviewedKeys.has(markKey(segment)))
 
 	if (Array.isReadonlyArrayEmpty(segments) || Array.isReadonlyArrayEmpty(reviewed)) return 'unchecked' as const
 	if (Array.length(reviewed) === Array.length(segments)) return 'checked' as const
@@ -711,14 +820,14 @@ function ReviewCheckbox(input: {
 			type="button"
 			aria-checked={input.state === 'indeterminate' ? 'mixed' : input.state === 'checked'}
 			className={cn(
-				'border-input text-primary-foreground flex size-3.5 shrink-0 items-center justify-center border',
+				'border-input text-primary-foreground flex size-3 shrink-0 items-center justify-center border',
 				input.state !== 'unchecked' && 'border-primary bg-primary'
 			)}
 			role="checkbox"
 			onClick={input.onClick}
 		>
-			{input.state === 'checked' && <CheckIcon className="size-3" />}
-			{input.state === 'indeterminate' && <MinusIcon className="size-3" />}
+			{input.state === 'checked' && <CheckIcon className="size-2.5" />}
+			{input.state === 'indeterminate' && <MinusIcon className="size-2.5" />}
 		</button>
 	)
 }
