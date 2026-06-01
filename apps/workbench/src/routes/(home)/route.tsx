@@ -4,10 +4,10 @@ import {Array, Effect, Hash, Match, Option, Schema, Stream, String, pipe} from '
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useState} from 'react'
+import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, projectsAtom} from '#lib/state.ts'
+import {activeHomeAtom, projectsAtom, terminalStateAtom} from '#lib/state.ts'
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
@@ -40,7 +40,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
-import type {TerminalState, TerminalStatus} from '@deslop/terminal/schema'
+import type {TerminalStatus} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -65,35 +65,6 @@ const runsAtom = Atom.family((cwd: string) =>
 			{initialValue: []}
 		)
 	)
-)
-
-const runStatusAtom = Atom.family(
-	(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) =>
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('terminal.state', {
-						args: ['-lc', input.command],
-						command: 'sh',
-						cwd: input.cwd,
-						sessionId: input.sessionId
-					})
-				),
-				Stream.unwrap
-			),
-			{
-				initialValue: {
-					args: ['-lc', input.command],
-					command: 'sh',
-					cwd: input.cwd,
-					ports: [],
-					runId: 0,
-					size: {cols: 120, rows: 32},
-					status: {state: 'starting'}
-				} as TerminalState
-			}
-		)
 )
 
 const branchesAtom = Atom.family((cwd: string) =>
@@ -234,43 +205,8 @@ function WorktreeRuns(input: {
 	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
 }) {
 	const scripts = useAtomSuspense(runsAtom(input.cwd))
-	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const [activeSessions, setActiveSessions] = useState<ReadonlySet<string>>(new Set())
 	const [expanded, setExpanded] = useState(false)
 	const [expandedScripts, setExpandedScripts] = useState<ReadonlySet<string>>(new Set())
-	const [lastStates, setLastStates] = useState<ReadonlyMap<string, TerminalStatus['state']>>(new Map())
-	const [runIds, setRunIds] = useState<ReadonlyMap<string, number>>(new Map())
-
-	function startTask(scriptName: string, taskIndex: number, command: string, focus = true) {
-		const sessionId = runSessionId(scriptName, taskIndex)
-		setActiveSessions(current => new Set(current).add(sessionId))
-		setLastStates(current => new Map(current).set(sessionId, 'starting'))
-		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(state => {
-			setRunIds(current => new Map(current).set(sessionId, state.runId))
-			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
-		})
-	}
-
-	function updateTaskState(sessionId: string, state: TerminalStatus['state']) {
-		setLastStates(current => (current.get(sessionId) === state ? current : new Map(current).set(sessionId, state)))
-		if (state === 'exited' || state === 'failed' || state === 'stopped') deactivateTask(sessionId)
-	}
-
-	function deactivateTask(sessionId: string) {
-		setActiveSessions(current => {
-			const next = new Set(current)
-			next.delete(sessionId)
-			return next
-		})
-	}
-
-	function stopTask(scriptName: string, taskIndex: number, command: string) {
-		const sessionId = runSessionId(scriptName, taskIndex)
-		setLastStates(current => new Map(current).set(sessionId, 'stopped'))
-		deactivateTask(sessionId)
-		void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
-	}
 
 	if (scripts.value.length === 0) return null
 
@@ -287,106 +223,64 @@ function WorktreeRuns(input: {
 			</TreeExplorerRow>
 			{expanded && (
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{Array.map(scripts.value, script => {
-						const parallel = script.tasks.length > 1
-						const groupCommands = script.tasks.map((_, taskIndex) => runTaskCommand(script, taskIndex))
-						const firstSessionId = runSessionId(script.name, 0)
-						const active = groupCommands.some((_, taskIndex) =>
-							activeSessions.has(runSessionId(script.name, taskIndex))
-						)
-						const groupIcon =
-							!parallel && activeSessions.has(firstSessionId) ? (
-								<RunTaskStatus
-									command={groupCommands[0] ?? ''}
-									cwd={input.cwd}
-									onState={state => updateTaskState(firstSessionId, state)}
-									runId={runIds.get(firstSessionId)}
-									sessionId={firstSessionId}
-								/>
-							) : (
-								<StatusDot state={active ? 'running' : lastStates.get(firstSessionId)} />
-							)
-						return (
-							<li key={script.name} className="w-full min-w-0">
-								<TreeExplorerRow
-									actions={
-										<button
-											type="button"
-											className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
-											onClick={event => {
-												event.stopPropagation()
-												if (active) {
-													groupCommands.forEach((command, taskIndex) => stopTask(script.name, taskIndex, command))
-												} else {
-													groupCommands.forEach((command, taskIndex) =>
-														startTask(script.name, taskIndex, command, taskIndex === 0)
-													)
-												}
-											}}
-											title={active ? 'Stop script' : 'Start script'}
-										>
-											{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
-										</button>
-									}
-									icon={groupIcon}
-									selected={false}
-									onClick={() => {
-										if (parallel) {
-											setExpandedScripts(current => {
-												const next = new Set(current)
-												if (next.has(script.name)) next.delete(script.name)
-												else next.add(script.name)
-												return next
-											})
-										} else if (active || lastStates.has(firstSessionId)) {
-											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '', runIds.get(firstSessionId))
-										} else {
-											input.selectRun(input.cwd, firstSessionId, groupCommands[0] ?? '', undefined, true)
-										}
-									}}
-								>
-									{script.name}
-								</TreeExplorerRow>
-								{parallel && expandedScripts.has(script.name) && (
-									<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-										{groupCommands.map((command, taskIndex) => (
-											<RunTaskRow
-												key={runSessionId(script.name, taskIndex)}
-												active={activeSessions.has(runSessionId(script.name, taskIndex))}
-												command={command}
-												cwd={input.cwd}
-												lastState={lastStates.get(runSessionId(script.name, taskIndex))}
-												onState={state => updateTaskState(runSessionId(script.name, taskIndex), state)}
-												runId={runIds.get(runSessionId(script.name, taskIndex))}
-												selectRun={input.selectRun}
-												sessionId={runSessionId(script.name, taskIndex)}
-												start={() => startTask(script.name, taskIndex, command)}
-												stop={() => stopTask(script.name, taskIndex, command)}
-											/>
-										))}
-									</ul>
-								)}
-							</li>
-						)
-					})}
+					{Array.map(scripts.value, script => (
+						<RunScriptRow
+							key={script.name}
+							cwd={input.cwd}
+							expanded={expandedScripts.has(script.name)}
+							onToggleExpanded={() => {
+								setExpandedScripts(current => {
+									const next = new Set(current)
+									if (next.has(script.name)) next.delete(script.name)
+									else next.add(script.name)
+									return next
+								})
+							}}
+							script={script}
+							selectRun={input.selectRun}
+						/>
+					))}
 				</ul>
 			)}
 		</li>
 	)
 }
 
-function RunTaskRow(input: {
-	readonly active: boolean
-	readonly command: string
+function runTerminalSession(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) {
+	return {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
+}
+
+function isActiveStatus(state: TerminalStatus['state']) {
+	return state === 'running' || state === 'starting'
+}
+
+function RunScriptRow(input: {
 	readonly cwd: string
-	readonly lastState?: TerminalStatus['state']
-	readonly onState: (state: TerminalStatus['state']) => void
-	readonly runId?: number
+	readonly expanded: boolean
+	readonly onToggleExpanded: () => void
+	readonly script: {readonly name: string; readonly tasks: readonly string[]}
 	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
-	readonly sessionId: string
-	readonly start: () => void
-	readonly stop: () => void
 }) {
+	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const parallel = input.script.tasks.length > 1
+	const commands = input.script.tasks.map((_, taskIndex) => runTaskCommand(input.script, taskIndex))
+	const firstCommand = commands[0] ?? ''
+	const firstSessionId = runSessionId(input.script.name, 0)
+	const firstSession = runTerminalSession({command: firstCommand, cwd: input.cwd, sessionId: firstSessionId})
+	const firstState = useAtomSuspense(terminalStateAtom(firstSession))
+	const active = isActiveStatus(firstState.value.status.state)
+
+	function startTask(command: string, sessionId: string, focus: boolean) {
+		void restart({payload: runTerminalSession({command, cwd: input.cwd, sessionId})}).then(state => {
+			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
+		})
+	}
+
+	function stopTask(command: string, sessionId: string) {
+		void stop({payload: runTerminalSession({command, cwd: input.cwd, sessionId})})
+	}
+
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -396,31 +290,81 @@ function RunTaskRow(input: {
 						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
 						onClick={event => {
 							event.stopPropagation()
-							if (input.active) input.stop()
-							else input.start()
+							commands.forEach((command, taskIndex) => {
+								const sessionId = runSessionId(input.script.name, taskIndex)
+								if (active) stopTask(command, sessionId)
+								else startTask(command, sessionId, taskIndex === 0)
+							})
 						}}
-						title={input.active ? 'Stop task' : 'Start task'}
+						title={active ? 'Stop script' : 'Start script'}
 					>
-						{input.active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
+						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 					</button>
 				}
-				icon={
-					input.active ? (
-						<RunTaskStatus
-							command={input.command}
-							cwd={input.cwd}
-							onState={input.onState}
-							runId={input.runId}
-							sessionId={input.sessionId}
-						/>
-					) : (
-						<StatusDot state={input.lastState} />
-					)
-				}
+				icon={<StatusDot state={firstState.value.status.state} />}
 				selected={false}
 				onClick={() => {
-					if (input.active || input.lastState) input.selectRun(input.cwd, input.sessionId, input.command, input.runId)
-					else input.selectRun(input.cwd, input.sessionId, input.command, undefined, true)
+					if (parallel) input.onToggleExpanded()
+					else input.selectRun(input.cwd, firstSessionId, firstCommand, firstState.value.runId)
+				}}
+			>
+				{input.script.name}
+			</TreeExplorerRow>
+			{parallel && input.expanded && (
+				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+					{commands.map((command, taskIndex) => (
+						<RunTaskRow
+							key={runSessionId(input.script.name, taskIndex)}
+							command={command}
+							cwd={input.cwd}
+							selectRun={input.selectRun}
+							sessionId={runSessionId(input.script.name, taskIndex)}
+						/>
+					))}
+				</ul>
+			)}
+		</li>
+	)
+}
+
+function RunTaskRow(input: {
+	readonly command: string
+	readonly cwd: string
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
+	readonly sessionId: string
+}) {
+	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const session = runTerminalSession(input)
+	const state = useAtomSuspense(terminalStateAtom(session))
+	const active = isActiveStatus(state.value.status.state)
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+						onClick={event => {
+							event.stopPropagation()
+							if (active) {
+								void stop({payload: session})
+							} else {
+								void restart({payload: session}).then(nextState => {
+									input.selectRun(input.cwd, input.sessionId, input.command, nextState.runId)
+								})
+							}
+						}}
+						title={active ? 'Stop task' : 'Start task'}
+					>
+						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
+					</button>
+				}
+				icon={<StatusDot state={state.value.status.state} />}
+				selected={false}
+				onClick={() => {
+					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId)
 				}}
 			>
 				{input.command}
@@ -438,33 +382,6 @@ function StatusDot(input: {readonly state?: TerminalStatus['state']}) {
 	}
 	if (input.state === 'exited') return <CircleIcon className="size-2.5 fill-emerald-500 text-emerald-500" />
 	return <CircleIcon className="text-muted-foreground size-2.5" />
-}
-
-function RunTaskStatus(input: {
-	readonly command: string
-	readonly cwd: string
-	readonly onState: (state: TerminalStatus['state']) => void
-	readonly runId?: number
-	readonly sessionId: string
-}) {
-	const status = useAtomSuspense(runStatusAtom(input))
-	const [observedCurrentRun, setObservedCurrentRun] = useState(false)
-	const state = input.runId !== undefined && status.value.runId < input.runId ? 'starting' : status.value.status.state
-	const staleFinalState =
-		input.runId === undefined &&
-		!observedCurrentRun &&
-		(state === 'exited' || state === 'failed' || state === 'stopped')
-
-	useEffect(() => {
-		if (state === 'running' || state === 'starting') {
-			setObservedCurrentRun(true)
-			input.onState(state)
-		} else if (observedCurrentRun) {
-			input.onState(state)
-		}
-	}, [input.onState, observedCurrentRun, state])
-
-	return <StatusDot state={staleFinalState ? 'running' : state} />
 }
 
 const agentProfiles = [

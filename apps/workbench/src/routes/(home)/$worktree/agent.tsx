@@ -1,14 +1,12 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Duration, Effect, Schema, Stream, pipe} from 'effect'
+import {Schema} from 'effect'
 
 import {Navigate, createFileRoute} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom} from '#lib/state.ts'
+import {activeHomeAtom, terminalEventsAtom, terminalStateAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
@@ -16,65 +14,6 @@ export const Route = createFileRoute('/(home)/$worktree/agent')({
 		Schema.Struct({args: Schema.Array(Schema.String), command: Schema.String, sessionId: Schema.String})
 	)
 })
-
-const terminalEventsAtom = Atom.family(
-	(input: {
-		readonly args: readonly string[]
-		readonly command: string
-		readonly cwd: string
-		readonly sessionId: string
-	}) =>
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('terminal.events', {
-						args: input.args,
-						command: input.command,
-						cwd: input.cwd,
-						sessionId: input.sessionId
-					})
-				),
-				Stream.unwrap,
-				Stream.groupedWithin(100, Duration.millis(16))
-			),
-			{initialValue: Array.empty<TerminalEvent>()}
-		)
-)
-
-const terminalStateAtom = Atom.family(
-	(input: {
-		readonly args: readonly string[]
-		readonly command: string
-		readonly cwd: string
-		readonly sessionId: string
-	}) =>
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('terminal.state', {
-						args: input.args,
-						command: input.command,
-						cwd: input.cwd,
-						sessionId: input.sessionId
-					})
-				),
-				Stream.unwrap
-			),
-			{
-				initialValue: {
-					args: [...input.args],
-					command: input.command,
-					cwd: input.cwd,
-					ports: [],
-					runId: 0,
-					size: {cols: 120, rows: 32},
-					status: {state: 'starting'}
-				} as TerminalState
-			}
-		)
-)
 
 function AgentPage() {
 	const params = Route.useParams()

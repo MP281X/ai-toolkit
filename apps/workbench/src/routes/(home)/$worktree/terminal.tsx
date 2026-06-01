@@ -1,49 +1,12 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Duration, Effect, Stream, pipe} from 'effect'
-
 import {Navigate, createFileRoute} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom} from '#lib/state.ts'
+import {activeHomeAtom, terminalEventsAtom, terminalStateAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/terminal')({component: TerminalPage})
-
-const terminalEventsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('terminal.events', {cwd})),
-			Stream.unwrap,
-			Stream.groupedWithin(100, Duration.millis(16))
-		),
-		{initialValue: Array.empty<TerminalEvent>()}
-	)
-)
-
-const terminalStateAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('terminal.state', {cwd})),
-			Stream.unwrap
-		),
-		{
-			initialValue: {
-				args: [],
-				command: '',
-				cwd,
-				ports: [],
-				runId: 0,
-				size: {cols: 120, rows: 32},
-				status: {state: 'starting'}
-			} as TerminalState
-		}
-	)
-)
 
 function TerminalPage() {
 	const params = Route.useParams()
@@ -56,8 +19,8 @@ function TerminalPage() {
 function WorktreeTerminal(input: {readonly cwd: string}) {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
-	const terminalEvents = useAtomSuspense(terminalEventsAtom(input.cwd))
-	const terminalState = useAtomSuspense(terminalStateAtom(input.cwd))
+	const terminalEvents = useAtomSuspense(terminalEventsAtom(input))
+	const terminalState = useAtomSuspense(terminalStateAtom(input))
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0">

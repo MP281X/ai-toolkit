@@ -133,6 +133,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command ?? shell
 		const processArgs = config.args ?? []
+		const autostart = config.command === undefined
 		const restartPolicy = config.restart ?? (config.command ? 'never' : 'always')
 		const stateRef = yield* SubscriptionRef.make<TerminalState>({
 			args: [...processArgs],
@@ -141,7 +142,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			ports: [],
 			runId: 0,
 			size: initialSize,
-			status: {state: 'starting'}
+			status: autostart ? {state: 'starting'} : {state: 'stopped'}
 		})
 		const screen = new xtermHeadless.Terminal({
 			allowProposedApi: true,
@@ -335,8 +336,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		yield* pipe(
 			Effect.gen(function* () {
-				let restart = true
-				while (restart) {
+				let restart = autostart
+				while (true) {
+					if (!restart) {
+						const control = yield* Queue.take(controls)
+						restart = control.type === 'restart'
+						if (!restart) continue
+					}
+
 					yield* resetScreen
 					yield* setStatus({state: 'starting'})
 					const action = yield* pipe(
@@ -376,11 +383,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							state: failed ? 'failed' : 'exited'
 						})
 						restart = restartPolicy === 'always' || (restartPolicy === 'failed' && failed)
-					}
-
-					if (!restart) {
-						const control = yield* Queue.take(controls)
-						restart = control.type === 'restart'
 					}
 
 					if (restart) yield* Effect.sleep('250 millis')

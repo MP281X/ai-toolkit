@@ -1,15 +1,13 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Duration, Effect, Schema, Stream, pipe} from 'effect'
+import {Schema} from 'effect'
 
 import {Navigate, createFileRoute} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom} from '#lib/state.ts'
+import {activeHomeAtom, terminalEventsAtom, terminalStateAtom} from '#lib/state.ts'
 import {Fallback} from '@deslop/components/fallbacks'
 import {Terminal} from '@deslop/components/render/terminal'
-import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/run')({
 	component: RunPage,
@@ -22,55 +20,6 @@ export const Route = createFileRoute('/(home)/$worktree/run')({
 		})
 	)
 })
-
-const terminalEventsAtom = Atom.family(
-	(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) =>
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('terminal.events', {
-						args: ['-lc', input.command],
-						command: 'sh',
-						cwd: input.cwd,
-						sessionId: input.sessionId
-					})
-				),
-				Stream.unwrap,
-				Stream.groupedWithin(100, Duration.millis(16))
-			),
-			{initialValue: Array.empty<TerminalEvent>()}
-		)
-)
-
-const terminalStateAtom = Atom.family(
-	(input: {readonly command: string; readonly cwd: string; readonly sessionId: string}) =>
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('terminal.state', {
-						args: ['-lc', input.command],
-						command: 'sh',
-						cwd: input.cwd,
-						sessionId: input.sessionId
-					})
-				),
-				Stream.unwrap
-			),
-			{
-				initialValue: {
-					args: ['-lc', input.command],
-					command: 'sh',
-					cwd: input.cwd,
-					ports: [],
-					runId: 0,
-					size: {cols: 120, rows: 32},
-					status: {state: 'starting'}
-				} as TerminalState
-			}
-		)
-)
 
 function RunPage() {
 	const params = Route.useParams()
@@ -104,8 +53,9 @@ function RunTerminal(input: {
 }) {
 	const writeInput = useAtomSet(RpcClient.mutation('terminal.input'), {mode: 'promise'})
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
-	const terminalEvents = useAtomSuspense(terminalEventsAtom(input))
-	const terminalState = useAtomSuspense(terminalStateAtom(input))
+	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
+	const terminalEvents = useAtomSuspense(terminalEventsAtom(session))
+	const terminalState = useAtomSuspense(terminalStateAtom(session))
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0">

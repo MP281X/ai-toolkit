@@ -2,20 +2,22 @@ import {randomUUID} from 'node:crypto'
 import {readFile} from 'node:fs/promises'
 import {join} from 'node:path'
 
-import {Array, Context, Duration, Effect, Layer, RcMap, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array, Context, Duration, Effect, Layer, RcMap, Schema, Stream, SubscriptionRef, pipe} from 'effect'
 
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
 import {TerminalError} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
+import {splitParallelCommands} from '@deslop/terminal/utils'
 
-type TerminalSessionKey = {
-	readonly args?: readonly string[]
-	readonly command?: string
-	readonly cwd: string
-	readonly sessionId?: string
-}
+const TerminalSessionKey = Schema.Struct({
+	args: Schema.optional(Schema.Array(Schema.String)),
+	command: Schema.optional(Schema.String),
+	cwd: Schema.String,
+	sessionId: Schema.optional(Schema.String)
+})
+type TerminalSessionKey = typeof TerminalSessionKey.Type
 
 function terminalSessionKey(input: TerminalSessionKey) {
 	return JSON.stringify({args: input.args, command: input.command, cwd: input.cwd, sessionId: input.sessionId})
@@ -29,48 +31,13 @@ function agentSessionKey(input: {readonly cwd: string; readonly uuid: string}) {
 	return JSON.stringify(input)
 }
 
-function splitParallelCommands(script: string) {
-	const commands: string[] = []
-	let current = ''
-	let quote: '"' | "'" | undefined
-	let escaped = false
-
-	for (let index = 0; index < script.length; index += 1) {
-		const char = script[index]
-		if (escaped) {
-			current += char
-			escaped = false
-		} else if (char === '\\') {
-			current += char
-			escaped = true
-		} else if (quote) {
-			current += char
-			if (char === quote) quote = undefined
-		} else if (char === '"' || char === "'") {
-			current += char
-			quote = char
-		} else if (char === '&' && script[index + 1] === '&') {
-			current += '&&'
-			index += 1
-		} else if (char === '&') {
-			const command = current.trim()
-			if (command) commands.push(command)
-			current = ''
-		} else {
-			current += char
-		}
-	}
-
-	const command = current.trim()
-	if (command) commands.push(command)
-
-	return commands
-}
-
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
 	lookup: Effect.fnUntraced(function* (key: string) {
-		const config = JSON.parse(key) as TerminalSessionKey
+		const config = yield* Effect.try({
+			catch: cause => new TerminalError({cause, message: 'invalid terminal session key'}),
+			try: () => Schema.decodeUnknownSync(TerminalSessionKey)(JSON.parse(key))
+		})
 		const context = yield* Layer.buildWithScope(
 			Terminal.layer({args: config.args, command: config.command, cwd: config.cwd}),
 			yield* Effect.scope
