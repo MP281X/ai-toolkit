@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
-import {Error as ErrorFallback, Loading} from '#components/fallbacks.tsx'
+import {Fallback, Loading} from '#components/fallbacks.tsx'
 import {Button} from '#components/ui/button.tsx'
 import {InputGroup, InputGroupInput} from '#components/ui/input-group.tsx'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/ui/resizable.tsx'
@@ -59,20 +59,6 @@ function isIgnoredBrowserLog(message: string) {
 		lower.includes('react-scan') ||
 		lower.includes('react grab') ||
 		lower.includes('react-grab')
-	)
-}
-
-function BrowserLogsHeader(props: {readonly count: number; readonly onClear: () => void}) {
-	return (
-		<div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
-			<div className="flex items-center gap-2">
-				<FileClockIcon className="size-3.5" />
-				<span>{props.count}</span>
-			</div>
-			<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear browser logs" onClick={props.onClear}>
-				<Trash2Icon className="size-3.5" />
-			</Button>
-		</div>
 	)
 }
 
@@ -214,13 +200,13 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 							setIsLoading(true)
 						}}
 					>
-						<SelectTrigger className="text-muted-foreground w-auto min-w-0 border-0 bg-transparent dark:bg-transparent [&_svg]:hidden">
+						<SelectTrigger className="text-muted-foreground w-auto min-w-0 border-0 bg-transparent font-mono dark:bg-transparent [&_svg]:hidden">
 							<span>http://localhost:{port || '0000'}/</span>
 						</SelectTrigger>
 						{alternatePorts.length > 0 && (
-							<SelectContent alignItemWithTrigger={true}>
+							<SelectContent className="font-mono" alignItemWithTrigger={true}>
 								{alternatePorts.map(port => (
-									<SelectItem key={port} value={port.toString()} className="[&>span:last-child]:hidden">
+									<SelectItem key={port} value={port.toString()} className="font-mono [&>span:last-child]:hidden">
 										http://localhost:{port}/
 									</SelectItem>
 								))}
@@ -230,7 +216,7 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 					<InputGroupInput
 						value={address.startsWith('/') ? address.slice(1) : address}
 						placeholder="path?query"
-						className="pl-0!"
+						className="font-mono"
 						onChange={event => {
 							setAddress(`/${event.currentTarget.value.replace(/^\/+/, '')}`)
 						}}
@@ -247,10 +233,7 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 			</form>
 			<div className="flex min-h-0 flex-1 flex-col">
 				{props.ports.length === 0 ? (
-					<ErrorFallback
-						error={new Error('Start a dev server in this worktree terminal to open a browser preview.')}
-						reset={() => {}}
-					/>
+					<Fallback message="Start a dev server in this worktree terminal to open a browser preview." />
 				) : (
 					<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
 						<ResizablePanel defaultSize="100%" minSize="40%">
@@ -275,7 +258,7 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 						<ResizableHandle />
 						<ResizablePanel collapsible collapsedSize={0} defaultSize={0} minSize={0} maxSize="50%">
 							<div className="flex h-full min-h-0 flex-col overflow-hidden">
-								<div className={cn('min-h-0 flex-1 overflow-auto', logs.length === 0 && 'hidden')}>
+								<div className={cn('min-h-0 flex-1 overflow-auto font-mono text-xs', logs.length === 0 && 'hidden')}>
 									{logs.map(log => (
 										<div key={log.id} className="grid grid-cols-[8rem_1rem_minmax(0,1fr)] gap-3 px-2 py-1">
 											<span className="overflow-hidden whitespace-nowrap select-none">{formatTimestamp(log.time)}</span>
@@ -293,12 +276,23 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 						</ResizablePanel>
 					</ResizablePanelGroup>
 				)}
-				<BrowserLogsHeader
-					count={logs.length}
-					onClear={() => {
-						setLogs([])
-					}}
-				/>
+				<div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
+					<div className="flex items-center gap-2 font-mono text-xs">
+						<FileClockIcon className="size-3.5" />
+						<span>{logs.length}</span>
+					</div>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Clear browser logs"
+						onClick={() => {
+							setLogs([])
+						}}
+					>
+						<Trash2Icon className="size-3.5" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	)

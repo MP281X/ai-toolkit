@@ -28,6 +28,7 @@ export function TreeExplorerRow(props: {
 	readonly onClick?: () => void
 	readonly icon?: React.ReactNode
 	readonly actions?: React.ReactNode
+	readonly title?: string
 	readonly children: React.ReactNode
 }) {
 	const className = cn(
@@ -50,6 +51,7 @@ export function TreeExplorerRow(props: {
 				aria-current={props.selected === true ? 'page' : undefined}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}
+				title={props.title}
 			>
 				<button
 					type="button"
@@ -71,6 +73,7 @@ export function TreeExplorerRow(props: {
 				onClick={props.onClick}
 				className={className}
 				style={{paddingLeft: 12, paddingRight: 8}}
+				title={props.title}
 			>
 				{label}
 				{props.actions}
@@ -79,7 +82,7 @@ export function TreeExplorerRow(props: {
 	}
 
 	return (
-		<div className={className} style={{paddingLeft: 12, paddingRight: 8}}>
+		<div className={className} style={{paddingLeft: 12, paddingRight: 8}} title={props.title}>
 			{label}
 			{props.actions}
 		</div>
