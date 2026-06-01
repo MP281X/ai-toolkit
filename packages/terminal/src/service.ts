@@ -1,3 +1,4 @@
+import {createRequire} from 'node:module'
 import nodeProcess from 'node:process'
 
 import {
@@ -13,6 +14,7 @@ import {
 	Ref,
 	Result,
 	Schedule,
+	Semaphore,
 	Stream,
 	String,
 	SubscriptionRef,
@@ -23,6 +25,8 @@ import {
 
 import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
+import type * as SerializeModule from '@xterm/addon-serialize'
+import type * as HeadlessModule from '@xterm/headless'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 import type {TerminalEvent, TerminalState} from './schema.ts'
@@ -41,8 +45,8 @@ function parseProcessParents(output: string) {
 			Array.fromIterable,
 			Array.filterMap(line => {
 				const columns = String.split(/\s+/)(String.trim(line))
-				const pid = Number(columns[0] ?? Number.NaN)
-				const ppid = Number(columns[1] ?? Number.NaN)
+				const pid = Number(columns[0])
+				const ppid = Number(columns[1])
 
 				return Number.isFinite(pid) && Number.isFinite(ppid) ? Result.succeed(Tuple.make(pid, ppid)) : Result.failVoid
 			})
@@ -106,8 +110,15 @@ const readListeningPorts = pipe(
 	Effect.map(parseListeningPorts)
 )
 
-const initialSize = {cols: 120, rows: 32}
-const maxHistoryEvents = 10_000
+function snapshotEvents(data: string) {
+	if (data === '') return Array.empty<TerminalEvent>()
+
+	const events: TerminalEvent[] = []
+	for (let index = 0; index < data.length; index += 64 * 1024) {
+		events.push({data: data.slice(index, index + 64 * 1024), type: 'data'})
+	}
+	return events
+}
 
 function samePorts(left: readonly number[], right: readonly number[]) {
 	return left.length === right.length && Array.every(left, (leftPort, index) => leftPort === right[index])
@@ -160,12 +171,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 	}) {
 		const dataQueue = yield* Queue.unbounded<string>()
 		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
-		const history = yield* Ref.make<readonly {readonly event: TerminalEvent; readonly sequence: number}[]>([])
+		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
 		const signalBuffer = yield* Ref.make('')
 		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
 		const processRef = yield* Ref.make<RunningProcess | undefined>(undefined)
-		const sizeRef = yield* Ref.make(initialSize)
+		const sizeRef = yield* Ref.make({cols: 120, rows: 32})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command ?? shell
 		const processArgs = config.args ?? []
@@ -176,14 +187,30 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			state: autostart ? 'starting' : 'idle',
 			title: ''
 		})
+		const screen = new (createRequire(import.meta.url)('@xterm/headless') as typeof HeadlessModule).Terminal({
+			allowProposedApi: true,
+			cols: 120,
+			rows: 32,
+			scrollback: 10_000
+		})
+		const serialize = new (
+			createRequire(import.meta.url)('@xterm/addon-serialize') as typeof SerializeModule
+		).SerializeAddon()
+		screen.loadAddon(serialize)
+
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
 			const sequence = yield* Ref.updateAndGet(sequenceRef, sequence => sequence + 1)
-			const published = {event, sequence}
-			yield* Ref.update(history, current =>
-				event.type === 'reset' ? [] : [...current, published].slice(-maxHistoryEvents)
-			)
-			yield* PubSub.publish(events, published)
+			yield* PubSub.publish(events, {event, sequence})
 		})
+		const requestSnapshot = Semaphore.withPermit(
+			screenLock,
+			Effect.gen(function* () {
+				const data = serialize.serialize({scrollback: 10_000})
+				const sequence = yield* Ref.get(sequenceRef)
+
+				return {data, sequence}
+			})
+		)
 
 		function setState(state: TerminalState['state']) {
 			return SubscriptionRef.update(stateRef, current => ({...current, state}))
@@ -270,8 +297,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const writeScreen = Effect.fnUntraced(function* (data: string) {
-			yield* readBufferedSignals(data)
-			yield* publish({data, type: 'data'})
+			yield* Semaphore.withPermit(
+				screenLock,
+				pipe(
+					Effect.callback<void>(resume => {
+						screen.write(data, () => {
+							resume(Effect.void)
+						})
+					}),
+					Effect.andThen(readBufferedSignals(data)),
+					Effect.andThen(publish({data, type: 'data'}))
+				)
+			)
 		})
 
 		const clearProcess = Effect.fnUntraced(function* (handle: RunningProcess) {
@@ -297,7 +334,15 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const spawnProcess = Effect.fnUntraced(function* () {
-			yield* publish({type: 'reset'})
+			yield* Semaphore.withPermit(
+				screenLock,
+				pipe(
+					Effect.sync(() => {
+						screen.reset()
+					}),
+					Effect.andThen(publish({type: 'reset'}))
+				)
+			)
 			yield* startRun
 
 			const size = yield* Ref.get(sizeRef)
@@ -345,10 +390,10 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		yield* pipe(Stream.fromQueue(dataQueue), Stream.runForEach(writeScreen), Effect.forkScoped)
 
 		yield* Effect.addFinalizer(() =>
-			Effect.all([stopProcess(), PubSub.shutdown(events), Queue.shutdown(dataQueue)], {
-				concurrency: 'unbounded',
-				discard: true
-			})
+			Effect.all(
+				[stopProcess(), PubSub.shutdown(events), Queue.shutdown(dataQueue), Effect.sync(() => screen.dispose())],
+				{concurrency: 'unbounded', discard: true}
+			)
 		)
 		if (autostart) {
 			yield* pipe(
@@ -392,6 +437,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
 			yield* Ref.set(sizeRef, nextSize)
+			yield* Semaphore.withPermit(
+				screenLock,
+				Effect.sync(() => {
+					screen.resize(nextSize.cols, nextSize.rows)
+				})
+			)
 
 			const process = yield* Ref.get(processRef)
 			if (!process) return
@@ -418,12 +469,15 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Stream.unwrap(
 				Effect.gen(function* () {
 					const subscription = yield* PubSub.subscribe(events)
-					const replay = yield* Ref.get(history)
-					const lastReplaySequence = replay.at(-1)?.sequence ?? 0
+					const snapshot = yield* requestSnapshot
 					const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
 
 					return pipe(
-						Stream.fromIterable([...replay, ...Array.filter(pending, event => event.sequence > lastReplaySequence)]),
+						Stream.fromIterable([
+							{event: {type: 'reset' as const}, sequence: snapshot.sequence},
+							...Array.map(snapshotEvents(snapshot.data), event => ({event, sequence: snapshot.sequence})),
+							...Array.filter(pending, event => event.sequence > snapshot.sequence)
+						]),
 						Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))
 					)
 				})
@@ -442,8 +496,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		return {
 			ports,
 			resize: Effect.fnUntraced(function* (size: {readonly cols: number; readonly rows: number}) {
-				yield* resize(size)
-				return yield* SubscriptionRef.get(stateRef)
+				return yield* pipe(resize(size), Effect.andThen(SubscriptionRef.get(stateRef)))
 			}),
 			restart: Effect.fnUntraced(function* () {
 				return yield* pipe(
@@ -457,8 +510,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			}),
 			updates,
 			write: Effect.fnUntraced(function* (data: string) {
-				yield* write(data)
-				return yield* SubscriptionRef.get(stateRef)
+				return yield* pipe(write(data), Effect.andThen(SubscriptionRef.get(stateRef)))
 			})
 		}
 	})

@@ -19,7 +19,7 @@ function TerminalPage() {
 function WorktreeTerminal(input: {readonly cwd: string}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const write = useAtomSet(RpcClient.mutation('terminal.write'), {mode: 'promise'})
-	const terminal = useAtomSuspense(terminalViewAtom(input))
+	const terminal = useAtomSuspense(terminalViewAtom({cwd: input.cwd}))
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0">

@@ -36,7 +36,7 @@ const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (config: Schema.Schema.Type<typeof TerminalSessionKey>) {
+	lookup: Effect.fnUntraced(function* (config: typeof TerminalSessionKey.Type) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
@@ -57,9 +57,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const git = yield* GitWorkspace
 		const terminals = yield* TerminalSessions
 		const gitWorktrees = yield* GitWorktreeSessions
-		const agents = yield* SubscriptionRef.make<
-			HashMap.HashMap<Schema.Schema.Type<typeof AgentSessionKey>, AgentSession>
-		>(HashMap.empty())
+		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
+			HashMap.empty()
+		)
 
 		return RpcContracts.of({
 			'agents.create': payload =>
@@ -67,11 +67,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 					const current = yield* SubscriptionRef.get(agents)
 					const labelCount = pipe(
 						Array.fromIterable(HashMap.values(current)),
-						Array.filter(session => session.cwd === payload.cwd),
-						Array.filter(session => session.command === payload.command),
+						Array.filter(session => session.cwd === payload.cwd && session.command === payload.command),
 						Array.length
 					)
-					const session: AgentSession = {
+					const session = {
 						args: [...payload.args],
 						command: payload.command,
 						cwd: payload.cwd,
@@ -94,21 +93,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 					yield* terminal.restart()
 					yield* pipe(
-						pipe(
-							terminal.updates,
-							Stream.filterMap(update =>
-								update.type === 'state' ? Result.succeed(update.state.state) : Result.failVoid
-							),
-							Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
-							Stream.take(1),
-							Stream.runDrain
+						terminal.updates,
+						Stream.filterMap(update =>
+							update.type === 'state' ? Result.succeed(update.state.state) : Result.failVoid
 						),
+						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
+						Stream.take(1),
+						Stream.runDrain,
 						Effect.andThen(
 							SubscriptionRef.update(agents, current =>
 								HashMap.remove(current, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}))
 							)
 						),
-						Effect.forkScoped
+						Effect.forkDetach
 					)
 
 					return session
@@ -123,7 +120,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 						SubscriptionRef.get(agents),
 						Effect.map(current =>
 							pipe(
-								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents)))(Stream.make(current)),
+								Stream.make(current),
+								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
 								Stream.map(sessions =>
 									pipe(
 										Array.fromIterable(HashMap.values(sessions)),
@@ -142,7 +140,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					pipe(
 						SubscriptionRef.get(git.projects),
 						Effect.map(projects =>
-							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects)))(Stream.make(projects))
+							pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
 						)
 					)
 				),
