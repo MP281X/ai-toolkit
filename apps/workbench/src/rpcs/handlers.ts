@@ -87,24 +87,23 @@ export const RpcHandlers = RpcContracts.toLayer(
 						next.set(agentSessionKey({cwd: session.cwd, uuid: session.uuid}), session)
 						return next
 					})
+					const terminal = yield* RcMap.get(
+						terminals,
+						terminalSessionKey({
+							args: session.args,
+							command: session.command,
+							cwd: session.cwd,
+							sessionId: agentSessionId(session.uuid)
+						})
+					)
+					yield* terminal.restart
 					yield* pipe(
-						RcMap.get(
-							terminals,
-							terminalSessionKey({
-								args: session.args,
-								command: session.command,
-								cwd: session.cwd,
-								sessionId: agentSessionId(session.uuid)
-							})
-						),
-						Effect.flatMap(terminal =>
-							pipe(
-								SubscriptionRef.changes(terminal.state),
-								Stream.map(state => state.status.state),
-								Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
-								Stream.take(1),
-								Stream.runDrain
-							)
+						pipe(
+							SubscriptionRef.changes(terminal.state),
+							Stream.map(state => state.status.state),
+							Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
+							Stream.take(1),
+							Stream.runDrain
 						),
 						Effect.andThen(
 							SubscriptionRef.update(agents, current => {

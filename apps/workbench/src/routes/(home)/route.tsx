@@ -1,13 +1,13 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Hash, Match, Option, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, Hash, Match, Option, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, projectsAtom, terminalStateAtom} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom} from '#lib/state.ts'
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
@@ -40,6 +40,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
+import type {TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -129,11 +130,11 @@ function HomeLayout() {
 								})
 							})
 						}}
-						selectAgent={(worktreeRoot, sessionId, command, args) => {
+						selectAgent={(worktreeRoot, agentId) => {
 							startTransition(() => {
 								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
-									search: {args, command, sessionId},
+									search: {agentId},
 									to: '/$worktree/agent'
 								})
 							})
@@ -372,24 +373,98 @@ const agentProfiles = [
 		icon: 'codex',
 		label: 'codex'
 	},
-	{args: ['--model', 'openai/gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
+	{args: ['--provider', 'openai-codex', '--model', 'gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
 ] as const
 
-const agentsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('agents.watch', {cwd})),
-			Stream.unwrap
-		),
-		{initialValue: [] as readonly AgentSession[]}
+function agentActivityLabel(activity: TerminalState['signals']['activity']) {
+	return pipe(
+		Match.value(activity),
+		Match.when('starting', () => 'Starting'),
+		Match.when('working', () => 'Working'),
+		Match.when('thinking', () => 'Thinking'),
+		Match.when('waiting', () => 'Waiting'),
+		Match.when('needs_input', () => 'Needs input'),
+		Match.orElse(() => undefined)
 	)
-)
+}
 
-function WorktreeAgents(input: {
-	readonly cwd: string
-	readonly selectAgent: (cwd: string, sessionId: string, command: string, args: readonly string[]) => void
+function terminalStatusLabel(status: TerminalState['status']) {
+	return pipe(
+		Match.value(status.state),
+		Match.when('starting', () => 'Starting'),
+		Match.when('stopped', () => 'Stopped'),
+		Match.when('exited', () => 'Exited'),
+		Match.when('failed', () => 'Failed'),
+		Match.orElse(() => undefined)
+	)
+}
+
+function agentStateIndicatorClassName(state: TerminalState) {
+	if (state.status.state === 'failed' || state.status.state === 'stopped') return 'bg-destructive'
+	if (state.status.state === 'exited') return 'bg-emerald-500'
+	if (state.signals.notification !== null || state.signals.activity === 'needs_input') return 'bg-amber-500'
+	if (state.status.state === 'starting') return 'bg-primary'
+	if (state.signals.activity === 'thinking') return 'bg-sky-500'
+	if (state.signals.activity === 'waiting') return 'bg-violet-500'
+	if (state.signals.activity === 'working' || state.signals.activity === 'starting') return 'bg-primary'
+	return 'bg-muted-foreground/50'
+}
+
+function agentTooltip(session: AgentSession, state: TerminalState) {
+	const lines = [
+		state.signals.title ? `Title: ${state.signals.title}` : session.label,
+		state.signals.notification?.message ? `Notification: ${state.signals.notification.message}` : undefined
+	]
+	return lines.filter((line): line is string => line !== undefined && String.isNonEmpty(line)).join('\n')
+}
+
+function AgentSessionRow(input: {
+	readonly onSelect: () => void
+	readonly onStop: () => void
+	readonly session: AgentSession
 }) {
+	const terminalSession = {
+		args: input.session.args,
+		command: input.session.command,
+		cwd: input.session.cwd,
+		sessionId: agentSessionId(input.session.uuid)
+	}
+	const state = useAtomSuspense(terminalStateAtom(terminalSession))
+	const stateLabel = agentActivityLabel(state.value.signals.activity) ?? terminalStatusLabel(state.value.status)
+	const title = state.value.signals.displayTitle ?? state.value.signals.title ?? input.session.label
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+						onClick={event => {
+							event.stopPropagation()
+							input.onStop()
+						}}
+						title={`Stop ${input.session.label}`}
+					>
+						<Square className="size-3" />
+					</button>
+				}
+				icon={<AgentIcon layer={input.session.icon} />}
+				selected={false}
+				title={agentTooltip(input.session, state.value)}
+				onClick={input.onSelect}
+			>
+				<span className="flex min-w-0 items-center gap-1.5">
+					<span className={`size-1.5 shrink-0 rounded-full ${agentStateIndicatorClassName(state.value)}`} />
+					<span className="min-w-0 flex-1 truncate">{title}</span>
+					{stateLabel && <span className="text-muted-foreground/80 shrink-0 text-[10px]">{stateLabel}</span>}
+				</span>
+			</TreeExplorerRow>
+		</li>
+	)
+}
+
+function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd: string, agentId: string) => void}) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
@@ -397,7 +472,7 @@ function WorktreeAgents(input: {
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
 		void create({payload: {...profile, cwd: input.cwd}}).then(session => {
-			input.selectAgent(input.cwd, agentSessionId(session.uuid), session.command, session.args)
+			input.selectAgent(input.cwd, session.uuid)
 		})
 	}
 
@@ -441,30 +516,12 @@ function WorktreeAgents(input: {
 							{profileSessions.length > 0 && (
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 									{profileSessions.map(session => (
-										<li key={session.uuid} className="w-full min-w-0">
-											<TreeExplorerRow
-												actions={
-													<button
-														type="button"
-														className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
-														onClick={event => {
-															event.stopPropagation()
-															stopAgent(session)
-														}}
-														title={`Stop ${session.label}`}
-													>
-														<Square className="size-3" />
-													</button>
-												}
-												icon={<AgentIcon layer={session.icon} />}
-												selected={false}
-												onClick={() =>
-													input.selectAgent(input.cwd, agentSessionId(session.uuid), session.command, session.args)
-												}
-											>
-												{session.label}
-											</TreeExplorerRow>
-										</li>
+										<AgentSessionRow
+											key={session.uuid}
+											session={session}
+											onSelect={() => input.selectAgent(input.cwd, session.uuid)}
+											onStop={() => stopAgent(session)}
+										/>
 									))}
 								</ul>
 							)}
@@ -484,7 +541,7 @@ function WorktreeManager(input: {
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectBrowser: (worktreeRoot: string) => void
-	readonly selectAgent: (worktreeRoot: string, sessionId: string, command: string, args: readonly string[]) => void
+	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (
 		worktreeRoot: string,
 		sessionId: string,

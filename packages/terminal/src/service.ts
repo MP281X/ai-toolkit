@@ -28,7 +28,7 @@ import {SerializeAddon} from '@xterm/addon-serialize'
 import xtermHeadless from '@xterm/headless'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import type {TerminalEvent, TerminalState, TerminalStatus} from './schema.ts'
+import type {TerminalEvent, TerminalSignals, TerminalState, TerminalStatus} from './schema.ts'
 import {TerminalError} from './schema.ts'
 
 function parseProcessParents(output: string) {
@@ -105,10 +105,43 @@ const readListeningPorts = pipe(
 )
 
 type TerminalControl = {readonly type: 'restart'} | {readonly type: 'stop'}
+type TerminalSignalEvent =
+	| {readonly activity: 'idle' | 'working'; readonly type: 'activity'}
+	| {readonly title: string; readonly type: 'title'}
+	| {readonly message: string | null; readonly type: 'notification'}
 
 const initialSize = {cols: 120, rows: 32} as const
+const initialSignals: TerminalSignals = {activity: 'idle', displayTitle: null, notification: null, title: null}
 const scrollback = 10_000
 const snapshotChunkSize = 64 * 1024
+
+function parseTitleSignal(title: string): Pick<TerminalSignals, 'activity' | 'displayTitle' | 'title'> {
+	const trimmed = String.trim(title)
+	const actionRequired = /^\[\s*[!.]\s*\]\s*Action Required\b/i
+	if (actionRequired.test(trimmed)) {
+		return {activity: 'needs_input', displayTitle: trimmed.replace(/^\[\s*[!.]\s*\]\s*/i, '') || trimmed, title}
+	}
+
+	const withoutKnownPrefix = trimmed
+		.replace(/^OC\s*\|\s*/i, '')
+		.replace(/^π\s*-\s*/i, '')
+		.replace(/^\[\s*[^\]]+\s*\]\s*/, '')
+		.replace(/^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-]\s*)+/, '')
+		.trim()
+	const displayTitle = withoutKnownPrefix || (trimmed === '' ? null : trimmed)
+	const segment = displayTitle?.match(/^(Starting|Working|Thinking|Waiting|Ready)\b/i)?.[1]?.toLowerCase()
+
+	if (segment === 'starting') return {activity: 'starting', displayTitle, title}
+	if (segment === 'working') return {activity: 'working', displayTitle, title}
+	if (segment === 'thinking') return {activity: 'thinking', displayTitle, title}
+	if (segment === 'waiting') return {activity: 'waiting', displayTitle, title}
+	if (segment === 'ready') return {activity: 'idle', displayTitle, title}
+	if (/^\[\s*[^\]]+\s*\]/.test(trimmed) || /^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-]\s*)+/.test(trimmed)) {
+		return {activity: 'working', displayTitle, title}
+	}
+
+	return {activity: String.isNonEmpty(trimmed) ? 'unknown' : 'idle', displayTitle, title}
+}
 
 function snapshotEvents(data: string) {
 	if (data === '') return [{data, type: 'snapshot'} as const]
@@ -130,6 +163,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const events = yield* PubSub.bounded<{readonly event: TerminalEvent; readonly sequence: number}>({capacity: 256})
 		const controls = yield* Queue.unbounded<TerminalControl>()
 		const dataQueue = yield* Queue.unbounded<string>()
+		const signalQueue = yield* Queue.unbounded<TerminalSignalEvent>()
 		const portOwners = yield* Ref.make<ReadonlyMap<number, number>>(new Map())
 		const processRef = yield* Ref.make<IPty | undefined>(undefined)
 		const screenLock = yield* Semaphore.make(1)
@@ -145,6 +179,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			cwd: config.cwd,
 			ports: [],
 			runId: 0,
+			signals: initialSignals,
 			size: initialSize,
 			status: autostart ? {state: 'starting'} : {state: 'stopped'}
 		})
@@ -157,6 +192,22 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const serialize = new SerializeAddon()
 
 		screen.loadAddon(serialize)
+		screen.onTitleChange(title => {
+			Queue.offerUnsafe(signalQueue, {title, type: 'title'})
+		})
+		screen.onBell(() => {
+			Queue.offerUnsafe(signalQueue, {message: null, type: 'notification'})
+		})
+		screen.parser.registerOscHandler(9, data => {
+			const [kind, value] = String.split(';')(data)
+			if (kind === '4') {
+				Queue.offerUnsafe(signalQueue, {activity: value === '0' ? 'idle' : 'working', type: 'activity'})
+				return true
+			}
+
+			Queue.offerUnsafe(signalQueue, {message: data, type: 'notification'})
+			return true
+		})
 
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
 			return yield* pipe(
@@ -180,11 +231,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			return SubscriptionRef.update(stateRef, state => ({...state, status}))
 		}
 
+		const resetSignals = SubscriptionRef.update(stateRef, state => ({...state, signals: initialSignals}))
+
 		const startRun = Effect.gen(function* () {
 			yield* SubscriptionRef.update(stateRef, state => ({
 				...state,
 				ports: [],
 				runId: state.runId + 1,
+				signals: initialSignals,
 				status: {state: 'starting' as const}
 			}))
 
@@ -254,10 +308,38 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		yield* Effect.addFinalizer(() =>
-			Effect.all([Queue.shutdown(controls), Queue.shutdown(dataQueue), PubSub.shutdown(events)], {discard: true})
+			Effect.all(
+				[Queue.shutdown(controls), Queue.shutdown(dataQueue), Queue.shutdown(signalQueue), PubSub.shutdown(events)],
+				{discard: true}
+			)
 		)
 
 		yield* pipe(Stream.fromQueue(dataQueue), Stream.runForEach(writeScreen), Effect.forkScoped)
+		yield* pipe(
+			Stream.fromQueue(signalQueue),
+			Stream.runForEach(signal =>
+				SubscriptionRef.update(stateRef, state => {
+					if (signal.type === 'activity') {
+						const titleActivity = state.signals.title === null ? 'idle' : parseTitleSignal(state.signals.title).activity
+						if (titleActivity !== 'idle' && titleActivity !== 'unknown') return state
+						return {...state, signals: {...state.signals, activity: signal.activity}}
+					}
+
+					if (signal.type === 'title') {
+						return {...state, signals: {...state.signals, ...parseTitleSignal(signal.title)}}
+					}
+
+					return {
+						...state,
+						signals: {
+							...state.signals,
+							notification: {message: signal.message, sequence: (state.signals.notification?.sequence ?? 0) + 1}
+						}
+					}
+				})
+			),
+			Effect.forkScoped
+		)
 
 		const spawnProcess = Effect.acquireRelease(
 			Effect.gen(function* () {
@@ -317,6 +399,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					}
 
 					yield* resetScreen
+					yield* resetSignals
 					yield* setStatus({state: 'starting'})
 					const action = yield* pipe(
 						Effect.scoped(

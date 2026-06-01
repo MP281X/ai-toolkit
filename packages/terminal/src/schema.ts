@@ -25,6 +25,22 @@ export const TerminalStatus = Schema.Union([
 	})
 ])
 
+export type TerminalSignals = typeof TerminalSignals.Type
+export const TerminalSignals = Schema.Struct({
+	activity: Schema.Union([
+		Schema.Literal('idle'),
+		Schema.Literal('starting'),
+		Schema.Literal('working'),
+		Schema.Literal('thinking'),
+		Schema.Literal('waiting'),
+		Schema.Literal('needs_input'),
+		Schema.Literal('unknown')
+	]),
+	displayTitle: Schema.NullOr(Schema.String),
+	notification: Schema.NullOr(Schema.Struct({message: Schema.NullOr(Schema.String), sequence: Schema.Number})),
+	title: Schema.NullOr(Schema.String)
+})
+
 export type TerminalState = typeof TerminalState.Type
 export const TerminalState = Schema.Struct({
 	args: Schema.Array(Schema.String),
@@ -32,6 +48,7 @@ export const TerminalState = Schema.Struct({
 	cwd: Schema.String,
 	ports: Schema.Array(Schema.Number),
 	runId: Schema.Number,
+	signals: TerminalSignals,
 	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number}),
 	status: TerminalStatus
 })

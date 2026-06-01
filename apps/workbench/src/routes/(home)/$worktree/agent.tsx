@@ -1,32 +1,42 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Schema} from 'effect'
+import {Array, Option, Schema, pipe} from 'effect'
 
 import {Navigate, createFileRoute} from '@tanstack/react-router'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, terminalEventsAtom, terminalStateAtom} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, terminalEventsAtom, terminalStateAtom} from '#lib/state.ts'
 import {Terminal} from '@deslop/components/render/terminal'
 
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
-	validateSearch: Schema.toStandardSchemaV1(
-		Schema.Struct({args: Schema.Array(Schema.String), command: Schema.String, sessionId: Schema.String})
-	)
+	validateSearch: Schema.toStandardSchemaV1(Schema.Struct({agentId: Schema.String}))
 })
+
+function agentSessionId(uuid: string) {
+	return `agent:${uuid}`
+}
 
 function AgentPage() {
 	const params = Route.useParams()
 	const search = Route.useSearch()
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
+	const cwd = activeHome.value.activeWorktree?.root ?? ''
+	const sessions = useAtomSuspense(agentsAtom(cwd))
 	if (!activeHome.value.activeWorktree) return <Navigate to="/" replace />
+	const session = pipe(
+		sessions.value,
+		Array.findFirst(candidate => candidate.uuid === search.agentId),
+		Option.getOrUndefined
+	)
+	if (!session) return <Navigate to="/" replace />
 
 	return (
 		<AgentTerminal
-			args={search.args}
-			command={search.command}
+			args={session.args}
+			command={session.command}
 			cwd={activeHome.value.activeWorktree.root}
-			sessionId={search.sessionId}
+			sessionId={agentSessionId(search.agentId)}
 		/>
 	)
 }
