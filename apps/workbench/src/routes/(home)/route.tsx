@@ -175,8 +175,8 @@ function shortPath(value: string) {
 }
 
 function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) {
-	if (input.root) return <PanelTop className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
-	return <Square className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
+	if (input.root) return <PanelTop className={input.dirty ? 'text-amber-500' : 'text-current'} />
+	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
 
 function runSessionId(scriptName: string, taskIndex: number) {
@@ -196,7 +196,7 @@ function WorktreeRuns(input: {
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
-				icon={<PackageIcon className="size-3.5" />}
+				icon={<PackageIcon />}
 				selected={false}
 				onClick={() => {
 					setExpanded(value => !value)
@@ -428,7 +428,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 
 	return (
 		<li className="w-full min-w-0">
-			<TreeExplorerRow icon={<BotIcon className="size-3.5" />} selected={false} onClick={() => {}}>
+			<TreeExplorerRow icon={<BotIcon />} selected={false} onClick={() => {}}>
 				agents
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
@@ -620,7 +620,7 @@ function WorktreeManager(input: {
 											void createFastWorktree(candidate.name)
 										}}
 									>
-										{candidate.type === 'local' ? <GitBranch className="size-3.5" /> : <Square className="size-3.5" />}
+										{candidate.type === 'local' ? <GitBranch /> : <Square />}
 										<span className="min-w-0 truncate">{candidate.name}</span>
 										<CommandShortcut>{candidate.type}</CommandShortcut>
 									</CommandItem>
@@ -628,7 +628,7 @@ function WorktreeManager(input: {
 								{branch !== '' &&
 									Option.isNone(Array.findFirst(availableBranches, candidate => candidate.name === branch)) && (
 										<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
-											<GitBranchPlus className="size-3.5" />
+											<GitBranchPlus />
 											Create {branch}
 											<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
 										</CommandItem>
@@ -650,11 +650,11 @@ function WorktreeManager(input: {
 						return (
 							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
 								<div
-									className={`text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
+									className={`text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left font-normal hover:bg-transparent ${projectAccentClassNames[index % projectAccentClassNames.length]}`}
 								>
 									<span className="flex min-w-0 flex-1 items-center gap-1.5">
-										<span className="flex size-3.5 shrink-0 items-center justify-center">
-											<Layers className="size-3.5" />
+										<span className="flex size-3 shrink-0 items-center justify-center [&_svg]:size-3">
+											<Layers />
 										</span>
 										<span className="min-w-0 flex-1 truncate">
 											<button
@@ -710,7 +710,7 @@ function WorktreeManager(input: {
 												<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
 												<li className="w-full min-w-0">
 													<TreeExplorerRow
-														icon={<TerminalIcon className="size-3.5" />}
+														icon={<TerminalIcon />}
 														selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
 														onClick={() => {
 															input.selectTerminal(worktree.root)
@@ -721,7 +721,7 @@ function WorktreeManager(input: {
 												</li>
 												<li className="w-full min-w-0">
 													<TreeExplorerRow
-														icon={<GlobeIcon className="size-3.5" />}
+														icon={<GlobeIcon />}
 														selected={input.activeView === 'browser' && input.activeWorktree?.root === worktree.root}
 														onClick={() => {
 															input.selectBrowser(worktree.root)

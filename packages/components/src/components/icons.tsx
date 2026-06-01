@@ -32,10 +32,10 @@ export function AgentIcon(props: {
 }) {
 	return pipe(
 		Match.value(props.layer),
-		Match.when('codex', () => <CodexDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('effect', () => <EffectDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('opencode', () => <OpencodeDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('pi', () => <PiDark className={cn('size-3.5 shrink-0', props.className)} />),
+		Match.when('codex', () => <CodexDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('effect', () => <EffectDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('opencode', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('pi', () => <PiDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }
@@ -81,9 +81,9 @@ export function ProviderIcon(props: {
 }) {
 	return pipe(
 		Match.value(props.provider),
-		Match.when('openai', () => <OpenaiDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('opencode-go', () => <OpencodeDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('openrouter', () => <OpenrouterDark className={cn('size-3.5 shrink-0', props.className)} />),
+		Match.when('openai', () => <OpenaiDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('opencode-go', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('openrouter', () => <OpenrouterDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }
@@ -91,11 +91,11 @@ export function ProviderIcon(props: {
 export function FileIcon(props: {readonly filePath: string; readonly className?: string}) {
 	return pipe(
 		Match.value(resolveLanguage(props.filePath)),
-		Match.when('shell', () => <BashDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('markdown', () => <MarkdownDark className={cn('size-3.5 shrink-0', props.className)} />),
-		Match.when('tsx', () => <ReactDark className={cn('size-3.5 shrink-0 text-sky-400', props.className)} />),
-		Match.when('jsonc', () => <Braces className={cn('size-3.5 shrink-0 text-amber-500', props.className)} />),
-		Match.when('text', () => <File className={cn('text-muted-foreground size-3.5 shrink-0', props.className)} />),
+		Match.when('shell', () => <BashDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('markdown', () => <MarkdownDark className={cn('size-3 shrink-0', props.className)} />),
+		Match.when('tsx', () => <ReactDark className={cn('size-3 shrink-0 text-sky-400', props.className)} />),
+		Match.when('jsonc', () => <Braces className={cn('size-3 shrink-0 text-amber-500', props.className)} />),
+		Match.when('text', () => <File className={cn('text-muted-foreground size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }

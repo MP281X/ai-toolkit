@@ -577,7 +577,7 @@ function DiffList(input: {
 			return (
 				<li key={node.path} className="w-full min-w-0">
 					<TreeExplorerRow
-						icon={<FolderIcon className="size-3.5 shrink-0" />}
+						icon={<FolderIcon />}
 						onClick={() => {
 							toggleFolder(node.path)
 						}}
@@ -598,7 +598,7 @@ function DiffList(input: {
 			<li key={node.path} className="w-full min-w-0">
 				<TreeExplorerRow
 					selected={input.selectedEntry?.filePath === node.diff.filePath}
-					icon={<FileIcon filePath={node.diff.filePath} className="size-3" />}
+					icon={<FileIcon filePath={node.diff.filePath} />}
 					actions={<DiffStatus status={node.diff.status} />}
 					onClick={() => {
 						input.selectReviewEntry(node.diff.filePath)
