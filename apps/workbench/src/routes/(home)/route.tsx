@@ -7,14 +7,21 @@ import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, projectsAtom} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom} from '#lib/state.ts'
+import type {AgentSession} from '#rpcs/contracts.ts'
 import {
+	AgentIcon,
+	BotIcon,
 	GitBranch,
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
+	PackageIcon,
 	PanelTop,
+	PlayIcon,
+	SparklesIcon,
 	Square,
+	TerminalStatusIcon,
 	TerminalIcon,
 	Trash
 } from '@deslop/components/icons'
@@ -33,6 +40,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
+import type {TerminalState} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -46,7 +54,18 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.72_0.075_285)] [&_.tree-label]:text-[oklch(0.78_0.075_285)]',
 	'[&_svg]:text-[oklch(0.72_0.075_20)] [&_.tree-label]:text-[oklch(0.78_0.075_20)]',
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
-] as const
+]
+
+const runsAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			Effect.flatMap(RpcClient, client =>
+				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
+			),
+			{initialValue: []}
+		)
+	)
+)
 
 const branchesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -64,16 +83,17 @@ const branchesAtom = Atom.family((cwd: string) =>
 function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const homeRouteState = useRouterState({
-		select: state => {
-			const activeView = pipe(
+		select: state => ({
+			activeView: pipe(
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
 				Match.when(String.endsWith('/browser'), () => 'browser' as const),
+				Match.when(String.endsWith('/run'), () => 'run' as const),
+				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
-			)
-
-			return {activeView, activeWorktreeId: String.split('/')(state.location.pathname)[1]}
-		}
+			),
+			activeWorktreeId: String.split('/')(state.location.pathname)[1]
+		})
 	})
 	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
 
@@ -107,6 +127,24 @@ function HomeLayout() {
 								void navigate({
 									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
 									to: '/$worktree/browser'
+								})
+							})
+						}}
+						selectAgent={(worktreeRoot, agentId) => {
+							startTransition(() => {
+								void navigate({
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									search: {agentId},
+									to: '/$worktree/agent'
+								})
+							})
+						}}
+						selectRun={(worktreeRoot, sessionId, command, runId, inactive) => {
+							startTransition(() => {
+								void navigate({
+									params: {worktree: Math.abs(Hash.string(worktreeRoot)).toString(36)},
+									search: {command, inactive, runId, sessionId},
+									to: '/$worktree/run'
 								})
 							})
 						}}
@@ -150,14 +188,367 @@ function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) 
 	return <Square className={`size-3.5 ${input.dirty ? 'text-amber-500' : 'text-current'}`} />
 }
 
+function runSessionId(scriptName: string, taskIndex: number) {
+	return `run:${scriptName}:${taskIndex}`
+}
+
+function agentSessionId(uuid: string) {
+	return `agent:${uuid}`
+}
+
+function runTaskCommand(script: {readonly name: string; readonly tasks: readonly string[]}, taskIndex: number) {
+	return script.tasks.length > 1 ? (script.tasks[taskIndex] ?? '') : `vp run ${script.name}`
+}
+
+function WorktreeRuns(input: {
+	readonly cwd: string
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
+}) {
+	const scripts = useAtomSuspense(runsAtom(input.cwd))
+	const [expanded, setExpanded] = useState(false)
+	const [expandedScripts, setExpandedScripts] = useState<ReadonlySet<string>>(new Set())
+
+	if (scripts.value.length === 0) return null
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				icon={<PackageIcon className="size-3.5" />}
+				selected={false}
+				onClick={() => {
+					setExpanded(value => !value)
+				}}
+			>
+				scripts
+			</TreeExplorerRow>
+			{expanded && (
+				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+					{Array.map(scripts.value, script => (
+						<RunScriptRow
+							key={script.name}
+							cwd={input.cwd}
+							expanded={expandedScripts.has(script.name)}
+							onToggleExpanded={() => {
+								setExpandedScripts(current => {
+									const next = new Set(current)
+									if (next.has(script.name)) next.delete(script.name)
+									else next.add(script.name)
+									return next
+								})
+							}}
+							script={script}
+							selectRun={input.selectRun}
+						/>
+					))}
+				</ul>
+			)}
+		</li>
+	)
+}
+
+function RunScriptRow(input: {
+	readonly cwd: string
+	readonly expanded: boolean
+	readonly onToggleExpanded: () => void
+	readonly script: {readonly name: string; readonly tasks: readonly string[]}
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
+}) {
+	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const parallel = input.script.tasks.length > 1
+	const commands = input.script.tasks.map((_, taskIndex) => runTaskCommand(input.script, taskIndex))
+	const firstCommand = commands[0] ?? ''
+	const firstSessionId = runSessionId(input.script.name, 0)
+	const firstSession = {args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId}
+	const firstState = useAtomSuspense(terminalStateAtom(firstSession))
+	const active = firstState.value.status.state === 'running' || firstState.value.status.state === 'starting'
+
+	function startTask(command: string, sessionId: string, focus: boolean) {
+		void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(state => {
+			if (focus) input.selectRun(input.cwd, sessionId, command, state.runId)
+		})
+	}
+
+	function stopTask(command: string, sessionId: string) {
+		void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
+	}
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+						onClick={event => {
+							event.stopPropagation()
+							commands.forEach((command, taskIndex) => {
+								const sessionId = runSessionId(input.script.name, taskIndex)
+								if (active) stopTask(command, sessionId)
+								else startTask(command, sessionId, taskIndex === 0)
+							})
+						}}
+						title={active ? 'Stop script' : 'Start script'}
+					>
+						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
+					</button>
+				}
+				icon={<TerminalStatusIcon state={firstState.value.status.state} />}
+				selected={false}
+				onClick={() => {
+					if (parallel) input.onToggleExpanded()
+					else input.selectRun(input.cwd, firstSessionId, firstCommand, firstState.value.runId)
+				}}
+			>
+				{input.script.name}
+			</TreeExplorerRow>
+			{parallel && input.expanded && (
+				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+					{commands.map((command, taskIndex) => (
+						<RunTaskRow
+							key={runSessionId(input.script.name, taskIndex)}
+							command={command}
+							cwd={input.cwd}
+							selectRun={input.selectRun}
+							sessionId={runSessionId(input.script.name, taskIndex)}
+						/>
+					))}
+				</ul>
+			)}
+		</li>
+	)
+}
+
+function RunTaskRow(input: {
+	readonly command: string
+	readonly cwd: string
+	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
+	readonly sessionId: string
+}) {
+	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
+	const state = useAtomSuspense(terminalStateAtom(session))
+	const active = state.value.status.state === 'running' || state.value.status.state === 'starting'
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+						onClick={event => {
+							event.stopPropagation()
+							if (active) {
+								void stop({payload: session})
+							} else {
+								void restart({payload: session}).then(nextState => {
+									input.selectRun(input.cwd, input.sessionId, input.command, nextState.runId)
+								})
+							}
+						}}
+						title={active ? 'Stop task' : 'Start task'}
+					>
+						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
+					</button>
+				}
+				icon={<TerminalStatusIcon state={state.value.status.state} />}
+				selected={false}
+				onClick={() => {
+					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId)
+				}}
+			>
+				{input.command}
+			</TreeExplorerRow>
+		</li>
+	)
+}
+
+const agentProfiles = [
+	{args: ['--model', 'openai/gpt-5.5'], command: 'opencode', icon: 'opencode', label: 'opencode'},
+	{
+		args: ['--model', 'gpt-5.5', '-c', 'model_reasoning_effort=low', '--dangerously-bypass-approvals-and-sandbox'],
+		command: 'codex',
+		icon: 'codex',
+		label: 'codex'
+	},
+	{args: ['--provider', 'openai-codex', '--model', 'gpt-5.5:low'], command: 'pi', icon: 'pi', label: 'pi'}
+] as const
+
+function agentActivityLabel(activity: TerminalState['signals']['activity']) {
+	return pipe(
+		Match.value(activity),
+		Match.when('starting', () => 'Starting'),
+		Match.when('working', () => 'Working'),
+		Match.when('thinking', () => 'Thinking'),
+		Match.when('waiting', () => 'Waiting'),
+		Match.when('needs_input', () => 'Needs input'),
+		Match.orElse(() => undefined)
+	)
+}
+
+function terminalStatusLabel(status: TerminalState['status']) {
+	return pipe(
+		Match.value(status.state),
+		Match.when('starting', () => 'Starting'),
+		Match.when('stopped', () => 'Stopped'),
+		Match.when('exited', () => 'Exited'),
+		Match.when('failed', () => 'Failed'),
+		Match.orElse(() => undefined)
+	)
+}
+
+function agentStateIndicatorClassName(state: TerminalState) {
+	if (state.status.state === 'failed' || state.status.state === 'stopped') return 'bg-destructive'
+	if (state.status.state === 'exited') return 'bg-emerald-500'
+	if (state.signals.notification !== null || state.signals.activity === 'needs_input') return 'bg-amber-500'
+	if (state.status.state === 'starting') return 'bg-primary'
+	if (state.signals.activity === 'thinking') return 'bg-sky-500'
+	if (state.signals.activity === 'waiting') return 'bg-violet-500'
+	if (state.signals.activity === 'working' || state.signals.activity === 'starting') return 'bg-primary'
+	return 'bg-muted-foreground/50'
+}
+
+function agentTooltip(session: AgentSession, state: TerminalState) {
+	const lines = [
+		state.signals.title ? `Title: ${state.signals.title}` : session.label,
+		state.signals.notification?.message ? `Notification: ${state.signals.notification.message}` : undefined
+	]
+	return lines.filter((line): line is string => line !== undefined && String.isNonEmpty(line)).join('\n')
+}
+
+function AgentSessionRow(input: {
+	readonly onSelect: () => void
+	readonly onStop: () => void
+	readonly session: AgentSession
+}) {
+	const terminalSession = {
+		args: input.session.args,
+		command: input.session.command,
+		cwd: input.session.cwd,
+		sessionId: agentSessionId(input.session.uuid)
+	}
+	const state = useAtomSuspense(terminalStateAtom(terminalSession))
+	const stateLabel = agentActivityLabel(state.value.signals.activity) ?? terminalStatusLabel(state.value.status)
+	const title = state.value.signals.displayTitle ?? state.value.signals.title ?? input.session.label
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+						onClick={event => {
+							event.stopPropagation()
+							input.onStop()
+						}}
+						title={`Stop ${input.session.label}`}
+					>
+						<Square className="size-3" />
+					</button>
+				}
+				icon={<AgentIcon layer={input.session.icon} />}
+				selected={false}
+				title={agentTooltip(input.session, state.value)}
+				onClick={input.onSelect}
+			>
+				<span className="flex min-w-0 items-center gap-1.5">
+					<span className={`size-1.5 shrink-0 rounded-full ${agentStateIndicatorClassName(state.value)}`} />
+					<span className="min-w-0 flex-1 truncate">{title}</span>
+					{stateLabel && <span className="text-muted-foreground/80 shrink-0 text-[10px]">{stateLabel}</span>}
+				</span>
+			</TreeExplorerRow>
+		</li>
+	)
+}
+
+function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd: string, agentId: string) => void}) {
+	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
+	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
+	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const sessions = useAtomSuspense(agentsAtom(input.cwd))
+
+	function startAgent(profile: (typeof agentProfiles)[number]) {
+		void create({payload: {...profile, cwd: input.cwd}}).then(session => {
+			input.selectAgent(input.cwd, session.uuid)
+		})
+	}
+
+	function stopAgent(session: AgentSession) {
+		void remove({payload: {cwd: input.cwd, uuid: session.uuid}})
+		void stop({
+			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: agentSessionId(session.uuid)}
+		})
+	}
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow icon={<BotIcon className="size-3.5" />} selected={false} onClick={() => {}}>
+				agents
+			</TreeExplorerRow>
+			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+				{agentProfiles.map(profile => {
+					const profileSessions = sessions.value.filter(session => session.command === profile.command)
+					return (
+						<li key={profile.command} className="w-full min-w-0">
+							<TreeExplorerRow
+								actions={
+									<button
+										type="button"
+										className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+										onClick={event => {
+											event.stopPropagation()
+											startAgent(profile)
+										}}
+										title={`Start ${profile.label}`}
+									>
+										<SparklesIcon className="size-3" />
+									</button>
+								}
+								icon={<AgentIcon layer={profile.icon} />}
+								selected={false}
+								onClick={() => {}}
+							>
+								{profile.label}
+							</TreeExplorerRow>
+							{profileSessions.length > 0 && (
+								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+									{profileSessions.map(session => (
+										<AgentSessionRow
+											key={session.uuid}
+											session={session}
+											onSelect={() => input.selectAgent(input.cwd, session.uuid)}
+											onStop={() => stopAgent(session)}
+										/>
+									))}
+								</ul>
+							)}
+						</li>
+					)
+				})}
+			</ul>
+		</li>
+	)
+}
+
 function WorktreeManager(input: {
 	readonly activeProject?: GitProject
 	readonly activeWorktree?: GitProject['worktrees'][number]
-	readonly activeView: 'diff' | 'terminal' | 'browser'
+	readonly activeView: 'agent' | 'diff' | 'terminal' | 'browser' | 'run'
 	readonly projects: readonly GitProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectBrowser: (worktreeRoot: string) => void
+	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
+	readonly selectRun: (
+		worktreeRoot: string,
+		sessionId: string,
+		command: string,
+		runId?: number,
+		inactive?: boolean
+	) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
@@ -251,9 +642,7 @@ function WorktreeManager(input: {
 
 			<CommandDialog
 				open={actionsOpen}
-				onOpenChange={open => {
-					setActionsOpen(open)
-				}}
+				onOpenChange={setActionsOpen}
 				title="Create worktree"
 				description="Create or open a worktree branch."
 				className="sm:max-w-2xl"
@@ -267,9 +656,7 @@ function WorktreeManager(input: {
 					<CommandInput
 						placeholder={`Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
 						value={branch}
-						onValueChange={value => {
-							setBranch(value)
-						}}
+						onValueChange={setBranch}
 						onKeyDown={event => {
 							if (event.key === 'Enter' && branch !== '' && createWorktreeProject) {
 								event.preventDefault()
@@ -377,6 +764,7 @@ function WorktreeManager(input: {
 												{worktree.branch ?? pathLabel(worktree.root)}
 											</TreeExplorerRow>
 											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+												<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
 												<li className="w-full min-w-0">
 													<TreeExplorerRow
 														icon={<TerminalIcon className="size-3.5" />}
@@ -399,6 +787,7 @@ function WorktreeManager(input: {
 														browser
 													</TreeExplorerRow>
 												</li>
+												<WorktreeRuns cwd={worktree.root} selectRun={input.selectRun} />
 											</ul>
 										</li>
 									))}

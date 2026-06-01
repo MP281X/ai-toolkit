@@ -12,9 +12,44 @@ import {
 	GitReviewMetadata,
 	GitReviewTo
 } from '@deslop/git/schema'
-import {TerminalError, TerminalEvent} from '@deslop/terminal/schema'
+import {TerminalError, TerminalEvent, TerminalState, TerminalStatus} from '@deslop/terminal/schema'
+
+const TerminalPayload = Schema.Struct({
+	args: Schema.optional(Schema.Array(Schema.String)),
+	command: Schema.optional(Schema.String),
+	cwd: Schema.String,
+	sessionId: Schema.optional(Schema.String)
+})
+
+export const AgentSession = Schema.Struct({
+	args: Schema.Array(Schema.String),
+	command: Schema.String,
+	cwd: Schema.String,
+	icon: Schema.Literals(['opencode', 'codex', 'pi']),
+	label: Schema.String,
+	uuid: Schema.String
+})
+export type AgentSession = typeof AgentSession.Type
 
 export class RpcContracts extends RpcGroup.make(
+	Rpc.make('agents.create', {
+		error: TerminalError,
+		payload: Schema.Struct({
+			args: Schema.Array(Schema.String),
+			command: Schema.String,
+			cwd: Schema.String,
+			icon: Schema.Literals(['opencode', 'codex', 'pi']),
+			label: Schema.String
+		}),
+		success: AgentSession
+	}),
+	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
+	Rpc.make('agents.watch', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String}),
+		stream: true,
+		success: Schema.Array(AgentSession)
+	}),
 	Rpc.make('projects.watch', {stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {
 		error: GitError,
@@ -72,13 +107,24 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, force: Schema.Boolean})
 	}),
-	Rpc.make('terminal.events', {
+	Rpc.make('runs.scripts', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String}),
-		stream: true,
-		success: TerminalEvent
+		success: Schema.Array(
+			Schema.Struct({command: Schema.String, name: Schema.String, tasks: Schema.Array(Schema.String)})
+		)
 	}),
-	Rpc.make('terminal.input', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, data: Schema.String})}),
+	Rpc.make('terminal.events', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalEvent}),
+	Rpc.make('terminal.input', {
+		error: TerminalError,
+		payload: Schema.Struct({
+			args: Schema.optional(Schema.Array(Schema.String)),
+			command: Schema.optional(Schema.String),
+			cwd: Schema.String,
+			data: Schema.String,
+			sessionId: Schema.optional(Schema.String)
+		})
+	}),
 	Rpc.make('terminal.killPort', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String, port: Schema.Number})
@@ -91,6 +137,17 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
-		payload: Schema.Struct({cols: Schema.Number, cwd: Schema.String, rows: Schema.Number})
-	})
+		payload: Schema.Struct({
+			args: Schema.optional(Schema.Array(Schema.String)),
+			cols: Schema.Number,
+			command: Schema.optional(Schema.String),
+			cwd: Schema.String,
+			rows: Schema.Number,
+			sessionId: Schema.optional(Schema.String)
+		})
+	}),
+	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
+	Rpc.make('terminal.state', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalState}),
+	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
+	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload})
 ) {}
