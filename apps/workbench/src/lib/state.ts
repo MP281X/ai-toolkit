@@ -1,9 +1,10 @@
-import {Array, Duration, Effect, Hash, Option, Result, Stream, pipe} from 'effect'
+import {Array, Duration, Effect, Hash, Option, Order, Result, Stream, String, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
+import {splitParallelCommands} from '@deslop/terminal/utils'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
@@ -56,14 +57,71 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 	)
 )
 
-export const terminalPortsAtom = Atom.family((cwd: string) =>
+export const terminalPortsAtom = Atom.family((input: TerminalSessionInput) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.ports', {cwd})),
+			Effect.map(client => client('terminal.ports', input)),
 			Stream.unwrap
 		),
 		{initialValue: Array.empty<number>()}
+	)
+)
+
+export const runsAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			Effect.flatMap(RpcClient, client =>
+				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
+			),
+			{initialValue: []}
+		)
+	)
+)
+
+export const browserPortsAtom = Atom.family((cwd: string) =>
+	Atom.make(get =>
+		pipe(
+			Effect.all([
+				get.result(terminalPortsAtom({cwd})),
+				get.result(runsAtom(cwd)).pipe(
+					Effect.flatMap(scripts =>
+						Effect.all(
+							pipe(
+								scripts,
+								Array.flatMap(script => {
+									const tasks = splitParallelCommands(script.command)
+									const parallel = tasks.length > 1
+
+									return Array.map(tasks, (task, taskIndex) =>
+										terminalPortsAtom({
+											args: ['-lc', parallel ? task : `vp run ${script.name}`],
+											command: 'sh',
+											cwd,
+											sessionId: `${script.name}:${taskIndex}`
+										})
+									)
+								}),
+								Array.map(atom => get.result(atom))
+							)
+						)
+					)
+				)
+			]),
+			Effect.map(([terminalResult, scriptResults]) =>
+				pipe(
+					[
+						...terminalResult,
+						...pipe(
+							scriptResults,
+							Array.flatMap(result => result)
+						)
+					],
+					Array.dedupe,
+					Array.sort(Order.Number)
+				)
+			)
+		)
 	)
 )
 

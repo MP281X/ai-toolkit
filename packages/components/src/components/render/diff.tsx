@@ -15,6 +15,7 @@ const DIFF_CSS = `
 		font-size: inherit !important;
 		letter-spacing: 0 !important;
 		line-height: inherit !important;
+		user-select: text !important;
 	}
 
 	pre {
@@ -25,6 +26,7 @@ const DIFF_CSS = `
 	::before,
 	::after {
 		border-radius: 0 !important;
+		user-select: text !important;
 	}
 `
 
@@ -185,6 +187,8 @@ export function PatchDiff(props: {
 	const [draftComment, setDraftComment] = useState<DiffComment>()
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
+	const comments = props.comments ?? []
+	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
 	useEffect(() => {
 		containerRef.current?.focus()
@@ -215,7 +219,7 @@ export function PatchDiff(props: {
 
 		if (
 			!Array.some(
-				props.comments ?? Array.empty(),
+				comments,
 				current =>
 					current.filePath === props.filePath &&
 					current.lineNumber === line.lineNumber &&
@@ -236,7 +240,7 @@ export function PatchDiff(props: {
 			ref={containerRef}
 			tabIndex={-1}
 			aria-label="Diff viewer"
-			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none select-text"
 			onPointerMoveCapture={event => {
 				pointerClientYRef.current = event.clientY
 			}}
@@ -281,12 +285,11 @@ export function PatchDiff(props: {
 						themeType: 'system',
 						unsafeCSS: DIFF_CSS
 					}}
-					lineAnnotations={Array.map(
-						draftComment
-							? Array.append(props.comments ?? Array.empty(), draftComment)
-							: (props.comments ?? Array.empty()),
-						comment => ({lineNumber: comment.lineNumber, metadata: comment, side: comment.side ?? 'additions'})
-					)}
+					lineAnnotations={Array.map(commentsWithDraft, comment => ({
+						lineNumber: comment.lineNumber,
+						metadata: comment,
+						side: comment.side ?? 'additions'
+					}))}
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
@@ -320,12 +323,7 @@ export function PatchDiff(props: {
 						unsafeCSS: DIFF_CSS
 					}}
 					lineAnnotations={Array.map(
-						Array.filter(
-							draftComment
-								? Array.append(props.comments ?? Array.empty(), draftComment)
-								: (props.comments ?? Array.empty()),
-							comment => comment.side !== 'deletions'
-						),
+						Array.filter(commentsWithDraft, comment => comment.side !== 'deletions'),
 						comment => ({lineNumber: comment.lineNumber, metadata: comment})
 					)}
 					renderAnnotation={annotation => (

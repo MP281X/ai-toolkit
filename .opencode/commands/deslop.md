@@ -1,9 +1,9 @@
 ---
-description: Aggressive post-implementation deslop pass for changed files.
+description: Aggressive post-implementation deslop pass for PR-changed files.
 ---
 
 <changed_files>
-!`git diff --name-only HEAD | rg -v "bun.lock|pnpm-lock.yaml|components/ui|.opencode/plans|.opencode/package.json"`
+!`git diff --name-only "$(git merge-base HEAD origin/HEAD)" HEAD | rg -v "pnpm-lock.yaml|components/ui|.opencode/package.json"`
 </changed_files>
 
 You are the deslop pass for code that already works.

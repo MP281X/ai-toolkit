@@ -6,7 +6,7 @@ export function Code(props: {readonly children: string; readonly lang: string; r
 		<div
 			data-code-block
 			dangerouslySetInnerHTML={{__html: highlightCode(props.children, resolveLanguage(props.lang))}}
-			className={cn('bg-muted/30 overflow-hidden select-text', props.className)}
+			className={cn('bg-muted/30 overflow-hidden select-text [&_*]:select-text', props.className)}
 		/>
 	)
 }
