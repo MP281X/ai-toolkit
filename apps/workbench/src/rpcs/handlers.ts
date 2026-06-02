@@ -22,7 +22,7 @@ import {
 
 import {KeyValueStore} from 'effect/unstable/persistence'
 
-import {ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
+import {ReviewComment, ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
 import {TerminalError} from '@deslop/terminal/schema'
@@ -207,12 +207,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 						)
 					)
 				),
-			'review.comments.delete': payload =>
+			'review.comments.resolve': payload =>
 				updateReviewState(payload, state => {
 					const key = commentKey(payload)
 
 					return new ReviewState({
-						comments: Array.filter(state.comments, comment => commentKey(comment) !== key),
+						comments: Array.map(state.comments, comment =>
+							commentKey(comment) === key ? new ReviewComment({...comment, resolved: true}) : comment
+						),
 						marks: state.marks
 					})
 				}),
@@ -223,7 +225,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					return new ReviewState({
 						comments: Array.append(
 							Array.filter(state.comments, comment => commentKey(comment) !== key),
-							payload.comment
+							new ReviewComment({...payload.comment, resolved: false})
 						),
 						marks: state.marks
 					})

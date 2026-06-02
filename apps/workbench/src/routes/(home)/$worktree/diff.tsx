@@ -9,7 +9,7 @@ import {startTransition, useEffect, useState, type MouseEvent} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
-import {ReviewState, type ReviewComment, type ReviewMark} from '#rpcs/contracts.ts'
+import {ReviewComment, ReviewState, type ReviewMark} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	CheckIcon,
@@ -20,8 +20,7 @@ import {
 	FolderIcon,
 	GitPullRequestArrowIcon,
 	Loader2Icon,
-	MinusIcon,
-	TrashIcon
+	MinusIcon
 } from '@deslop/components/icons'
 import {PatchDiff} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
@@ -100,6 +99,8 @@ const githubThreadsAtom = Atom.family((cwd: string) =>
 export type QueuedComment = typeof ReviewComment.Type
 
 type DisplayComment = QueuedComment & {
+	readonly resolved: boolean
+	readonly resolving?: boolean
 	readonly source: 'github' | 'local'
 	readonly threadId?: string
 	readonly url?: string
@@ -130,26 +131,8 @@ const saveQueuedCommentAtom = Atom.family((input: {readonly base: string; readon
 			return new ReviewState({
 				comments: Array.append(
 					Array.filter(state.comments, currentComment => commentKey(currentComment) !== key),
-					comment
+					new ReviewComment({...comment, resolved: false})
 				),
-				marks: state.marks
-			})
-		}
-	})
-)
-
-const deleteQueuedCommentAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
-	Atom.optimisticFn(optimisticReviewStateAtom(input), {
-		fn: RpcClient.runtime.fn<Omit<QueuedComment, 'body'>>()(
-			Effect.fnUntraced(function* (comment) {
-				const client = yield* RpcClient
-				return yield* client('review.comments.delete', {base: input.base, cwd: input.cwd, ...comment})
-			})
-		),
-		reducer: (state, comment: Omit<QueuedComment, 'body'>) => {
-			const key = commentKey(comment)
-			return new ReviewState({
-				comments: Array.filter(state.comments, currentComment => commentKey(currentComment) !== key),
 				marks: state.marks
 			})
 		}
@@ -225,6 +208,75 @@ const wipReviewActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
+type CommentResolutionState = {readonly resolvingAll: boolean; readonly resolvingKeys: ReadonlySet<string>}
+
+type ResolveCommentInput = {readonly comment: DisplayComment; readonly key: string}
+
+const commentResolutionStateAtom = Atom.family(() =>
+	Atom.optimistic(Atom.make((): CommentResolutionState => ({resolvingAll: false, resolvingKeys: new Set<string>()})))
+)
+
+const resolveCommentActionAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(commentResolutionStateAtom(input.cwd), {
+		fn: RpcClient.runtime.fn<ResolveCommentInput>()(
+			Effect.fnUntraced(function* ({comment}) {
+				const client = yield* RpcClient
+
+				if (comment.source === 'github') {
+					if (comment.threadId) {
+						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: comment.threadId})
+					}
+					return
+				}
+
+				yield* client('review.comments.resolve', {
+					base: input.base,
+					cwd: input.cwd,
+					filePath: comment.filePath,
+					lineNumber: comment.lineNumber,
+					side: comment.side
+				})
+			})
+		),
+		reducer: (state, {key}) => ({
+			resolvingAll: state.resolvingAll,
+			resolvingKeys: new Set([...state.resolvingKeys, key])
+		})
+	})
+)
+
+const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
+	Atom.optimisticFn(commentResolutionStateAtom(input.cwd), {
+		fn: RpcClient.runtime.fn<readonly ResolveCommentInput[]>()(
+			Effect.fnUntraced(function* (comments) {
+				const client = yield* RpcClient
+				const resolvedThreadIds = new Set<string>()
+
+				for (const {comment} of comments) {
+					if (comment.source === 'github' && comment.threadId && !resolvedThreadIds.has(comment.threadId)) {
+						resolvedThreadIds.add(comment.threadId)
+						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: comment.threadId})
+					}
+
+					if (comment.source === 'local') {
+						yield* client('review.comments.resolve', {
+							base: input.base,
+							cwd: input.cwd,
+							filePath: comment.filePath,
+							lineNumber: comment.lineNumber,
+							side: comment.side
+						})
+					}
+				}
+			})
+		),
+		reducer: (state, comments) => ({
+			resolvingAll: true,
+			resolvingKeys: new Set([...state.resolvingKeys, ...Array.map(comments, comment => comment.key)])
+		})
+	})
+)
+
 function groupCommentsByFile(comments: readonly DisplayComment[]) {
 	const groups = new Map<string, {comments: DisplayComment[]; filePath: string; key: string}>()
 
@@ -290,20 +342,33 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const refreshDiffs = useAtomRefresh(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
 	const refreshGithubThreads = useAtomRefresh(githubThreadsAtom(input.cwd))
 	const saveComment = useAtomSet(saveQueuedCommentAtom({base, cwd: input.cwd}), {mode: 'promise'})
-	const deleteComment = useAtomSet(deleteQueuedCommentAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const resolveComment = useAtomSet(resolveCommentActionAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const resolveComments = useAtomSet(resolveCommentsActionAtom({base, cwd: input.cwd}), {mode: 'promise'})
+	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
 	const markReviewed = useAtomSet(markReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const unmarkReviewed = useAtomSet(unmarkReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
-	const resolveGithubThread = useAtomSet(RpcClient.mutation('review.githubThreads.resolve'), {mode: 'promise'})
 	const hasWipCommits = pipe(
 		metadata.value.commits,
 		Array.head,
 		Option.exists(commit => commit.wip)
 	)
 	const effectiveComments: readonly DisplayComment[] = Array.appendAll(
-		Array.map(comments, comment => ({...comment, source: 'local' as const})),
-		Array.map(githubThreads, comment => ({...comment, source: 'github' as const, threadId: comment.id}))
+		Array.map(comments, comment => ({
+			...comment,
+			resolved: comment.resolved === true,
+			resolving: commentResolutionState.resolvingKeys.has(commentKey(comment)),
+			source: 'local' as const
+		})),
+		Array.map(githubThreads, comment => ({
+			...comment,
+			resolving: commentResolutionState.resolvingKeys.has(commentKey(comment)),
+			source: 'github' as const,
+			threadId: comment.id
+		}))
 	)
-	const commentsByFile = groupCommentsByFile(effectiveComments)
+	const unresolvedComments = Array.filter(effectiveComments, comment => !comment.resolved)
+	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({comment, key: commentKey(comment)}))
+	const commentsByFile = groupCommentsByFile(unresolvedComments)
 	const selectedEntryComments = selectedEntry
 		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
@@ -383,24 +448,28 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		})
 	}
 
-	function deleteQueuedComment(comment: Omit<QueuedComment, 'body'>) {
-		void deleteComment(comment).catch(() => {
-			toast.error('Failed to delete comment.')
-		})
+	function resolveReviewComment(comment: DisplayComment) {
+		void resolveComment({comment, key: commentKey(comment)})
+			.then(() => {
+				if (comment.source === 'github') refreshGithubThreads()
+			})
+			.catch(() => {
+				toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
+			})
 	}
 
-	function resolveThread(threadId: string) {
-		void resolveGithubThread({payload: {cwd: input.cwd, threadId}})
+	function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
+		void resolveComments(commentsToResolve)
 			.then(() => {
 				refreshGithubThreads()
 			})
 			.catch(() => {
-				toast.error('Failed to resolve GitHub thread.')
+				toast.error('Failed to resolve comment.')
 			})
 	}
 
-	useHotkey({key: 'C', shift: true}, () => void copyComments(effectiveComments), {
-		enabled: !Array.isReadonlyArrayEmpty(effectiveComments),
+	useHotkey({key: 'C', shift: true}, () => void copyComments(unresolvedComments), {
+		enabled: !Array.isReadonlyArrayEmpty(unresolvedComments),
 		preventDefault: true
 	})
 	useHotkey({key: '?', shift: true}, () => {
@@ -419,7 +488,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								group.comments,
 								Array.map(
 									comment =>
-										`- ${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
+										`${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
 								),
 								Array.join('\n\n')
 							)
@@ -463,30 +532,37 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							prUrl={metadata.value.prUrl}
 							refreshReview={refreshReview}
 						/>
-						<div className="min-h-0 flex-[1.2] border-b">
-							{reviewDiffsLoaded ? (
-								<DiffList
-									diffs={reviewDiffsValue}
-									marks={effectiveReviewMarks}
-									markReviewed={markFileReviewed}
-									unmarkReviewed={unmarkFileReviewed}
-									selectedEntry={selectedEntry}
-									openReviewEntry={openFile}
-								/>
-							) : (
-								<PaneLoading />
-							)}
-						</div>
-						<div className="min-h-0 flex-1">
-							<CommitList
-								commits={metadata.value.commits}
-								selected={reviewTarget}
-								selectCommit={selectCommit}
-								selectHead={() => {
-									selectTarget({type: 'head-to-worktree'})
-								}}
-							/>
-						</div>
+						<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+							<ResizablePanel defaultSize="55%" minSize="15%">
+								<div className="h-full min-h-0">
+									{reviewDiffsLoaded ? (
+										<DiffList
+											diffs={reviewDiffsValue}
+											marks={effectiveReviewMarks}
+											markReviewed={markFileReviewed}
+											unmarkReviewed={unmarkFileReviewed}
+											selectedEntry={selectedEntry}
+											openReviewEntry={openFile}
+										/>
+									) : (
+										<PaneLoading />
+									)}
+								</div>
+							</ResizablePanel>
+							<ResizableHandle />
+							<ResizablePanel defaultSize="45%" minSize="15%">
+								<div className="h-full min-h-0">
+									<CommitList
+										commits={metadata.value.commits}
+										selected={reviewTarget}
+										selectCommit={selectCommit}
+										selectHead={() => {
+											selectTarget({type: 'head-to-worktree'})
+										}}
+									/>
+								</div>
+							</ResizablePanel>
+						</ResizablePanelGroup>
 					</div>
 				</ResizablePanel>
 				<ResizableHandle />
@@ -510,25 +586,22 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 												body: comment.body,
 												filePath: comment.filePath,
 												lineNumber: comment.lineNumber,
+												resolved: false,
 												side: comment.side
 											})
 										}}
-										onDeleteComment={comment => {
-											if (comment.source === 'github') {
-												if (comment.threadId) resolveThread(comment.threadId)
-											} else {
-												deleteQueuedComment({
-													filePath: comment.filePath,
-													lineNumber: comment.lineNumber,
-													side: comment.side
-												})
-											}
+										onResolveComment={comment => {
+											resolveReviewComment({
+												...comment,
+												resolved: comment.resolved === true,
+												source: comment.source ?? 'local'
+											})
 										}}
 									/>
 								</div>
 							)}
 						</div>
-						{!Array.isReadonlyArrayEmpty(effectiveComments) && (
+						{!Array.isReadonlyArrayEmpty(unresolvedComments) && (
 							<footer className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t px-2">
 								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
 									{Array.map(commentsByFile, group => (
@@ -537,10 +610,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											type="button"
 											variant="outline"
 											size="xs"
-											aria-label={`Open comments for ${group.filePath}`}
-											title={`${group.comments.length} comments for ${group.filePath}`}
+											aria-label={`Copy comments for ${group.filePath}`}
+											title={`Copy ${group.comments.length} comments for ${group.filePath}`}
 											onClick={() => {
-												openFile(group.filePath)
+												void copyComments(group.comments)
 											}}
 										>
 											<FileIcon filePath={group.filePath} />
@@ -555,7 +628,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										size="icon-sm"
 										aria-label="Copy all comments"
 										title="Copy all comments"
-										onClick={() => void copyComments(effectiveComments)}
+										onClick={() => void copyComments(unresolvedComments)}
 									>
 										<CopyIcon />
 									</Button>
@@ -563,31 +636,16 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										type="button"
 										variant="ghost"
 										size="icon-sm"
-										className="text-destructive hover:text-destructive"
 										aria-label="Resolve all comments"
 										title="Resolve all comments"
+										disabled={
+											commentResolutionState.resolvingAll ? true : Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
+										}
 										onClick={() => {
-											const resolvedThreadIds = new Set<string>()
-											for (const comment of effectiveComments) {
-												if (
-													comment.source === 'github' &&
-													comment.threadId &&
-													!resolvedThreadIds.has(comment.threadId)
-												) {
-													resolvedThreadIds.add(comment.threadId)
-													resolveThread(comment.threadId)
-												}
-												if (comment.source === 'local') {
-													deleteQueuedComment({
-														filePath: comment.filePath,
-														lineNumber: comment.lineNumber,
-														side: comment.side
-													})
-												}
-											}
+											resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
-										<TrashIcon />
+										{commentResolutionState.resolvingAll ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
 									</Button>
 								</div>
 							</footer>

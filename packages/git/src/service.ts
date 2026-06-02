@@ -887,7 +887,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			return pipe(
 				threads,
-				Array.filter(thread => thread.isResolved !== true && thread.id !== undefined),
+				Array.filter(thread => thread.id !== undefined),
 				Array.flatMap(thread =>
 					pipe(
 						thread.comments?.nodes ?? [],
@@ -899,6 +899,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 									filePath: comment.path ?? '',
 									id: thread.id ?? '',
 									lineNumber: comment.line ?? comment.originalLine ?? 1,
+									resolved: thread.isResolved === true,
 									url: comment.url
 								})
 						)

@@ -60,6 +60,7 @@ export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHub
 	filePath: Schema.String,
 	id: Schema.String,
 	lineNumber: Schema.Number,
+	resolved: Schema.Boolean,
 	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
 	url: Schema.optional(Schema.String)
 }) {}

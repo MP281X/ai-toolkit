@@ -3,7 +3,10 @@ import {Array, String} from 'effect'
 import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
+import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
+
+import {GithubLight} from '../ui/svgs/githubLight.tsx'
 
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
@@ -35,6 +38,8 @@ type DiffComment = {
 	readonly lineNumber: number
 	readonly side?: AnnotationSide
 	readonly body: string
+	readonly resolved?: boolean
+	readonly resolving?: boolean
 	readonly source?: 'github' | 'local'
 	readonly threadId?: string
 }
@@ -82,7 +87,7 @@ function CommentAnnotation(props: {
 	readonly comment: DiffComment
 	readonly isDraft?: boolean
 	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onResolveComment?: (comment: DiffComment) => void
 	readonly onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -104,7 +109,7 @@ function CommentAnnotation(props: {
 				return
 			}
 
-			props.onDeleteComment?.({...props.comment, body})
+			props.onResolveComment?.({...props.comment, body})
 			setEditing(false)
 			props.onCloseDraft?.()
 			return
@@ -115,75 +120,109 @@ function CommentAnnotation(props: {
 		props.onCloseDraft?.()
 	}
 
+	const sourceIcon =
+		props.comment.source === 'github' ? (
+			<GithubLight className="size-3 shrink-0" />
+		) : (
+			<MessageSquareTextIcon className="size-3 shrink-0" />
+		)
+	const iconCell = (
+		<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
+			{sourceIcon}
+		</div>
+	)
+
 	if (editing) {
 		return (
-			<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
-				<textarea
-					ref={inputRef}
-					value={body}
-					placeholder="Add comment"
-					className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
-					onChange={event => {
-						setBody(event.currentTarget.value)
-					}}
-					onClick={event => {
-						event.stopPropagation()
-					}}
-					onKeyDown={event => {
-						if (event.key === 'Escape') {
-							event.preventDefault()
+			<div className="text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-transparent px-2 py-2">
+				{iconCell}
+				<div className="min-w-0">
+					<textarea
+						ref={inputRef}
+						value={body}
+						placeholder="Add comment"
+						className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
+						onChange={event => {
+							setBody(event.currentTarget.value)
+						}}
+						onClick={event => {
+							event.stopPropagation()
+						}}
+						onKeyDown={event => {
+							if (event.key === 'Escape') {
+								event.preventDefault()
 
-							if (props.isDraft) props.onCloseDraft?.()
-							else setEditing(false)
-						}
+								if (props.isDraft) props.onCloseDraft?.()
+								else setEditing(false)
+							}
 
-						if (event.key === 'Enter' && !event.shiftKey) {
-							event.preventDefault()
-							saveDraft()
-						}
-					}}
-				/>
+							if (event.key === 'Enter' && !event.shiftKey) {
+								event.preventDefault()
+								saveDraft()
+							}
+						}}
+					/>
+				</div>
+				<div />
+			</div>
+		)
+	}
+
+	if (props.comment.resolved === true) {
+		return (
+			<div className="text-muted-foreground bg-muted/45 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
+				{iconCell}
+				<span className="decoration-muted-foreground/60 min-w-0 truncate line-through">{props.comment.body}</span>
+				<div />
 			</div>
 		)
 	}
 
 	return (
-		<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
-			<div className="grid gap-1">
+		<div className="text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-transparent px-2 py-2">
+			{iconCell}
+			<button
+				type="button"
+				className="min-w-0 bg-transparent p-0 text-left"
+				onClick={event => {
+					event.stopPropagation()
+					if (props.comment.source !== 'github') setEditing(true)
+				}}
+			>
+				<span className="block whitespace-pre-wrap">{props.comment.body}</span>
+			</button>
+			<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border text-xs">
 				<button
 					type="button"
-					className="block w-full bg-transparent p-0 text-left whitespace-pre-wrap"
+					className="hover:bg-muted hover:text-foreground p-1"
+					aria-label="Copy comment"
+					title="Copy comment"
 					onClick={event => {
 						event.stopPropagation()
-						if (props.comment.source !== 'github') setEditing(true)
+						void copyComment()
 					}}
 				>
-					{props.comment.body}
+					<CopyIcon className="size-3" />
 				</button>
-				<div className="flex items-center gap-1">
+				{props.onResolveComment && (
 					<button
 						type="button"
-						className="text-muted-foreground hover:text-foreground text-xs"
+						className="border-border hover:bg-muted hover:text-foreground border-l p-1"
+						aria-label="Resolve comment"
+						title="Resolve comment"
+						disabled={props.comment.resolving}
 						onClick={event => {
 							event.stopPropagation()
-							void copyComment()
+							props.onResolveComment?.(props.comment)
 						}}
 					>
-						Copy
+						{props.comment.resolving ? (
+							<Loader2Icon className="size-3 animate-spin" />
+						) : (
+							<CheckIcon className="size-3" />
+						)}
 					</button>
-					{props.onDeleteComment && (
-						<button
-							type="button"
-							className="text-muted-foreground hover:text-foreground text-xs"
-							onClick={event => {
-								event.stopPropagation()
-								props.onDeleteComment?.(props.comment)
-							}}
-						>
-							{props.comment.source === 'github' ? 'Resolve' : 'Delete'}
-						</button>
-					)}
-				</div>
+				)}
 			</div>
 		</div>
 	)
@@ -210,7 +249,7 @@ export function PatchDiff(props: {
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
 	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number | undefined>(undefined)
@@ -332,7 +371,7 @@ export function PatchDiff(props: {
 								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
 							}
 							onSaveComment={props.onSaveComment}
-							onDeleteComment={props.onDeleteComment}
+							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
 								setDraftComment(undefined)
 							}}
@@ -368,7 +407,7 @@ export function PatchDiff(props: {
 								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
 							}
 							onSaveComment={props.onSaveComment}
-							onDeleteComment={props.onDeleteComment}
+							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
 								setDraftComment(undefined)
 							}}

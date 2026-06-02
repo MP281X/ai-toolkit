@@ -42,6 +42,7 @@ export class ReviewComment extends Schema.Class<ReviewComment>('ReviewComment')(
 	body: Schema.String,
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
+	resolved: Schema.optional(Schema.Boolean),
 	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 }) {}
 
@@ -110,7 +111,7 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({base: Schema.String, comment: ReviewComment, cwd: Schema.String})
 	}),
-	Rpc.make('review.comments.delete', {
+	Rpc.make('review.comments.resolve', {
 		error: GitError,
 		payload: Schema.Struct({
 			base: Schema.String,
