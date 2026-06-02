@@ -79,51 +79,60 @@ export const RpcHandlers = RpcContracts.toLayer(
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const routes = yield* discoverPortlessScripts(cwd, {port: sessionId => portless.port(`${cwd}:${sessionId}`)})
-				const scripts = routes.map(route => {
-					const command = commandFromScript(route.script.command)
-					const script: PortlessScript = {
-						...route.script,
-						preparedCommand:
-							command.command === 'vp' && command.args[0] === 'dev'
-								? ChildProcess.make('vp', [
-										'dev',
-										'--host',
-										'127.0.0.1',
-										'--port',
-										route.port.toString(),
-										'--strictPort'
-									])
-								: command
-					}
+				const scripts = pipe(
+					routes,
+					Array.map(route => {
+						const command = commandFromScript(route.script.command)
+						const script: PortlessScript = {
+							...route.script,
+							preparedCommand:
+								command.command === 'vp' && command.args[0] === 'dev'
+									? ChildProcess.make('vp', [
+											'dev',
+											'--host',
+											'127.0.0.1',
+											'--port',
+											route.port.toString(),
+											'--strictPort'
+										])
+									: command
+						}
 
-					return {host: route.host, port: route.port, script}
-				})
+						return {host: route.host, port: route.port, script}
+					})
+				)
 
 				yield* Effect.all(
-					scripts.map(script =>
-						Effect.all(
-							[
-								portless.register(script.host, script.port),
-								Ref.update(portlessScripts, current => HashMap.set(current, script.script.sessionId, script.script))
-							],
-							{discard: true}
+					pipe(
+						scripts,
+						Array.map(script =>
+							Effect.all(
+								[
+									portless.register(script.host, script.port),
+									Ref.update(portlessScripts, current => HashMap.set(current, script.script.sessionId, script.script))
+								],
+								{discard: true}
+							)
 						)
 					),
 					{discard: true}
 				)
 
-				return scripts.map(({script}) => ({
-					baseOrigin: script.baseOrigin,
-					command: script.command,
-					cwd: script.cwd,
-					name: script.name,
-					origin: script.origin,
-					packageFolder: script.packageFolder,
-					packagePath: script.packagePath,
-					portless: true,
-					service: script.service,
-					sessionId: script.sessionId
-				}))
+				return pipe(
+					scripts,
+					Array.map(route => ({
+						baseOrigin: route.script.baseOrigin,
+						command: route.script.command,
+						cwd: route.script.cwd,
+						name: route.script.name,
+						origin: route.script.origin,
+						packageFolder: route.script.packageFolder,
+						packagePath: route.script.packagePath,
+						portless: true,
+						service: route.script.service,
+						sessionId: route.script.sessionId
+					}))
+				)
 			})
 		})
 
@@ -134,6 +143,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 			if (script === undefined) return input
 
 			return {cwd: script.cwd, env: script.env, preparedCommand: script.preparedCommand, sessionId: script.sessionId}
+		})
+		const terminal = Effect.fnUntraced(function* (input: typeof TerminalSessionKey.Type) {
+			return yield* pipe(
+				terminalSession(input),
+				Effect.flatMap(session => RcMap.get(terminals, session))
+			)
 		})
 
 		const reviewStateKey = Effect.fnUntraced(function* (input: {readonly base: string; readonly cwd: string}) {
@@ -272,11 +287,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'projects.deleteWorktree': payload => git.deleteWorktree(payload),
 			'projects.watch': () =>
 				Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(git.projects),
-						Effect.map(projects =>
-							pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
-						)
+					Effect.map(SubscriptionRef.get(git.projects), projects =>
+						pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
 					)
 				),
 			'review.comments.resolve': payload =>
@@ -385,39 +397,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'runs.scripts': payload => discoverRootScripts(payload.cwd),
 			'terminal.resize': payload =>
 				pipe(
-					terminalSession(TerminalSessionKey.make(payload)).pipe(
-						Effect.flatMap(session => RcMap.get(terminals, session))
-					),
+					terminal(TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
 			'terminal.restart': payload =>
-				pipe(
-					terminalSession(TerminalSessionKey.make(payload)).pipe(
-						Effect.flatMap(session => RcMap.get(terminals, session))
-					),
-					Effect.flatMap(terminal => terminal.restart())
-				),
+				Effect.flatMap(terminal(TerminalSessionKey.make(payload)), terminal => terminal.restart()),
 			'terminal.stop': payload =>
-				pipe(
-					terminalSession(TerminalSessionKey.make(payload)).pipe(
-						Effect.flatMap(session => RcMap.get(terminals, session))
-					),
-					Effect.flatMap(terminal => terminal.stop())
-				),
+				Effect.flatMap(terminal(TerminalSessionKey.make(payload)), terminal => terminal.stop()),
 			'terminal.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						terminalSession(TerminalSessionKey.make(payload)).pipe(
-							Effect.flatMap(session => RcMap.get(terminals, session))
-						),
-						Effect.map(terminal => terminal.updates)
-					)
-				),
+				Stream.unwrap(Effect.map(terminal(TerminalSessionKey.make(payload)), terminal => terminal.updates)),
 			'terminal.write': payload =>
 				pipe(
-					terminalSession(TerminalSessionKey.make(payload)).pipe(
-						Effect.flatMap(session => RcMap.get(terminals, session))
-					),
+					terminal(TerminalSessionKey.make(payload)),
 					Effect.flatMap(terminal => terminal.write(payload.data))
 				)
 		})

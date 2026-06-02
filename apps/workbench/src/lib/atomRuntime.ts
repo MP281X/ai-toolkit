@@ -8,19 +8,6 @@ import {Socket} from 'effect/unstable/socket'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import {OtelLayer} from '@deslop/opentelemetry/client'
 
-function portlessServiceOrigin(baseOrigin: string, service: string) {
-	const url = new URL(baseOrigin)
-	url.hostname = `${service}.${url.hostname}`
-	return url.origin
-}
-
-function portlessServerOrigin(origin: string) {
-	const url = new URL(origin)
-	const [, ...labels] = url.hostname.split('.')
-	url.hostname = ['server', ...labels].join('.')
-	return url.origin
-}
-
 export const LiveLayers = pipe(
 	Layer.empty,
 	// Base layers
@@ -50,11 +37,23 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 						base: Config.option(Config.string('VITE_PORTLESS_BASE_ORIGIN')),
 						origin: Config.option(Config.string('VITE_PORTLESS_ORIGIN'))
 					}),
-					Effect.map(({base, origin}) =>
+					Effect.map(config =>
 						pipe(
-							base,
-							Option.map(baseOrigin => portlessServiceOrigin(baseOrigin, 'server')),
-							Option.orElse(() => Option.map(origin, portlessServerOrigin)),
+							config.base,
+							Option.map(baseOrigin => {
+								const url = new URL(baseOrigin)
+								url.hostname = `server.${url.hostname}`
+
+								return url.origin
+							}),
+							Option.orElse(() =>
+								Option.map(config.origin, origin => {
+									const url = new URL(origin)
+									url.hostname = ['server', ...url.hostname.split('.').slice(1)].join('.')
+
+									return url.origin
+								})
+							),
 							Option.match({
 								onNone: () => `${location.origin}/api/rpc`,
 								onSome: serverOrigin => `${serverOrigin}/api/rpc`

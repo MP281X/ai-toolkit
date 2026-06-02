@@ -2,56 +2,40 @@ import {randomUUID} from 'node:crypto'
 import {readFile} from 'node:fs/promises'
 import {basename, dirname, relative} from 'node:path'
 
-import {Array, Effect, pipe} from 'effect'
+import {Array, Effect, Order, String, pipe} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 import type {RunScript} from '#rpcs/contracts.ts'
 import {TerminalError} from '@deslop/terminal/schema'
 
-export type PackageJson = {readonly name?: string; readonly scripts?: Readonly<Record<string, string>>}
-export type PortlessRunScript = RunScript & {readonly env: Readonly<Record<string, string>>}
-export type PortlessRoute = {readonly host: string; readonly port: number; readonly script: PortlessRunScript}
-
-function includeScript(name: string) {
-	return name === 'dev' || name.startsWith('dev:')
-}
-
-function scriptService(name: string) {
-	return /^dev:(.+)$/u.exec(name)?.[1] ?? 'dev'
-}
-
-function scriptOrigin(input: {readonly folder: string; readonly root: string; readonly service: string}) {
-	return `http://${[input.service, input.folder, basename(input.root), 'localhost'].join('.')}:${process.env['PORT'] ?? '4010'}`
-}
-
-function baseOrigin(input: {readonly folder: string; readonly root: string}) {
-	return `http://${[input.folder, basename(input.root), 'localhost'].join('.')}:${process.env['PORT'] ?? '4010'}`
-}
-
-export function rootScriptsFromPackage(input: {readonly cwd: string; readonly packageJson: PackageJson}) {
-	return pipe(
-		Object.entries(input.packageJson.scripts ?? {}),
-		Array.map(([name, command]) => ({
-			command,
-			cwd: input.cwd,
-			name,
-			packageFolder: basename(input.cwd),
-			packagePath: 'package.json',
-			sessionId: `package.json:${name}`
-		}))
-	)
+type PackageJson = {readonly name?: string; readonly scripts?: Readonly<Record<string, string>>}
+type PortlessRoute = {
+	readonly host: string
+	readonly port: number
+	readonly script: RunScript & {readonly env: Readonly<Record<string, string>>}
 }
 
 export const discoverRootScripts = Effect.fnUntraced(function* (cwd: string) {
-	return yield* Effect.tryPromise({
-		catch: cause => new TerminalError({cause, message: `failed to read root package.json in ${cwd}`}),
-		try: async () => {
-			const packageJson = JSON.parse(await readFile(`${cwd}/package.json`, 'utf8')) as PackageJson
-
-			return rootScriptsFromPackage({cwd, packageJson})
-		}
-	})
+	return yield* pipe(
+		Effect.tryPromise({
+			catch: cause => new TerminalError({cause, message: `failed to read root package.json in ${cwd}`}),
+			try: () => readFile(`${cwd}/package.json`, 'utf8')
+		}),
+		Effect.map(source =>
+			pipe(
+				Object.entries((JSON.parse(source) as PackageJson).scripts ?? {}),
+				Array.map(entry => ({
+					command: entry[1],
+					cwd,
+					name: entry[0],
+					packageFolder: basename(cwd),
+					packagePath: 'package.json',
+					sessionId: `package.json:${entry[0]}`
+				}))
+			)
+		)
+	)
 })
 
 export const discoverPortlessScripts = Effect.fnUntraced(function* (
@@ -69,7 +53,10 @@ export const discoverPortlessScripts = Effect.fnUntraced(function* (
 	)
 
 	return yield* pipe(
-		output.split('\n').filter(path => path === 'package.json' || path.endsWith('/package.json')),
+		pipe(
+			String.split('\n')(output),
+			Array.filter(path => path === 'package.json' || String.endsWith('/package.json')(path))
+		),
 		Array.map(packagePath =>
 			pipe(
 				Effect.tryPromise({
@@ -90,16 +77,22 @@ export const discoverPortlessScripts = Effect.fnUntraced(function* (
 
 					const folder = basename(dirname(result.fullPath))
 					const relativePackagePath = relative(cwd, result.fullPath)
-					const scriptEntries = Object.entries(result.packageJson.scripts ?? {}).filter(([name]) => includeScript(name))
-					const packageOrigin = baseOrigin({folder, root: cwd})
+					const scriptEntries = pipe(
+						Object.entries(result.packageJson.scripts ?? {}),
+						Array.filter(entry => entry[0] === 'dev' || String.startsWith('dev:')(entry[0]))
+					)
+					const packageOrigin = `http://${[folder, basename(cwd), 'localhost'].join('.')}:${process.env['PORT'] ?? '4010'}`
 
 					return pipe(
 						scriptEntries,
-						Array.map(([name, command]) =>
-							Effect.map(input.port(`${relativePackagePath}:${name}`), port => {
-								const service = scriptService(name)
+						Array.map(entry => {
+							const name = entry[0]
+							const command = entry[1]
+
+							return Effect.map(input.port(`${relativePackagePath}:${name}`), port => {
+								const service = /^dev:(.+)$/u.exec(name)?.[1] ?? 'dev'
 								const host = [service, folder, basename(cwd), 'localhost'].join('.')
-								const origin = scriptOrigin({folder, root: cwd, service})
+								const origin = `http://${host}:${process.env['PORT'] ?? '4010'}`
 
 								return {
 									host,
@@ -125,18 +118,19 @@ export const discoverPortlessScripts = Effect.fnUntraced(function* (
 									}
 								}
 							})
-						),
+						}),
 						Effect.all
 					)
 				})
 			)
 		),
 		Effect.all,
-		Effect.map(discovered => discovered.flat()),
-		Effect.map(scripts =>
-			scripts.sort((left, right) =>
-				`${left.script.packagePath}:${left.script.name}`.localeCompare(
-					`${right.script.packagePath}:${right.script.name}`
+		Effect.map(Array.flatten),
+		Effect.map(
+			Array.sort(
+				pipe(
+					Order.String,
+					Order.mapInput((script: PortlessRoute) => `${script.script.packagePath}:${script.script.name}`)
 				)
 			)
 		)

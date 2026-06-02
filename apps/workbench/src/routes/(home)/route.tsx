@@ -212,8 +212,12 @@ function sortPortlessScripts(scripts: readonly RunScript[]) {
 const portlessActiveAtom = Atom.family((scripts: readonly RunScript[]) =>
 	Atom.make(get =>
 		pipe(
-			Effect.all(scripts.map(script => get.result(terminalStateAtom(scriptSession(script))))),
-			Effect.map(states => states.some(state => state.runId > 0 && terminalStateActive(state.state)))
+			pipe(
+				scripts,
+				Array.map(script => get.result(terminalStateAtom(scriptSession(script))))
+			),
+			Effect.all,
+			Effect.map(Array.some(state => state.runId > 0 && terminalStateActive(state.state)))
 		)
 	)
 )
@@ -223,7 +227,6 @@ function TreeRowActions(input: {readonly children: React.ReactNode}) {
 }
 
 function WorktreePortless(input: {
-	readonly active: boolean
 	readonly cwd: string
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (
@@ -245,13 +248,13 @@ function WorktreePortless(input: {
 	if (scripts.value.length === 0) return null
 
 	async function startScripts() {
-		for (const session of scripts.value.map(scriptSession)) {
+		for (const session of pipe(scripts.value, Array.map(scriptSession))) {
 			await restart({payload: session})
 		}
 	}
 
 	async function stopScripts() {
-		for (const session of scripts.value.map(scriptSession)) {
+		for (const session of pipe(scripts.value, Array.map(scriptSession))) {
 			await stop({payload: session})
 		}
 	}
@@ -428,7 +431,10 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 				{agentProfiles.map(profile => {
-					const profileSessions = sessions.value.filter(session => session.command === profile.command)
+					const profileSessions = pipe(
+						sessions.value,
+						Array.filter(session => session.command === profile.command)
+					)
 					return (
 						<li key={profile.command} className="w-full min-w-0">
 							<TreeExplorerRow
@@ -717,7 +723,6 @@ function WorktreeManager(input: {
 													</TreeExplorerRow>
 												</li>
 												<WorktreePortless
-													active={input.activeView === 'portless' && input.activeWorktree?.root === worktree.root}
 													cwd={worktree.root}
 													selectPortless={input.selectPortless}
 													selectRun={input.selectRun}

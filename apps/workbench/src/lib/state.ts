@@ -89,8 +89,8 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 			get.result(portlessRunsAtom(cwd)),
 			Effect.map(scripts =>
 				pipe(
-					Array.filter(scripts, script => script.origin !== undefined),
-					Array.map(script => script.origin ?? ''),
+					scripts,
+					Array.filterMap(script => (script.origin === undefined ? Result.failVoid : Result.succeed(script.origin))),
 					Array.dedupe,
 					Array.sort(Order.String)
 				)
