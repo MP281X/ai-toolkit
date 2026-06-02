@@ -5,8 +5,8 @@ import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
-	GitDiffScope,
 	GitError,
+	GitHubReviewThread,
 	GitProject,
 	GitReviewFrom,
 	GitReviewMetadata,
@@ -41,6 +41,7 @@ export class ReviewComment extends Schema.Class<ReviewComment>('ReviewComment')(
 	body: Schema.String,
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
+	resolved: Schema.optional(Schema.Boolean),
 	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 }) {}
 
@@ -74,12 +75,6 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({cwd: Schema.String}),
 		success: GitBranchesSnapshot
 	}),
-	Rpc.make('review.watch', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, scope: GitDiffScope}),
-		stream: true,
-		success: Schema.Array(GitDiff)
-	}),
 	Rpc.make('review.metadata', {
 		error: GitError,
 		payload: Schema.Struct({base: Schema.optional(Schema.String), cwd: Schema.String}),
@@ -109,7 +104,7 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({base: Schema.String, comment: ReviewComment, cwd: Schema.String})
 	}),
-	Rpc.make('review.comments.delete', {
+	Rpc.make('review.comments.resolve', {
 		error: GitError,
 		payload: Schema.Struct({
 			base: Schema.String,
@@ -126,6 +121,15 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('review.commitAndPush', {
 		error: GitError,
 		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, message: Schema.String})
+	}),
+	Rpc.make('review.githubThreads', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String}),
+		success: Schema.Array(GitHubReviewThread)
+	}),
+	Rpc.make('review.githubThreads.resolve', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, threadId: Schema.String})
 	}),
 	Rpc.make('review.stageFile', {
 		error: GitError,

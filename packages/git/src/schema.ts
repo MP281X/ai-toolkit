@@ -8,9 +8,6 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 export type GitDiffStatus = typeof GitDiffStatus.Type
 export const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
-export type GitDiffScope = typeof GitDiffScope.Type
-export const GitDiffScope = Schema.Literals(['staged-to-worktree', 'head-to-staged'])
-
 export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment')({
 	filePath: Schema.String,
 	fingerprint: Schema.String,
@@ -47,8 +44,22 @@ export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
 	base: Schema.String,
+	branch: Schema.String,
 	commits: Schema.Array(GitCommit),
-	dirty: Schema.Boolean
+	defaultBranch: Schema.String,
+	dirty: Schema.Boolean,
+	prUrl: Schema.optional(Schema.String),
+	unpushedCommits: Schema.Boolean
+}) {}
+
+export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHubReviewThread')({
+	body: Schema.String,
+	filePath: Schema.String,
+	id: Schema.String,
+	lineNumber: Schema.Number,
+	resolved: Schema.Boolean,
+	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
+	url: Schema.optional(Schema.String)
 }) {}
 
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({

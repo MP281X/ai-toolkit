@@ -1,9 +1,14 @@
 import {Array, String} from 'effect'
 
 import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
-import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
+import {getSingularPatch, parseDiffFromFile, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
+import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
+
+import {GithubLight} from '../ui/svgs/githubLight.tsx'
+
+import {Markdown} from './markdown.tsx'
 
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
@@ -11,6 +16,12 @@ const DIFF_CSS = `
 	:host,
 	pre {
 		--diffs-bg: var(--background) !important;
+		--diffs-bg-buffer-override: var(--background) !important;
+		--diffs-bg-context-override: var(--background) !important;
+		--diffs-bg-hover-override: color-mix(in oklab, var(--muted) 70%, transparent) !important;
+		--diffs-bg-separator-override: var(--muted) !important;
+		--diffs-fg: var(--foreground) !important;
+		--diffs-fg-number-override: var(--muted-foreground) !important;
 		font-family: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono Variable', monospace !important;
 		font-size: inherit !important;
 		letter-spacing: 0 !important;
@@ -28,6 +39,35 @@ const DIFF_CSS = `
 		border-radius: 0 !important;
 		user-select: text !important;
 	}
+
+	[data-diff],
+	[data-file],
+	[data-separator],
+	[data-line],
+	[data-line] *,
+	[data-line-annotation],
+	[data-annotation-content] {
+		border-radius: 0 !important;
+	}
+
+	[data-diff] [data-line][data-line-type='context'],
+	[data-diff] [data-line][data-line-type='context-expanded'],
+	[data-file] [data-line] {
+		background-color: var(--background) !important;
+		color: var(--foreground) !important;
+	}
+
+	[data-diff] [data-column-number][data-line-type='context'],
+	[data-diff] [data-column-number][data-line-type='context-expanded'],
+	[data-file] [data-column-number] {
+		background-color: var(--background) !important;
+		color: var(--muted-foreground) !important;
+	}
+
+	[data-separator] {
+		background-color: var(--muted) !important;
+		color: var(--muted-foreground) !important;
+	}
 `
 
 type DiffComment = {
@@ -35,6 +75,31 @@ type DiffComment = {
 	readonly lineNumber: number
 	readonly side?: AnnotationSide
 	readonly body: string
+	readonly resolved?: boolean
+	readonly resolving?: boolean
+	readonly source?: 'github' | 'local'
+	readonly threadId?: string
+}
+
+function sameDiffLine(
+	left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide},
+	right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
+) {
+	return (
+		left.filePath === right.filePath &&
+		left.lineNumber === right.lineNumber &&
+		(left.side === 'deletions') === (right.side === 'deletions')
+	)
+}
+
+export function formatCopiedComment(comment: {
+	readonly body: string
+	readonly filePath: string
+	readonly lineNumber: number
+	readonly side?: AnnotationSide
+}) {
+	const linePrefix = comment.side === 'deletions' ? 'deleted' : 'line'
+	return `# Review comments\n\n## ${comment.filePath}\n\n${linePrefix}:${comment.lineNumber}: ${comment.body}`
 }
 
 function captureScrollAnchor(container: HTMLElement, clientY: number) {
@@ -80,7 +145,7 @@ function CommentAnnotation(props: {
 	readonly comment: DiffComment
 	readonly isDraft?: boolean
 	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onResolveComment?: (comment: DiffComment) => void
 	readonly onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -91,6 +156,10 @@ function CommentAnnotation(props: {
 		if (editing) inputRef.current?.focus()
 	}, [editing])
 
+	async function copyComment() {
+		await navigator.clipboard.writeText(formatCopiedComment(props.comment))
+	}
+
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
 			if (props.isDraft) {
@@ -98,7 +167,7 @@ function CommentAnnotation(props: {
 				return
 			}
 
-			props.onDeleteComment?.({...props.comment, body})
+			props.onResolveComment?.({...props.comment, body})
 			setEditing(false)
 			props.onCloseDraft?.()
 			return
@@ -109,50 +178,110 @@ function CommentAnnotation(props: {
 		props.onCloseDraft?.()
 	}
 
+	const sourceIcon =
+		props.comment.source === 'github' ? (
+			<GithubLight className="size-3 shrink-0" />
+		) : (
+			<MessageSquareTextIcon className="size-3 shrink-0" />
+		)
+	const iconCell = (
+		<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
+			{sourceIcon}
+		</div>
+	)
+
 	if (editing) {
 		return (
-			<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
-				<textarea
-					ref={inputRef}
-					value={body}
-					placeholder="Add comment"
-					className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
-					onChange={event => {
-						setBody(event.currentTarget.value)
-					}}
-					onClick={event => {
-						event.stopPropagation()
-					}}
-					onKeyDown={event => {
-						if (event.key === 'Escape') {
-							event.preventDefault()
+			<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
+				{iconCell}
+				<div className="min-w-0">
+					<textarea
+						ref={inputRef}
+						value={body}
+						placeholder="Add comment"
+						className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"
+						onChange={event => {
+							setBody(event.currentTarget.value)
+						}}
+						onClick={event => {
+							event.stopPropagation()
+						}}
+						onKeyDown={event => {
+							if (event.key === 'Escape') {
+								event.preventDefault()
 
-							if (props.isDraft) props.onCloseDraft?.()
-							else setEditing(false)
-						}
+								if (props.isDraft) props.onCloseDraft?.()
+								else setEditing(false)
+							}
 
-						if (event.key === 'Enter' && !event.shiftKey) {
-							event.preventDefault()
-							saveDraft()
-						}
-					}}
-				/>
+							if (event.key === 'Enter' && !event.shiftKey) {
+								event.preventDefault()
+								saveDraft()
+							}
+						}}
+					/>
+				</div>
+				<div />
+			</div>
+		)
+	}
+
+	if (props.comment.resolved === true) {
+		return (
+			<div className="text-muted-foreground bg-muted/70 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
+				{iconCell}
+				<span className="decoration-muted-foreground/60 min-w-0 truncate line-through">{props.comment.body}</span>
+				<div />
 			</div>
 		)
 	}
 
 	return (
-		<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
+		<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
+			{iconCell}
 			<button
 				type="button"
-				className="block w-full bg-transparent p-0 text-left whitespace-pre-wrap"
+				className="min-w-0 bg-transparent p-0 text-left"
 				onClick={event => {
 					event.stopPropagation()
-					setEditing(true)
+					if (props.comment.source !== 'github') setEditing(true)
 				}}
 			>
-				{props.comment.body}
+				<Markdown className="text-inherit">{props.comment.body}</Markdown>
 			</button>
+			<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border text-xs">
+				<button
+					type="button"
+					className="hover:bg-muted hover:text-foreground p-1"
+					aria-label="Copy comment"
+					title="Copy comment"
+					onClick={event => {
+						event.stopPropagation()
+						void copyComment()
+					}}
+				>
+					<CopyIcon className="size-3" />
+				</button>
+				{props.onResolveComment && (
+					<button
+						type="button"
+						className="border-border hover:bg-muted hover:text-foreground border-l p-1"
+						aria-label="Resolve comment"
+						title="Resolve comment"
+						disabled={props.comment.resolving}
+						onClick={event => {
+							event.stopPropagation()
+							props.onResolveComment?.(props.comment)
+						}}
+					>
+						{props.comment.resolving ? (
+							<Loader2Icon className="size-3 animate-spin" />
+						) : (
+							<CheckIcon className="size-3" />
+						)}
+					</button>
+				)}
+			</div>
 		</div>
 	)
 }
@@ -160,16 +289,14 @@ function CommentAnnotation(props: {
 function patchResultContent(fileDiff: FileDiffMetadata) {
 	if (fileDiff.type === 'deleted') return ''
 
-	return Array.join(
-		Array.flatMap(fileDiff.hunks, hunk =>
-			Array.flatMap(hunk.hunkContent, part =>
-				Array.take(
-					Array.drop(fileDiff.additionLines, part.additionLineIndex),
-					part.type === 'context' ? part.lines : part.additions
-				)
-			)
-		),
-		''
+	return Array.join(fileDiff.additionLines, '')
+}
+
+function compactFileDiff(filePath: string, fileDiff: FileDiffMetadata) {
+	return parseDiffFromFile(
+		{contents: Array.join(fileDiff.deletionLines, ''), name: fileDiff.prevName ?? filePath},
+		{contents: patchResultContent(fileDiff), name: filePath},
+		{context: 3}
 	)
 }
 
@@ -178,7 +305,7 @@ export function PatchDiff(props: {
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
 	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onDeleteComment?: (comment: DiffComment) => void
+	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number | undefined>(undefined)
@@ -187,6 +314,7 @@ export function PatchDiff(props: {
 	const [draftComment, setDraftComment] = useState<DiffComment>()
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
+	const compactDiff = setLanguageOverride(compactFileDiff(props.filePath, fileDiff), language)
 	const comments = props.comments ?? []
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
@@ -208,9 +336,7 @@ export function PatchDiff(props: {
 
 		if (
 			draftComment &&
-			draftComment.filePath === props.filePath &&
-			draftComment.lineNumber === line.lineNumber &&
-			(draftComment.side === 'deletions') === (line.side === 'deletions')
+			sameDiffLine(draftComment, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
 		) {
 			return
 		}
@@ -218,12 +344,8 @@ export function PatchDiff(props: {
 		if (draftComment) return
 
 		if (
-			!Array.some(
-				comments,
-				current =>
-					current.filePath === props.filePath &&
-					current.lineNumber === line.lineNumber &&
-					(current.side === 'deletions') === (line.side === 'deletions')
+			!Array.some(comments, current =>
+				sameDiffLine(current, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
 			)
 		) {
 			setDraftComment({
@@ -269,7 +391,7 @@ export function PatchDiff(props: {
 			{mode === 'diff' ? (
 				<PierreFileDiff<DiffComment>
 					key={props.patch}
-					fileDiff={fileDiff}
+					fileDiff={compactDiff}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
@@ -293,14 +415,9 @@ export function PatchDiff(props: {
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={
-								draftComment &&
-								annotation.metadata.filePath === draftComment.filePath &&
-								annotation.metadata.lineNumber === draftComment.lineNumber &&
-								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
-							}
+							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
 							onSaveComment={props.onSaveComment}
-							onDeleteComment={props.onDeleteComment}
+							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
 								setDraftComment(undefined)
 							}}
@@ -329,14 +446,9 @@ export function PatchDiff(props: {
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={
-								draftComment &&
-								annotation.metadata.filePath === draftComment.filePath &&
-								annotation.metadata.lineNumber === draftComment.lineNumber &&
-								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
-							}
+							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
 							onSaveComment={props.onSaveComment}
-							onDeleteComment={props.onDeleteComment}
+							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
 								setDraftComment(undefined)
 							}}
