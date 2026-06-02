@@ -100,6 +100,8 @@ type DisplayComment = QueuedComment & {
 	readonly url?: string
 }
 
+type CopyableComment = Pick<QueuedComment, 'body' | 'filePath' | 'lineNumber' | 'side'>
+
 function emptyReviewState() {
 	return new ReviewState({comments: Array.empty(), marks: Array.empty()})
 }
@@ -271,8 +273,8 @@ const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; re
 	})
 )
 
-function groupCommentsByFile(comments: readonly DisplayComment[]) {
-	const groups = new Map<string, {comments: DisplayComment[]; filePath: string}>()
+function groupCommentsByFile<Comment extends {readonly filePath: string}>(comments: readonly Comment[]) {
+	const groups = new Map<string, {comments: Comment[]; filePath: string}>()
 
 	for (const comment of comments) {
 		const key = comment.filePath
@@ -468,30 +470,35 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		setShortcutsOpen(true)
 	})
 
-	async function copyComments(commentsToCopy: readonly DisplayComment[]) {
-		await navigator.clipboard.writeText(
-			pipe(
-				groupCommentsByFile(commentsToCopy),
-				Array.map(group =>
-					Array.join(
-						[
-							`## ${group.filePath}`,
-							pipe(
-								group.comments,
-								Array.map(
-									comment =>
-										`${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
-								),
-								Array.join('\n\n')
-							)
-						],
-						'\n\n'
-					)
-				),
-				Array.prepend('# Review comments'),
-				Array.join('\n\n')
-			)
+	function formatCopiedComments(commentsToCopy: readonly CopyableComment[]) {
+		return pipe(
+			groupCommentsByFile(commentsToCopy),
+			Array.map(group =>
+				Array.join(
+					[
+						`## ${group.filePath}`,
+						pipe(
+							group.comments,
+							Array.map(
+								comment => `${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
+							),
+							Array.join('\n\n')
+						)
+					],
+					'\n\n'
+				)
+			),
+			Array.prepend('# Review comments'),
+			Array.join('\n\n')
 		)
+	}
+
+	async function copyComments(commentsToCopy: readonly DisplayComment[]) {
+		await navigator.clipboard.writeText(formatCopiedComments(commentsToCopy))
+	}
+
+	function formatCopiedComment(comment: CopyableComment) {
+		return formatCopiedComments([comment])
 	}
 
 	return (
@@ -573,6 +580,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										filePath={selectedEntry.filePath}
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
+										formatCopiedComment={formatCopiedComment}
 										onSaveComment={comment => {
 											saveQueuedComment({
 												body: comment.body,
@@ -602,10 +610,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											type="button"
 											variant="outline"
 											size="xs"
-											aria-label={`Copy comments for ${group.filePath}`}
-											title={`Copy ${group.comments.length} comments for ${group.filePath}`}
+											aria-label={`Open ${group.filePath}`}
+											title={group.filePath}
 											onClick={() => {
-												void copyComments(group.comments)
+												openFile(group.filePath)
 											}}
 										>
 											<FileIcon filePath={group.filePath} />

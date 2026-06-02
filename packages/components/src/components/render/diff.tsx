@@ -8,6 +8,8 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {GithubLight} from '../ui/svgs/githubLight.tsx'
 
+import {Markdown} from './markdown.tsx'
+
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
 const DIFF_CSS = `
@@ -121,6 +123,7 @@ function restoreScrollAnchor(
 function CommentAnnotation(props: {
 	readonly comment: DiffComment
 	readonly isDraft?: boolean
+	readonly formatCopiedComment?: (comment: DiffComment) => string
 	readonly onSaveComment?: (comment: DiffComment) => void
 	readonly onResolveComment?: (comment: DiffComment) => void
 	readonly onCloseDraft?: () => void
@@ -134,7 +137,7 @@ function CommentAnnotation(props: {
 	}, [editing])
 
 	async function copyComment() {
-		await navigator.clipboard.writeText(props.comment.body)
+		await navigator.clipboard.writeText(props.formatCopiedComment?.(props.comment) ?? props.comment.body)
 	}
 
 	function saveDraft() {
@@ -169,7 +172,7 @@ function CommentAnnotation(props: {
 
 	if (editing) {
 		return (
-			<div className="text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-transparent px-2 py-2">
+			<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
 				{iconCell}
 				<div className="min-w-0">
 					<textarea
@@ -205,7 +208,7 @@ function CommentAnnotation(props: {
 
 	if (props.comment.resolved === true) {
 		return (
-			<div className="text-muted-foreground bg-muted/45 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
+			<div className="text-muted-foreground bg-muted/70 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
 				{iconCell}
 				<span className="decoration-muted-foreground/60 min-w-0 truncate line-through">{props.comment.body}</span>
 				<div />
@@ -214,7 +217,7 @@ function CommentAnnotation(props: {
 	}
 
 	return (
-		<div className="text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 bg-transparent px-2 py-2">
+		<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
 			{iconCell}
 			<button
 				type="button"
@@ -224,7 +227,7 @@ function CommentAnnotation(props: {
 					if (props.comment.source !== 'github') setEditing(true)
 				}}
 			>
-				<span className="block whitespace-pre-wrap">{props.comment.body}</span>
+				<Markdown className="text-inherit">{props.comment.body}</Markdown>
 			</button>
 			<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border text-xs">
 				<button
@@ -281,6 +284,7 @@ export function PatchDiff(props: {
 	readonly filePath: string
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
+	readonly formatCopiedComment?: (comment: DiffComment) => string
 	readonly onSaveComment?: (comment: DiffComment) => void
 	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
@@ -404,6 +408,7 @@ export function PatchDiff(props: {
 								annotation.metadata.lineNumber === draftComment.lineNumber &&
 								(annotation.metadata.side === 'deletions') === (draftComment.side === 'deletions')
 							}
+							formatCopiedComment={props.formatCopiedComment}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {

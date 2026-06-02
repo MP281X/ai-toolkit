@@ -679,14 +679,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		const defaultBranchName = pipe(
 			git.string(config.cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
-			Effect.map(flow(String.trim, String.replace(/^origin\//u, ''))),
-			Effect.catchTag('GitError', () =>
-				pipe(
-					git.string(config.cwd, ['rev-parse', '--verify', 'main']),
-					Effect.as('main'),
-					Effect.catchTag('GitError', () => Effect.succeed('master'))
-				)
-			)
+			Effect.map(flow(String.trim, String.replace(/^origin\//u, '')))
 		)
 
 		const branchBase = Effect.fnUntraced(function* (defaultBranch: string) {
@@ -816,6 +809,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 								nodes {
 									id
 									isResolved
+									diffSide
 									comments(first: 20) {
 										nodes {
 											body
@@ -859,6 +853,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 									}
 									readonly id?: string
 									readonly isResolved?: boolean
+									readonly diffSide?: 'LEFT' | 'RIGHT'
 								}[]
 							}
 						}
@@ -882,6 +877,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 									id: thread.id ?? '',
 									lineNumber: comment.line ?? comment.originalLine ?? 1,
 									resolved: thread.isResolved === true,
+									side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
 									url: comment.url
 								})
 						)
