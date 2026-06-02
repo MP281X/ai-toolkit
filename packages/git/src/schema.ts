@@ -51,7 +51,8 @@ export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitRevie
 	commits: Schema.Array(GitCommit),
 	defaultBranch: Schema.String,
 	dirty: Schema.Boolean,
-	prUrl: Schema.optional(Schema.String)
+	prUrl: Schema.optional(Schema.String),
+	unpushedCommits: Schema.Boolean
 }) {}
 
 export class GitPublishResult extends Schema.Class<GitPublishResult>('GitPublishResult')({

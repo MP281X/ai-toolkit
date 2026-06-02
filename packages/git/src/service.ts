@@ -769,14 +769,34 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		const pushCurrentBranch = Effect.gen(function* () {
 			const branch = yield* currentBranch
-			const hasUpstream = yield* pipe(
+			const upstream = yield* pipe(
 				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+				Effect.map(String.trim),
+				Effect.option
+			)
+			const remote = pipe(
+				upstream,
+				Option.map(value => String.split('/')(value)[0] ?? 'origin'),
+				Option.getOrElse(() => 'origin')
+			)
+
+			yield* pipe(git.string(config.cwd, ['push', '-u', remote, `HEAD:${branch}`]), Effect.asVoid)
+		})
+
+		const hasUnpushedCommits = Effect.gen(function* () {
+			const branch = yield* currentBranch
+			const remoteBranch = `origin/${branch}`
+			const hasRemoteBranch = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--verify', remoteBranch]),
 				Effect.as(true),
 				Effect.orElseSucceed(() => false)
 			)
-			yield* pipe(
-				hasUpstream ? git.string(config.cwd, ['push']) : git.string(config.cwd, ['push', '-u', 'origin', branch]),
-				Effect.asVoid
+
+			if (!hasRemoteBranch) return true
+
+			return yield* pipe(
+				git.lines(config.cwd, ['log', '--format=%H', `${remoteBranch}..HEAD`]),
+				Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
 			)
 		})
 
@@ -794,9 +814,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			const pr = yield* pipe(
 				ghString(['pr', 'view', '--json', 'number', '--jq', '.number']),
 				Effect.map(flow(String.trim, Number.parse)),
-				Effect.flatMap(
-					Option.match({onNone: () => Effect.fail(new GitError({message: 'No PR found.'})), onSome: Effect.succeed})
-				)
+				Effect.flatMap(Option.match({onNone: () => new GitError({message: 'No PR found.'}), onSome: Effect.succeed}))
 			)
 			const repository = yield* pipe(
 				ghString(['repo', 'view', '--json', 'owner,name']),
@@ -896,7 +914,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 		return {
 			commitAndPush: Effect.fnUntraced(function* (input: {readonly base: string; readonly message: string}) {
 				if (yield* hasWorktreeChanges) {
-					return yield* Effect.fail(new GitError({message: 'Create a WIP commit before squashing.'}))
+					return yield* new GitError({message: 'Create a WIP commit before squashing.'})
 				}
 
 				const oldestWip = pipe(
@@ -907,7 +925,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				)
 
 				if (!oldestWip) {
-					return yield* Effect.fail(new GitError({message: 'No WIP commits to squash.'}))
+					return yield* new GitError({message: 'No WIP commits to squash.'})
 				}
 
 				yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldestWip.hash}^`]), Effect.asVoid)
@@ -916,7 +934,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			commits,
 			createWipCommit: Effect.fnUntraced(function* (message: string) {
 				if (!(yield* hasWorktreeChanges)) {
-					return yield* Effect.fail(new GitError({message: 'No changes to commit.'}))
+					return yield* new GitError({message: 'No changes to commit.'})
 				}
 
 				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
@@ -939,13 +957,17 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					commits: displayCommits,
 					defaultBranch,
 					dirty: yield* hasWorktreeChanges,
-					prUrl: Option.getOrUndefined(yield* branchPrUrl)
+					prUrl: Option.getOrUndefined(yield* branchPrUrl),
+					unpushedCommits: yield* hasUnpushedCommits
 				})
 			}),
 			publish: Effect.gen(function* () {
 				const branch = yield* currentBranch
 				const defaultBranch = yield* defaultBranchName
 				yield* pushCurrentBranch
+				if (yield* hasUnpushedCommits) {
+					return yield* new GitError({message: 'Push completed but the branch still has unpushed commits.'})
+				}
 
 				if (branch === defaultBranch) return new GitPublishResult({})
 
