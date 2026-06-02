@@ -5,7 +5,6 @@ import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
-	GitDiffScope,
 	GitError,
 	GitHubReviewThread,
 	GitProject,
@@ -75,12 +74,6 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String}),
 		success: GitBranchesSnapshot
-	}),
-	Rpc.make('review.watch', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, scope: GitDiffScope}),
-		stream: true,
-		success: Schema.Array(GitDiff)
 	}),
 	Rpc.make('review.metadata', {
 		error: GitError,

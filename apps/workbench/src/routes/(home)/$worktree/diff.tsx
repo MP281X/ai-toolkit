@@ -48,27 +48,21 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 )
 
 type ReviewTarget =
-	| {readonly type: 'head-to-worktree'}
+	| {readonly from: 'HEAD'; readonly type: 'head-to-worktree'}
 	| {readonly commit: string; readonly from: string; readonly type: 'commit-to-worktree'}
-
-function rangeForTarget(target: ReviewTarget) {
-	return pipe(
-		Match.value(target),
-		Match.when({type: 'head-to-worktree'}, () => ({from: {ref: 'HEAD', type: 'ref'}, to: {type: 'worktree'}}) as const),
-		Match.when(
-			{type: 'commit-to-worktree'},
-			current => ({from: {ref: current.from, type: 'ref'}, to: {type: 'worktree'}}) as const
-		),
-		Match.exhaustive
-	)
-}
 
 const reviewDiffsAtom = Atom.family((input: {readonly cwd: string; readonly target: ReviewTarget}) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient,
-				Effect.map(client => client('review.watchRange', {cwd: input.cwd, ...rangeForTarget(input.target)})),
+				Effect.map(client =>
+					client('review.watchRange', {
+						cwd: input.cwd,
+						from: {ref: input.target.from, type: 'ref'},
+						to: {type: 'worktree'}
+					})
+				),
 				Stream.unwrap
 			)
 		)
@@ -278,7 +272,7 @@ const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; re
 )
 
 function groupCommentsByFile(comments: readonly DisplayComment[]) {
-	const groups = new Map<string, {comments: DisplayComment[]; filePath: string; key: string}>()
+	const groups = new Map<string, {comments: DisplayComment[]; filePath: string}>()
 
 	for (const comment of comments) {
 		const key = comment.filePath
@@ -287,7 +281,7 @@ function groupCommentsByFile(comments: readonly DisplayComment[]) {
 		if (group) {
 			group.comments.push(comment)
 		} else {
-			groups.set(key, {comments: [comment], filePath: comment.filePath, key})
+			groups.set(key, {comments: [comment], filePath: comment.filePath})
 		}
 	}
 
@@ -327,7 +321,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				from: selectedCommit.parents[0] ?? `${selectedCommit.hash}^`,
 				type: 'commit-to-worktree'
 			}
-		: {type: 'head-to-worktree'}
+		: {from: 'HEAD', type: 'head-to-worktree'}
 	const [selectedFilePath, setSelectedFilePath] = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
@@ -385,8 +379,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const validReviewMarks = reviewStateLoaded
 		? Array.filter(reviewStateValue.marks, mark => visibleSegmentKeys.has(markKey(mark)))
 		: Array.empty()
-	const effectiveReviewMarks = validReviewMarks
-
 	useEffect(() => {
 		const firstFilePath = reviewDiffsValue[0]?.filePath
 
@@ -538,7 +530,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 									{reviewDiffsLoaded ? (
 										<DiffList
 											diffs={reviewDiffsValue}
-											marks={effectiveReviewMarks}
+											marks={validReviewMarks}
 											markReviewed={markFileReviewed}
 											unmarkReviewed={unmarkFileReviewed}
 											selectedEntry={selectedEntry}
@@ -557,7 +549,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										selected={reviewTarget}
 										selectCommit={selectCommit}
 										selectHead={() => {
-											selectTarget({type: 'head-to-worktree'})
+											selectTarget({from: 'HEAD', type: 'head-to-worktree'})
 										}}
 									/>
 								</div>
@@ -606,7 +598,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
 									{Array.map(commentsByFile, group => (
 										<Button
-											key={group.key}
+											key={group.filePath}
 											type="button"
 											variant="outline"
 											size="xs"

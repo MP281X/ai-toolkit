@@ -8,9 +8,6 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 export type GitDiffStatus = typeof GitDiffStatus.Type
 export const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
-export type GitDiffScope = typeof GitDiffScope.Type
-export const GitDiffScope = Schema.Literals(['staged-to-worktree', 'head-to-staged'])
-
 export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment')({
 	filePath: Schema.String,
 	fingerprint: Schema.String,

@@ -454,12 +454,10 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 
-		const hasWorktreeChanges = Effect.gen(function* () {
-			return yield* pipe(
-				git.lines(config.cwd, ['status', '--porcelain']),
-				Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
-			)
-		})
+		const hasWorktreeChanges = pipe(
+			git.lines(config.cwd, ['status', '--porcelain']),
+			Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
+		)
 
 		const resolveFrom = Effect.fnUntraced(function* (from: GitReviewFrom) {
 			if (from.type === 'ref') return from.ref
@@ -552,43 +550,35 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return diffsFromPatch(patch, input.segments)
 		})
 
-		const untrackedDiffs = Effect.gen(function* () {
-			return yield* Effect.forEach(
-				yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
-				filePath =>
-					pipe(
-						fs.readFileString(path.join(config.cwd, filePath)),
-						Effect.orElseSucceed(() => ''),
-						Effect.map(
-							content =>
-								new GitDiff({
-									filePath,
-									patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-										String.split('\n')(content),
-										Array.map(line => `+${line}`),
-										Array.join('\n')
-									)}`,
-									segments: [
-										new GitDiffSegment({filePath, fingerprint: content, id: 'HEAD->worktree', type: 'worktree'})
-									],
-									status: 'added'
-								})
-						)
-					),
-				{concurrency: 'unbounded'}
+		const untrackedDiffs = pipe(
+			git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
+			Effect.flatMap(files =>
+				Effect.forEach(
+					files,
+					filePath =>
+						pipe(
+							fs.readFileString(path.join(config.cwd, filePath)),
+							Effect.orElseSucceed(() => ''),
+							Effect.map(
+								content =>
+									new GitDiff({
+										filePath,
+										patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+											String.split('\n')(content),
+											Array.map(line => `+${line}`),
+											Array.join('\n')
+										)}`,
+										segments: [
+											new GitDiffSegment({filePath, fingerprint: content, id: 'HEAD->worktree', type: 'worktree'})
+										],
+										status: 'added'
+									})
+							)
+						),
+					{concurrency: 'unbounded'}
+				)
 			)
-		})
-
-		const reviewDiffs = Effect.fnUntraced(function* (scope: 'staged-to-worktree' | 'head-to-staged') {
-			const diffs = yield* gitDiffs({
-				args: scope === 'head-to-staged' ? ['--cached'] : Array.empty(),
-				segments: Array.empty()
-			})
-
-			if (scope === 'head-to-staged') return diffs
-
-			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
-		})
+		)
 
 		const commitSegmentDiffs = Effect.fnUntraced(function* (input: {readonly from: string; readonly to: string}) {
 			const log = yield* git.string(config.cwd, [
@@ -713,14 +703,12 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			)
 		})
 
-		const branchPrUrl = Effect.gen(function* () {
-			return yield* pipe(
-				ghString(['pr', 'view', '--json', 'url', '--jq', '.url']),
-				Effect.map(String.trim),
-				Effect.map(url => (String.isNonEmpty(url) ? Option.some(url) : Option.none<string>())),
-				Effect.catchTag('GitError', () => Effect.succeed(Option.none<string>()))
-			)
-		})
+		const branchPrUrl = pipe(
+			ghString(['pr', 'view', '--json', 'url', '--jq', '.url']),
+			Effect.map(String.trim),
+			Effect.map(url => (String.isNonEmpty(url) ? Option.some(url) : Option.none<string>())),
+			Effect.catchTag('GitError', () => Effect.succeed(Option.none<string>()))
+		)
 
 		function isWipSubject(subject: string) {
 			return subject === 'wip' || String.startsWith('wip: ')(subject)
@@ -751,24 +739,22 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			)
 		})
 
-		const firstParentCommits = Effect.gen(function* () {
-			return yield* pipe(
-				git.lines(config.cwd, ['log', '--first-parent', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', 'HEAD']),
-				Effect.map(
-					Array.map(line => {
-						const parts = String.split('\u0000')(line)
-						const subject = parts[2] ?? ''
-						return new GitCommit({
-							hash: parts[0] ?? '',
-							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
-							shortHash: parts[1] ?? '',
-							subject,
-							wip: isWipSubject(subject)
-						})
+		const firstParentCommits = pipe(
+			git.lines(config.cwd, ['log', '--first-parent', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', 'HEAD']),
+			Effect.map(
+				Array.map(line => {
+					const parts = String.split('\u0000')(line)
+					const subject = parts[2] ?? ''
+					return new GitCommit({
+						hash: parts[0] ?? '',
+						parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
+						shortHash: parts[1] ?? '',
+						subject,
+						wip: isWipSubject(subject)
 					})
-				)
+				})
 			)
-		})
+		)
 
 		const pushCurrentBranch = Effect.gen(function* () {
 			const branch = yield* currentBranch
@@ -799,22 +785,18 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return yield* git.lines(config.cwd, ['log', '--format=%s', `${from}..HEAD`])
 		})
 
-		const hasPushableCommits = Effect.gen(function* () {
-			const subjects = yield* unpushedCommitSubjects
-			if (Array.some(subjects, isWipSubject)) return false
+		const hasPushableCommits = pipe(
+			unpushedCommitSubjects,
+			Effect.map(subjects => !Array.some(subjects, isWipSubject) && !Array.isReadonlyArrayEmpty(subjects))
+		)
 
-			return !Array.isReadonlyArrayEmpty(subjects)
-		})
-
-		const createDraftPr = Effect.gen(function* () {
-			return yield* pipe(
-				ghString(['pr', 'create', '--draft', '--fill']),
-				Effect.map(output => {
-					const url = output.match(/https?:\/\/\S+/u)?.[0] ?? String.trim(output)
-					return String.isNonEmpty(url) ? Option.some(url) : Option.none<string>()
-				})
-			)
-		})
+		const createDraftPr = pipe(
+			ghString(['pr', 'create', '--draft', '--fill']),
+			Effect.map(output => {
+				const url = output.match(/https?:\/\/\S+/u)?.[0] ?? String.trim(output)
+				return String.isNonEmpty(url) ? Option.some(url) : Option.none<string>()
+			})
+		)
 
 		const prReviewThreads = Effect.gen(function* () {
 			const pr = yield* pipe(
@@ -991,7 +973,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					}`
 				yield* pipe(ghString(['api', 'graphql', '-f', `query=${query}`, '-f', `threadId=${threadId}`]), Effect.asVoid)
 			}),
-			reviewDiffs,
 			reviewRangeDiffs,
 			reviewThreads: pipe(
 				prReviewThreads,
@@ -1003,28 +984,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			unstageFile: Effect.fnUntraced(function* (filePath: string) {
 				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.asVoid)
 			}),
-			watchReviewDiffs: (scope: 'staged-to-worktree' | 'head-to-staged') =>
-				pipe(
-					worktreeChanges,
-					Stream.mapEffect(() =>
-						pipe(
-							reviewDiffs(scope),
-							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
-						)
-					),
-					Stream.changesWith(
-						(left, right) =>
-							Array.length(left) === Array.length(right) &&
-							Array.every(
-								left,
-								(leftDiff, index) =>
-									right[index] !== undefined &&
-									leftDiff.filePath === right[index].filePath &&
-									leftDiff.status === right[index].status &&
-									leftDiff.patch === right[index].patch
-							)
-					)
-				),
 			watchReviewRangeDiffs: (input: {readonly from: GitReviewFrom; readonly to: GitReviewTo}) =>
 				pipe(
 					worktreeChanges,

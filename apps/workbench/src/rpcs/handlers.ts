@@ -304,13 +304,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
 				),
-			'review.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewDiffs(payload.scope))
-					)
-				),
 			'review.watchRange': payload =>
 				Stream.unwrap(
 					pipe(
