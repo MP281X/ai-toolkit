@@ -82,16 +82,22 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 		signal: webRequest.signal
 	})
 	const upstreamResponse = yield* Effect.tryPromise(() => fetch(upstreamRequest))
+	const headers = new Headers(upstreamResponse.headers)
+	headers.delete('content-length')
+	headers.delete('content-encoding')
 	const shouldRewriteHtml =
 		request.method === 'GET' && (upstreamResponse.headers.get('content-type') ?? '').includes('text/html')
 
 	if (!shouldRewriteHtml) {
-		return HttpServerResponse.fromWeb(upstreamResponse)
+		return HttpServerResponse.fromWeb(
+			new Response(upstreamResponse.body, {
+				headers,
+				status: upstreamResponse.status,
+				statusText: upstreamResponse.statusText
+			})
+		)
 	}
 
-	const headers = new Headers(upstreamResponse.headers)
-	headers.delete('content-length')
-	headers.delete('content-encoding')
 	const body = yield* Effect.tryPromise(() => upstreamResponse.text())
 	headers.set('content-type', 'text/html; charset=utf-8')
 

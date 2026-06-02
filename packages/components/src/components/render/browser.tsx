@@ -84,7 +84,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 		setCurrentUrl(origin ? browserUrl(origin, address) : '')
 		setFaviconUrl(undefined)
 		setIsLoading(origin !== '')
-	}, [address, origin])
+	}, [origin])
 
 	useLayoutEffect(() => {
 		setIsListening(false)
