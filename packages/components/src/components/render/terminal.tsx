@@ -35,25 +35,31 @@ function terminalWriter(write: (data: string, done?: () => void) => void) {
 	}
 }
 
-function solidCssColor(element: HTMLElement) {
+function cssColor(element: HTMLElement, value: string) {
 	const ownerDocument = element.ownerDocument
-	const rendererStyles = getComputedStyle(element.parentElement?.parentElement ?? element.parentElement ?? element)
-	const rootStyles = getComputedStyle(ownerDocument.documentElement)
-	const cssColor =
-		rendererStyles.backgroundColor === 'rgba(0, 0, 0, 0)'
-			? rootStyles.getPropertyValue('--background').trim()
-			: rendererStyles.backgroundColor
 	const canvas = ownerDocument.createElement('canvas')
 	canvas.width = 1
 	canvas.height = 1
 	const context = canvas.getContext('2d')
 	if (!context) return 'rgb(0, 0, 0)'
 
-	context.fillStyle = cssColor
+	context.fillStyle = value
 	context.fillRect(0, 0, 1, 1)
-	const [red, green, blue] = context.getImageData(0, 0, 1, 1).data
+	const [red, green, blue, alpha = 255] = context.getImageData(0, 0, 1, 1).data
 
-	return `rgb(${red}, ${green}, ${blue})`
+	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
+}
+
+function solidCssColor(element: HTMLElement) {
+	const ownerDocument = element.ownerDocument
+	const rendererStyles = getComputedStyle(element.parentElement?.parentElement ?? element.parentElement ?? element)
+	const rootStyles = getComputedStyle(ownerDocument.documentElement)
+	const color =
+		rendererStyles.backgroundColor === 'rgba(0, 0, 0, 0)'
+			? rootStyles.getPropertyValue('--background').trim()
+			: rendererStyles.backgroundColor
+
+	return cssColor(element, color)
 }
 
 export function Terminal(input: {
@@ -66,7 +72,6 @@ export function Terminal(input: {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<XTerm>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
-	const resizeRef = useRef<() => void>(() => {})
 	const writerRef = useRef<ReturnType<typeof terminalWriter>>(null)
 
 	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
@@ -80,6 +85,7 @@ export function Terminal(input: {
 		const fontWeight = Number.parseInt(style.fontWeight, 10)
 		const container = element
 		const background = solidCssColor(element)
+		const selectionBackground = cssColor(element, 'oklch(0.8214 0.1337 49.9802 / 30%)')
 		const terminal = new XTerm({
 			customGlyphs: true,
 			fontFamily: style.fontFamily,
@@ -90,7 +96,7 @@ export function Terminal(input: {
 			lineHeight: 1,
 			scrollback: 10_000,
 			smoothScrollDuration: 0,
-			theme: {background}
+			theme: {background, selectionBackground, selectionInactiveBackground: selectionBackground}
 		})
 		Object.assign(terminal.options, {scrollbar: {showScrollbar: false}})
 		const fit = new FitAddon()
@@ -98,6 +104,7 @@ export function Terminal(input: {
 		let animationFrame: number | undefined
 		let disposed = false
 		let lastSize: {readonly cols: number; readonly rows: number} | undefined
+		let suppressShortcutPaste = false
 
 		function alignScreen() {
 			const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen')
@@ -132,10 +139,9 @@ export function Terminal(input: {
 			})
 		}
 
-		resizeRef.current = fitAndNotify
-
 		terminal.loadAddon(fit)
 		terminal.open(element)
+		terminal.focus()
 		const writer = terminalWriter((data, done) => {
 			if (disposed) {
 				done?.()
@@ -157,40 +163,32 @@ export function Terminal(input: {
 			callbacksRef.current.onData(data)
 		})
 		terminal.attachCustomKeyEventHandler(event => {
+			if (event.type === 'keyup') {
+				suppressShortcutPaste = false
+				return true
+			}
 			if (event.type !== 'keydown') return true
 
 			const paste = (event.ctrlKey || event.metaKey) && (event.key === 'v' || event.key === 'V')
 			const alternatePaste = event.ctrlKey && event.shiftKey && (event.key === 'v' || event.key === 'V')
-			if (paste || alternatePaste) {
-				void navigator.clipboard.readText().then(text => {
-					if (text !== '') callbacksRef.current.onData(text)
-				})
-				return false
-			}
-
-			const copy = event.metaKey && (event.key === 'c' || event.key === 'C')
-			const alternateCopy = event.ctrlKey && event.shiftKey && (event.key === 'c' || event.key === 'C')
-			if (copy || alternateCopy) {
-				const selection = terminal.getSelection()
-				if (selection !== '') {
-					void navigator.clipboard.writeText(selection)
-					terminal.clearSelection()
-					return false
-				}
-			}
-
-			return true
-		})
-
-		function paste(event: ClipboardEvent) {
-			const text = event.clipboardData?.getData('text/plain') ?? ''
-			if (text === '') return
+			if (!(paste || alternatePaste)) return true
 
 			event.preventDefault()
-			callbacksRef.current.onData(text)
+			suppressShortcutPaste = true
+			void navigator.clipboard.readText().then(text => {
+				if (text !== '') terminal.paste(text)
+			})
+			return false
+		})
+
+		function suppressNativePaste(event: ClipboardEvent) {
+			if (!suppressShortcutPaste) return
+
+			event.preventDefault()
+			event.stopImmediatePropagation()
 		}
 
-		container.addEventListener('paste', paste, {capture: true})
+		element.addEventListener('paste', suppressNativePaste, {capture: true})
 
 		const observer = new ResizeObserver(resize)
 		observer.observe(element)
@@ -209,22 +207,30 @@ export function Terminal(input: {
 			disposed = true
 			terminalRef.current = null
 			writerRef.current = null
-			resizeRef.current = () => {}
 			for (const timeout of timeouts) clearTimeout(timeout)
 			if (animationFrame !== undefined) cancelAnimationFrame(animationFrame)
 			window?.removeEventListener('resize', resize)
-			container.removeEventListener('paste', paste, {capture: true})
+			element.removeEventListener('paste', suppressNativePaste, {capture: true})
 			observer.disconnect()
 			terminal.dispose()
 		}
 	}, [])
 	useEffect(() => {
-		resizeRef.current()
+		let data = ''
+		function flush() {
+			const writer = writerRef.current
+			if (!(writer && data !== '')) return
+
+			writer.push(data)
+			data = ''
+		}
+
 		for (const event of input.events) {
 			const writer = writerRef.current
 			if (!writer) return
 
 			if (event.type === 'reset') {
+				flush()
 				void writer.barrier(() => {
 					const terminal = terminalRef.current
 					if (!terminal) return
@@ -233,9 +239,10 @@ export function Terminal(input: {
 					terminal.clear()
 				})
 			} else {
-				writer.push(event.data)
+				data += event.data
 			}
 		}
+		flush()
 	}, [input.events])
 
 	const terminalError = pipe(

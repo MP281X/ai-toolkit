@@ -7,7 +7,7 @@ import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, projectsAtom, runsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
@@ -55,17 +55,6 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.72_0.075_20)] [&_.tree-label]:text-[oklch(0.78_0.075_20)]',
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
 ]
-
-const runsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
 
 const branchesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -179,10 +168,6 @@ function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) 
 	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
 
-function runSessionId(scriptName: string, taskIndex: number) {
-	return `run:${scriptName}:${taskIndex}`
-}
-
 function WorktreeRuns(input: {
 	readonly cwd: string
 	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
@@ -241,7 +226,7 @@ function RunScriptRow(input: {
 	const parallel = input.script.tasks.length > 1
 	const commands = input.script.tasks.map(task => (parallel ? task : `vp run ${input.script.name}`))
 	const firstCommand = commands[0] ?? ''
-	const firstSessionId = runSessionId(input.script.name, 0)
+	const firstSessionId = `${input.script.name}:0`
 	const firstState = useAtomSuspense(
 		terminalStateAtom({args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId})
 	)
@@ -257,15 +242,24 @@ function RunScriptRow(input: {
 						onClick={event => {
 							event.stopPropagation()
 							commands.forEach((command, taskIndex) => {
-								const sessionId = runSessionId(input.script.name, taskIndex)
 								if (active) {
-									void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
-								} else {
-									void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(
-										state => {
-											if (taskIndex === 0) input.selectRun(input.cwd, sessionId, command, state.runId)
+									void stop({
+										payload: {
+											args: ['-lc', command],
+											command: 'sh',
+											cwd: input.cwd,
+											sessionId: `${input.script.name}:${taskIndex}`
 										}
-									)
+									})
+								} else {
+									void restart({
+										payload: {
+											args: ['-lc', command],
+											command: 'sh',
+											cwd: input.cwd,
+											sessionId: `${input.script.name}:${taskIndex}`
+										}
+									})
 								}
 							})
 						}}
@@ -296,11 +290,11 @@ function RunScriptRow(input: {
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{commands.map((command, taskIndex) => (
 						<RunTaskRow
-							key={runSessionId(input.script.name, taskIndex)}
+							key={`${input.script.name}:${taskIndex}`}
 							command={command}
 							cwd={input.cwd}
 							selectRun={input.selectRun}
-							sessionId={runSessionId(input.script.name, taskIndex)}
+							sessionId={`${input.script.name}:${taskIndex}`}
 						/>
 					))}
 				</ul>
@@ -333,9 +327,7 @@ function RunTaskRow(input: {
 							if (active) {
 								void stop({payload: session})
 							} else {
-								void restart({payload: session}).then(nextState => {
-									input.selectRun(input.cwd, input.sessionId, input.command, nextState.runId)
-								})
+								void restart({payload: session})
 							}
 						}}
 						title={active ? 'Stop task' : 'Start task'}
