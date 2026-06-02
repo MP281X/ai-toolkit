@@ -783,7 +783,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			yield* pipe(git.string(config.cwd, ['push', '-u', remote, `HEAD:${branch}`]), Effect.asVoid)
 		})
 
-		const hasUnpushedCommits = Effect.gen(function* () {
+		const unpushedCommitSubjects = Effect.gen(function* () {
 			const branch = yield* currentBranch
 			const remoteBranch = `origin/${branch}`
 			const hasRemoteBranch = yield* pipe(
@@ -792,12 +792,26 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				Effect.orElseSucceed(() => false)
 			)
 
-			if (!hasRemoteBranch) return true
+			if (hasRemoteBranch) {
+				return yield* git.lines(config.cwd, ['log', '--format=%s', `${remoteBranch}..HEAD`])
+			}
 
-			return yield* pipe(
-				git.lines(config.cwd, ['log', '--format=%H', `${remoteBranch}..HEAD`]),
-				Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
+			const defaultBranch = yield* defaultBranchName
+			const base = yield* branchBase(defaultBranch)
+			const from = yield* pipe(
+				git.string(config.cwd, ['merge-base', base, 'HEAD']),
+				Effect.map(String.trim),
+				Effect.catchTag('GitError', () => Effect.succeed(base))
 			)
+
+			return yield* git.lines(config.cwd, ['log', '--format=%s', `${from}..HEAD`])
+		})
+
+		const hasPushableCommits = Effect.gen(function* () {
+			const subjects = yield* unpushedCommitSubjects
+			if (Array.some(subjects, String.startsWith('wip: '))) return false
+
+			return !Array.isReadonlyArrayEmpty(subjects)
 		})
 
 		const createDraftPr = Effect.gen(function* () {
@@ -828,13 +842,12 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 								nodes {
 									id
 									isResolved
-									path
-									line
-									startLine
-									side
 									comments(first: 20) {
 										nodes {
 											body
+											line
+											originalLine
+											path
 											url
 										}
 									}
@@ -861,13 +874,17 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 						readonly pullRequest?: {
 							readonly reviewThreads?: {
 								readonly nodes?: readonly {
-									readonly comments?: {readonly nodes?: readonly {readonly body?: string; readonly url?: string}[]}
+									readonly comments?: {
+										readonly nodes?: readonly {
+											readonly body?: string
+											readonly line?: number
+											readonly originalLine?: number
+											readonly path?: string
+											readonly url?: string
+										}[]
+									}
 									readonly id?: string
 									readonly isResolved?: boolean
-									readonly line?: number
-									readonly path?: string
-									readonly side?: string
-									readonly startLine?: number
 								}[]
 							}
 						}
@@ -878,19 +895,18 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			return pipe(
 				threads,
-				Array.filter(thread => thread.isResolved !== true && thread.id !== undefined && thread.path !== undefined),
+				Array.filter(thread => thread.isResolved !== true && thread.id !== undefined),
 				Array.flatMap(thread =>
 					pipe(
 						thread.comments?.nodes ?? [],
-						Array.filter(comment => comment.body !== undefined),
+						Array.filter(comment => comment.body !== undefined && comment.path !== undefined),
 						Array.map(
 							comment =>
 								new GitHubReviewThread({
 									body: comment.body ?? '',
-									filePath: thread.path ?? '',
+									filePath: comment.path ?? '',
 									id: thread.id ?? '',
-									lineNumber: thread.line ?? thread.startLine ?? 1,
-									side: thread.side === 'LEFT' ? 'deletions' : undefined,
+									lineNumber: comment.line ?? comment.originalLine ?? 1,
 									url: comment.url
 								})
 						)
@@ -958,14 +974,17 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					defaultBranch,
 					dirty: yield* hasWorktreeChanges,
 					prUrl: Option.getOrUndefined(yield* branchPrUrl),
-					unpushedCommits: yield* hasUnpushedCommits
+					unpushedCommits: yield* hasPushableCommits
 				})
 			}),
 			publish: Effect.gen(function* () {
 				const branch = yield* currentBranch
 				const defaultBranch = yield* defaultBranchName
+				if (!(yield* hasPushableCommits)) {
+					return yield* new GitError({message: 'No pushable commits.'})
+				}
 				yield* pushCurrentBranch
-				if (yield* hasUnpushedCommits) {
+				if (yield* hasPushableCommits) {
 					return yield* new GitError({message: 'Push completed but the branch still has unpushed commits.'})
 				}
 

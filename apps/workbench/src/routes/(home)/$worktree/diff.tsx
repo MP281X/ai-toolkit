@@ -462,6 +462,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							hasWipCommits={hasWipCommits}
 							prUrl={metadata.value.prUrl}
 							refreshReview={refreshReview}
+							unpushedCommits={metadata.value.unpushedCommits}
 						/>
 						<div className="min-h-0 flex-[1.2] border-b">
 							{reviewDiffsLoaded ? (
@@ -606,6 +607,7 @@ function CommitActionForm(input: {
 	readonly hasWipCommits: boolean
 	readonly prUrl?: string
 	readonly refreshReview: () => void
+	readonly unpushedCommits: boolean
 }) {
 	const [commitMessage, setCommitMessage] = useState('')
 	const actionStateResult = useAtomValue(reviewActionsStateAtom(input.cwd))
@@ -670,33 +672,35 @@ function CommitActionForm(input: {
 							<UploadIcon />
 						)}
 					</InputGroupButton>
-					{input.prUrl && (
-						<InputGroupButton
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							aria-label="Open PR"
-							title="Open PR"
-							onClick={() => {
-								window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-							}}
-						>
-							<ExternalLinkIcon />
-						</InputGroupButton>
-					)}
 				</InputGroupAddon>
 			</InputGroup>
-			<Button
-				type="button"
-				variant="outline"
-				size="icon-sm"
-				aria-label="Push"
-				title="Push"
-				disabled={actionState.pushing}
-				onClick={() => void push()}
-			>
-				{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
-			</Button>
+			<div className="inline-flex shrink-0 items-center">
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					aria-label="Push"
+					title="Push"
+					disabled={actionState.pushing || !input.unpushedCommits}
+					className="border-r-0"
+					onClick={() => void push()}
+				>
+					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					aria-label="Open PR"
+					title="Open PR"
+					disabled={!input.prUrl}
+					onClick={() => {
+						if (input.prUrl) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
+					}}
+				>
+					<ExternalLinkIcon />
+				</Button>
+			</div>
 		</form>
 	)
 }
