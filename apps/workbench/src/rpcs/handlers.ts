@@ -258,11 +258,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.metadata({base: payload.base}))
 				),
-			'review.publish': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.publish)
-				),
 			'review.stageFile': payload =>
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),

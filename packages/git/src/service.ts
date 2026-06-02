@@ -37,8 +37,7 @@ import {
 	GitReviewMetadata,
 	GitRepository,
 	GitWorktree as GitWorktreeSchema,
-	GitWorktreeStatus,
-	GitPublishResult
+	GitWorktreeStatus
 } from './schema.ts'
 
 const makeGitExecutor = Effect.gen(function* () {
@@ -723,6 +722,10 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			)
 		})
 
+		function isWipSubject(subject: string) {
+			return subject === 'wip' || String.startsWith('wip: ')(subject)
+		}
+
 		const commits = Effect.fnUntraced(function* (base: string) {
 			const from = yield* pipe(
 				git.string(config.cwd, ['merge-base', base, 'HEAD']),
@@ -741,7 +744,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
 							shortHash: parts[1] ?? '',
 							subject,
-							wip: String.startsWith('wip: ')(subject)
+							wip: isWipSubject(subject)
 						})
 					})
 				)
@@ -760,7 +763,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
 							shortHash: parts[1] ?? '',
 							subject,
-							wip: String.startsWith('wip: ')(subject)
+							wip: isWipSubject(subject)
 						})
 					})
 				)
@@ -769,18 +772,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		const pushCurrentBranch = Effect.gen(function* () {
 			const branch = yield* currentBranch
-			const upstream = yield* pipe(
-				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
-				Effect.map(String.trim),
-				Effect.option
-			)
-			const remote = pipe(
-				upstream,
-				Option.map(value => String.split('/')(value)[0] ?? 'origin'),
-				Option.getOrElse(() => 'origin')
-			)
-
-			yield* pipe(git.string(config.cwd, ['push', '-u', remote, `HEAD:${branch}`]), Effect.asVoid)
+			yield* pipe(git.string(config.cwd, ['push', '-u', 'origin', `HEAD:${branch}`]), Effect.asVoid)
 		})
 
 		const unpushedCommitSubjects = Effect.gen(function* () {
@@ -809,7 +801,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		const hasPushableCommits = Effect.gen(function* () {
 			const subjects = yield* unpushedCommitSubjects
-			if (Array.some(subjects, String.startsWith('wip: '))) return false
+			if (Array.some(subjects, isWipSubject)) return false
 
 			return !Array.isReadonlyArrayEmpty(subjects)
 		})
@@ -929,23 +921,32 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 		return {
 			commitAndPush: Effect.fnUntraced(function* (input: {readonly base: string; readonly message: string}) {
-				if (yield* hasWorktreeChanges) {
-					return yield* new GitError({message: 'Create a WIP commit before squashing.'})
-				}
-
 				const oldestWip = pipe(
 					yield* commits(input.base),
-					Array.filter(commit => commit.wip),
+					Array.takeWhile(commit => commit.wip),
 					Array.last,
 					Option.getOrUndefined
 				)
+				const dirty = yield* hasWorktreeChanges
 
-				if (!oldestWip) {
-					return yield* new GitError({message: 'No WIP commits to squash.'})
+				if (oldestWip) {
+					yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldestWip.hash}^`]), Effect.asVoid)
+				} else if (!dirty) {
+					return yield* new GitError({message: 'No changes to commit.'})
 				}
 
-				yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldestWip.hash}^`]), Effect.asVoid)
+				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
 				yield* pipe(git.string(config.cwd, ['commit', '-m', input.message]), Effect.asVoid)
+				yield* pushCurrentBranch
+				if (yield* hasPushableCommits) {
+					return yield* new GitError({message: 'Push completed but the branch still has unpushed commits.'})
+				}
+
+				const branch = yield* currentBranch
+				const defaultBranch = yield* defaultBranchName
+				if (branch !== defaultBranch && Option.isNone(yield* branchPrUrl)) {
+					yield* createDraftPr
+				}
 			}),
 			commits,
 			createWipCommit: Effect.fnUntraced(function* (message: string) {
@@ -954,7 +955,8 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				}
 
 				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
-				yield* pipe(git.string(config.cwd, ['commit', '-m', `wip: ${message}`]), Effect.asVoid)
+				const subject = pipe(message, String.trim, message => (String.isEmpty(message) ? 'wip' : `wip: ${message}`))
+				yield* pipe(git.string(config.cwd, ['commit', '-m', subject]), Effect.asVoid)
 			}),
 			discardFile: Effect.fnUntraced(function* (filePath: string) {
 				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.ignore)
@@ -976,24 +978,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					prUrl: Option.getOrUndefined(yield* branchPrUrl),
 					unpushedCommits: yield* hasPushableCommits
 				})
-			}),
-			publish: Effect.gen(function* () {
-				const branch = yield* currentBranch
-				const defaultBranch = yield* defaultBranchName
-				if (!(yield* hasPushableCommits)) {
-					return yield* new GitError({message: 'No pushable commits.'})
-				}
-				yield* pushCurrentBranch
-				if (yield* hasPushableCommits) {
-					return yield* new GitError({message: 'Push completed but the branch still has unpushed commits.'})
-				}
-
-				if (branch === defaultBranch) return new GitPublishResult({})
-
-				const existingPrUrl = yield* branchPrUrl
-				const prUrl = Option.isSome(existingPrUrl) ? existingPrUrl.value : Option.getOrUndefined(yield* createDraftPr)
-
-				return new GitPublishResult({prUrl})
 			}),
 			resolveReviewThread: Effect.fnUntraced(function* (threadId: string) {
 				const query = `

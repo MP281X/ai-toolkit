@@ -9,7 +9,6 @@ import {
 	GitError,
 	GitHubReviewThread,
 	GitProject,
-	GitPublishResult,
 	GitReviewFrom,
 	GitReviewMetadata,
 	GitReviewTo
@@ -128,11 +127,6 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('review.commitAndPush', {
 		error: GitError,
 		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, message: Schema.String})
-	}),
-	Rpc.make('review.publish', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String}),
-		success: GitPublishResult
 	}),
 	Rpc.make('review.githubThreads', {
 		error: GitError,

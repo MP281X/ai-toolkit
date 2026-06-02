@@ -13,15 +13,15 @@ import {ReviewState, type ReviewComment, type ReviewMark} from '#rpcs/contracts.
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	CheckIcon,
+	BrushCleaningIcon,
 	CopyIcon,
 	ExternalLinkIcon,
 	FileIcon,
 	FolderIcon,
-	GitCompareIcon,
+	GitPullRequestArrowIcon,
 	Loader2Icon,
 	MinusIcon,
-	TrashIcon,
-	UploadIcon
+	TrashIcon
 } from '@deslop/components/icons'
 import {PatchDiff} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
@@ -195,37 +195,33 @@ const unmarkReviewedAtom = Atom.family((input: {readonly base: string; readonly 
 	})
 )
 
-type ReviewActionsState = {readonly committing: boolean; readonly pushing: boolean}
+type ReviewActionsState = {readonly committing: boolean; readonly wipping: boolean}
 
 const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => Effect.succeed<ReviewActionsState>({committing: false, pushing: false})))
+	Atom.optimistic(Atom.make(() => Effect.succeed<ReviewActionsState>({committing: false, wipping: false})))
 )
 
 const commitReviewActionAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
 	Atom.optimisticFn(reviewActionsStateAtom(input.cwd), {
-		fn: RpcClient.runtime.fn<{readonly dirty: boolean; readonly message: string}>()(
-			Effect.fnUntraced(function* (payload) {
+		fn: RpcClient.runtime.fn<string>()(
+			Effect.fnUntraced(function* (message) {
 				const client = yield* RpcClient
-				if (payload.dirty) {
-					return yield* client('review.createWipCommit', {cwd: input.cwd, message: payload.message})
-				}
-
-				return yield* client('review.commitAndPush', {base: input.base, cwd: input.cwd, message: payload.message})
+				return yield* client('review.commitAndPush', {base: input.base, cwd: input.cwd, message})
 			})
 		),
 		reducer: state => ({...state, committing: true})
 	})
 )
 
-const publishReviewActionAtom = Atom.family((cwd: string) =>
+const wipReviewActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<void>()(
-			Effect.fnUntraced(function* () {
+		fn: RpcClient.runtime.fn<string>()(
+			Effect.fnUntraced(function* (message) {
 				const client = yield* RpcClient
-				return yield* client('review.publish', {cwd})
+				return yield* client('review.createWipCommit', {cwd, message})
 			})
 		),
-		reducer: state => ({...state, pushing: true})
+		reducer: state => ({...state, wipping: true})
 	})
 )
 
@@ -298,7 +294,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const markReviewed = useAtomSet(markReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const unmarkReviewed = useAtomSet(unmarkReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const resolveGithubThread = useAtomSet(RpcClient.mutation('review.githubThreads.resolve'), {mode: 'promise'})
-	const hasWipCommits = Array.some(metadata.value.commits, commit => commit.wip)
+	const hasWipCommits = pipe(
+		metadata.value.commits,
+		Array.head,
+		Option.exists(commit => commit.wip)
+	)
 	const effectiveComments: readonly DisplayComment[] = Array.appendAll(
 		Array.map(comments, comment => ({...comment, source: 'local' as const})),
 		Array.map(githubThreads, comment => ({...comment, source: 'github' as const, threadId: comment.id}))
@@ -462,7 +462,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							hasWipCommits={hasWipCommits}
 							prUrl={metadata.value.prUrl}
 							refreshReview={refreshReview}
-							unpushedCommits={metadata.value.unpushedCommits}
 						/>
 						<div className="min-h-0 flex-[1.2] border-b">
 							{reviewDiffsLoaded ? (
@@ -607,34 +606,31 @@ function CommitActionForm(input: {
 	readonly hasWipCommits: boolean
 	readonly prUrl?: string
 	readonly refreshReview: () => void
-	readonly unpushedCommits: boolean
 }) {
 	const [commitMessage, setCommitMessage] = useState('')
 	const actionStateResult = useAtomValue(reviewActionsStateAtom(input.cwd))
 	const actionState =
-		actionStateResult._tag === 'Success' ? actionStateResult.value : {committing: false, pushing: false}
+		actionStateResult._tag === 'Success' ? actionStateResult.value : {committing: false, wipping: false}
 	const commit = useAtomSet(commitReviewActionAtom({base: input.base, cwd: input.cwd}), {mode: 'promise'})
-	const publish = useAtomSet(publishReviewActionAtom(input.cwd), {mode: 'promise'})
+	const wip = useAtomSet(wipReviewActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessage, String.trim)
-	const disabled = actionState.committing
-		? true
-		: String.isEmpty(trimmedCommitMessage)
-			? true
-			: !input.dirty && !input.hasWipCommits
-	const title = input.dirty ? 'Create WIP commit' : 'Squash WIP commits'
+	const missingMessage = String.isEmpty(trimmedCommitMessage)
+	const commitDisabled = actionState.committing || missingMessage || (!input.dirty && !input.hasWipCommits)
+	const wipDisabled = actionState.wipping || !input.dirty
 
 	async function submit() {
-		if (disabled) return
+		if (commitDisabled) return
 
-		await commit({dirty: input.dirty, message: trimmedCommitMessage})
+		await commit(trimmedCommitMessage)
 		setCommitMessage('')
 		input.refreshReview()
 	}
 
-	async function push() {
-		if (actionState.pushing) return
+	async function createWip() {
+		if (wipDisabled) return
 
-		await publish()
+		await wip(trimmedCommitMessage)
+		setCommitMessage('')
 		input.refreshReview()
 	}
 
@@ -660,17 +656,11 @@ function CommitActionForm(input: {
 						type="submit"
 						variant="ghost"
 						size="icon-xs"
-						aria-label={title}
-						disabled={disabled}
-						title={title}
+						aria-label="Commit and push"
+						disabled={commitDisabled}
+						title="Commit and push"
 					>
-						{actionState.committing ? (
-							<Loader2Icon className="animate-spin" />
-						) : input.dirty ? (
-							<GitCompareIcon />
-						) : (
-							<UploadIcon />
-						)}
+						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>
@@ -679,13 +669,13 @@ function CommitActionForm(input: {
 					type="button"
 					variant="outline"
 					size="icon"
-					aria-label="Push"
-					title="Push"
-					disabled={actionState.pushing || !input.unpushedCommits}
+					aria-label="Create WIP commit"
+					title="Create WIP commit"
+					disabled={wipDisabled}
 					className="border-r-0"
-					onClick={() => void push()}
+					onClick={() => void createWip()}
 				>
-					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
+					{actionState.wipping ? <Loader2Icon className="animate-spin" /> : <BrushCleaningIcon />}
 				</Button>
 				<Button
 					type="button"

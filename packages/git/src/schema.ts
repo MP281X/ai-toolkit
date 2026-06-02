@@ -55,10 +55,6 @@ export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitRevie
 	unpushedCommits: Schema.Boolean
 }) {}
 
-export class GitPublishResult extends Schema.Class<GitPublishResult>('GitPublishResult')({
-	prUrl: Schema.optional(Schema.String)
-}) {}
-
 export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHubReviewThread')({
 	body: Schema.String,
 	filePath: Schema.String,
