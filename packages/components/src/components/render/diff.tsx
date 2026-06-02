@@ -1,7 +1,7 @@
 import {Array, String} from 'effect'
 
 import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
-import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
+import {getSingularPatch, parseDiffFromFile, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
 import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
@@ -14,6 +14,12 @@ const DIFF_CSS = `
 	:host,
 	pre {
 		--diffs-bg: var(--background) !important;
+		--diffs-bg-buffer-override: var(--background) !important;
+		--diffs-bg-context-override: var(--background) !important;
+		--diffs-bg-hover-override: color-mix(in oklab, var(--muted) 70%, transparent) !important;
+		--diffs-bg-separator-override: var(--muted) !important;
+		--diffs-fg: var(--foreground) !important;
+		--diffs-fg-number-override: var(--muted-foreground) !important;
 		font-family: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono Variable', monospace !important;
 		font-size: inherit !important;
 		letter-spacing: 0 !important;
@@ -30,6 +36,35 @@ const DIFF_CSS = `
 	::after {
 		border-radius: 0 !important;
 		user-select: text !important;
+	}
+
+	[data-diff],
+	[data-file],
+	[data-separator],
+	[data-line],
+	[data-line] *,
+	[data-line-annotation],
+	[data-annotation-content] {
+		border-radius: 0 !important;
+	}
+
+	[data-diff] [data-line][data-line-type='context'],
+	[data-diff] [data-line][data-line-type='context-expanded'],
+	[data-file] [data-line] {
+		background-color: var(--background) !important;
+		color: var(--foreground) !important;
+	}
+
+	[data-diff] [data-column-number][data-line-type='context'],
+	[data-diff] [data-column-number][data-line-type='context-expanded'],
+	[data-file] [data-column-number] {
+		background-color: var(--background) !important;
+		color: var(--muted-foreground) !important;
+	}
+
+	[data-separator] {
+		background-color: var(--muted) !important;
+		color: var(--muted-foreground) !important;
 	}
 `
 
@@ -231,16 +266,14 @@ function CommentAnnotation(props: {
 function patchResultContent(fileDiff: FileDiffMetadata) {
 	if (fileDiff.type === 'deleted') return ''
 
-	return Array.join(
-		Array.flatMap(fileDiff.hunks, hunk =>
-			Array.flatMap(hunk.hunkContent, part =>
-				Array.take(
-					Array.drop(fileDiff.additionLines, part.additionLineIndex),
-					part.type === 'context' ? part.lines : part.additions
-				)
-			)
-		),
-		''
+	return Array.join(fileDiff.additionLines, '')
+}
+
+function compactFileDiff(filePath: string, fileDiff: FileDiffMetadata) {
+	return parseDiffFromFile(
+		{contents: Array.join(fileDiff.deletionLines, ''), name: fileDiff.prevName ?? filePath},
+		{contents: patchResultContent(fileDiff), name: filePath},
+		{context: 3}
 	)
 }
 
@@ -258,6 +291,7 @@ export function PatchDiff(props: {
 	const [draftComment, setDraftComment] = useState<DiffComment>()
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
+	const compactDiff = setLanguageOverride(compactFileDiff(props.filePath, fileDiff), language)
 	const comments = props.comments ?? []
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
@@ -340,7 +374,7 @@ export function PatchDiff(props: {
 			{mode === 'diff' ? (
 				<PierreFileDiff<DiffComment>
 					key={props.patch}
-					fileDiff={fileDiff}
+					fileDiff={compactDiff}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
