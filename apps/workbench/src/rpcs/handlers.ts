@@ -22,7 +22,7 @@ import {
 
 import {KeyValueStore} from 'effect/unstable/persistence'
 
-import {ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
+import {ReviewComment, ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
 import {TerminalError} from '@deslop/terminal/schema'
@@ -35,6 +35,8 @@ const TerminalSessionKey = Schema.Struct({
 	cwd: Schema.String,
 	sessionId: Schema.optional(Schema.String)
 })
+
+const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
@@ -76,8 +78,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const readReviewState = Effect.fnUntraced(function* (key: string) {
 			return yield* pipe(
 				reviewStore.get(`review-state/${key}`),
-				Effect.map(Option.getOrElse(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))),
-				Effect.orElseSucceed(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))
+				Effect.map(Option.getOrElse(() => emptyReviewState)),
+				Effect.orElseSucceed(() => emptyReviewState)
 			)
 		})
 
@@ -207,7 +209,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						)
 					)
 				),
-			'review.comments.delete': payload =>
+			'review.comments.resolve': payload =>
 				updateReviewState(payload, state => {
 					const key = commentKey(payload)
 
@@ -223,7 +225,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					return new ReviewState({
 						comments: Array.append(
 							Array.filter(state.comments, comment => commentKey(comment) !== key),
-							payload.comment
+							new ReviewComment({...payload.comment, resolved: false})
 						),
 						marks: state.marks
 					})
@@ -242,6 +244,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
+				),
+			'review.githubThreads': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.reviewThreads)
+				),
+			'review.githubThreads.resolve': payload =>
+				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.flatMap(worktree => worktree.resolveReviewThread(payload.threadId))
 				),
 			'review.metadata': payload =>
 				pipe(
@@ -291,13 +303,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
-				),
-			'review.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewDiffs(payload.scope))
-					)
 				),
 			'review.watchRange': payload =>
 				Stream.unwrap(
