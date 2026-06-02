@@ -113,9 +113,9 @@ importers:
         specifier: latest
         version: 6.0.0
     devDependencies:
-      '@deslop/browser':
+      '@deslop/portless':
         specifier: workspace:*
-        version: link:../../packages/browser
+        version: link:../../packages/portless
       '@deslop/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -159,7 +159,7 @@ importers:
         specifier: latest
         version: 4.3.0
 
-  packages/browser: {}
+  packages/portless: {}
 
   packages/components:
     dependencies:

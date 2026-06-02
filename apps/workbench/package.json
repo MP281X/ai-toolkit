@@ -16,10 +16,11 @@
 	},
 
 	"scripts": {
-		"dev": "vp dev --port 3010",
+		"dev:client": "vp dev",
+		"dev:server": "node --watch ./src/main.server.ts",
 		"build": "vp build && vp pack",
 
-		"preview": "vp run build && PORT=4010 node ./dist/server.js"
+		"preview": "vp run build && node ./dist/server.js"
 	},
 
 	"dependencies": {
@@ -37,7 +38,7 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/git": "workspace:*",
-		"@deslop/browser": "workspace:*",
+		"@deslop/portless": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",

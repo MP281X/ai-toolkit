@@ -1,4 +1,6 @@
-import {Array, Option, String, pipe} from 'effect'
+import {Array, Match, Option, String, pipe} from 'effect'
+
+import {ChildProcess} from 'effect/unstable/process'
 
 type SplitState = {
 	readonly commands: readonly string[]
@@ -43,4 +45,13 @@ export function splitParallelCommands(script: string) {
 		Option.liftPredicate(String.trim(state.current), String.isNonEmpty),
 		Option.match({onNone: () => state.commands, onSome: command => [...state.commands, command]})
 	)
+}
+
+export function commandFromScript(script: string) {
+	const [command, args] = Match.value(/^vp\s+dev(?:\s|$)/u.test(script)).pipe(
+		Match.when(true, () => ['vp', ['dev']] as const),
+		Match.orElse(() => ['sh', ['-lc', script]] as const)
+	)
+
+	return ChildProcess.make(command, args)
 }

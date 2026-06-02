@@ -4,12 +4,12 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
-import {splitParallelCommands} from '@deslop/terminal/utils'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
 	readonly command?: string
 	readonly cwd: string
+	readonly env?: Readonly<Record<string, string>>
 	readonly sessionId?: string
 }
 
@@ -18,7 +18,11 @@ export function worktreeRouteId(root: string) {
 }
 
 function terminalStateInitialValue(input: TerminalSessionInput): TerminalState {
-	return {ports: Array.empty<number>(), runId: 0, state: input.command === undefined ? 'starting' : 'idle', title: ''}
+	return {
+		runId: 0,
+		state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle',
+		title: ''
+	}
 }
 
 function terminalViewInitialValue(input: TerminalSessionInput) {
@@ -57,68 +61,27 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 	)
 )
 
-export const terminalPortsAtom = Atom.family((input: TerminalSessionInput) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('terminal.ports', input)),
-			Stream.unwrap
-		),
-		{initialValue: Array.empty<number>()}
-	)
-)
-
-export const runsAtom = Atom.family((cwd: string) =>
+export const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
+				String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])
 			),
 			{initialValue: []}
 		)
 	)
 )
 
-export const browserPortsAtom = Atom.family((cwd: string) =>
+export const portlessOriginsAtom = Atom.family((cwd: string) =>
 	Atom.make(get =>
 		pipe(
-			Effect.all([
-				get.result(terminalPortsAtom({cwd})),
-				get.result(runsAtom(cwd)).pipe(
-					Effect.flatMap(scripts =>
-						Effect.all(
-							pipe(
-								scripts,
-								Array.flatMap(script => {
-									const tasks = splitParallelCommands(script.command)
-									const parallel = tasks.length > 1
-
-									return Array.map(tasks, (task, taskIndex) =>
-										terminalPortsAtom({
-											args: ['-lc', parallel ? task : `vp run ${script.name}`],
-											command: 'sh',
-											cwd,
-											sessionId: `${script.name}:${taskIndex}`
-										})
-									)
-								}),
-								Array.map(atom => get.result(atom))
-							)
-						)
-					)
-				)
-			]),
-			Effect.map(([terminalResult, scriptResults]) =>
+			get.result(portlessRunsAtom(cwd)),
+			Effect.map(scripts =>
 				pipe(
-					[
-						...terminalResult,
-						...pipe(
-							scriptResults,
-							Array.flatMap(result => result)
-						)
-					],
+					scripts,
+					Array.filterMap(script => (script.origin === undefined ? Result.failVoid : Result.succeed(script.origin))),
 					Array.dedupe,
-					Array.sort(Order.Number)
+					Array.sort(Order.String)
 				)
 			)
 		)
@@ -141,22 +104,19 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 			pipe(
 				get.result(projectsAtom),
 				Effect.map(projects => {
-					const activeProject = pipe(
-						projects,
-						Array.findFirst(project =>
-							Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+					const activeProject = Array.findFirst(projects, project =>
+						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+					)
+					const activeWorktree = pipe(
+						activeProject,
+						Option.flatMap(project =>
+							Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
 						)
 					)
 
 					return {
 						activeProject: Option.getOrUndefined(activeProject),
-						activeWorktree: pipe(
-							activeProject,
-							Option.flatMap(project =>
-								Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-							),
-							Option.getOrUndefined
-						),
+						activeWorktree: Option.getOrUndefined(activeWorktree),
 						projects
 					}
 				})
