@@ -32,11 +32,13 @@ import {
 	GitDiff,
 	GitDiffSegment,
 	GitError,
+	GitHubReviewThread,
 	GitProject,
 	GitReviewMetadata,
 	GitRepository,
 	GitWorktree as GitWorktreeSchema,
-	GitWorktreeStatus
+	GitWorktreeStatus,
+	GitPublishResult
 } from './schema.ts'
 
 const makeGitExecutor = Effect.gen(function* () {
@@ -448,6 +450,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/service/GitWorktree', {
 	make: Effect.fnUntraced(function* (config: {readonly cwd: string}) {
+		const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 		const git = yield* makeGitExecutor
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
@@ -676,15 +679,30 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return Array.appendAll(diffsWithSegments, untracked)
 		})
 
-		const suggestBase = Effect.gen(function* () {
-			const defaultBranch = yield* pipe(
-				git.string(config.cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
-				Effect.map(flow(String.trim, String.replace(/^origin\//u, 'origin/'))),
-				Effect.orElseSucceed(() => 'origin/main')
-			)
-
+		const ghString = Effect.fnUntraced(function* (args: readonly string[]) {
 			return yield* pipe(
-				[defaultBranch, 'origin/main', 'origin/master', 'main', 'master'],
+				execString(ChildProcess.make('gh', args, {cwd: config.cwd})),
+				Effect.mapError(cause => new GitError({cause}))
+			)
+		})
+
+		const currentBranch = pipe(git.string(config.cwd, ['branch', '--show-current']), Effect.map(String.trim))
+
+		const defaultBranchName = pipe(
+			git.string(config.cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
+			Effect.map(flow(String.trim, String.replace(/^origin\//u, ''))),
+			Effect.catchTag('GitError', () =>
+				pipe(
+					git.string(config.cwd, ['rev-parse', '--verify', 'main']),
+					Effect.as('main'),
+					Effect.catchTag('GitError', () => Effect.succeed('master'))
+				)
+			)
+		)
+
+		const branchBase = Effect.fnUntraced(function* (defaultBranch: string) {
+			return yield* pipe(
+				[`origin/${defaultBranch}`, defaultBranch],
 				Effect.findFirst(candidate =>
 					pipe(
 						git.string(config.cwd, ['rev-parse', '--verify', candidate]),
@@ -693,6 +711,15 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					)
 				),
 				Effect.map(Option.getOrElse(() => 'HEAD'))
+			)
+		})
+
+		const branchPrUrl = Effect.gen(function* () {
+			return yield* pipe(
+				ghString(['pr', 'view', '--json', 'url', '--jq', '.url']),
+				Effect.map(String.trim),
+				Effect.map(url => (String.isNonEmpty(url) ? Option.some(url) : Option.none<string>())),
+				Effect.catchTag('GitError', () => Effect.succeed(Option.none<string>()))
 			)
 		})
 
@@ -717,6 +744,139 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 							wip: String.startsWith('wip: ')(subject)
 						})
 					})
+				)
+			)
+		})
+
+		const firstParentCommits = Effect.gen(function* () {
+			return yield* pipe(
+				git.lines(config.cwd, ['log', '--first-parent', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', 'HEAD']),
+				Effect.map(
+					Array.map(line => {
+						const parts = String.split('\u0000')(line)
+						const subject = parts[2] ?? ''
+						return new GitCommit({
+							hash: parts[0] ?? '',
+							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
+							shortHash: parts[1] ?? '',
+							subject,
+							wip: String.startsWith('wip: ')(subject)
+						})
+					})
+				)
+			)
+		})
+
+		const pushCurrentBranch = Effect.gen(function* () {
+			const branch = yield* currentBranch
+			const hasUpstream = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+				Effect.as(true),
+				Effect.orElseSucceed(() => false)
+			)
+			yield* pipe(
+				hasUpstream ? git.string(config.cwd, ['push']) : git.string(config.cwd, ['push', '-u', 'origin', branch]),
+				Effect.asVoid
+			)
+		})
+
+		const createDraftPr = Effect.gen(function* () {
+			return yield* pipe(
+				ghString(['pr', 'create', '--draft', '--fill']),
+				Effect.map(output => {
+					const url = output.match(/https?:\/\/\S+/u)?.[0] ?? String.trim(output)
+					return String.isNonEmpty(url) ? Option.some(url) : Option.none<string>()
+				})
+			)
+		})
+
+		const prReviewThreads = Effect.gen(function* () {
+			const pr = yield* pipe(
+				ghString(['pr', 'view', '--json', 'number', '--jq', '.number']),
+				Effect.map(flow(String.trim, Number.parse)),
+				Effect.flatMap(
+					Option.match({onNone: () => Effect.fail(new GitError({message: 'No PR found.'})), onSome: Effect.succeed})
+				)
+			)
+			const repository = yield* pipe(
+				ghString(['repo', 'view', '--json', 'owner,name']),
+				Effect.map(output => JSON.parse(output) as {readonly name: string; readonly owner: {readonly login: string}})
+			)
+			const query = `
+				query($owner: String!, $name: String!, $number: Int!) {
+					repository(owner: $owner, name: $name) {
+						pullRequest(number: $number) {
+							reviewThreads(first: 100) {
+								nodes {
+									id
+									isResolved
+									path
+									line
+									startLine
+									side
+									comments(first: 20) {
+										nodes {
+											body
+											url
+										}
+									}
+								}
+							}
+						}
+					}
+				}`
+			const response = yield* ghString([
+				'api',
+				'graphql',
+				'-f',
+				`query=${query}`,
+				'-f',
+				`owner=${repository.owner.login}`,
+				'-f',
+				`name=${repository.name}`,
+				'-F',
+				`number=${pr}`
+			])
+			const data = JSON.parse(response) as {
+				readonly data?: {
+					readonly repository?: {
+						readonly pullRequest?: {
+							readonly reviewThreads?: {
+								readonly nodes?: readonly {
+									readonly comments?: {readonly nodes?: readonly {readonly body?: string; readonly url?: string}[]}
+									readonly id?: string
+									readonly isResolved?: boolean
+									readonly line?: number
+									readonly path?: string
+									readonly side?: string
+									readonly startLine?: number
+								}[]
+							}
+						}
+					}
+				}
+			}
+			const threads = data.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
+
+			return pipe(
+				threads,
+				Array.filter(thread => thread.isResolved !== true && thread.id !== undefined && thread.path !== undefined),
+				Array.flatMap(thread =>
+					pipe(
+						thread.comments?.nodes ?? [],
+						Array.filter(comment => comment.body !== undefined),
+						Array.map(
+							comment =>
+								new GitHubReviewThread({
+									body: comment.body ?? '',
+									filePath: thread.path ?? '',
+									id: thread.id ?? '',
+									lineNumber: thread.line ?? thread.startLine ?? 1,
+									side: thread.side === 'LEFT' ? 'deletions' : undefined,
+									url: comment.url
+								})
+						)
+					)
 				)
 			)
 		})
@@ -752,17 +912,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 				yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldestWip.hash}^`]), Effect.asVoid)
 				yield* pipe(git.string(config.cwd, ['commit', '-m', input.message]), Effect.asVoid)
-
-				const branch = yield* pipe(git.string(config.cwd, ['branch', '--show-current']), Effect.map(String.trim))
-				const hasUpstream = yield* pipe(
-					git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
-					Effect.as(true),
-					Effect.orElseSucceed(() => false)
-				)
-				yield* pipe(
-					hasUpstream ? git.string(config.cwd, ['push']) : git.string(config.cwd, ['push', '-u', 'origin', branch]),
-					Effect.asVoid
-				)
 			}),
 			commits,
 			createWipCommit: Effect.fnUntraced(function* (message: string) {
@@ -779,12 +928,49 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				yield* pipe(git.string(config.cwd, ['clean', '-fd', '--', filePath]), Effect.asVoid)
 			}),
 			metadata: Effect.fnUntraced(function* (input?: {readonly base?: string}) {
-				const base = input?.base ?? (yield* suggestBase)
+				const branch = yield* currentBranch
+				const defaultBranch = yield* defaultBranchName
+				const base = input?.base ?? (yield* branchBase(defaultBranch))
+				const displayCommits = branch === defaultBranch ? yield* firstParentCommits : yield* commits(base)
 
-				return new GitReviewMetadata({base, commits: yield* commits(base), dirty: yield* hasWorktreeChanges})
+				return new GitReviewMetadata({
+					base,
+					branch,
+					commits: displayCommits,
+					defaultBranch,
+					dirty: yield* hasWorktreeChanges,
+					prUrl: Option.getOrUndefined(yield* branchPrUrl)
+				})
+			}),
+			publish: Effect.gen(function* () {
+				const branch = yield* currentBranch
+				const defaultBranch = yield* defaultBranchName
+				yield* pushCurrentBranch
+
+				if (branch === defaultBranch) return new GitPublishResult({})
+
+				const existingPrUrl = yield* branchPrUrl
+				const prUrl = Option.isSome(existingPrUrl) ? existingPrUrl.value : Option.getOrUndefined(yield* createDraftPr)
+
+				return new GitPublishResult({prUrl})
+			}),
+			resolveReviewThread: Effect.fnUntraced(function* (threadId: string) {
+				const query = `
+					mutation($threadId: ID!) {
+						resolveReviewThread(input: {threadId: $threadId}) {
+							thread {
+								id
+							}
+						}
+					}`
+				yield* pipe(ghString(['api', 'graphql', '-f', `query=${query}`, '-f', `threadId=${threadId}`]), Effect.asVoid)
 			}),
 			reviewDiffs,
 			reviewRangeDiffs,
+			reviewThreads: pipe(
+				prReviewThreads,
+				Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitHubReviewThread>()))
+			),
 			stageFile: Effect.fnUntraced(function* (filePath: string) {
 				yield* pipe(git.string(config.cwd, ['add', '--', filePath]), Effect.asVoid)
 			}),

@@ -47,8 +47,24 @@ export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
 	base: Schema.String,
+	branch: Schema.String,
 	commits: Schema.Array(GitCommit),
-	dirty: Schema.Boolean
+	defaultBranch: Schema.String,
+	dirty: Schema.Boolean,
+	prUrl: Schema.optional(Schema.String)
+}) {}
+
+export class GitPublishResult extends Schema.Class<GitPublishResult>('GitPublishResult')({
+	prUrl: Schema.optional(Schema.String)
+}) {}
+
+export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHubReviewThread')({
+	body: Schema.String,
+	filePath: Schema.String,
+	id: Schema.String,
+	lineNumber: Schema.Number,
+	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
+	url: Schema.optional(Schema.String)
 }) {}
 
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({

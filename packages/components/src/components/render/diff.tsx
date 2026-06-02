@@ -35,6 +35,8 @@ type DiffComment = {
 	readonly lineNumber: number
 	readonly side?: AnnotationSide
 	readonly body: string
+	readonly source?: 'github' | 'local'
+	readonly threadId?: string
 }
 
 function captureScrollAnchor(container: HTMLElement, clientY: number) {
@@ -91,6 +93,10 @@ function CommentAnnotation(props: {
 		if (editing) inputRef.current?.focus()
 	}, [editing])
 
+	async function copyComment() {
+		await navigator.clipboard.writeText(props.comment.body)
+	}
+
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
 			if (props.isDraft) {
@@ -143,16 +149,42 @@ function CommentAnnotation(props: {
 
 	return (
 		<div className="text-foreground box-border w-full max-w-full bg-transparent px-2 py-2">
-			<button
-				type="button"
-				className="block w-full bg-transparent p-0 text-left whitespace-pre-wrap"
-				onClick={event => {
-					event.stopPropagation()
-					setEditing(true)
-				}}
-			>
-				{props.comment.body}
-			</button>
+			<div className="grid gap-1">
+				<button
+					type="button"
+					className="block w-full bg-transparent p-0 text-left whitespace-pre-wrap"
+					onClick={event => {
+						event.stopPropagation()
+						if (props.comment.source !== 'github') setEditing(true)
+					}}
+				>
+					{props.comment.body}
+				</button>
+				<div className="flex items-center gap-1">
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground text-xs"
+						onClick={event => {
+							event.stopPropagation()
+							void copyComment()
+						}}
+					>
+						Copy
+					</button>
+					{props.onDeleteComment && (
+						<button
+							type="button"
+							className="text-muted-foreground hover:text-foreground text-xs"
+							onClick={event => {
+								event.stopPropagation()
+								props.onDeleteComment?.(props.comment)
+							}}
+						>
+							{props.comment.source === 'github' ? 'Resolve' : 'Delete'}
+						</button>
+					)}
+				</div>
+			</div>
 		</div>
 	)
 }
