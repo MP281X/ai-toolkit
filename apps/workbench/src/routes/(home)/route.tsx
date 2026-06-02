@@ -250,11 +250,7 @@ function RunScriptRow(input: {
 								if (active) {
 									void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
 								} else {
-									void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}}).then(
-										state => {
-											if (taskIndex === 0) input.selectRun(input.cwd, sessionId, command, state.runId)
-										}
-									)
+									void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
 								}
 							})
 						}}
@@ -322,9 +318,7 @@ function RunTaskRow(input: {
 							if (active) {
 								void stop({payload: session})
 							} else {
-								void restart({payload: session}).then(nextState => {
-									input.selectRun(input.cwd, input.sessionId, input.command, nextState.runId)
-								})
+								void restart({payload: session})
 							}
 						}}
 						title={active ? 'Stop task' : 'Start task'}

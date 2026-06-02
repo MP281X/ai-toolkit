@@ -15,6 +15,7 @@ const DIFF_CSS = `
 		font-size: inherit !important;
 		letter-spacing: 0 !important;
 		line-height: inherit !important;
+		user-select: text !important;
 	}
 
 	pre {
@@ -25,6 +26,7 @@ const DIFF_CSS = `
 	::before,
 	::after {
 		border-radius: 0 !important;
+		user-select: text !important;
 	}
 `
 
@@ -236,7 +238,7 @@ export function PatchDiff(props: {
 			ref={containerRef}
 			tabIndex={-1}
 			aria-label="Diff viewer"
-			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none select-text"
 			onPointerMoveCapture={event => {
 				pointerClientYRef.current = event.clientY
 			}}
