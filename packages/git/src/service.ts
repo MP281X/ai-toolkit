@@ -707,6 +707,19 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			return subject === 'wip' || String.startsWith('wip: ')(subject)
 		}
 
+		function commitFromLogLine(line: string) {
+			const parts = String.split('\u0000')(line)
+			const subject = parts[2] ?? ''
+
+			return new GitCommit({
+				hash: parts[0] ?? '',
+				parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
+				shortHash: parts[1] ?? '',
+				subject,
+				wip: isWipSubject(subject)
+			})
+		}
+
 		const commits = Effect.fnUntraced(function* (base: string) {
 			const from = yield* pipe(
 				git.string(config.cwd, ['merge-base', base, 'HEAD']),
@@ -716,37 +729,13 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			return yield* pipe(
 				git.lines(config.cwd, ['log', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', `${from}..HEAD`]),
-				Effect.map(
-					Array.map(line => {
-						const parts = String.split('\u0000')(line)
-						const subject = parts[2] ?? ''
-						return new GitCommit({
-							hash: parts[0] ?? '',
-							parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
-							shortHash: parts[1] ?? '',
-							subject,
-							wip: isWipSubject(subject)
-						})
-					})
-				)
+				Effect.map(Array.map(commitFromLogLine))
 			)
 		})
 
 		const firstParentCommits = pipe(
 			git.lines(config.cwd, ['log', '--first-parent', '--max-count=80', '--format=%H%x00%h%x00%s%x00%P', 'HEAD']),
-			Effect.map(
-				Array.map(line => {
-					const parts = String.split('\u0000')(line)
-					const subject = parts[2] ?? ''
-					return new GitCommit({
-						hash: parts[0] ?? '',
-						parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
-						shortHash: parts[1] ?? '',
-						subject,
-						wip: isWipSubject(subject)
-					})
-				})
-			)
+			Effect.map(Array.map(commitFromLogLine))
 		)
 
 		const pushCurrentBranch = Effect.gen(function* () {

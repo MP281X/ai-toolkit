@@ -36,6 +36,8 @@ const TerminalSessionKey = Schema.Struct({
 	sessionId: Schema.optional(Schema.String)
 })
 
+const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
+
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 const TerminalSessions = RcMap.make({
@@ -76,8 +78,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const readReviewState = Effect.fnUntraced(function* (key: string) {
 			return yield* pipe(
 				reviewStore.get(`review-state/${key}`),
-				Effect.map(Option.getOrElse(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))),
-				Effect.orElseSucceed(() => new ReviewState({comments: Array.empty(), marks: Array.empty()}))
+				Effect.map(Option.getOrElse(() => emptyReviewState)),
+				Effect.orElseSucceed(() => emptyReviewState)
 			)
 		})
 
@@ -212,9 +214,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					const key = commentKey(payload)
 
 					return new ReviewState({
-						comments: Array.map(state.comments, comment =>
-							commentKey(comment) === key ? new ReviewComment({...comment, resolved: true}) : comment
-						),
+						comments: Array.filter(state.comments, comment => commentKey(comment) !== key),
 						marks: state.marks
 					})
 				}),

@@ -22,7 +22,7 @@ import {
 	Loader2Icon,
 	MinusIcon
 } from '@deslop/components/icons'
-import {PatchDiff} from '@deslop/components/render/diff'
+import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
 import {Button} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
@@ -100,14 +100,10 @@ type DisplayComment = QueuedComment & {
 	readonly url?: string
 }
 
-type CopyableComment = Pick<QueuedComment, 'body' | 'filePath' | 'lineNumber' | 'side'>
-
-function emptyReviewState() {
-	return new ReviewState({comments: Array.empty(), marks: Array.empty()})
-}
+const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
 
 const reviewStateValueAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
-	Atom.map(reviewStateAtom(input), result => (result._tag === 'Success' ? result.value : emptyReviewState()))
+	Atom.map(reviewStateAtom(input), result => (result._tag === 'Success' ? result.value : emptyReviewState))
 )
 
 const optimisticReviewStateAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
@@ -174,10 +170,8 @@ const unmarkReviewedAtom = Atom.family((input: {readonly base: string; readonly 
 	})
 )
 
-type ReviewActionsState = {readonly committing: boolean; readonly wipping: boolean}
-
 const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => Effect.succeed<ReviewActionsState>({committing: false, wipping: false})))
+	Atom.optimistic(Atom.make(() => Effect.succeed({committing: false, wipping: false})))
 )
 
 const commitReviewActionAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
@@ -204,23 +198,21 @@ const wipReviewActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
-type CommentResolutionState = {readonly resolvingAll: boolean; readonly resolvingKeys: ReadonlySet<string>}
-
 type ResolveCommentInput = {readonly comment: DisplayComment; readonly key: string}
 
 const commentResolutionStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make((): CommentResolutionState => ({resolvingAll: false, resolvingKeys: new Set<string>()})))
+	Atom.optimistic(Atom.make(() => ({resolvingAll: false, resolvingKeys: new Set<string>()})))
 )
 
 const resolveCommentActionAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
 	Atom.optimisticFn(commentResolutionStateAtom(input.cwd), {
 		fn: RpcClient.runtime.fn<ResolveCommentInput>()(
-			Effect.fnUntraced(function* ({comment}) {
+			Effect.fnUntraced(function* (resolveInput) {
 				const client = yield* RpcClient
 
-				if (comment.source === 'github') {
-					if (comment.threadId) {
-						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: comment.threadId})
+				if (resolveInput.comment.source === 'github') {
+					if (resolveInput.comment.threadId) {
+						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: resolveInput.comment.threadId})
 					}
 					return
 				}
@@ -228,9 +220,9 @@ const resolveCommentActionAtom = Atom.family((input: {readonly base: string; rea
 				yield* client('review.comments.resolve', {
 					base: input.base,
 					cwd: input.cwd,
-					filePath: comment.filePath,
-					lineNumber: comment.lineNumber,
-					side: comment.side
+					filePath: resolveInput.comment.filePath,
+					lineNumber: resolveInput.comment.lineNumber,
+					side: resolveInput.comment.side
 				})
 			})
 		),
@@ -246,24 +238,30 @@ const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; re
 		fn: RpcClient.runtime.fn<readonly ResolveCommentInput[]>()(
 			Effect.fnUntraced(function* (comments) {
 				const client = yield* RpcClient
-				const resolvedThreadIds = new Set<string>()
 
-				for (const {comment} of comments) {
-					if (comment.source === 'github' && comment.threadId && !resolvedThreadIds.has(comment.threadId)) {
-						resolvedThreadIds.add(comment.threadId)
-						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: comment.threadId})
-					}
-
-					if (comment.source === 'local') {
-						yield* client('review.comments.resolve', {
+				yield* pipe(
+					comments,
+					Array.flatMap(resolveInput =>
+						resolveInput.comment.source === 'github' && resolveInput.comment.threadId
+							? [resolveInput.comment.threadId]
+							: Array.empty<string>()
+					),
+					Array.dedupe,
+					Effect.forEach(threadId => client('review.githubThreads.resolve', {cwd: input.cwd, threadId}))
+				)
+				yield* pipe(
+					comments,
+					Array.filter(resolveInput => resolveInput.comment.source === 'local'),
+					Effect.forEach(resolveInput =>
+						client('review.comments.resolve', {
 							base: input.base,
 							cwd: input.cwd,
-							filePath: comment.filePath,
-							lineNumber: comment.lineNumber,
-							side: comment.side
+							filePath: resolveInput.comment.filePath,
+							lineNumber: resolveInput.comment.lineNumber,
+							side: resolveInput.comment.side
 						})
-					}
-				}
+					)
+				)
 			})
 		),
 		reducer: (state, comments) => ({
@@ -303,7 +301,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
 	const [base] = useState(suggestedMetadata.value.base)
-	const metadata = suggestedMetadata
 	const reviewStateResult = useAtomValue(reviewStateAtom({base, cwd: input.cwd}))
 	const githubThreadsResult = useAtomValue(githubThreadsAtom(input.cwd))
 	const reviewStateLoaded = reviewStateResult._tag === 'Success'
@@ -313,7 +310,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		githubThreadsResult._tag === 'Success' ? githubThreadsResult.value : Array.empty<GitHubReviewThread>()
 	const [shortcutsOpen, setShortcutsOpen] = useState(false)
 	const selectedCommit = pipe(
-		metadata.value.commits,
+		suggestedMetadata.value.commits,
 		Array.findFirst(commit => commit.hash === search.commit),
 		Option.getOrUndefined
 	)
@@ -344,7 +341,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const markReviewed = useAtomSet(markReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const unmarkReviewed = useAtomSet(unmarkReviewedAtom({base, cwd: input.cwd}), {mode: 'promise'})
 	const hasWipCommits = pipe(
-		metadata.value.commits,
+		suggestedMetadata.value.commits,
 		Array.head,
 		Option.exists(commit => commit.wip)
 	)
@@ -366,7 +363,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({comment, key: commentKey(comment)}))
 	const commentsByFile = groupCommentsByFile(unresolvedComments)
 	const selectedEntryComments = selectedEntry
-		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
+		? Array.filter(unresolvedComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
 	const visibleSegmentKeys = new Set(
 		pipe(
@@ -470,35 +467,8 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		setShortcutsOpen(true)
 	})
 
-	function formatCopiedComments(commentsToCopy: readonly CopyableComment[]) {
-		return pipe(
-			groupCommentsByFile(commentsToCopy),
-			Array.map(group =>
-				Array.join(
-					[
-						`## ${group.filePath}`,
-						pipe(
-							group.comments,
-							Array.map(
-								comment => `${comment.side === 'deletions' ? 'deleted' : 'line'}:${comment.lineNumber}: ${comment.body}`
-							),
-							Array.join('\n\n')
-						)
-					],
-					'\n\n'
-				)
-			),
-			Array.prepend('# Review comments'),
-			Array.join('\n\n')
-		)
-	}
-
 	async function copyComments(commentsToCopy: readonly DisplayComment[]) {
-		await navigator.clipboard.writeText(formatCopiedComments(commentsToCopy))
-	}
-
-	function formatCopiedComment(comment: CopyableComment) {
-		return formatCopiedComments([comment])
+		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
 	}
 
 	return (
@@ -526,9 +496,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						<CommitActionForm
 							base={base}
 							cwd={input.cwd}
-							dirty={metadata.value.dirty}
+							dirty={suggestedMetadata.value.dirty}
 							hasWipCommits={hasWipCommits}
-							prUrl={metadata.value.prUrl}
+							prUrl={suggestedMetadata.value.prUrl}
 							refreshReview={refreshReview}
 						/>
 						<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
@@ -552,7 +522,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							<ResizablePanel defaultSize="45%" minSize="15%">
 								<div className="h-full min-h-0">
 									<CommitList
-										commits={metadata.value.commits}
+										commits={suggestedMetadata.value.commits}
 										selected={reviewTarget}
 										selectCommit={selectCommit}
 										selectHead={() => {
@@ -580,7 +550,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										filePath={selectedEntry.filePath}
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
-										formatCopiedComment={formatCopiedComment}
 										onSaveComment={comment => {
 											saveQueuedComment({
 												body: comment.body,
@@ -617,7 +586,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											}}
 										>
 											<FileIcon filePath={group.filePath} />
-											<span className="max-w-32 truncate">{group.filePath.split('/').at(-1) ?? group.filePath}</span>
+											<span className="max-w-32 truncate">
+												{pipe(
+													String.split('/')(group.filePath),
+													Array.last,
+													Option.getOrElse(() => group.filePath)
+												)}
+											</span>
 										</Button>
 									))}
 								</div>
