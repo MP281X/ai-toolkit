@@ -21,7 +21,6 @@ export const TerminalAction = Schema.Union([
 
 export type TerminalState = typeof TerminalState.Type
 export const TerminalState = Schema.Struct({
-	ports: Schema.Array(Schema.Number),
 	runId: Schema.Number,
 	state: Schema.Literals(['idle', 'starting', 'running', 'waiting', 'needs_input', 'stopped', 'exited', 'failed']),
 	title: Schema.String

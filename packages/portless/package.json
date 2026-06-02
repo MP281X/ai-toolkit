@@ -1,7 +1,11 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/browser",
+	"name": "@deslop/portless",
+
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
 
 	"exports": {
 		"./http": "./src/http.ts"

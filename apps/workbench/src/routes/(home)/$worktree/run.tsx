@@ -13,7 +13,9 @@ export const Route = createFileRoute('/(home)/$worktree/run')({
 	component: RunPage,
 	validateSearch: Schema.toStandardSchemaV1(
 		Schema.Struct({
-			command: Schema.String,
+			command: Schema.optional(Schema.String),
+			cwd: Schema.optional(Schema.String),
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 			inactive: Schema.optional(Schema.Boolean),
 			runId: Schema.optional(Schema.Number),
 			sessionId: Schema.String
@@ -38,7 +40,8 @@ function RunPage() {
 	return (
 		<RunTerminal
 			command={search.command}
-			cwd={activeHome.value.activeWorktree.root}
+			cwd={search.cwd ?? activeHome.value.activeWorktree.root}
+			env={search.env}
 			runId={search.runId}
 			sessionId={search.sessionId}
 		/>
@@ -46,14 +49,18 @@ function RunPage() {
 }
 
 function RunTerminal(input: {
-	readonly command: string
+	readonly command?: string
 	readonly cwd: string
+	readonly env?: Readonly<Record<string, string>>
 	readonly runId?: number
 	readonly sessionId: string
 }) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
 	const write = useAtomSet(RpcClient.mutation('terminal.write'), {mode: 'promise'})
-	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
+	const session =
+		input.command === undefined
+			? {cwd: input.cwd, sessionId: input.sessionId}
+			: {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, env: input.env, sessionId: input.sessionId}
 	const terminal = useAtomSuspense(terminalViewAtom(session))
 
 	return (

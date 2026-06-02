@@ -8,7 +8,6 @@
   "workspaces": ["apps/*", "packages/*", ".opencode"],
 
   "scripts": {
-		"dev": "mprocs 'vp run @deslop/workbench#dev' 'vp run @deslop/portfolio#dev'",
 		"build": "vp run -r build",
     "preview": "mprocs 'vp run @deslop/workbench#preview' 'vp run @deslop/portfolio#preview'",
 

@@ -5,7 +5,7 @@
 
 	"exports": {
 		"./schema": "./src/schema.ts",
-		"./utils": "./src/utils.ts",
+		"./utils": "./src/lib/utils.ts",
 		"./service": "./src/service.ts"
 	},
 
