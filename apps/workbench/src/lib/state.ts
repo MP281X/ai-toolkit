@@ -79,10 +79,6 @@ export const runsAtom = Atom.family((cwd: string) =>
 	)
 )
 
-function runSessionId(scriptName: string, taskIndex: number) {
-	return `run:${scriptName}:${taskIndex}`
-}
-
 export const browserPortsAtom = Atom.family((cwd: string) =>
 	Atom.make(get =>
 		pipe(
@@ -102,7 +98,7 @@ export const browserPortsAtom = Atom.family((cwd: string) =>
 											args: ['-lc', parallel ? task : `vp run ${script.name}`],
 											command: 'sh',
 											cwd,
-											sessionId: runSessionId(script.name, taskIndex)
+											sessionId: `${script.name}:${taskIndex}`
 										})
 									)
 								}),

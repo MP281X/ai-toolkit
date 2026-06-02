@@ -2,8 +2,7 @@ import process from 'node:process'
 
 import * as NodeHttpServerRequest from '@effect/platform-node/NodeHttpServerRequest'
 
-import {Layer, pipe} from 'effect'
-import {Effect} from 'effect'
+import {Effect, Layer, pipe} from 'effect'
 
 import {HttpMiddleware, HttpRouter, HttpServerResponse} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'

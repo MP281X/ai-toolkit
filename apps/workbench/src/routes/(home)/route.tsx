@@ -168,10 +168,6 @@ function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) 
 	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
 
-function runSessionId(scriptName: string, taskIndex: number) {
-	return `run:${scriptName}:${taskIndex}`
-}
-
 function WorktreeRuns(input: {
 	readonly cwd: string
 	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
@@ -230,7 +226,7 @@ function RunScriptRow(input: {
 	const parallel = input.script.tasks.length > 1
 	const commands = input.script.tasks.map(task => (parallel ? task : `vp run ${input.script.name}`))
 	const firstCommand = commands[0] ?? ''
-	const firstSessionId = runSessionId(input.script.name, 0)
+	const firstSessionId = `${input.script.name}:0`
 	const firstState = useAtomSuspense(
 		terminalStateAtom({args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId})
 	)
@@ -246,11 +242,24 @@ function RunScriptRow(input: {
 						onClick={event => {
 							event.stopPropagation()
 							commands.forEach((command, taskIndex) => {
-								const sessionId = runSessionId(input.script.name, taskIndex)
 								if (active) {
-									void stop({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
+									void stop({
+										payload: {
+											args: ['-lc', command],
+											command: 'sh',
+											cwd: input.cwd,
+											sessionId: `${input.script.name}:${taskIndex}`
+										}
+									})
 								} else {
-									void restart({payload: {args: ['-lc', command], command: 'sh', cwd: input.cwd, sessionId}})
+									void restart({
+										payload: {
+											args: ['-lc', command],
+											command: 'sh',
+											cwd: input.cwd,
+											sessionId: `${input.script.name}:${taskIndex}`
+										}
+									})
 								}
 							})
 						}}
@@ -281,11 +290,11 @@ function RunScriptRow(input: {
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{commands.map((command, taskIndex) => (
 						<RunTaskRow
-							key={runSessionId(input.script.name, taskIndex)}
+							key={`${input.script.name}:${taskIndex}`}
 							command={command}
 							cwd={input.cwd}
 							selectRun={input.selectRun}
-							sessionId={runSessionId(input.script.name, taskIndex)}
+							sessionId={`${input.script.name}:${taskIndex}`}
 						/>
 					))}
 				</ul>

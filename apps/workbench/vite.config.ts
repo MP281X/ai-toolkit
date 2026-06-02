@@ -9,8 +9,8 @@ import type {Duplex} from 'node:stream'
 import {NodeHttpServer} from '@effect/platform-node'
 import {NodeWS} from '@effect/platform-node/NodeSocket'
 
-import {Effect, Exit, Scope, pipe} from 'effect'
 import type {Layer} from 'effect'
+import {Effect, Exit, Scope, pipe} from 'effect'
 
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
