@@ -3,6 +3,8 @@ import {Context, Effect, Layer, Option, pipe} from 'effect'
 import {HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
 import {Socket} from 'effect/unstable/socket'
 
+import {command, discover} from '#lib/utils.ts'
+
 const INJECTED_HEAD = `<script>
 (() => {
   if (window.__deslopBrowserBridge) return
@@ -166,10 +168,11 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/Port
 			app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 		) {
 			const request = yield* HttpServerRequest.HttpServerRequest
-			const hostname = yield* requestHostname(request.headers.host)
+			const hostname = yield* requestHostname(request.headers['host'])
 			if (Option.isNone(hostname) || isLocalHostname(hostname.value)) return yield* app
+			if (!hostname.value.endsWith('.localhost')) return yield* app
 
-			const route = yield* lookup(request.headers.host)
+			const route = yield* lookup(request.headers['host'])
 			if (Option.isNone(route)) return HttpServerResponse.empty({status: 404})
 			if (request.headers['upgrade']?.toLowerCase() === 'websocket') {
 				return yield* proxyWebSocket(request, route.value)
@@ -189,7 +192,12 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/Port
 
 			const reserved = new Set(ports.values())
 			for (let port = 4000; port <= 4999; port += 1) {
-				if (!reserved.has(port)) {
+				const occupied = yield* pipe(
+					Effect.tryPromise(() => fetch(`http://127.0.0.1:${port}`, {signal: AbortSignal.timeout(100)})),
+					Effect.as(true),
+					Effect.catch(() => Effect.succeed(false))
+				)
+				if (!reserved.has(port) && !occupied) {
 					ports.set(key, port)
 					return port
 				}
@@ -199,8 +207,20 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/Port
 		const register = Effect.fnUntraced(function* (host: string, port: number) {
 			routes.set(host, `http://127.0.0.1:${port}`)
 		})
+		const scripts = Effect.fnUntraced(function* (cwd: string, input: {readonly proxyPort: string}) {
+			return yield* pipe(
+				discover(cwd, {port: sessionId => port(`${cwd}:${sessionId}`), proxyPort: input.proxyPort}),
+				Effect.map(routes =>
+					routes.map(route => ({
+						host: route.host,
+						port: route.port,
+						script: {...route.script, preparedCommand: command(route.script, route.port)}
+					}))
+				)
+			)
+		})
 
-		return {middleware, port, register}
+		return {middleware, port, register, scripts}
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)

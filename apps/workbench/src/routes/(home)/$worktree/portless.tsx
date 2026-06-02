@@ -16,14 +16,9 @@ function PortlessPage() {
 	const params = Route.useParams()
 	const search = Route.useSearch()
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
+	const origins = useAtomSuspense(portlessOriginsAtom(activeHome.value.activeWorktree?.root ?? ''))
 	if (!activeHome.value.activeWorktree) return <Navigate to="/" replace />
-
-	return <WorktreeBrowser cwd={activeHome.value.activeWorktree.root} origin={search.origin} />
-}
-
-function WorktreeBrowser(input: {readonly cwd: string; readonly origin?: string}) {
-	const origins = useAtomSuspense(portlessOriginsAtom(input.cwd))
-	const origin = input.origin && origins.value.includes(input.origin) ? input.origin : origins.value[0]
+	const origin = search.origin && origins.value.includes(search.origin) ? search.origin : origins.value[0]
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0 p-2">

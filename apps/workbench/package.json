@@ -20,7 +20,7 @@
 		"dev:server": "node --watch ./src/main.server.ts",
 		"build": "vp build && vp pack",
 
-		"preview": "vp run build && PORT=5010 node ./dist/server.js"
+		"preview": "vp run build && node ./dist/server.js"
 	},
 
 	"dependencies": {

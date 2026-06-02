@@ -222,10 +222,6 @@ const portlessActiveAtom = Atom.family((scripts: readonly RunScript[]) =>
 	)
 )
 
-function TreeRowActions(input: {readonly children: React.ReactNode}) {
-	return <span className="flex h-full items-center justify-end">{input.children}</span>
-}
-
 function WorktreePortless(input: {
 	readonly cwd: string
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
@@ -263,7 +259,7 @@ function WorktreePortless(input: {
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				actions={
-					<TreeRowActions>
+					<span className="flex h-full items-center justify-end">
 						<button
 							type="button"
 							className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
@@ -275,7 +271,7 @@ function WorktreePortless(input: {
 						>
 							{active.value ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
 						</button>
-					</TreeRowActions>
+					</span>
 				}
 				icon={<GlobeIcon />}
 				selected={false}
@@ -321,7 +317,7 @@ function PortlessServiceRow(input: {
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				actions={
-					<TreeRowActions>
+					<span className="flex h-full items-center justify-end">
 						<button
 							type="button"
 							className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
@@ -339,7 +335,7 @@ function PortlessServiceRow(input: {
 						>
 							<TerminalIcon className="size-3" />
 						</button>
-					</TreeRowActions>
+					</span>
 				}
 				icon={<ProcessStateIcon state={firstState.value.state} />}
 				selected={false}

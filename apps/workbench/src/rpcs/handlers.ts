@@ -19,15 +19,14 @@ import {
 } from 'effect'
 
 import {KeyValueStore} from 'effect/unstable/persistence'
-import {ChildProcess} from 'effect/unstable/process'
+import type {ChildProcess} from 'effect/unstable/process'
 
-import {discoverPortlessScripts, discoverRootScripts} from '#lib/devRunner.ts'
 import {ReviewComment, ReviewState, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
 import {Portless} from '@deslop/portless/http'
+import {TerminalError} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
-import {commandFromScript} from '@deslop/terminal/utils'
 
 const TerminalSessionKey = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
@@ -78,28 +77,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
-				const routes = yield* discoverPortlessScripts(cwd, {port: sessionId => portless.port(`${cwd}:${sessionId}`)})
-				const scripts = pipe(
-					routes,
-					Array.map(route => {
-						const command = commandFromScript(route.script.command)
-						const script: PortlessScript = {
-							...route.script,
-							preparedCommand:
-								command.command === 'vp' && command.args[0] === 'dev'
-									? ChildProcess.make('vp', [
-											'dev',
-											'--host',
-											'127.0.0.1',
-											'--port',
-											route.port.toString(),
-											'--strictPort'
-										])
-									: command
-						}
-
-						return {host: route.host, port: route.port, script}
-					})
+				const scripts = yield* pipe(
+					portless.scripts(cwd, {proxyPort: process.env['PORT'] ?? '4010'}),
+					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover portless scripts in ${cwd}`}))
 				)
 
 				yield* Effect.all(
@@ -394,7 +374,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
-			'runs.scripts': payload => discoverRootScripts(payload.cwd),
 			'terminal.resize': payload =>
 				pipe(
 					terminal(TerminalSessionKey.make(payload)),

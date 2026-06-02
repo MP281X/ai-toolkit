@@ -61,17 +61,6 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 	)
 )
 
-export const runsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
-
 export const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
@@ -115,22 +104,19 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 			pipe(
 				get.result(projectsAtom),
 				Effect.map(projects => {
-					const activeProject = pipe(
-						projects,
-						Array.findFirst(project =>
-							Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+					const activeProject = Array.findFirst(projects, project =>
+						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+					)
+					const activeWorktree = pipe(
+						activeProject,
+						Option.flatMap(project =>
+							Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
 						)
 					)
 
 					return {
 						activeProject: Option.getOrUndefined(activeProject),
-						activeWorktree: pipe(
-							activeProject,
-							Option.flatMap(project =>
-								Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-							),
-							Option.getOrUndefined
-						),
+						activeWorktree: Option.getOrUndefined(activeWorktree),
 						projects
 					}
 				})

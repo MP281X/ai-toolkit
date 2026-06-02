@@ -31,7 +31,7 @@ NodeRuntime.runMain(
 		Layer.provide(
 			NodeHttpServer.layerConfig(createServer, {
 				gracefulShutdownTimeout: Config.succeed('1500 millis'),
-				port: Config.port('PORT').pipe(Config.withDefault(4010))
+				port: Config.port('PORT').pipe(Config.withDefault(5010))
 			})
 		),
 		Layer.provide(NodeServices.layer),

@@ -185,6 +185,13 @@ pre.shiki span[style] {
 	max-width: 100%;
 }
 
+.markdown sub img,
+.markdown sup img {
+	display: inline-block;
+	margin: 0;
+	vertical-align: text-bottom;
+}
+
 .markdown a {
 	color: var(--primary);
 	text-decoration: underline;

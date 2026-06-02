@@ -3,6 +3,10 @@
 	"sideEffects": false,
 	"name": "@deslop/portless",
 
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+
 	"exports": {
 		"./http": "./src/http.ts"
 	}

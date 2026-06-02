@@ -173,11 +173,6 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, force: Schema.Boolean})
 	}),
-	Rpc.make('runs.scripts', {
-		error: TerminalError,
-		payload: Schema.Struct({cwd: Schema.String}),
-		success: Schema.Array(RunScript)
-	}),
 	Rpc.make('runs.portless', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String}),
