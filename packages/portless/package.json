@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/browser",
+	"name": "@deslop/portless",
 
 	"exports": {
 		"./http": "./src/http.ts"

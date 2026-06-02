@@ -17,17 +17,23 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {Fallback, Loading} from '#components/fallbacks.tsx'
 import {Button} from '#components/ui/button.tsx'
-import {InputGroup, InputGroupInput} from '#components/ui/input-group.tsx'
+import {Input} from '#components/ui/input.tsx'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/ui/resizable.tsx'
-import {Select, SelectContent, SelectItem, SelectTrigger} from '#components/ui/select.tsx'
 import {cn, formatTimestamp} from '#lib/utils.ts'
 
-function browserOrigin(port: string) {
-	return `${window.location.protocol}//${port}.localhost:${window.location.port}`
+function browserUrl(origin: string, rest: string) {
+	return `${origin}${rest.startsWith('/') ? rest : `/${rest}`}`
 }
 
-function browserUrl(port: string, rest: string) {
-	return `${browserOrigin(port)}${rest.startsWith('/') ? rest : `/${rest}`}`
+function originLabel(origin: string) {
+	if (origin === '') return 'localhost:0000'
+
+	try {
+		const url = new URL(origin)
+		return url.host
+	} catch {
+		return origin.replace(/^https?:\/\//u, '')
+	}
 }
 
 type BrowserLog = {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}
@@ -62,38 +68,38 @@ function isIgnoredBrowserLog(message: string) {
 	)
 }
 
-export function Browser(props: {readonly className?: string; readonly ports: readonly number[]}) {
+export function Browser(props: {readonly className?: string; readonly origin?: string}) {
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const logIdRef = useRef(0)
-	const [port, setPort] = useState(() => props.ports[0]?.toString() ?? '')
-	const [currentUrl, setCurrentUrl] = useState(() => (props.ports[0] ? browserUrl(props.ports[0].toString(), '/') : ''))
+	const origin = props.origin ?? ''
+	const [currentUrl, setCurrentUrl] = useState(() => (origin ? browserUrl(origin, '/') : ''))
 	const [frameKey, setFrameKey] = useState(0)
 	const [address, setAddress] = useState('/')
 	const [faviconUrl, setFaviconUrl] = useState<string>()
 	const [isListening, setIsListening] = useState(false)
-	const [isLoading, setIsLoading] = useState(() => props.ports.length > 0)
+	const [isLoading, setIsLoading] = useState(() => origin !== '')
 	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
-	const alternatePorts = props.ports.filter(nextPort => nextPort.toString() !== port)
 
 	useEffect(() => {
-		const nextPort = props.ports.includes(Number(port)) ? port : (props.ports[0]?.toString() ?? '')
-		if (nextPort === port) return
-
-		setPort(nextPort)
-		setCurrentUrl(nextPort ? browserUrl(nextPort, address) : '')
+		setCurrentUrl(origin ? browserUrl(origin, address) : '')
 		setFaviconUrl(undefined)
-		setIsLoading(nextPort !== '')
-	}, [address, port, props.ports])
+		setIsLoading(origin !== '')
+	}, [address, origin])
 
 	useLayoutEffect(() => {
 		setIsListening(false)
 
 		function onMessage(event: MessageEvent) {
-			if (event.origin !== browserOrigin(port)) return
+			if (event.origin !== origin) return
 			if (typeof event.data !== 'object' || event.data === null) return
 
 			if (event.data.__deslopBrowserFavicon === true) {
 				setFaviconUrl(typeof event.data.href === 'string' ? event.data.href : undefined)
+				return
+			}
+
+			if (event.data.__deslopBrowserLocation === true) {
+				setAddress(typeof event.data.path === 'string' ? event.data.path : '/')
 				return
 			}
 
@@ -110,12 +116,12 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 			window.removeEventListener('message', onMessage)
 			setIsListening(false)
 		}
-	}, [port])
+	}, [origin])
 
 	function navigate() {
-		if (!port) return
+		if (!origin) return
 
-		const nextUrl = browserUrl(port, String.trim(address) || '/')
+		const nextUrl = browserUrl(origin, String.trim(address) || '/')
 
 		setLogs([])
 		setCurrentUrl(nextUrl)
@@ -130,10 +136,10 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 	}
 
 	function clearCookies() {
-		if (!port) return
+		if (!origin) return
 
 		setLogs([])
-		iframeRef.current?.contentWindow?.postMessage({__deslopBrowserClear: true}, browserOrigin(port))
+		iframeRef.current?.contentWindow?.postMessage({__deslopBrowserClear: true}, origin)
 	}
 
 	function openTopLevel() {
@@ -186,53 +192,30 @@ export function Browser(props: {readonly className?: string; readonly ports: rea
 				<div className="border-border flex h-8 w-8 shrink-0 items-center justify-center border">
 					{faviconUrl && <img src={faviconUrl} alt="" className="size-4" />}
 				</div>
-				<InputGroup className="border-foreground/25 flex-1">
-					<Select
-						disabled={alternatePorts.length === 0}
-						value={port}
-						onValueChange={nextPort => {
-							if (nextPort === null) return
-
-							setPort(nextPort)
-							setLogs([])
-							setCurrentUrl(browserUrl(nextPort, String.trim(address) || '/'))
-							setFaviconUrl(undefined)
-							setIsLoading(true)
-						}}
-					>
-						<SelectTrigger className="text-muted-foreground w-auto min-w-0 border-0 bg-transparent font-mono dark:bg-transparent [&_svg]:hidden">
-							<span>http://localhost:{port || '0000'}/</span>
-						</SelectTrigger>
-						{alternatePorts.length > 0 && (
-							<SelectContent className="font-mono" alignItemWithTrigger={true}>
-								{alternatePorts.map(port => (
-									<SelectItem key={port} value={port.toString()} className="font-mono [&>span:last-child]:hidden">
-										http://localhost:{port}/
-									</SelectItem>
-								))}
-							</SelectContent>
-						)}
-					</Select>
-					<InputGroupInput
+				<div className="flex min-w-0 flex-1 items-center gap-1">
+					<div className="border-input bg-secondary text-secondary-foreground/70 flex h-8 min-w-0 shrink items-center border px-2 text-xs">
+						<span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{originLabel(origin)}</span>
+					</div>
+					<Input
 						value={address.startsWith('/') ? address.slice(1) : address}
-						placeholder="path?query"
-						className="font-mono"
+						placeholder=""
+						className="min-w-[7rem] flex-1 text-xs"
 						onChange={event => {
 							setAddress(`/${event.currentTarget.value.replace(/^\/+/, '')}`)
 						}}
 					/>
-				</InputGroup>
+				</div>
 				<Button type="button" variant="outline" size="icon" aria-label="Open top-level preview" onClick={openTopLevel}>
 					<ExternalLinkIcon className="size-3.5" />
 				</Button>
-				{port && (
+				{origin && (
 					<Button type="button" variant="outline" size="icon" aria-label="Clear cookies" onClick={clearCookies}>
 						<Trash2Icon className="size-3.5" />
 					</Button>
 				)}
 			</form>
 			<div className="flex min-h-0 flex-1 flex-col">
-				{props.ports.length === 0 ? (
+				{origin === '' ? (
 					<Fallback message="Start a dev server in this worktree terminal to open a browser preview." />
 				) : (
 					<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">

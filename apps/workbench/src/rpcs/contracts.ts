@@ -18,8 +18,24 @@ const TerminalPayload = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
 })
+
+export const RunScript = Schema.Struct({
+	baseOrigin: Schema.optional(Schema.String),
+	command: Schema.String,
+	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+	name: Schema.String,
+	origin: Schema.optional(Schema.String),
+	packageFolder: Schema.String,
+	packagePath: Schema.String,
+	portless: Schema.optional(Schema.Boolean),
+	service: Schema.optional(Schema.String),
+	sessionId: Schema.String
+})
+export type RunScript = typeof RunScript.Type
 
 export const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
@@ -160,9 +176,12 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('runs.scripts', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String}),
-		success: Schema.Array(
-			Schema.Struct({command: Schema.String, name: Schema.String, tasks: Schema.Array(Schema.String)})
-		)
+		success: Schema.Array(RunScript)
+	}),
+	Rpc.make('runs.portless', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String}),
+		success: Schema.Array(RunScript)
 	}),
 	Rpc.make('terminal.write', {
 		error: TerminalError,
@@ -171,6 +190,7 @@ export class RpcContracts extends RpcGroup.make(
 			command: Schema.optional(Schema.String),
 			cwd: Schema.String,
 			data: Schema.String,
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 			sessionId: Schema.optional(Schema.String)
 		}),
 		success: TerminalState
@@ -182,6 +202,7 @@ export class RpcContracts extends RpcGroup.make(
 			cols: Schema.Number,
 			command: Schema.optional(Schema.String),
 			cwd: Schema.String,
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 			rows: Schema.Number,
 			sessionId: Schema.optional(Schema.String)
 		}),
@@ -189,11 +210,5 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
-	Rpc.make('terminal.ports', {
-		error: TerminalError,
-		payload: TerminalPayload,
-		stream: true,
-		success: Schema.Array(Schema.Number)
-	}),
 	Rpc.make('terminal.watch', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalUpdate})
 ) {}

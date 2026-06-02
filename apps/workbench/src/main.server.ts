@@ -10,7 +10,7 @@ import {RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
-import {BrowserProxyMiddleware} from '@deslop/browser/http'
+import {Portless} from '@deslop/portless/http'
 
 NodeRuntime.runMain(
 	pipe(
@@ -22,7 +22,7 @@ NodeRuntime.runMain(
 					root: fileURLToPath(new URL('./client', import.meta.url)),
 					spa: true
 				}),
-				HttpRouter.middleware(BrowserProxyMiddleware, {global: true}),
+				HttpRouter.middleware(Portless.middleware, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			),
 			{disableLogger: true}

@@ -7,8 +7,15 @@ import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, projectsAtom, runsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
-import type {AgentSession} from '#rpcs/contracts.ts'
+import {
+	activeHomeAtom,
+	agentsAtom,
+	portlessRunsAtom,
+	projectsAtom,
+	terminalStateAtom,
+	worktreeRouteId
+} from '#lib/state.ts'
+import type {AgentSession, RunScript} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
 	BotIcon,
@@ -16,7 +23,6 @@ import {
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
-	PackageIcon,
 	PanelTop,
 	PlayIcon,
 	ProcessStateIcon,
@@ -76,7 +82,7 @@ function HomeLayout() {
 			activeView: pipe(
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
-				Match.when(String.endsWith('/browser'), () => 'browser' as const),
+				Match.when(String.endsWith('/portless'), () => 'portless' as const),
 				Match.when(String.endsWith('/run'), () => 'run' as const),
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
@@ -105,9 +111,13 @@ function HomeLayout() {
 								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
 							})
 						}}
-						selectBrowser={worktreeRoot => {
+						selectPortless={(worktreeRoot, origin) => {
 							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/browser'})
+								void navigate({
+									params: {worktree: worktreeRouteId(worktreeRoot)},
+									search: {origin},
+									to: '/$worktree/portless'
+								})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
@@ -119,11 +129,11 @@ function HomeLayout() {
 								})
 							})
 						}}
-						selectRun={(worktreeRoot, sessionId, command, runId, inactive) => {
+						selectRun={(worktreeRoot, sessionId, command, runId, inactive, env, cwd) => {
 							startTransition(() => {
 								void navigate({
 									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {command, inactive, runId, sessionId},
+									search: {command, cwd, env, inactive, runId, sessionId},
 									to: '/$worktree/run'
 								})
 							})
@@ -168,180 +178,173 @@ function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) 
 	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
 
-function WorktreeRuns(input: {
-	readonly cwd: string
-	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
-}) {
-	const scripts = useAtomSuspense(runsAtom(input.cwd))
-	const [expanded, setExpanded] = useState(false)
-	const [expandedScripts, setExpandedScripts] = useState<ReadonlySet<string>>(new Set())
-
-	if (scripts.value.length === 0) return null
-
-	return (
-		<li className="w-full min-w-0">
-			<TreeExplorerRow
-				icon={<PackageIcon />}
-				selected={false}
-				onClick={() => {
-					setExpanded(value => !value)
-				}}
-			>
-				scripts
-			</TreeExplorerRow>
-			{expanded && (
-				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{Array.map(scripts.value, script => (
-						<RunScriptRow
-							key={script.name}
-							cwd={input.cwd}
-							expanded={expandedScripts.has(script.name)}
-							onToggleExpanded={() => {
-								setExpandedScripts(current => {
-									const next = new Set(current)
-									if (next.has(script.name)) next.delete(script.name)
-									else next.add(script.name)
-									return next
-								})
-							}}
-							script={script}
-							selectRun={input.selectRun}
-						/>
-					))}
-				</ul>
-			)}
-		</li>
-	)
+function scriptSession(script: RunScript) {
+	return script.portless === true
+		? {cwd: script.cwd, sessionId: script.sessionId}
+		: {args: ['-lc', script.command], command: 'sh', cwd: script.cwd, sessionId: script.sessionId}
 }
 
-function RunScriptRow(input: {
+function portlessServiceRank(script: RunScript) {
+	const service = script.service ?? script.name
+	if (service === 'dev') return 0
+	if (service === 'client') return 1
+	if (service === 'server') return 2
+	return 3
+}
+
+function portlessLabel(script: RunScript) {
+	const service = script.service ?? script.name
+	return service === 'dev' ? script.packageFolder : `${script.packageFolder}:${service}`
+}
+
+function sortPortlessScripts(scripts: readonly RunScript[]) {
+	return [...scripts].sort((left, right) => {
+		const packageOrder = left.packageFolder.localeCompare(right.packageFolder)
+		if (packageOrder !== 0) return packageOrder
+
+		const rankOrder = portlessServiceRank(left) - portlessServiceRank(right)
+		if (rankOrder !== 0) return rankOrder
+
+		return portlessLabel(left).localeCompare(portlessLabel(right))
+	})
+}
+
+const portlessActiveAtom = Atom.family((scripts: readonly RunScript[]) =>
+	Atom.make(get =>
+		pipe(
+			Effect.all(scripts.map(script => get.result(terminalStateAtom(scriptSession(script))))),
+			Effect.map(states => states.some(state => state.runId > 0 && terminalStateActive(state.state)))
+		)
+	)
+)
+
+function TreeRowActions(input: {readonly children: React.ReactNode}) {
+	return <span className="flex h-full items-center justify-end">{input.children}</span>
+}
+
+function WorktreePortless(input: {
+	readonly active: boolean
 	readonly cwd: string
-	readonly expanded: boolean
-	readonly onToggleExpanded: () => void
-	readonly script: {readonly name: string; readonly tasks: readonly string[]}
-	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
+	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectRun: (
+		worktreeRoot: string,
+		sessionId: string,
+		command?: string,
+		runId?: number,
+		inactive?: boolean,
+		env?: Readonly<Record<string, string>>,
+		runCwd?: string
+	) => void
 }) {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const parallel = input.script.tasks.length > 1
-	const commands = input.script.tasks.map(task => (parallel ? task : `vp run ${input.script.name}`))
-	const firstCommand = commands[0] ?? ''
-	const firstSessionId = `${input.script.name}:0`
-	const firstState = useAtomSuspense(
-		terminalStateAtom({args: ['-lc', firstCommand], command: 'sh', cwd: input.cwd, sessionId: firstSessionId})
-	)
-	const active = firstState.value.runId > 0 && terminalStateActive(firstState.value.state)
+	const scripts = useAtomSuspense(portlessRunsAtom(input.cwd))
+	const sortedScripts = sortPortlessScripts(scripts.value)
+	const active = useAtomSuspense(portlessActiveAtom(scripts.value))
+
+	if (scripts.value.length === 0) return null
+
+	async function startScripts() {
+		for (const session of scripts.value.map(scriptSession)) {
+			await restart({payload: session})
+		}
+	}
+
+	async function stopScripts() {
+		for (const session of scripts.value.map(scriptSession)) {
+			await stop({payload: session})
+		}
+	}
 
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				actions={
-					<button
-						type="button"
-						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
-						onClick={event => {
-							event.stopPropagation()
-							commands.forEach((command, taskIndex) => {
-								if (active) {
-									void stop({
-										payload: {
-											args: ['-lc', command],
-											command: 'sh',
-											cwd: input.cwd,
-											sessionId: `${input.script.name}:${taskIndex}`
-										}
-									})
-								} else {
-									void restart({
-										payload: {
-											args: ['-lc', command],
-											command: 'sh',
-											cwd: input.cwd,
-											sessionId: `${input.script.name}:${taskIndex}`
-										}
-									})
-								}
-							})
-						}}
-						title={active ? 'Stop script' : 'Start script'}
-					>
-						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
-					</button>
+					<TreeRowActions>
+						<button
+							type="button"
+							className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+							onClick={event => {
+								event.stopPropagation()
+								void (active.value ? stopScripts() : startScripts())
+							}}
+							title={active.value ? 'Stop all portless services' : 'Start all portless services'}
+						>
+							{active.value ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
+						</button>
+					</TreeRowActions>
+				}
+				icon={<GlobeIcon />}
+				selected={false}
+				onClick={() => {}}
+			>
+				portless
+			</TreeExplorerRow>
+			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+				{sortedScripts.map(script => (
+					<PortlessServiceRow
+						key={script.sessionId}
+						cwd={input.cwd}
+						label={portlessLabel(script)}
+						script={script}
+						selectPortless={input.selectPortless}
+						selectRun={input.selectRun}
+					/>
+				))}
+			</ul>
+		</li>
+	)
+}
+
+function PortlessServiceRow(input: {
+	readonly cwd: string
+	readonly label: string
+	readonly script: RunScript
+	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectRun: (
+		worktreeRoot: string,
+		sessionId: string,
+		command?: string,
+		runId?: number,
+		inactive?: boolean,
+		env?: Readonly<Record<string, string>>,
+		runCwd?: string
+	) => void
+}) {
+	const session = scriptSession(input.script)
+	const firstState = useAtomSuspense(terminalStateAtom(session))
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				actions={
+					<TreeRowActions>
+						<button
+							type="button"
+							className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
+							onClick={event => {
+								event.stopPropagation()
+								input.selectRun(
+									input.cwd,
+									input.script.sessionId,
+									undefined,
+									firstState.value.runId,
+									firstState.value.runId === 0
+								)
+							}}
+							title={`Open ${input.label} terminal`}
+						>
+							<TerminalIcon className="size-3" />
+						</button>
+					</TreeRowActions>
 				}
 				icon={<ProcessStateIcon state={firstState.value.state} />}
 				selected={false}
 				onClick={() => {
-					if (parallel) {
-						input.onToggleExpanded()
-					} else {
-						input.selectRun(
-							input.cwd,
-							firstSessionId,
-							firstCommand,
-							firstState.value.runId,
-							firstState.value.runId === 0
-						)
-					}
+					input.selectPortless(input.cwd, input.script.origin)
 				}}
 			>
-				{input.script.name}
-			</TreeExplorerRow>
-			{parallel && input.expanded && (
-				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{commands.map((command, taskIndex) => (
-						<RunTaskRow
-							key={`${input.script.name}:${taskIndex}`}
-							command={command}
-							cwd={input.cwd}
-							selectRun={input.selectRun}
-							sessionId={`${input.script.name}:${taskIndex}`}
-						/>
-					))}
-				</ul>
-			)}
-		</li>
-	)
-}
-
-function RunTaskRow(input: {
-	readonly command: string
-	readonly cwd: string
-	readonly selectRun: (cwd: string, sessionId: string, command: string, runId?: number, inactive?: boolean) => void
-	readonly sessionId: string
-}) {
-	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const session = {args: ['-lc', input.command], command: 'sh', cwd: input.cwd, sessionId: input.sessionId}
-	const state = useAtomSuspense(terminalStateAtom(session))
-	const active = state.value.runId > 0 && terminalStateActive(state.value.state)
-
-	return (
-		<li className="w-full min-w-0">
-			<TreeExplorerRow
-				actions={
-					<button
-						type="button"
-						className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
-						onClick={event => {
-							event.stopPropagation()
-							if (active) {
-								void stop({payload: session})
-							} else {
-								void restart({payload: session})
-							}
-						}}
-						title={active ? 'Stop task' : 'Start task'}
-					>
-						{active ? <Square className="size-3" /> : <PlayIcon className="size-3" />}
-					</button>
-				}
-				icon={<ProcessStateIcon state={state.value.state} />}
-				selected={false}
-				onClick={() => {
-					input.selectRun(input.cwd, input.sessionId, input.command, state.value.runId, state.value.runId === 0)
-				}}
-			>
-				{input.command}
+				{input.label}
 			</TreeExplorerRow>
 		</li>
 	)
@@ -471,18 +474,20 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 function WorktreeManager(input: {
 	readonly activeProject?: GitProject
 	readonly activeWorktree?: GitProject['worktrees'][number]
-	readonly activeView: 'agent' | 'diff' | 'terminal' | 'browser' | 'run'
+	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
 	readonly projects: readonly GitProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
-	readonly selectBrowser: (worktreeRoot: string) => void
+	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (
 		worktreeRoot: string,
 		sessionId: string,
-		command: string,
+		command?: string,
 		runId?: number,
-		inactive?: boolean
+		inactive?: boolean,
+		env?: Readonly<Record<string, string>>,
+		runCwd?: string
 	) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
@@ -711,18 +716,12 @@ function WorktreeManager(input: {
 														terminal
 													</TreeExplorerRow>
 												</li>
-												<li className="w-full min-w-0">
-													<TreeExplorerRow
-														icon={<GlobeIcon />}
-														selected={input.activeView === 'browser' && input.activeWorktree?.root === worktree.root}
-														onClick={() => {
-															input.selectBrowser(worktree.root)
-														}}
-													>
-														browser
-													</TreeExplorerRow>
-												</li>
-												<WorktreeRuns cwd={worktree.root} selectRun={input.selectRun} />
+												<WorktreePortless
+													active={input.activeView === 'portless' && input.activeWorktree?.root === worktree.root}
+													cwd={worktree.root}
+													selectPortless={input.selectPortless}
+													selectRun={input.selectRun}
+												/>
 											</ul>
 										</li>
 									))}

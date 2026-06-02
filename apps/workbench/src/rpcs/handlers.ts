@@ -1,6 +1,4 @@
 import {randomUUID} from 'node:crypto'
-import {readFile} from 'node:fs/promises'
-import {join} from 'node:path'
 
 import {
 	Array,
@@ -12,7 +10,7 @@ import {
 	Layer,
 	Option,
 	RcMap,
-	Record,
+	Ref,
 	Result,
 	Schema,
 	Stream,
@@ -21,20 +19,29 @@ import {
 } from 'effect'
 
 import {KeyValueStore} from 'effect/unstable/persistence'
+import {ChildProcess} from 'effect/unstable/process'
 
-import {ReviewComment, ReviewState, RpcContracts, type AgentSession} from '#rpcs/contracts.ts'
+import {discoverPortlessScripts, discoverRootScripts} from '#lib/devRunner.ts'
+import {ReviewComment, ReviewState, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
-import {TerminalError} from '@deslop/terminal/schema'
+import {Portless} from '@deslop/portless/http'
 import {Terminal} from '@deslop/terminal/service'
-import {splitParallelCommands} from '@deslop/terminal/utils'
+import {commandFromScript} from '@deslop/terminal/utils'
 
 const TerminalSessionKey = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
 })
+type TerminalSessionInput = typeof TerminalSessionKey.Type & {readonly preparedCommand?: ChildProcess.StandardCommand}
+
+type PortlessScript = Omit<RunScript, 'env'> & {
+	readonly env: Readonly<Record<string, string>>
+	readonly preparedCommand: ChildProcess.StandardCommand
+}
 
 const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
 
@@ -42,7 +49,7 @@ const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (config: typeof TerminalSessionKey.Type) {
+	lookup: Effect.fnUntraced(function* (config: TerminalSessionInput) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
@@ -64,7 +71,70 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const terminals = yield* TerminalSessions
 		const gitWorktrees = yield* GitWorktreeSessions
 		const fs = yield* FileSystem.FileSystem
+		const portless = yield* Portless
+		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessScript>())
 		const reviewStore = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, ReviewState)
+
+		const portlessWorktrees = yield* RcMap.make({
+			idleTimeToLive: Duration.infinity,
+			lookup: Effect.fnUntraced(function* (cwd: string) {
+				const routes = yield* discoverPortlessScripts(cwd, {port: sessionId => portless.port(`${cwd}:${sessionId}`)})
+				const scripts = routes.map(route => {
+					const command = commandFromScript(route.script.command)
+					const script: PortlessScript = {
+						...route.script,
+						preparedCommand:
+							command.command === 'vp' && command.args[0] === 'dev'
+								? ChildProcess.make('vp', [
+										'dev',
+										'--host',
+										'127.0.0.1',
+										'--port',
+										route.port.toString(),
+										'--strictPort'
+									])
+								: command
+					}
+
+					return {host: route.host, port: route.port, script}
+				})
+
+				yield* Effect.all(
+					scripts.map(script =>
+						Effect.all(
+							[
+								portless.register(script.host, script.port),
+								Ref.update(portlessScripts, current => HashMap.set(current, script.script.sessionId, script.script))
+							],
+							{discard: true}
+						)
+					),
+					{discard: true}
+				)
+
+				return scripts.map(({script}) => ({
+					baseOrigin: script.baseOrigin,
+					command: script.command,
+					cwd: script.cwd,
+					name: script.name,
+					origin: script.origin,
+					packageFolder: script.packageFolder,
+					packagePath: script.packagePath,
+					portless: true,
+					service: script.service,
+					sessionId: script.sessionId
+				}))
+			})
+		})
+
+		const terminalSession = Effect.fnUntraced(function* (input: typeof TerminalSessionKey.Type) {
+			if (input.sessionId === undefined || input.command !== undefined) return input
+
+			const script = pipe(yield* Ref.get(portlessScripts), HashMap.get(input.sessionId), Option.getOrUndefined)
+			if (script === undefined) return input
+
+			return {cwd: script.cwd, env: script.env, preparedCommand: script.preparedCommand, sessionId: script.sessionId}
+		})
 
 		const reviewStateKey = Effect.fnUntraced(function* (input: {readonly base: string; readonly cwd: string}) {
 			const root = yield* pipe(
@@ -311,59 +381,43 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
 					)
 				),
-			'runs.scripts': payload =>
-				pipe(
-					Effect.tryPromise({
-						catch: cause => new TerminalError({cause, message: `failed to read package.json in ${payload.cwd}`}),
-						try: () => readFile(join(payload.cwd, 'package.json'), 'utf8')
-					}),
-					Effect.map(
-						Schema.decodeUnknownSync(
-							Schema.fromJsonString(
-								Schema.Struct({scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))})
-							)
-						)
-					),
-					Effect.map(packageJson =>
-						pipe(
-							packageJson.scripts ?? {},
-							Record.toEntries,
-							Array.map(([name, command]) => ({command, name, tasks: splitParallelCommands(command)}))
-						)
-					)
-				),
-			'terminal.ports': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(terminals, TerminalSessionKey.make(payload)),
-						Effect.map(terminal => terminal.ports)
-					)
-				),
+			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
+			'runs.scripts': payload => discoverRootScripts(payload.cwd),
 			'terminal.resize': payload =>
 				pipe(
-					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					terminalSession(TerminalSessionKey.make(payload)).pipe(
+						Effect.flatMap(session => RcMap.get(terminals, session))
+					),
 					Effect.flatMap(terminal => terminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
 			'terminal.restart': payload =>
 				pipe(
-					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					terminalSession(TerminalSessionKey.make(payload)).pipe(
+						Effect.flatMap(session => RcMap.get(terminals, session))
+					),
 					Effect.flatMap(terminal => terminal.restart())
 				),
 			'terminal.stop': payload =>
 				pipe(
-					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					terminalSession(TerminalSessionKey.make(payload)).pipe(
+						Effect.flatMap(session => RcMap.get(terminals, session))
+					),
 					Effect.flatMap(terminal => terminal.stop())
 				),
 			'terminal.watch': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(terminals, TerminalSessionKey.make(payload)),
+						terminalSession(TerminalSessionKey.make(payload)).pipe(
+							Effect.flatMap(session => RcMap.get(terminals, session))
+						),
 						Effect.map(terminal => terminal.updates)
 					)
 				),
 			'terminal.write': payload =>
 				pipe(
-					RcMap.get(terminals, TerminalSessionKey.make(payload)),
+					terminalSession(TerminalSessionKey.make(payload)).pipe(
+						Effect.flatMap(session => RcMap.get(terminals, session))
+					),
 					Effect.flatMap(terminal => terminal.write(payload.data))
 				)
 		})
