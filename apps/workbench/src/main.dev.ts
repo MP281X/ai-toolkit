@@ -10,6 +10,7 @@ import {RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
+import {BrowserProxyMiddleware} from '@deslop/browser/http'
 
 const viteIndexKey = Symbol.for('deslop/ViteIndexByPort')
 const viteIndexes: Map<number, (url: string) => Promise<string>> = ((
@@ -33,6 +34,7 @@ export default pipe(
 	Layer.mergeAll(
 		RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
 		ViteRoute,
+		HttpRouter.middleware(BrowserProxyMiddleware, {global: true}),
 		HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 	),
 	Layer.provide(LiveLayers)

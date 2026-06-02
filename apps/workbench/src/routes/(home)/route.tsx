@@ -7,7 +7,7 @@ import {Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, projectsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
+import {activeHomeAtom, agentsAtom, projectsAtom, runsAtom, terminalStateAtom, worktreeRouteId} from '#lib/state.ts'
 import type {AgentSession} from '#rpcs/contracts.ts'
 import {
 	AgentIcon,
@@ -55,17 +55,6 @@ const projectAccentClassNames = [
 	'[&_svg]:text-[oklch(0.72_0.075_20)] [&_.tree-label]:text-[oklch(0.78_0.075_20)]',
 	'[&_svg]:text-[oklch(0.74_0.065_95)] [&_.tree-label]:text-[oklch(0.8_0.065_95)]'
 ]
-
-const runsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
 
 const branchesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
