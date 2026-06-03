@@ -11,7 +11,6 @@ import {
 	Option,
 	RcMap,
 	Ref,
-	Result,
 	Schema,
 	Stream,
 	SubscriptionRef,
@@ -19,7 +18,7 @@ import {
 } from 'effect'
 
 import {KeyValueStore} from 'effect/unstable/persistence'
-import type {ChildProcess} from 'effect/unstable/process'
+import {ChildProcess} from 'effect/unstable/process'
 
 import {ReviewComment, ReviewState, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
@@ -35,7 +34,11 @@ const TerminalSessionKey = Schema.Struct({
 	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
 })
-type TerminalSessionInput = typeof TerminalSessionKey.Type & {readonly preparedCommand?: ChildProcess.StandardCommand}
+type TerminalSessionInput = {
+	readonly command?: ChildProcess.StandardCommand
+	readonly cwd: string
+	readonly sessionId?: string
+}
 
 type PortlessScript = Omit<RunScript, 'env'> & {
 	readonly env: Readonly<Record<string, string>>
@@ -116,11 +119,38 @@ export const RpcHandlers = RpcContracts.toLayer(
 			const script = pipe(yield* Ref.get(portlessScripts), HashMap.get(input.sessionId), Option.getOrUndefined)
 			if (script === undefined) return input
 
-			return {cwd: script.cwd, env: script.env, preparedCommand: script.preparedCommand, sessionId: script.sessionId}
+			return {
+				command: ChildProcess.make(script.preparedCommand.command, script.preparedCommand.args, {
+					...script.preparedCommand.options,
+					env: script.env
+				}),
+				cwd: script.cwd,
+				sessionId: script.sessionId
+			}
 		})
+		function terminalSessionInput(
+			session: typeof TerminalSessionKey.Type | TerminalSessionInput
+		): TerminalSessionInput {
+			if ('args' in session || 'env' in session) {
+				return {
+					command:
+						session.command === undefined
+							? undefined
+							: ChildProcess.make(session.command, session.args ?? [], {env: session.env}),
+					cwd: session.cwd,
+					sessionId: session.sessionId
+				}
+			}
+			if (typeof session.command === 'string') {
+				return {command: ChildProcess.make(session.command), cwd: session.cwd, sessionId: session.sessionId}
+			}
+
+			return {command: session.command, cwd: session.cwd, sessionId: session.sessionId}
+		}
 		const terminal = Effect.fnUntraced(function* (input: typeof TerminalSessionKey.Type) {
 			return yield* pipe(
 				terminalSession(input),
+				Effect.map(terminalSessionInput),
 				Effect.flatMap(session => RcMap.get(terminals, session))
 			)
 		})
@@ -206,21 +236,21 @@ export const RpcHandlers = RpcContracts.toLayer(
 					yield* SubscriptionRef.update(agents, sessions =>
 						HashMap.set(sessions, AgentSessionKey.make({cwd: session.cwd, uuid: session.uuid}), session)
 					)
-					const terminal = yield* RcMap.get(
-						terminals,
+					const terminal = yield* terminalSession(
 						TerminalSessionKey.make({
 							args: session.args,
 							command: session.command,
 							cwd: session.cwd,
 							sessionId: session.uuid
 						})
+					).pipe(
+						Effect.map(terminalSessionInput),
+						Effect.flatMap(session => RcMap.get(terminals, session))
 					)
 					yield* terminal.restart()
 					yield* pipe(
-						terminal.updates,
-						Stream.filterMap(update =>
-							update.type === 'state' ? Result.succeed(update.state.state) : Result.failVoid
-						),
+						terminal.stateUpdates,
+						Stream.map(state => state.state),
 						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
 						Stream.take(1),
 						Stream.runDrain,
@@ -375,6 +405,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 				),
 			'terminal.restart': payload =>
 				Effect.flatMap(terminal(TerminalSessionKey.make(payload)), terminal => terminal.restart()),
+			'terminal.state.watch': payload =>
+				Stream.unwrap(Effect.map(terminal(TerminalSessionKey.make(payload)), terminal => terminal.stateUpdates)),
 			'terminal.stop': payload =>
 				Effect.flatMap(terminal(TerminalSessionKey.make(payload)), terminal => terminal.stop()),
 			'terminal.watch': payload =>
