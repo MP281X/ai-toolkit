@@ -165,7 +165,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		function setProgressState(progress: ProgressModule.IProgressState) {
 			return SubscriptionRef.update(stateRef, current => {
-				if (current.state === 'stopped' || current.state === 'exited') return current
+				if (current.state === 'stopped' || current.state === 'exited' || current.state === 'failed') return current
 				const state = pipe(
 					progress.state,
 					Match.value,
