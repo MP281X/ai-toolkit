@@ -36,7 +36,6 @@ type RunningProcess = {
 type TerminalSize = {readonly cols: number; readonly rows: number}
 type QueuedData = {readonly data: string; readonly generation: number}
 type QueuedWrite = {readonly data: string; readonly process: RunningProcess}
-const eventBacklogCapacity = 512
 const terminalReset = '\u001bc'
 
 function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'> {
@@ -69,11 +68,14 @@ function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'>
 function snapshotEvents(data: string, sequence: number) {
 	if (data === '') return Array.empty<TerminalEvent>()
 
-	const events: TerminalEvent[] = []
-	for (let index = 0; index < data.length; index += 256 * 1024) {
-		events.push({data: data.slice(index, index + 256 * 1024), sequence, type: 'data'})
-	}
-	return events
+	return pipe(
+		Array.range(0, Math.floor((data.length - 1) / (256 * 1024))),
+		Array.map(index => ({
+			data: data.slice(index * 256 * 1024, (index + 1) * 256 * 1024),
+			sequence,
+			type: 'data' as const
+		}))
+	)
 }
 
 function adjacentGroups<T>(
@@ -84,15 +86,10 @@ function adjacentGroups<T>(
 	return pipe(
 		items,
 		Array.reduce(Array.empty<T>(), (groups, item) => {
-			const next = groups
 			const previous = groups.at(-1)
-			if (previous === undefined || !sameGroup(previous, item)) {
-				next.push(item)
-				return next
-			}
+			if (previous === undefined || !sameGroup(previous, item)) return Array.append(groups, item)
 
-			next[next.length - 1] = merge(previous, item)
-			return next
+			return Array.append(Array.dropRight(groups, 1), merge(previous, item))
 		})
 	)
 }
@@ -116,10 +113,9 @@ function queuedWriteGroups(items: readonly QueuedWrite[]) {
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
 		const dataQueue = yield* Queue.unbounded<QueuedData>()
-		const screenQueue = yield* Queue.unbounded<QueuedData>()
 		const writeQueue = yield* Queue.unbounded<QueuedWrite>()
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
-		const events = yield* PubSub.bounded<TerminalEvent>({capacity: 1024, replay: eventBacklogCapacity})
+		const events = yield* PubSub.bounded<TerminalEvent>(1024)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
 		const eventSequenceRef = yield* Ref.make(0)
@@ -160,7 +156,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		)
 
 		function setState(state: TerminalState['state']) {
-			return SubscriptionRef.update(stateRef, current => ({...current, state}))
+			return SubscriptionRef.update(stateRef, current => (current.state === state ? current : {...current, state}))
 		}
 
 		function setProgressState(progressState: ProgressModule.IProgressState) {
@@ -175,6 +171,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Match.orElse(() => 'running' as const)
 				)
 
+				if (current.state === state) return current
 				return {...current, state}
 			})
 		}
@@ -182,7 +179,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setTitle(title: string) {
 			return SubscriptionRef.update(stateRef, current => {
 				if (!terminalStateActive(current.state)) return current
-				return {...current, ...parseTitleSignal(title)}
+				const next = parseTitleSignal(title)
+				if (current.state === next.state && current.title === next.title) return current
+				return {...current, ...next}
 			})
 		}
 
@@ -332,24 +331,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		yield* pipe(
 			Stream.fromQueue(dataQueue),
-			Stream.groupedWithin(256, Duration.millis(8)),
-			Stream.runForEach(items =>
-				Effect.forEach(
-					queuedDataGroups(Array.fromIterable(items), mergeQueuedData),
-					item =>
-						Effect.gen(function* () {
-							const generation = yield* Ref.get(screenGenerationRef)
-							if (generation !== item.generation) return
-
-							yield* Queue.offer(screenQueue, item)
-						}),
-					{discard: true}
-				)
-			),
-			Effect.forkScoped
-		)
-		yield* pipe(
-			Stream.fromQueue(screenQueue),
 			Stream.groupedWithin(256, Duration.millis(16)),
 			Stream.runForEach(items =>
 				Effect.forEach(queuedDataGroups(Array.fromIterable(items), mergeQueuedData), writeScreen, {discard: true})
@@ -363,7 +344,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					stopProcess(),
 					PubSub.shutdown(events),
 					Queue.shutdown(dataQueue),
-					Queue.shutdown(screenQueue),
 					Queue.shutdown(writeQueue),
 					Queue.shutdown(resizeQueue),
 					Effect.sync(() => {

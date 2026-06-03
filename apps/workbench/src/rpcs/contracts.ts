@@ -43,6 +43,7 @@ export const AgentSession = Schema.Struct({
 	cwd: Schema.String,
 	icon: Schema.Literals(['opencode', 'codex', 'pi']),
 	label: Schema.String,
+	state: TerminalState,
 	uuid: Schema.String
 })
 export type AgentSession = typeof AgentSession.Type
