@@ -43,8 +43,8 @@ function AgentTerminal(input: {
 	readonly cwd: string
 	readonly sessionId: string
 }) {
-	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
-	const write = useAtomSet(RpcClient.mutation('terminal.write'), {mode: 'promise'})
+	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
+	const write = useAtomSet(RpcClient.mutation('terminal.write'))
 	const terminal = useAtomSuspense(terminalViewAtom(input))
 
 	return (
@@ -52,14 +52,13 @@ function AgentTerminal(input: {
 			<Terminal
 				key={input.sessionId}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
-				events={terminal.value.events}
+				data={terminal.value.data}
+				frame={terminal.value.frame}
 				onData={data =>
-					void write({
-						payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}
-					})
+					write({payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}})
 				}
 				onResize={size =>
-					void resize({
+					resize({
 						payload: {
 							args: input.args,
 							cols: size.cols,
