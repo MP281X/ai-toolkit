@@ -68,15 +68,22 @@ class Item<TValue extends RichTextArea.Value> extends MenuOption {
 
 function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>() {
 	return {
-		editorState: JSON.parse(
-			'{"root":{"children":[{"children":[],"direction":null,"format":"","indent":0,"type":"paragraph","version":1}],"direction":null,"format":"","indent":0,"type":"root","version":1}}'
-		),
+		editorState: {
+			root: {
+				children: [{children: [], direction: null, format: '', indent: 0, type: 'paragraph', version: 1}],
+				direction: null,
+				format: '',
+				indent: 0,
+				type: 'root',
+				version: 1
+			}
+		} satisfies Lexical.SerializedEditorState<Lexical.SerializedRootNode>,
 		text: '',
 		tokens: Array.empty<TextAreaToken<TValue>>()
 	}
 }
 
-function snapshot<TValue extends RichTextArea.Value>(
+function editorSnapshot<TValue extends RichTextArea.Value>(
 	editor: Lexical.LexicalEditor | undefined,
 	tokensMap: Map<string, TextAreaToken<TValue>>
 ) {
@@ -264,12 +271,10 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	const initializedRef = useRef(false)
 
 	useEffect(() => {
-		// oxlint-disable-next-line no-param-reassign
-		props.editorRef.current = editor
+		Reflect.set(props.editorRef, 'current', editor)
 
 		return () => {
-			// oxlint-disable-next-line no-param-reassign
-			props.editorRef.current = null
+			Reflect.set(props.editorRef, 'current', null)
 		}
 	}, [editor, props.editorRef])
 
@@ -289,12 +294,12 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 					if (event?.shiftKey === true || props.menuRef.current || Predicate.isUndefined(props.onSubmit)) return false
 
 					event?.preventDefault()
-					props.onSubmit(snapshot(editor, props.tokensRef.current))
+					props.onSubmit(editorSnapshot(editor, props.tokensRef.current))
 					return true
 				},
 				Lexical.COMMAND_PRIORITY_LOW
 			),
-		[editor, props.menuRef, props.onSubmit, props.tokensRef]
+		[editor, props, props.menuRef, props.onSubmit, props.tokensRef]
 	)
 
 	useEffect(
@@ -514,7 +519,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				editorRef.current?.focus()
 			},
 			getSnapshot() {
-				return snapshot(editorRef.current ?? undefined, tokensRef.current)
+				return editorSnapshot(editorRef.current ?? undefined, tokensRef.current)
 			},
 			restore(nextSnapshot) {
 				restore(editorRef.current ?? undefined, nextSnapshot, tokensRef.current)

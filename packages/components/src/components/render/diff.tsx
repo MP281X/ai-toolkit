@@ -1,4 +1,4 @@
-import {Array, String} from 'effect'
+import {Array, Predicate, String} from 'effect'
 
 import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
 import {getSingularPatch, parseDiffFromFile, setLanguageOverride} from '@pierre/diffs'
@@ -112,10 +112,10 @@ function captureScrollAnchor(container: HTMLElement, clientY: number) {
 		return clientY >= rect.top && clientY <= rect.bottom
 	})
 
-	if (!lineElement || lineElement.dataset['lineType'] === 'change-deletion') return undefined
+	if (!lineElement || lineElement.dataset['lineType'] === 'change-deletion') return
 
 	const lineNumber = lineElement.dataset['line']
-	if (!lineNumber) return undefined
+	if (Predicate.isUndefined(lineNumber) || String.isEmpty(lineNumber)) return
 
 	return {clientY, lineNumber, offsetWithinLine: clientY - lineElement.getBoundingClientRect().top}
 }
@@ -162,7 +162,7 @@ function CommentAnnotation(props: {
 
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
-			if (props.isDraft) {
+			if (props.isDraft === true) {
 				props.onCloseDraft?.()
 				return
 			}
@@ -210,7 +210,7 @@ function CommentAnnotation(props: {
 							if (event.key === 'Escape') {
 								event.preventDefault()
 
-								if (props.isDraft) props.onCloseDraft?.()
+								if (props.isDraft === true) props.onCloseDraft?.()
 								else setEditing(false)
 							}
 
@@ -274,7 +274,7 @@ function CommentAnnotation(props: {
 							props.onResolveComment?.(props.comment)
 						}}
 					>
-						{props.comment.resolving ? (
+						{props.comment.resolving === true ? (
 							<Loader2Icon className="size-3 animate-spin" />
 						) : (
 							<CheckIcon className="size-3" />
@@ -308,8 +308,8 @@ export function PatchDiff(props: {
 	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
-	const pointerClientYRef = useRef<number | undefined>(undefined)
-	const scrollAnchorRef = useRef<ReturnType<typeof captureScrollAnchor>>(undefined)
+	const pointerClientYRef = useRef<number>(null)
+	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
 	const [mode, setMode] = useState<'diff' | 'file'>('diff')
 	const [draftComment, setDraftComment] = useState<DiffComment>()
 	const language = resolveLanguage(props.filePath)
@@ -325,10 +325,10 @@ export function PatchDiff(props: {
 	useLayoutEffect(() => {
 		const container = containerRef.current
 		const anchor = scrollAnchorRef.current
-		if (!container || !anchor) return
+		if (Predicate.isNull(container) || Predicate.isNull(anchor)) return
 
 		restoreScrollAnchor(container, anchor, mode)
-		scrollAnchorRef.current = undefined
+		scrollAnchorRef.current = null
 	}, [mode])
 
 	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
@@ -379,11 +379,10 @@ export function PatchDiff(props: {
 					event.stopPropagation()
 
 					const rect = event.currentTarget.getBoundingClientRect()
-					const clientY =
-						pointerClientYRef.current !== undefined
-							? Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-							: rect.top + rect.height / 2
-					scrollAnchorRef.current = captureScrollAnchor(event.currentTarget, clientY)
+					const clientY = Predicate.isNull(pointerClientYRef.current)
+						? rect.top + rect.height / 2
+						: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
+					scrollAnchorRef.current = captureScrollAnchor(event.currentTarget, clientY) ?? null
 					setMode(current => (current === 'diff' ? 'file' : 'diff'))
 				}
 			}}

@@ -9,12 +9,15 @@ import {
 	FileSystem,
 	HashMap,
 	Layer,
+	Match,
 	Number,
 	Option,
 	Order,
 	Path,
+	Predicate,
 	Random,
 	Result,
+	Schema,
 	Stream,
 	String,
 	SubscriptionRef,
@@ -32,6 +35,8 @@ import {
 	GitDiff,
 	GitDiffSegment,
 	GitError,
+	GitHubRepositoryResponse,
+	GitHubReviewThreadsResponse,
 	GitHubReviewThread,
 	GitProject,
 	GitReviewMetadata,
@@ -61,6 +66,59 @@ const makeGitExecutor = Effect.gen(function* () {
 
 	return {lines, string}
 })
+
+function toArgs(to: GitReviewTo) {
+	return to.type === 'ref' ? [to.ref] : Array.empty<string>()
+}
+
+function segmentsByFile(segments: readonly GitDiffSegment[]) {
+	return Array.reduce(segments, HashMap.empty<string, readonly GitDiffSegment[]>(), (groups, segment) =>
+		HashMap.modifyAt(groups, segment.filePath, current =>
+			Option.some(
+				Array.append(
+					Option.getOrElse(current, () => Array.empty<GitDiffSegment>()),
+					segment
+				)
+			)
+		)
+	)
+}
+
+function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, readonly GitDiffSegment[]>) {
+	const deleted = /^deleted file mode /mu.test(chunk)
+	const filePath =
+		(deleted ? chunk.match(/^--- a\/(.+)$/mu)?.[1] : undefined) ??
+		chunk.match(/^\+\+\+ b\/(.+)$/mu)?.[1] ??
+		chunk.match(/^--- a\/(.+)$/mu)?.[1] ??
+		chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
+		''
+	const status = Match.value(chunk).pipe(
+		Match.when(
+			value => /^new file mode /mu.test(value),
+			() => 'added' as const
+		),
+		Match.when(
+			() => deleted,
+			() => 'deleted' as const
+		),
+		Match.when(
+			value => /^rename (from|to) /mu.test(value),
+			() => 'renamed' as const
+		),
+		Match.orElse(() => 'modified' as const)
+	)
+
+	return new GitDiff({
+		filePath,
+		patch: chunk,
+		segments: Option.getOrElse(HashMap.get(segments, filePath), () => Array.empty()),
+		status
+	})
+}
+
+function isWipSubject(subject: string) {
+	return subject === 'wip' || String.startsWith('wip: ')(subject)
+}
 
 export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/service/GitWorkspace', {
 	make: Effect.gen(function* () {
@@ -116,19 +174,24 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			function* (roots, repositories) {
 				return yield* Array.match(roots, {
 					onEmpty: () => Effect.succeed(repositories),
-					onNonEmpty: roots =>
-						pipe(
-							fs.readDirectory(roots[0]),
+					onNonEmpty: remainingRoots => {
+						const root = remainingRoots[0]
+
+						return pipe(
+							fs.readDirectory(root),
 							Effect.orElseSucceed(() => Array.empty<string>()),
 							Effect.flatMap(entries => {
 								if (Array.contains(entries, '.git')) {
 									return pipe(
-										git.string(roots[0], ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+										git.string(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
 										Effect.map(String.trim),
-										Effect.map(gitDirectory => Result.succeed(new GitRepository({gitDirectory, root: roots[0]}))),
+										Effect.map(gitDirectory => Result.succeed(new GitRepository({gitDirectory, root}))),
 										Effect.orElseSucceed(() => Result.failVoid),
 										Effect.flatMap(repository =>
-											collectRepositoriesFromRoots(Array.drop(roots, 1), Array.append(repositories, repository))
+											collectRepositoriesFromRoots(
+												Array.drop(remainingRoots, 1),
+												Array.append(repositories, repository)
+											)
 										)
 									)
 								}
@@ -146,8 +209,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 									),
 									Effect.forEach(entry =>
 										pipe(
-											fs.stat(path.join(roots[0], entry)),
-											Effect.map(info => (info.type === 'Directory' ? path.join(roots[0], entry) : '')),
+											fs.stat(path.join(root, entry)),
+											Effect.map(info => (info.type === 'Directory' ? path.join(root, entry) : '')),
 											Effect.orElseSucceed(() => '')
 										)
 									),
@@ -160,6 +223,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 								)
 							})
 						)
+					}
 				})
 			}
 		)
@@ -282,8 +346,15 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 		yield* refreshProjects()
 		yield* Effect.acquireRelease(
-			Effect.sync(() => NodeFs.watch(home, () => run(refreshProjects()))),
-			watcher => Effect.sync(() => watcher.close())
+			Effect.sync(() =>
+				NodeFs.watch(home, () => {
+					run(refreshProjects())
+				})
+			),
+			watcher =>
+				Effect.sync(() => {
+					watcher.close()
+				})
 		)
 
 		return {
@@ -432,7 +503,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					Effect.asVoid
 				)
 
-				if (worktree.branch !== undefined) {
+				if (Predicate.isNotUndefined(worktree.branch)) {
 					yield* pipe(git.string(worktree.mainRoot, ['branch', '-D', worktree.branch]), Effect.ignore)
 				}
 				yield* refreshProjects()
@@ -464,47 +535,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 
 			return yield* pipe(git.string(config.cwd, ['merge-base', from.base, 'HEAD']), Effect.map(String.trim))
 		})
-
-		function toArgs(to: GitReviewTo) {
-			return to.type === 'ref' ? [to.ref] : Array.empty<string>()
-		}
-
-		function segmentsByFile(segments: readonly GitDiffSegment[]) {
-			return Array.reduce(segments, HashMap.empty<string, readonly GitDiffSegment[]>(), (groups, segment) =>
-				HashMap.modifyAt(groups, segment.filePath, current =>
-					Option.some(
-						Array.append(
-							Option.getOrElse(current, () => Array.empty<GitDiffSegment>()),
-							segment
-						)
-					)
-				)
-			)
-		}
-
-		function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, readonly GitDiffSegment[]>) {
-			const deleted = /^deleted file mode /mu.test(chunk)
-			const filePath =
-				(deleted ? chunk.match(/^--- a\/(.+)$/mu)?.[1] : undefined) ??
-				chunk.match(/^\+\+\+ b\/(.+)$/mu)?.[1] ??
-				chunk.match(/^--- a\/(.+)$/mu)?.[1] ??
-				chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
-				''
-			const status = /^new file mode /mu.test(chunk)
-				? 'added'
-				: deleted
-					? 'deleted'
-					: /^rename (from|to) /mu.test(chunk)
-						? 'renamed'
-						: 'modified'
-
-			return new GitDiff({
-				filePath,
-				patch: chunk,
-				segments: Option.getOrElse(HashMap.get(segments, filePath), () => Array.empty()),
-				status
-			})
-		}
 
 		function diffsFromPatch(patch: string, segments: readonly GitDiffSegment[]) {
 			const groupedSegments = segmentsByFile(segments)
@@ -595,9 +625,9 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				Array.filter(String.isNonEmpty),
 				Array.flatMap(entry => {
 					const lines = String.split('\n')(entry)
-					const header = lines[0] ?? ''
+					const header = lines[0]
 					const parts = String.split('\u0000')(header)
-					const commit = parts[0] ?? ''
+					const commit = parts[0]
 					const parent = pipe(parts[1] ?? '', String.split(' '), Array.filter(String.isNonEmpty))[0] ?? `${commit}^`
 					const id = `${parent}->${commit}`
 
@@ -703,16 +733,12 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			Effect.catchTag('GitError', () => Effect.succeed(Option.none<string>()))
 		)
 
-		function isWipSubject(subject: string) {
-			return subject === 'wip' || String.startsWith('wip: ')(subject)
-		}
-
 		function commitFromLogLine(line: string) {
 			const parts = String.split('\u0000')(line)
 			const subject = parts[2] ?? ''
 
 			return new GitCommit({
-				hash: parts[0] ?? '',
+				hash: parts[0],
 				parents: pipe(parts[3] ?? '', String.split(' '), Array.filter(String.isNonEmpty)),
 				shortHash: parts[1] ?? '',
 				subject,
@@ -788,7 +814,8 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			)
 			const repository = yield* pipe(
 				ghString(['repo', 'view', '--json', 'owner,name']),
-				Effect.map(output => JSON.parse(output) as {readonly name: string; readonly owner: {readonly login: string}})
+				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubRepositoryResponse))),
+				Effect.mapError(cause => new GitError({cause, message: 'Failed to parse GitHub repository.'}))
 			)
 			const query = `
 				query($owner: String!, $name: String!, $number: Int!) {
@@ -825,47 +852,25 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				'-F',
 				`number=${pr}`
 			])
-			const data = JSON.parse(response) as {
-				readonly data?: {
-					readonly repository?: {
-						readonly pullRequest?: {
-							readonly reviewThreads?: {
-								readonly nodes?: readonly {
-									readonly comments?: {
-										readonly nodes?: readonly {
-											readonly body?: string
-											readonly line?: number
-											readonly originalLine?: number
-											readonly path?: string
-											readonly url?: string
-										}[]
-									}
-									readonly id?: string
-									readonly isResolved?: boolean
-									readonly diffSide?: 'LEFT' | 'RIGHT'
-								}[]
-							}
-						}
-					}
-				}
-			}
+			const data = yield* pipe(
+				Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubReviewThreadsResponse))(response),
+				Effect.mapError(cause => new GitError({cause, message: 'Failed to parse GitHub review threads.'}))
+			)
 			const threads = data.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
 
 			return pipe(
 				threads,
-				Array.filter(thread => thread.id !== undefined),
 				Array.flatMap(thread =>
 					pipe(
-						thread.comments?.nodes ?? [],
-						Array.filter(comment => comment.body !== undefined && comment.path !== undefined),
+						thread.comments.nodes,
 						Array.map(
 							comment =>
 								new GitHubReviewThread({
-									body: comment.body ?? '',
-									filePath: comment.path ?? '',
-									id: thread.id ?? '',
+									body: comment.body,
+									filePath: comment.path,
+									id: thread.id,
 									lineNumber: comment.line ?? comment.originalLine ?? 1,
-									resolved: thread.isResolved === true,
+									resolved: thread.isResolved,
 									side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
 									url: comment.url
 								})
@@ -881,7 +886,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				pipe(
 					fs.watch(config.cwd),
 					Stream.catch(() => Stream.empty),
-					Stream.map(() => undefined)
+					Stream.map(() => void 0)
 				)
 			),
 			Stream.debounce(Duration.millis(50))
@@ -923,7 +928,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				}
 
 				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
-				const subject = pipe(message, String.trim, message => (String.isEmpty(message) ? 'wip' : `wip: ${message}`))
+				const subject = pipe(message, String.trim, value => (String.isEmpty(value) ? 'wip' : `wip: ${value}`))
 				yield* pipe(git.string(config.cwd, ['commit', '-m', subject]), Effect.asVoid)
 			}),
 			discardFile: Effect.fnUntraced(function* (filePath: string) {
@@ -984,7 +989,7 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 							Array.every(
 								left,
 								(leftDiff, index) =>
-									right[index] !== undefined &&
+									Predicate.isNotUndefined(right[index]) &&
 									leftDiff.filePath === right[index].filePath &&
 									leftDiff.status === right[index].status &&
 									leftDiff.patch === right[index].patch

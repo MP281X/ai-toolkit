@@ -30,10 +30,10 @@ function terminalViewInitialValue(input: TerminalSessionInput) {
 }
 
 function terminalViewUpdates(current: ReturnType<typeof terminalViewInitialValue>, updates: Iterable<TerminalUpdate>) {
-	const view = pipe(
+	const nextView = pipe(
 		updates,
-		Array.reduce({data: '', frame: current.frame, state: current.state}, (view, update) => {
-			const next = view
+		Array.reduce({data: '', frame: current.frame, state: current.state}, (currentView, update) => {
+			const next = currentView
 			if (update.type === 'state') {
 				next.state = update.state
 				return next
@@ -44,7 +44,7 @@ function terminalViewUpdates(current: ReturnType<typeof terminalViewInitialValue
 		})
 	)
 
-	return {data: view.data, frame: view.data === '' ? view.frame : view.frame + 1, state: view.state}
+	return {data: nextView.data, frame: nextView.data === '' ? nextView.frame : nextView.frame + 1, state: nextView.state}
 }
 
 export const terminalViewAtom = Atom.family((input: TerminalSessionInput) =>
@@ -91,7 +91,7 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 					scripts,
 					Array.filterMap(script => (script.origin === undefined ? Result.failVoid : Result.succeed(script.origin))),
 					Array.dedupe,
-					Array.sort(Order.String)
+					Array.sortWith(origin => origin, Order.String)
 				)
 			)
 		)

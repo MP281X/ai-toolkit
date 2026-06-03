@@ -70,8 +70,12 @@ function RunTerminal(input: {
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				data={terminal.value.data}
 				frame={terminal.value.frame}
-				onData={data => write({payload: {...session, data}})}
-				onResize={size => resize({payload: {cols: size.cols, rows: size.rows, ...session}})}
+				onData={data => {
+					write({payload: {...session, data}})
+				}}
+				onResize={size => {
+					resize({payload: {cols: size.cols, rows: size.rows, ...session}})
+				}}
 				state={
 					input.runId !== undefined && terminal.value.state.runId < input.runId
 						? 'starting'

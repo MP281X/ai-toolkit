@@ -18,8 +18,11 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(
 		ConfigProvider.layer(
 			ConfigProvider.fromUnknown({
+				// oxlint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Vite exposes env values through an index signature.
 				VITE_OTEL_URL: import.meta.env['VITE_OTEL_URL'],
+				// oxlint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Vite exposes env values through an index signature.
 				VITE_PORTLESS_BASE_ORIGIN: import.meta.env['VITE_PORTLESS_BASE_ORIGIN'],
+				// oxlint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Vite exposes env values through an index signature.
 				VITE_PORTLESS_ORIGIN: import.meta.env['VITE_PORTLESS_ORIGIN']
 			})
 		)

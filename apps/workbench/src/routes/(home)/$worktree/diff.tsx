@@ -1,6 +1,6 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, Match, Option, Predicate, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -30,8 +30,7 @@ import {InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput} from '@d
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
 import {cn} from '@deslop/components/utils'
-import type {GitCommit, GitDiff} from '@deslop/git/schema'
-import type {GitHubReviewThread} from '@deslop/git/schema'
+import type {GitCommit, GitDiff, GitHubReviewThread} from '@deslop/git/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/diff')({
 	component: DiffPage,
@@ -211,7 +210,7 @@ const resolveCommentActionAtom = Atom.family((input: {readonly base: string; rea
 				const client = yield* RpcClient
 
 				if (resolveInput.comment.source === 'github') {
-					if (resolveInput.comment.threadId) {
+					if (Predicate.isNotUndefined(resolveInput.comment.threadId)) {
 						yield* client('review.githubThreads.resolve', {cwd: input.cwd, threadId: resolveInput.comment.threadId})
 					}
 					return
@@ -242,7 +241,7 @@ const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; re
 				yield* pipe(
 					comments,
 					Array.flatMap(resolveInput =>
-						resolveInput.comment.source === 'github' && resolveInput.comment.threadId
+						resolveInput.comment.source === 'github' && Predicate.isNotUndefined(resolveInput.comment.threadId)
 							? [resolveInput.comment.threadId]
 							: Array.empty<string>()
 					),
@@ -286,6 +285,10 @@ function groupCommentsByFile<Comment extends {readonly filePath: string}>(commen
 	}
 
 	return Array.fromIterable(groups.values())
+}
+
+async function copyComments(commentsToCopy: readonly DisplayComment[]) {
+	await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
 }
 
 function DiffPage() {
@@ -381,13 +384,30 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	useEffect(() => {
 		const firstFilePath = reviewDiffsValue[0]?.filePath
 
-		if (firstFilePath === undefined) {
+		if (Predicate.isUndefined(firstFilePath)) {
 			if (String.isNonEmpty(selectedFilePath)) setSelectedFilePath('')
 			return
 		}
 
-		if (!Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePath)) openFile(firstFilePath)
-	}, [reviewDiffsValue, selectedFilePath])
+		if (!Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePath)) {
+			setSelectedFilePath(firstFilePath)
+			const marks = pipe(
+				reviewDiffsValue,
+				Array.findFirst(diff => diff.filePath === firstFilePath),
+				Option.map(marksForDiff),
+				Option.getOrElse(() => Array.empty<ReviewMark>())
+			)
+			if (!Array.isReadonlyArrayEmpty(marks)) {
+				void (async () => {
+					try {
+						await markReviewed(marks)
+					} catch {
+						toast.error('Failed to mark file reviewed.')
+					}
+				})()
+			}
+		}
+	}, [markReviewed, reviewDiffsValue, selectedFilePath])
 
 	function marksForFile(filePath: string) {
 		return pipe(
@@ -422,41 +442,55 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	function markFileReviewed(marks: readonly ReviewMark[]) {
-		void markReviewed(marks).catch(() => {
-			toast.error('Failed to mark file reviewed.')
-		})
+		void (async () => {
+			try {
+				await markReviewed(marks)
+			} catch {
+				toast.error('Failed to mark file reviewed.')
+			}
+		})()
 	}
 
 	function unmarkFileReviewed(marks: readonly ReviewMark[]) {
-		void unmarkReviewed(marks).catch(() => {
-			toast.error('Failed to unmark file reviewed.')
-		})
+		void (async () => {
+			try {
+				await unmarkReviewed(marks)
+			} catch {
+				toast.error('Failed to unmark file reviewed.')
+			}
+		})()
 	}
 
 	function saveQueuedComment(comment: QueuedComment) {
-		void saveComment(comment).catch(() => {
-			toast.error('Failed to save comment.')
-		})
+		void (async () => {
+			try {
+				await saveComment(comment)
+			} catch {
+				toast.error('Failed to save comment.')
+			}
+		})()
 	}
 
 	function resolveReviewComment(comment: DisplayComment) {
-		void resolveComment({comment, key: commentKey(comment)})
-			.then(() => {
+		void (async () => {
+			try {
+				await resolveComment({comment, key: commentKey(comment)})
 				if (comment.source === 'github') refreshGithubThreads()
-			})
-			.catch(() => {
+			} catch {
 				toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
-			})
+			}
+		})()
 	}
 
 	function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
-		void resolveComments(commentsToResolve)
-			.then(() => {
+		void (async () => {
+			try {
+				await resolveComments(commentsToResolve)
 				refreshGithubThreads()
-			})
-			.catch(() => {
+			} catch {
 				toast.error('Failed to resolve comment.')
-			})
+			}
+		})()
 	}
 
 	useHotkey({key: 'C', shift: true}, () => void copyComments(unresolvedComments), {
@@ -466,10 +500,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	useHotkey({key: '?', shift: true}, () => {
 		setShortcutsOpen(true)
 	})
-
-	async function copyComments(commentsToCopy: readonly DisplayComment[]) {
-		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
-	}
 
 	return (
 		<>
@@ -716,9 +746,9 @@ function CommitActionForm(input: {
 					size="icon"
 					aria-label="Open PR"
 					title="Open PR"
-					disabled={!input.prUrl}
+					disabled={Predicate.isUndefined(input.prUrl)}
 					onClick={() => {
-						if (input.prUrl) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
+						if (Predicate.isNotUndefined(input.prUrl)) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
 					}}
 				>
 					<ExternalLinkIcon />

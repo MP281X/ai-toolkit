@@ -1,6 +1,6 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Schema, String, pipe} from 'effect'
+import {Array, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
@@ -167,7 +167,7 @@ function shortPath(value: string) {
 	const homeSegments = String.startsWith('/home/')(value)
 		? pipe(String.split('/')(value), Array.take(3), Array.join('/'))
 		: undefined
-	if (homeSegments && String.startsWith(`${homeSegments}/`)(value)) {
+	if (Predicate.isNotUndefined(homeSegments) && String.startsWith(`${homeSegments}/`)(value)) {
 		return `~/${String.slice(String.length(homeSegments) + 1)(value)}`
 	}
 	return pathLabel(value)
@@ -198,7 +198,7 @@ function portlessLabel(script: RunScript) {
 }
 
 function sortPortlessScripts(scripts: readonly RunScript[]) {
-	return [...scripts].sort((left, right) => {
+	return [...scripts].toSorted((left, right) => {
 		const packageOrder = left.packageFolder.localeCompare(right.packageFolder)
 		if (packageOrder !== 0) return packageOrder
 
@@ -408,9 +408,10 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
-		void create({payload: {...profile, cwd: input.cwd}}).then(session => {
+		void (async () => {
+			const session = await create({payload: {...profile, cwd: input.cwd}})
 			input.selectAgent(input.cwd, session.uuid)
-		})
+		})()
 	}
 
 	function stopAgent(session: AgentSession) {
@@ -459,8 +460,12 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 										<AgentSessionRow
 											key={session.uuid}
 											session={session}
-											onSelect={() => input.selectAgent(input.cwd, session.uuid)}
-											onStop={() => stopAgent(session)}
+											onSelect={() => {
+												input.selectAgent(input.cwd, session.uuid)
+											}}
+											onStop={() => {
+												stopAgent(session)
+											}}
 										/>
 									))}
 								</ul>
@@ -525,6 +530,11 @@ function WorktreeManager(input: {
 			Array.findFirst(candidate => candidate.name === nextBranch),
 			Option.getOrUndefined
 		)
+		const mode = Match.value(nextSelectedBranch?.type).pipe(
+			Match.when('local', () => 'existing-local' as const),
+			Match.when('remote', () => 'existing-remote' as const),
+			Match.orElse(() => 'new-local' as const)
+		)
 		const worktreeRoot = await createWorktree({
 			payload: {
 				baseBranch:
@@ -533,18 +543,18 @@ function WorktreeManager(input: {
 						: `origin/${branchSnapshot.value.defaultBranch}`,
 				branch: nextBranch,
 				cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
-				mode:
-					nextSelectedBranch?.type === 'local'
-						? 'existing-local'
-						: nextSelectedBranch?.type === 'remote'
-							? 'existing-remote'
-							: 'new-local'
+				mode
 			}
 		})
 		setActionsOpen(false)
 		setBranch('')
 		refreshProjects()
 		input.selectWorktree(worktreeRoot)
+	}
+	async function deleteActiveWorktree() {
+		if (!input.activeWorktree) return
+		await deleteWorktree({payload: {cwd: input.activeWorktree.root, force: true}})
+		refreshProjects()
 	}
 
 	return (
@@ -565,15 +575,14 @@ function WorktreeManager(input: {
 					<button
 						type="button"
 						className="text-destructive hover:bg-muted hover:text-destructive flex h-8 w-8 items-center justify-center"
-						onClick={async () => {
+						onClick={() => {
 							if (!input.activeWorktree) return
 							if (!confirm(`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`)) {
 								return
 							}
 
-							await deleteWorktree({payload: {cwd: input.activeWorktree.root, force: true}})
+							void deleteActiveWorktree()
 							setActionsOpen(false)
-							refreshProjects()
 						}}
 						title="Delete worktree"
 					>

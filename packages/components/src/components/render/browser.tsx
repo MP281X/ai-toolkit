@@ -1,4 +1,4 @@
-import {DateTime, String} from 'effect'
+import {DateTime, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {
 	ArrowLeftIcon,
@@ -37,6 +37,11 @@ function originLabel(origin: string) {
 }
 
 type BrowserLog = {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}
+const BrowserMessage = Schema.Union([
+	Schema.Struct({deslopBrowserFavicon: Schema.Literal(true), href: Schema.optional(Schema.String)}),
+	Schema.Struct({deslopBrowserLocation: Schema.Literal(true), path: Schema.optional(Schema.String)}),
+	Schema.Struct({deslopBrowserLog: Schema.Literal(true), level: Schema.String, message: Schema.String})
+])
 
 function logLevelClassName(level: string) {
 	if (level === 'error') return 'text-destructive'
@@ -81,7 +86,8 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
 
 	useEffect(() => {
-		setCurrentUrl(origin ? browserUrl(origin, address) : '')
+		setAddress('/')
+		setCurrentUrl(origin ? browserUrl(origin, '/') : '')
 		setFaviconUrl(undefined)
 		setIsLoading(origin !== '')
 	}, [origin])
@@ -91,22 +97,26 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 
 		function onMessage(event: MessageEvent) {
 			if (event.origin !== origin) return
-			if (typeof event.data !== 'object' || event.data === null) return
 
-			if (event.data.__deslopBrowserFavicon === true) {
-				setFaviconUrl(typeof event.data.href === 'string' ? event.data.href : undefined)
-				return
-			}
+			pipe(
+				Schema.decodeUnknownOption(BrowserMessage)(event.data),
+				Option.match({
+					onNone: () => {},
+					onSome: data => {
+						if ('deslopBrowserFavicon' in data) {
+							setFaviconUrl(data.href)
+							return
+						}
 
-			if (event.data.__deslopBrowserLocation === true) {
-				setAddress(typeof event.data.path === 'string' ? event.data.path : '/')
-				return
-			}
+						if ('deslopBrowserLocation' in data) {
+							setAddress(data.path ?? '/')
+							return
+						}
 
-			if (event.data.__deslopBrowserLog !== true) return
-			if (typeof event.data.level !== 'string' || typeof event.data.message !== 'string') return
-
-			addLog(event.data.level, event.data.message)
+						addLog(data.level, data.message)
+					}
+				})
+			)
 		}
 
 		window.addEventListener('message', onMessage)
@@ -119,7 +129,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	}, [origin])
 
 	function navigate() {
-		if (!origin) return
+		if (String.isEmpty(origin)) return
 
 		const nextUrl = browserUrl(origin, String.trim(address) || '/')
 
@@ -136,14 +146,14 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	}
 
 	function clearCookies() {
-		if (!origin) return
+		if (String.isEmpty(origin)) return
 
 		setLogs([])
-		iframeRef.current?.contentWindow?.postMessage({__deslopBrowserClear: true}, origin)
+		iframeRef.current?.contentWindow?.postMessage({deslopBrowserClear: true}, origin)
 	}
 
 	function openTopLevel() {
-		if (!currentUrl) return
+		if (String.isEmpty(currentUrl)) return
 
 		window.open(currentUrl, '_blank', 'noopener,noreferrer')
 	}
@@ -190,7 +200,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 					<RotateCwIcon className="size-3.5" />
 				</Button>
 				<div className="border-border flex h-8 w-8 shrink-0 items-center justify-center border">
-					{faviconUrl && <img src={faviconUrl} alt="" className="size-4" />}
+					{Predicate.isNotUndefined(faviconUrl) && <img src={faviconUrl} alt="" className="size-4" />}
 				</div>
 				<div className="flex min-w-0 flex-1 items-center gap-1">
 					<div className="border-input bg-secondary text-secondary-foreground/70 flex h-8 min-w-0 shrink items-center border px-2 text-xs">
