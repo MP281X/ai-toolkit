@@ -119,7 +119,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 			const script = pipe(yield* Ref.get(portlessScripts), HashMap.get(input.sessionId), Option.getOrUndefined)
 			if (script === undefined) return input
 
-			return {command: script.preparedCommand, cwd: script.cwd, sessionId: script.sessionId}
+			return {
+				command: ChildProcess.make(script.preparedCommand.command, script.preparedCommand.args, {
+					...script.preparedCommand.options,
+					env: script.env
+				}),
+				cwd: script.cwd,
+				sessionId: script.sessionId
+			}
 		})
 		function terminalSessionInput(
 			session: typeof TerminalSessionKey.Type | TerminalSessionInput

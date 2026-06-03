@@ -35,10 +35,36 @@ type RunningProcess = {
 
 type TerminalSize = {readonly cols: number; readonly rows: number}
 type QueuedData = {readonly data: string; readonly generation: number}
-type QueuedScreenWrite = QueuedData & {readonly sequence: number}
 type QueuedWrite = {readonly data: string; readonly process: RunningProcess}
 const eventBacklogCapacity = 512
 const terminalReset = '\u001bc'
+
+function parseTitleSignal(title: string): Pick<TerminalState, 'state' | 'title'> {
+	const trimmed = title.trim()
+	const actionRequired = /^\[\s*[!.]\s*\]\s*Action Required\b/iu
+	if (actionRequired.test(trimmed)) {
+		return {state: 'waiting', title: trimmed.replace(/^\[\s*[!.]\s*\]\s*/iu, '') || trimmed}
+	}
+
+	const spinner = /^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-])(?:\s|\s*\|)/u.test(trimmed)
+	const withoutKnownPrefix = trimmed
+		.replace(/^OC\s*\|\s*/iu, '')
+		.replace(/^π\s*-\s*/iu, '')
+		.replace(/^\[\s*[^\]]+\s*\]\s*/u, '')
+		.replace(/^(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏|/\\-]\s*)+/u, '')
+		.replace(/^\|\s*/u, '')
+		.trim()
+	const nextTitle = withoutKnownPrefix || trimmed
+	const segment = /^(Idle|Ready|Starting|Working|Thinking|Waiting)\b/iu.exec(nextTitle)?.[1]?.toLowerCase()
+
+	if (segment === 'idle' || segment === 'ready') return {state: 'idle', title: nextTitle}
+	if (segment === 'starting') return {state: 'starting', title: nextTitle}
+	if (segment === 'waiting') return {state: 'waiting', title: nextTitle}
+	if (segment === 'working' || segment === 'thinking' || spinner) return {state: 'running', title: nextTitle}
+	if (trimmed !== '') return {state: 'idle', title: nextTitle}
+
+	return {state: 'idle', title: ''}
+}
 
 function snapshotEvents(data: string, sequence: number) {
 	if (data === '') return Array.empty<TerminalEvent>()
@@ -79,10 +105,6 @@ function mergeQueuedData(previous: QueuedData, item: QueuedData): QueuedData {
 	return {data: `${previous.data}${item.data}`, generation: item.generation}
 }
 
-function mergeScreenWrite(previous: QueuedScreenWrite, item: QueuedScreenWrite): QueuedScreenWrite {
-	return {...mergeQueuedData(previous, item), sequence: item.sequence}
-}
-
 function queuedWriteGroups(items: readonly QueuedWrite[]) {
 	return adjacentGroups(
 		items,
@@ -94,7 +116,7 @@ function queuedWriteGroups(items: readonly QueuedWrite[]) {
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
 		const dataQueue = yield* Queue.unbounded<QueuedData>()
-		const screenQueue = yield* Queue.unbounded<QueuedScreenWrite>()
+		const screenQueue = yield* Queue.unbounded<QueuedData>()
 		const writeQueue = yield* Queue.unbounded<QueuedWrite>()
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const events = yield* PubSub.bounded<TerminalEvent>({capacity: 1024, replay: eventBacklogCapacity})
@@ -160,7 +182,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setTitle(title: string) {
 			return SubscriptionRef.update(stateRef, current => {
 				if (!terminalStateActive(current.state)) return current
-				return {...current, title}
+				return {...current, ...parseTitleSignal(title)}
 			})
 		}
 
@@ -200,7 +222,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* interruptProcess(subprocess, 'SIGKILL')
 		})
 
-		const writeScreen = Effect.fnUntraced(function* (input: QueuedScreenWrite) {
+		const writeScreen = Effect.fnUntraced(function* (input: QueuedData) {
 			const generation = yield* Ref.get(screenGenerationRef)
 			if (generation !== input.generation) return
 
@@ -215,7 +237,10 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Effect.andThen(
 						Effect.gen(function* () {
 							const generation = yield* Ref.get(screenGenerationRef)
-							if (generation === input.generation) yield* Ref.set(parsedSequenceRef, input.sequence)
+							if (generation === input.generation) {
+								const sequence = yield* publish(input.data)
+								yield* Ref.set(parsedSequenceRef, sequence)
+							}
 						})
 					)
 				)
@@ -316,8 +341,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							const generation = yield* Ref.get(screenGenerationRef)
 							if (generation !== item.generation) return
 
-							const sequence = yield* publish(item.data)
-							yield* Queue.offer(screenQueue, {...item, sequence})
+							yield* Queue.offer(screenQueue, item)
 						}),
 					{discard: true}
 				)
@@ -328,7 +352,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Stream.fromQueue(screenQueue),
 			Stream.groupedWithin(256, Duration.millis(16)),
 			Stream.runForEach(items =>
-				Effect.forEach(queuedDataGroups(Array.fromIterable(items), mergeScreenWrite), writeScreen, {discard: true})
+				Effect.forEach(queuedDataGroups(Array.fromIterable(items), mergeQueuedData), writeScreen, {discard: true})
 			),
 			Effect.forkScoped
 		)
