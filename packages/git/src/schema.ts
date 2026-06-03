@@ -67,41 +67,29 @@ export const GitHubRepositoryResponse = Schema.Struct({
 	owner: Schema.Struct({login: Schema.String})
 })
 
+const GitHubReviewThreadCommentResponse = Schema.Struct({
+	body: Schema.String,
+	line: Schema.optional(Schema.NullOr(Schema.Number)),
+	originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
+	path: Schema.String,
+	url: Schema.optional(Schema.String)
+})
+
+const GitHubReviewThreadResponse = Schema.Struct({
+	comments: Schema.Struct({nodes: Schema.Array(GitHubReviewThreadCommentResponse)}),
+	diffSide: Schema.optional(Schema.String),
+	id: Schema.String,
+	isResolved: Schema.Boolean
+})
+
+const GitHubPullRequestResponse = Schema.Struct({
+	reviewThreads: Schema.optional(Schema.Struct({nodes: Schema.Array(GitHubReviewThreadResponse)}))
+})
+
+const GitHubReviewRepositoryResponse = Schema.Struct({pullRequest: Schema.optional(GitHubPullRequestResponse)})
+
 export const GitHubReviewThreadsResponse = Schema.Struct({
-	data: Schema.optional(
-		Schema.Struct({
-			repository: Schema.optional(
-				Schema.Struct({
-					pullRequest: Schema.optional(
-						Schema.Struct({
-							reviewThreads: Schema.optional(
-								Schema.Struct({
-									nodes: Schema.Array(
-										Schema.Struct({
-											comments: Schema.Struct({
-												nodes: Schema.Array(
-													Schema.Struct({
-														body: Schema.String,
-														line: Schema.optional(Schema.NullOr(Schema.Number)),
-														originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
-														path: Schema.String,
-														url: Schema.optional(Schema.String)
-													})
-												)
-											}),
-											diffSide: Schema.optional(Schema.String),
-											id: Schema.String,
-											isResolved: Schema.Boolean
-										})
-									)
-								})
-							)
-						})
-					)
-				})
-			)
-		})
-	)
+	data: Schema.optional(Schema.Struct({repository: Schema.optional(GitHubReviewRepositoryResponse)}))
 })
 
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({
