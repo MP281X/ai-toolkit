@@ -1,7 +1,7 @@
 import {Array, Predicate, String} from 'effect'
 
-import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
-import {getSingularPatch, parseDiffFromFile, setLanguageOverride} from '@pierre/diffs'
+import type {AnnotationSide} from '@pierre/diffs'
+import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
 import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
@@ -144,6 +144,7 @@ function restoreScrollAnchor(
 function CommentAnnotation(props: {
 	readonly comment: DiffComment
 	readonly isDraft?: boolean
+	readonly onCopyComment?: (comment: DiffComment) => void
 	readonly onSaveComment?: (comment: DiffComment) => void
 	readonly onResolveComment?: (comment: DiffComment) => void
 	readonly onCloseDraft?: () => void
@@ -158,6 +159,7 @@ function CommentAnnotation(props: {
 
 	async function copyComment() {
 		await navigator.clipboard.writeText(formatCopiedComment(props.comment))
+		props.onCopyComment?.(props.comment)
 	}
 
 	function saveDraft() {
@@ -286,24 +288,12 @@ function CommentAnnotation(props: {
 	)
 }
 
-function patchResultContent(fileDiff: FileDiffMetadata) {
-	if (fileDiff.type === 'deleted') return ''
-
-	return Array.join(fileDiff.additionLines, '')
-}
-
-function compactFileDiff(filePath: string, fileDiff: FileDiffMetadata) {
-	return parseDiffFromFile(
-		{contents: Array.join(fileDiff.deletionLines, ''), name: fileDiff.prevName ?? filePath},
-		{contents: patchResultContent(fileDiff), name: filePath},
-		{context: 3}
-	)
-}
-
 export function PatchDiff(props: {
+	readonly content: string
 	readonly filePath: string
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
+	readonly onCopyComment?: (comment: DiffComment) => void
 	readonly onSaveComment?: (comment: DiffComment) => void
 	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
@@ -314,7 +304,6 @@ export function PatchDiff(props: {
 	const [draftComment, setDraftComment] = useState<DiffComment>()
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
-	const compactDiff = setLanguageOverride(compactFileDiff(props.filePath, fileDiff), language)
 	const comments = props.comments ?? []
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
@@ -390,7 +379,7 @@ export function PatchDiff(props: {
 			{mode === 'diff' ? (
 				<PierreFileDiff<DiffComment>
 					key={props.patch}
-					fileDiff={compactDiff}
+					fileDiff={fileDiff}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
@@ -415,6 +404,7 @@ export function PatchDiff(props: {
 						<CommentAnnotation
 							comment={annotation.metadata}
 							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							onCopyComment={props.onCopyComment}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
@@ -426,7 +416,7 @@ export function PatchDiff(props: {
 			) : (
 				<File<DiffComment>
 					key={props.patch}
-					file={{contents: patchResultContent(fileDiff), lang: language, name: props.filePath}}
+					file={{contents: props.content, lang: language, name: props.filePath}}
 					options={{
 						disableFileHeader: true,
 						disableLineNumbers: false,
@@ -446,6 +436,7 @@ export function PatchDiff(props: {
 						<CommentAnnotation
 							comment={annotation.metadata}
 							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							onCopyComment={props.onCopyComment}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {

@@ -20,7 +20,7 @@ import {
 import {KeyValueStore} from 'effect/unstable/persistence'
 import {ChildProcess} from 'effect/unstable/process'
 
-import {ReviewComment, ReviewState, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
+import {ReviewComment, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
 import {GitError} from '@deslop/git/schema'
 import {GitWorkspace, GitWorktree} from '@deslop/git/service'
 import {Portless} from '@deslop/portless/http'
@@ -45,7 +45,8 @@ type PortlessScript = Omit<RunScript, 'env'> & {
 	readonly preparedCommand: ChildProcess.StandardCommand
 }
 
-const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
+const emptyReviewComments: readonly ReviewComment[] = Array.empty()
+const emptyReviewedFiles: readonly string[] = Array.empty()
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
@@ -75,12 +76,8 @@ function commentKey(input: {
 	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
 }
 
-function markKey(input: {readonly filePath: string; readonly fingerprint: string; readonly segmentId: string}) {
-	return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
-}
-
 const TerminalSessions = RcMap.make({
-	idleTimeToLive: Duration.infinity,
+	idleTimeToLive: Duration.minutes(20),
 	lookup: Effect.fnUntraced(function* (config: TerminalSessionInput) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
@@ -105,10 +102,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const fs = yield* FileSystem.FileSystem
 		const portless = yield* Portless
 		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessScript>())
-		const reviewStore = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, ReviewState)
+		const reviewStore = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Schema.Array(ReviewComment))
 
 		const portlessWorktrees = yield* RcMap.make({
-			idleTimeToLive: Duration.infinity,
+			idleTimeToLive: Duration.minutes(5),
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const scripts = yield* pipe(
 					portless.scripts(cwd),
@@ -175,36 +172,73 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return Buffer.from(`${root}\u0000${input.base}`, 'utf8').toString('base64url')
 		})
 
-		const readReviewState = Effect.fnUntraced(function* (key: string) {
+		const readReviewComments = Effect.fnUntraced(function* (key: string) {
 			return yield* pipe(
 				reviewStore.get(`review-state/${key}`),
-				Effect.map(Option.getOrElse(() => emptyReviewState)),
-				Effect.orElseSucceed(() => emptyReviewState)
+				Effect.map(Option.getOrElse(() => emptyReviewComments)),
+				Effect.orElseSucceed(() => emptyReviewComments)
 			)
 		})
 
-		const reviewStates = yield* RcMap.make({
+		const reviewComments = yield* RcMap.make({
 			idleTimeToLive: Duration.minutes(5),
 			lookup: Effect.fnUntraced(function* (key: string) {
-				return yield* SubscriptionRef.make(yield* readReviewState(key))
+				return yield* SubscriptionRef.make(yield* readReviewComments(key))
 			})
 		})
 
-		const updateReviewState = Effect.fnUntraced(function* (
+		const updateReviewComments = Effect.fnUntraced(function* (
 			input: {readonly base: string; readonly cwd: string},
-			f: (state: ReviewState) => ReviewState
+			f: (comments: readonly ReviewComment[]) => readonly ReviewComment[]
 		) {
 			return yield* pipe(
 				Effect.scoped(
 					Effect.gen(function* () {
 						const key = yield* reviewStateKey(input)
-						const ref = yield* RcMap.get(reviewStates, key)
+						const ref = yield* RcMap.get(reviewComments, key)
 						const state = yield* SubscriptionRef.modify(ref, current => {
 							const next = f(current)
 
 							return [next, next] as const
 						})
 						yield* reviewStore.set(`review-state/${key}`, state)
+					})
+				),
+				Effect.mapError(cause => new GitError({cause}))
+			)
+		})
+
+		const reviewedFilesKey = Effect.fnUntraced(function* (input: {
+			readonly cwd: string
+			readonly from: string
+			readonly type: 'commit-to-worktree' | 'head-to-worktree'
+		}) {
+			const root = yield* pipe(
+				fs.realPath(input.cwd),
+				Effect.orElseSucceed(() => input.cwd)
+			)
+
+			return Buffer.from(`${root}\u0000${input.type}\u0000${input.from}`, 'utf8').toString('base64url')
+		})
+
+		const reviewedFiles = yield* RcMap.make({
+			idleTimeToLive: Duration.minutes(120),
+			lookup: Effect.fnUntraced(function* () {
+				return yield* SubscriptionRef.make(emptyReviewedFiles)
+			})
+		})
+
+		const updateReviewedFiles = Effect.fnUntraced(function* (
+			input: {readonly cwd: string; readonly from: string; readonly type: 'commit-to-worktree' | 'head-to-worktree'},
+			f: (files: readonly string[]) => readonly string[]
+		) {
+			return yield* pipe(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const key = yield* reviewedFilesKey(input)
+						const ref = yield* RcMap.get(reviewedFiles, key)
+
+						yield* SubscriptionRef.update(ref, f)
 					})
 				),
 				Effect.mapError(cause => new GitError({cause}))
@@ -296,26 +330,33 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'review.comments.resolve': payload =>
-				updateReviewState(payload, state => {
+				updateReviewComments(payload, comments => {
 					const key = commentKey(payload)
 
-					return new ReviewState({
-						comments: Array.filter(state.comments, comment => commentKey(comment) !== key),
-						marks: state.marks
-					})
+					return Array.filter(comments, comment => commentKey(comment) !== key)
 				}),
 			'review.comments.save': payload =>
-				updateReviewState(payload, state => {
+				updateReviewComments(payload, comments => {
 					const key = commentKey(payload.comment)
 
-					return new ReviewState({
-						comments: Array.append(
-							Array.filter(state.comments, comment => commentKey(comment) !== key),
-							new ReviewComment({...payload.comment, resolved: false})
-						),
-						marks: state.marks
-					})
+					return Array.append(
+						Array.filter(comments, comment => commentKey(comment) !== key),
+						new ReviewComment({...payload.comment, resolved: false})
+					)
 				}),
+			'review.comments.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						reviewStateKey(payload),
+						Effect.flatMap(key => RcMap.get(reviewComments, key)),
+						Effect.flatMap(ref =>
+							pipe(
+								SubscriptionRef.get(ref),
+								Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(ref)))(Stream.make(state)))
+							)
+						)
+					)
+				),
 			'review.commitAndPush': payload =>
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
@@ -325,11 +366,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.createWipCommit(payload.message))
-				),
-			'review.discardFile': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
 				),
 			'review.githubThreads': payload =>
 				pipe(
@@ -346,55 +382,30 @@ export const RpcHandlers = RpcContracts.toLayer(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.metadata({base: payload.base}))
 				),
-			'review.stageFile': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.stageFile(payload.filePath))
-				),
-			'review.state.mark': payload =>
-				updateReviewState(payload, state => {
-					const keys = new Set(Array.map(payload.marks, markKey))
-
-					return new ReviewState({
-						comments: state.comments,
-						marks: Array.appendAll(
-							Array.filter(state.marks, mark => !keys.has(markKey(mark))),
-							payload.marks
-						)
-					})
-				}),
-			'review.state.unmark': payload =>
-				updateReviewState(payload, state => {
-					const keys = new Set(Array.map(payload.marks, markKey))
-
-					return new ReviewState({
-						comments: state.comments,
-						marks: Array.filter(state.marks, mark => !keys.has(markKey(mark)))
-					})
-				}),
-			'review.state.watch': payload =>
+			'review.overview.watch': payload =>
 				Stream.unwrap(
 					pipe(
-						reviewStateKey(payload),
-						Effect.flatMap(key => RcMap.get(reviewStates, key)),
+						RcMap.get(gitWorktrees, payload.cwd),
+						Effect.map(worktree => worktree.watchReviewRangeOverview({from: payload.from}))
+					)
+				),
+			'review.reviewedFiles.set': payload =>
+				updateReviewedFiles(payload, files =>
+					payload.reviewed
+						? pipe(Array.append(files, payload.filePath), Array.dedupe)
+						: Array.filter(files, filePath => filePath !== payload.filePath)
+				),
+			'review.reviewedFiles.watch': payload =>
+				Stream.unwrap(
+					pipe(
+						reviewedFilesKey(payload),
+						Effect.flatMap(key => RcMap.get(reviewedFiles, key)),
 						Effect.flatMap(ref =>
 							pipe(
 								SubscriptionRef.get(ref),
 								Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(ref)))(Stream.make(state)))
 							)
 						)
-					)
-				),
-			'review.unstageFile': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
-				),
-			'review.watchRange': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
 					)
 				),
 			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),

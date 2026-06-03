@@ -82,7 +82,7 @@ export const discover = Effect.fnUntraced(function* (
 										packageFolder: folder,
 										packagePath,
 										service,
-										sessionId: `${packagePath}:${name}:${Date.now()}:${Math.random()}`
+										sessionId: `${cwd}:${packagePath}:${name}`
 									}
 								}
 							})

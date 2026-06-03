@@ -8,31 +8,22 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 export type GitDiffStatus = typeof GitDiffStatus.Type
 export const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
-export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment')({
-	filePath: Schema.String,
-	fingerprint: Schema.String,
-	id: Schema.String,
-	type: Schema.Literals(['commit', 'worktree'])
-}) {}
-
 export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
+	content: Schema.String,
 	filePath: Schema.String,
 	patch: Schema.String,
-	segments: Schema.Array(GitDiffSegment),
 	status: GitDiffStatus
 }) {}
 
-export type GitReviewFrom = typeof GitReviewFrom.Type
-export const GitReviewFrom = Schema.Union([
-	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
-	Schema.Struct({base: Schema.String, type: Schema.Literal('merge-base')})
-])
+export class GitReviewFile extends Schema.Class<GitReviewFile>('GitReviewFile')({
+	filePath: Schema.String,
+	status: GitDiffStatus
+}) {}
 
-export type GitReviewTo = typeof GitReviewTo.Type
-export const GitReviewTo = Schema.Union([
-	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
-	Schema.Struct({type: Schema.Literal('worktree')})
-])
+export class GitReviewOverview extends Schema.Class<GitReviewOverview>('GitReviewOverview')({
+	diffs: Schema.Array(GitDiff),
+	files: Schema.Array(GitReviewFile)
+}) {}
 
 export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 	hash: Schema.String,

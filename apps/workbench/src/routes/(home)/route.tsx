@@ -692,49 +692,55 @@ function WorktreeManager(input: {
 									</Button>
 								</div>
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-									{Array.map(project.worktrees, worktree => (
-										<li key={worktree.root} className="w-full min-w-0">
-											<TreeExplorerRow
-												key={worktree.root}
-												icon={
-													<WorktreeIcon
-														dirty={
-															worktree.status?.dirtyTracked ??
-															worktree.status?.untracked ??
-															worktree.status?.unpushedCommits ??
-															(worktree.status?.behind ?? 0) > 0
-														}
-														root={worktree.root === project.repository.root}
-													/>
-												}
-												selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
-												onClick={() => {
-													input.selectWorktree(worktree.root)
-												}}
-											>
-												{worktree.branch ?? pathLabel(worktree.root)}
-											</TreeExplorerRow>
-											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-												<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
-												<li className="w-full min-w-0">
-													<TreeExplorerRow
-														icon={<TerminalIcon />}
-														selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
-														onClick={() => {
-															input.selectTerminal(worktree.root)
-														}}
-													>
-														terminal
-													</TreeExplorerRow>
-												</li>
-												<WorktreePortless
-													cwd={worktree.root}
-													selectPortless={input.selectPortless}
-													selectRun={input.selectRun}
-												/>
-											</ul>
-										</li>
-									))}
+									{Array.map(project.worktrees, worktree => {
+										const active = input.activeWorktree?.root === worktree.root
+
+										return (
+											<li key={worktree.root} className="w-full min-w-0">
+												<TreeExplorerRow
+													key={worktree.root}
+													icon={
+														<WorktreeIcon
+															dirty={
+																worktree.status?.dirtyTracked ??
+																worktree.status?.untracked ??
+																worktree.status?.unpushedCommits ??
+																(worktree.status?.behind ?? 0) > 0
+															}
+															root={worktree.root === project.repository.root}
+														/>
+													}
+													selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
+													onClick={() => {
+														input.selectWorktree(worktree.root)
+													}}
+												>
+													{worktree.branch ?? pathLabel(worktree.root)}
+												</TreeExplorerRow>
+												<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+													{active && <WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />}
+													<li className="w-full min-w-0">
+														<TreeExplorerRow
+															icon={<TerminalIcon />}
+															selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
+															onClick={() => {
+																input.selectTerminal(worktree.root)
+															}}
+														>
+															terminal
+														</TreeExplorerRow>
+													</li>
+													{active && (
+														<WorktreePortless
+															cwd={worktree.root}
+															selectPortless={input.selectPortless}
+															selectRun={input.selectRun}
+														/>
+													)}
+												</ul>
+											</li>
+										)
+									})}
 								</ul>
 							</li>
 						)

@@ -4,13 +4,11 @@ import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 import {
 	GitBranchesSnapshot,
-	GitDiff,
 	GitError,
 	GitHubReviewThread,
 	GitProject,
-	GitReviewFrom,
 	GitReviewMetadata,
-	GitReviewTo
+	GitReviewOverview
 } from '@deslop/git/schema'
 import {TerminalError, TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
 
@@ -47,23 +45,12 @@ export const AgentSession = Schema.Struct({
 })
 export type AgentSession = typeof AgentSession.Type
 
-export class ReviewMark extends Schema.Class<ReviewMark>('ReviewMark')({
-	filePath: Schema.String,
-	fingerprint: Schema.String,
-	segmentId: Schema.String
-}) {}
-
 export class ReviewComment extends Schema.Class<ReviewComment>('ReviewComment')({
 	body: Schema.String,
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
 	resolved: Schema.optional(Schema.Boolean),
 	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
-}) {}
-
-export class ReviewState extends Schema.Class<ReviewState>('ReviewState')({
-	comments: Schema.Array(ReviewComment),
-	marks: Schema.Array(ReviewMark)
 }) {}
 
 export class RpcContracts extends RpcGroup.make(
@@ -96,25 +83,17 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({base: Schema.optional(Schema.String), cwd: Schema.String}),
 		success: GitReviewMetadata
 	}),
-	Rpc.make('review.watchRange', {
+	Rpc.make('review.overview.watch', {
 		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, from: GitReviewFrom, to: GitReviewTo}),
+		payload: Schema.Struct({cwd: Schema.String, from: Schema.String}),
 		stream: true,
-		success: Schema.Array(GitDiff)
+		success: GitReviewOverview
 	}),
-	Rpc.make('review.state.watch', {
+	Rpc.make('review.comments.watch', {
 		error: GitError,
 		payload: Schema.Struct({base: Schema.String, cwd: Schema.String}),
 		stream: true,
-		success: ReviewState
-	}),
-	Rpc.make('review.state.mark', {
-		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
-	}),
-	Rpc.make('review.state.unmark', {
-		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
+		success: Schema.Array(ReviewComment)
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
@@ -128,6 +107,26 @@ export class RpcContracts extends RpcGroup.make(
 			filePath: Schema.String,
 			lineNumber: Schema.Number,
 			side: Schema.optional(Schema.Literals(['additions', 'deletions']))
+		})
+	}),
+	Rpc.make('review.reviewedFiles.watch', {
+		error: GitError,
+		payload: Schema.Struct({
+			cwd: Schema.String,
+			from: Schema.String,
+			type: Schema.Literals(['commit-to-worktree', 'head-to-worktree'])
+		}),
+		stream: true,
+		success: Schema.Array(Schema.String)
+	}),
+	Rpc.make('review.reviewedFiles.set', {
+		error: GitError,
+		payload: Schema.Struct({
+			cwd: Schema.String,
+			filePath: Schema.String,
+			from: Schema.String,
+			reviewed: Schema.Boolean,
+			type: Schema.Literals(['commit-to-worktree', 'head-to-worktree'])
 		})
 	}),
 	Rpc.make('review.createWipCommit', {
@@ -146,18 +145,6 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('review.githubThreads.resolve', {
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, threadId: Schema.String})
-	}),
-	Rpc.make('review.stageFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
-	}),
-	Rpc.make('review.unstageFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
-	}),
-	Rpc.make('review.discardFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
 	}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,

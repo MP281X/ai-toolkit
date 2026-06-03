@@ -7,7 +7,6 @@ import {
 	Duration,
 	Effect,
 	FileSystem,
-	HashMap,
 	Layer,
 	Match,
 	Number,
@@ -27,19 +26,19 @@ import {
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import type {GitReviewFrom, GitReviewTo} from './schema.ts'
 import {
 	GitBranch,
 	GitBranchesSnapshot,
 	GitCommit,
 	GitDiff,
-	GitDiffSegment,
 	GitError,
 	GitHubRepositoryResponse,
 	GitHubReviewThreadsResponse,
 	GitHubReviewThread,
 	GitProject,
+	GitReviewFile,
 	GitReviewMetadata,
+	GitReviewOverview,
 	GitRepository,
 	GitWorktree as GitWorktreeSchema,
 	GitWorktreeStatus
@@ -67,24 +66,7 @@ const makeGitExecutor = Effect.gen(function* () {
 	return {lines, string}
 })
 
-function toArgs(to: GitReviewTo) {
-	return to.type === 'ref' ? [to.ref] : Array.empty<string>()
-}
-
-function segmentsByFile(segments: readonly GitDiffSegment[]) {
-	return Array.reduce(segments, HashMap.empty<string, readonly GitDiffSegment[]>(), (groups, segment) =>
-		HashMap.modifyAt(groups, segment.filePath, current =>
-			Option.some(
-				Array.append(
-					Option.getOrElse(current, () => Array.empty<GitDiffSegment>()),
-					segment
-				)
-			)
-		)
-	)
-}
-
-function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, readonly GitDiffSegment[]>) {
+function diffFromPatchChunk(chunk: string) {
 	const deleted = /^deleted file mode /mu.test(chunk)
 	const filePath =
 		(deleted ? chunk.match(/^--- a\/(.+)$/mu)?.[1] : undefined) ??
@@ -108,12 +90,7 @@ function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, rea
 		Match.orElse(() => 'modified' as const)
 	)
 
-	return new GitDiff({
-		filePath,
-		patch: chunk,
-		segments: Option.getOrElse(HashMap.get(segments, filePath), () => Array.empty()),
-		status
-	})
+	return new GitDiff({content: '', filePath, patch: chunk, status})
 }
 
 function isWipSubject(subject: string) {
@@ -144,26 +121,27 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			)
 		})
 
-		const getWorktreeStatus = Effect.fnUntraced(function* (cwd: string, branch?: string) {
-			const counts = yield* pipe(
-				git.string(cwd, ['rev-list', '--left-right', '--count', `origin/${branch ?? ''}...HEAD`]),
-				Effect.map(flow(String.trim, String.split(/\s+/u))),
-				Effect.orElseSucceed(() => ['0', '0'])
+		const getWorktreeStatus = Effect.fnUntraced(function* (cwd: string) {
+			const status = yield* pipe(
+				git.string(cwd, ['status', '--porcelain=v2', '--branch', '-z']),
+				Effect.orElseSucceed(() => '')
 			)
+			const entries = pipe(String.split('\u0000')(status), Array.filter(String.isNonEmpty))
+			const branchLine = pipe(
+				entries,
+				Array.findFirst(entry => String.startsWith('# branch.ab ')(entry)),
+				Option.getOrElse(() => '# branch.ab +0 -0')
+			)
+			const counts = String.split(/\s+/u)(branchLine)
+			const ahead = Option.getOrElse(Number.parse(String.replace(/^\+/u, '')(counts[2] ?? '0')), () => 0)
+			const behind = Option.getOrElse(Number.parse(String.replace(/^-/u, '')(counts[3] ?? '0')), () => 0)
+
 			return new GitWorktreeStatus({
-				ahead: Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0),
-				behind: Option.getOrElse(Number.parse(counts[0]), () => 0),
-				dirtyTracked: yield* pipe(
-					git.lines(cwd, ['status', '--porcelain', '--untracked-files=no']),
-					Effect.map(lines => !Array.isReadonlyArrayEmpty(lines)),
-					Effect.orElseSucceed(() => false)
-				),
-				unpushedCommits: Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0) > 0,
-				untracked: yield* pipe(
-					git.lines(cwd, ['ls-files', '--others', '--exclude-standard']),
-					Effect.map(lines => !Array.isReadonlyArrayEmpty(lines)),
-					Effect.orElseSucceed(() => false)
-				)
+				ahead,
+				behind,
+				dirtyTracked: Array.some(entries, entry => String.startsWith('1 ')(entry) || String.startsWith('2 ')(entry)),
+				unpushedCommits: ahead > 0,
+				untracked: Array.some(entries, String.startsWith('? '))
 			})
 		})
 
@@ -275,19 +253,14 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					String.isNonEmpty(state.currentRoot) && state.hasCurrentCommit
 						? Array.append(state.worktrees, {branch: state.currentBranch, root: state.currentRoot})
 						: state.worktrees,
-				Effect.forEach(worktree =>
-					pipe(
-						getWorktreeStatus(worktree.root, String.isNonEmpty(worktree.branch) ? worktree.branch : undefined),
-						Effect.map(
-							status =>
-								new GitWorktreeSchema({
-									branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
-									root: worktree.root,
-									status
-								})
-						)
-					)
-				)
+				Array.map(
+					worktree =>
+						new GitWorktreeSchema({
+							branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
+							root: worktree.root
+						})
+				),
+				Effect.succeed
 			)
 		})
 
@@ -341,7 +314,30 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			)
 		})
 		const refreshProjects = Effect.fnUntraced(function* () {
-			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(home))
+			const structuralProjects = yield* listProjectsFrom(home)
+			yield* SubscriptionRef.set(projects, structuralProjects)
+			run(
+				pipe(
+					structuralProjects,
+					Effect.forEach(
+						project =>
+							pipe(
+								project.worktrees,
+								Effect.forEach(
+									worktree =>
+										pipe(
+											getWorktreeStatus(worktree.root),
+											Effect.map(status => new GitWorktreeSchema({...worktree, status}))
+										),
+									{concurrency: 'unbounded'}
+								),
+								Effect.map(worktrees => new GitProject({...project, worktrees}))
+							),
+						{concurrency: 'unbounded'}
+					),
+					Effect.flatMap(projectsWithStatus => SubscriptionRef.set(projects, projectsWithStatus))
+				)
+			)
 		})
 
 		yield* refreshProjects()
@@ -530,172 +526,80 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 			Effect.map(lines => !Array.isReadonlyArrayEmpty(lines))
 		)
 
-		const resolveFrom = Effect.fnUntraced(function* (from: GitReviewFrom) {
-			if (from.type === 'ref') return from.ref
+		function diffsFromPatch(patch: string) {
+			return pipe(patch.split(/(?=^diff --git )/mu), Array.filter(String.isNonEmpty), Array.map(diffFromPatchChunk))
+		}
 
-			return yield* pipe(git.string(config.cwd, ['merge-base', from.base, 'HEAD']), Effect.map(String.trim))
+		const diffContent = Effect.fnUntraced(function* (diff: GitDiff) {
+			const content =
+				diff.status === 'deleted'
+					? ''
+					: yield* pipe(
+							fs.readFileString(path.join(config.cwd, diff.filePath)),
+							Effect.orElseSucceed(() => '')
+						)
+
+			return new GitDiff({content, filePath: diff.filePath, patch: diff.patch, status: diff.status})
 		})
 
-		function diffsFromPatch(patch: string, segments: readonly GitDiffSegment[]) {
-			const groupedSegments = segmentsByFile(segments)
-
-			return pipe(
-				patch.split(/(?=^diff --git )/mu),
-				Array.filter(String.isNonEmpty),
-				Array.map(chunk => diffFromPatchChunk(chunk, groupedSegments))
-			)
-		}
-
-		function attachSegments(diffs: readonly GitDiff[], segments: readonly GitDiffSegment[]) {
-			const groupedSegments = segmentsByFile(segments)
-
-			return Array.map(
-				diffs,
-				diff =>
-					new GitDiff({
-						filePath: diff.filePath,
-						patch: diff.patch,
-						segments: Option.getOrElse(HashMap.get(groupedSegments, diff.filePath), () => Array.empty()),
-						status: diff.status
-					})
-			)
-		}
-
-		const gitDiffs = Effect.fnUntraced(function* (input: {
-			readonly args: readonly string[]
-			readonly segments: readonly GitDiffSegment[]
-		}) {
+		const trackedDiffs = Effect.fnUntraced(function* (input: {readonly from: string}) {
 			const patch = yield* git.string(config.cwd, [
 				'diff',
-				...input.args,
+				input.from,
 				'--ignore-all-space',
 				'--ignore-blank-lines',
 				'--ignore-cr-at-eol',
 				'--patch',
 				'--find-renames',
-				'-U999999',
 				'--no-ext-diff'
 			])
 
-			return diffsFromPatch(patch, input.segments)
+			return yield* pipe(diffsFromPatch(patch), Effect.forEach(diffContent, {concurrency: 'unbounded'}))
+		})
+
+		const untrackedFileDiff = Effect.fnUntraced(function* (filePath: string) {
+			const content = yield* pipe(
+				fs.readFileString(path.join(config.cwd, filePath)),
+				Effect.orElseSucceed(() => '')
+			)
+
+			const lines = String.split('\n')(content)
+
+			return new GitDiff({
+				content,
+				filePath,
+				patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(lines)} @@\n${pipe(
+					lines,
+					Array.map(line => `+${line}`),
+					Array.join('\n')
+				)}`,
+				status: 'added'
+			})
 		})
 
 		const untrackedDiffs = pipe(
-			git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
-			Effect.flatMap(files =>
-				Effect.forEach(
-					files,
-					filePath =>
-						pipe(
-							fs.readFileString(path.join(config.cwd, filePath)),
-							Effect.orElseSucceed(() => ''),
-							Effect.map(
-								content =>
-									new GitDiff({
-										filePath,
-										patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-											String.split('\n')(content),
-											Array.map(line => `+${line}`),
-											Array.join('\n')
-										)}`,
-										segments: [
-											new GitDiffSegment({filePath, fingerprint: content, id: 'HEAD->worktree', type: 'worktree'})
-										],
-										status: 'added'
-									})
-							)
-						),
-					{concurrency: 'unbounded'}
+			git.string(config.cwd, ['ls-files', '--others', '--exclude-standard', '-z']),
+			Effect.flatMap(output =>
+				pipe(
+					String.split('\u0000')(output),
+					Array.filter(String.isNonEmpty),
+					Effect.forEach(untrackedFileDiff, {concurrency: 'unbounded'})
 				)
 			)
 		)
 
-		const commitSegmentDiffs = Effect.fnUntraced(function* (input: {readonly from: string; readonly to: string}) {
-			const log = yield* git.string(config.cwd, [
-				'log',
-				'--reverse',
-				'--format=%x00DESLOP-COMMIT%x00%H%x00%P',
-				'--find-renames',
-				'--name-only',
-				`${input.from}..${input.to}`
-			])
-
-			return pipe(
-				log.split('\u0000DESLOP-COMMIT\u0000'),
-				Array.filter(String.isNonEmpty),
-				Array.flatMap(entry => {
-					const lines = String.split('\n')(entry)
-					const header = lines[0]
-					const parts = String.split('\u0000')(header)
-					const commit = parts[0]
-					const parent = pipe(parts[1] ?? '', String.split(' '), Array.filter(String.isNonEmpty))[0] ?? `${commit}^`
-					const id = `${parent}->${commit}`
-
-					return pipe(
-						Array.drop(lines, 1),
-						Array.filter(String.isNonEmpty),
-						Array.map(filePath => new GitDiffSegment({filePath, fingerprint: `${id}:${filePath}`, id, type: 'commit'}))
-					)
-				})
+		const reviewRangeOverview = Effect.fnUntraced(function* (input: {readonly from: string}) {
+			const diffs = yield* pipe(
+				Effect.all([trackedDiffs(input), untrackedDiffs], {concurrency: 'unbounded'}),
+				Effect.map(([tracked, untracked]) => Array.appendAll(tracked, untracked))
 			)
-		})
-
-		const reviewRangeDiffs = Effect.fnUntraced(function* (input: {
-			readonly from: GitReviewFrom
-			readonly to: GitReviewTo
-		}) {
-			const from = yield* resolveFrom(input.from)
-			const to = input.to.type === 'ref' ? input.to.ref : 'HEAD'
-
-			if (from === 'HEAD' && input.to.type === 'worktree') {
-				const trackedDiffs = yield* gitDiffs({args: ['HEAD'], segments: Array.empty()})
-				const diffs = pipe(
-					trackedDiffs,
-					Array.map(diff => {
-						const segment = new GitDiffSegment({
-							filePath: diff.filePath,
-							fingerprint: diff.patch,
-							id: 'HEAD->worktree',
-							type: 'worktree'
-						})
-
-						return new GitDiff({filePath: diff.filePath, patch: diff.patch, segments: [segment], status: diff.status})
-					})
-				)
-
-				return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
-			}
-
-			const [commitSegments, trackedWorktreeDiffs, untracked, diffs] = yield* Effect.all(
-				[
-					commitSegmentDiffs({from, to}),
-					input.to.type === 'worktree'
-						? gitDiffs({args: ['HEAD'], segments: Array.empty()})
-						: Effect.succeed(Array.empty<GitDiff>()),
-					input.to.type === 'worktree' ? untrackedDiffs : Effect.succeed(Array.empty<GitDiff>()),
-					gitDiffs({args: [from, ...toArgs(input.to)], segments: Array.empty()})
-				],
-				{concurrency: 'unbounded'}
+			const files = pipe(
+				diffs,
+				Array.map(diff => new GitReviewFile({filePath: diff.filePath, status: diff.status})),
+				Array.dedupeWith((left, right) => left.filePath === right.filePath)
 			)
-			const worktreeSegments = pipe(
-				trackedWorktreeDiffs,
-				Array.map(
-					diff =>
-						new GitDiffSegment({
-							filePath: diff.filePath,
-							fingerprint: diff.patch,
-							id: 'HEAD->worktree',
-							type: 'worktree'
-						})
-				),
-				Array.appendAll(Array.flatMap(untracked, diff => diff.segments))
-			)
-			const segments = Array.appendAll(commitSegments, worktreeSegments)
-			const diffsWithSegments = attachSegments(diffs, segments)
 
-			if (input.to.type === 'ref') return diffsWithSegments
-
-			return Array.appendAll(diffsWithSegments, untracked)
+			return new GitReviewOverview({diffs, files})
 		})
 
 		const ghString = Effect.fnUntraced(function* (args: readonly string[]) {
@@ -931,11 +835,6 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 				const subject = pipe(message, String.trim, value => (String.isEmpty(value) ? 'wip' : `wip: ${value}`))
 				yield* pipe(git.string(config.cwd, ['commit', '-m', subject]), Effect.asVoid)
 			}),
-			discardFile: Effect.fnUntraced(function* (filePath: string) {
-				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.ignore)
-				yield* pipe(git.string(config.cwd, ['restore', '--worktree', '--source=HEAD', '--', filePath]), Effect.ignore)
-				yield* pipe(git.string(config.cwd, ['clean', '-fd', '--', filePath]), Effect.asVoid)
-			}),
 			metadata: Effect.fnUntraced(function* (input?: {readonly base?: string}) {
 				const branch = yield* currentBranch
 				const defaultBranch = yield* defaultBranchName
@@ -963,36 +862,40 @@ export class GitWorktree extends Context.Service<GitWorktree>()('@deslop/git/ser
 					}`
 				yield* pipe(ghString(['api', 'graphql', '-f', `query=${query}`, '-f', `threadId=${threadId}`]), Effect.asVoid)
 			}),
-			reviewRangeDiffs,
 			reviewThreads: pipe(
 				prReviewThreads,
 				Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitHubReviewThread>()))
 			),
-			stageFile: Effect.fnUntraced(function* (filePath: string) {
-				yield* pipe(git.string(config.cwd, ['add', '--', filePath]), Effect.asVoid)
-			}),
-			unstageFile: Effect.fnUntraced(function* (filePath: string) {
-				yield* pipe(git.string(config.cwd, ['reset', 'HEAD', '--', filePath]), Effect.asVoid)
-			}),
-			watchReviewRangeDiffs: (input: {readonly from: GitReviewFrom; readonly to: GitReviewTo}) =>
+			watchReviewRangeOverview: (input: {readonly from: string}) =>
 				pipe(
 					worktreeChanges,
 					Stream.mapEffect(() =>
 						pipe(
-							reviewRangeDiffs(input),
-							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
+							reviewRangeOverview(input),
+							Effect.catchTag('GitError', () =>
+								Effect.succeed(new GitReviewOverview({diffs: Array.empty(), files: Array.empty()}))
+							)
 						)
 					),
 					Stream.changesWith(
 						(left, right) =>
-							Array.length(left) === Array.length(right) &&
+							Array.length(left.files) === Array.length(right.files) &&
 							Array.every(
-								left,
+								left.files,
+								(leftFile, index) =>
+									Predicate.isNotUndefined(right.files[index]) &&
+									leftFile.filePath === right.files[index].filePath &&
+									leftFile.status === right.files[index].status
+							) &&
+							Array.length(left.diffs) === Array.length(right.diffs) &&
+							Array.every(
+								left.diffs,
 								(leftDiff, index) =>
-									Predicate.isNotUndefined(right[index]) &&
-									leftDiff.filePath === right[index].filePath &&
-									leftDiff.status === right[index].status &&
-									leftDiff.patch === right[index].patch
+									Predicate.isNotUndefined(right.diffs[index]) &&
+									leftDiff.filePath === right.diffs[index].filePath &&
+									leftDiff.status === right.diffs[index].status &&
+									leftDiff.content === right.diffs[index].content &&
+									leftDiff.patch === right.diffs[index].patch
 							)
 					)
 				)
