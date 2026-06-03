@@ -1,15 +1,6 @@
 import {Function, Match, pipe} from 'effect'
 
-import {
-	Braces,
-	CirclePauseIcon,
-	CircleIcon,
-	File,
-	Loader2Icon,
-	MessageCircleQuestionIcon,
-	OctagonXIcon,
-	TriangleAlertIcon
-} from 'lucide-react'
+import {Braces, CirclePauseIcon, CircleIcon, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
 import {BashDark} from './ui/svgs/bashDark.tsx'
 import {CodexDark} from './ui/svgs/codexDark.tsx'
@@ -41,7 +32,7 @@ export function AgentIcon(props: {
 }
 
 export function ProcessStateIcon(props: {
-	readonly state?: 'idle' | 'starting' | 'running' | 'waiting' | 'needs_input' | 'stopped' | 'exited' | 'failed'
+	readonly state?: 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 	readonly className?: string
 }) {
 	return pipe(
@@ -49,9 +40,6 @@ export function ProcessStateIcon(props: {
 		Match.when('starting', () => <Loader2Icon className={cn('text-primary size-3 animate-spin', props.className)} />),
 		Match.when('running', () => <CircleIcon className={cn('fill-primary text-primary size-2.5', props.className)} />),
 		Match.when('waiting', () => <CirclePauseIcon className={cn('size-3 text-amber-500', props.className)} />),
-		Match.when('needs_input', () => (
-			<MessageCircleQuestionIcon className={cn('size-3 text-sky-500', props.className)} />
-		)),
 		Match.when(Match.is('failed', 'stopped'), () => (
 			<CircleIcon className={cn('text-destructive fill-destructive size-2.5', props.className)} />
 		)),

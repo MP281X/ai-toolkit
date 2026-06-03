@@ -187,8 +187,7 @@ export class RpcContracts extends RpcGroup.make(
 			data: Schema.String,
 			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 			sessionId: Schema.optional(Schema.String)
-		}),
-		success: TerminalState
+		})
 	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
@@ -200,10 +199,15 @@ export class RpcContracts extends RpcGroup.make(
 			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 			rows: Schema.Number,
 			sessionId: Schema.optional(Schema.String)
-		}),
-		success: TerminalState
+		})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
+	Rpc.make('terminal.state.watch', {
+		error: TerminalError,
+		payload: TerminalPayload,
+		stream: true,
+		success: TerminalState
+	}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
 	Rpc.make('terminal.watch', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalUpdate})
 ) {}

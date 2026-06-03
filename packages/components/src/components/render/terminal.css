@@ -23,6 +23,10 @@
 	scrollbar-width: none;
 }
 
+.terminal-renderer .xterm .xterm-selection div {
+	background-color: oklch(0.8214 0.1337 49.9802 / 30%) !important;
+}
+
 .terminal-renderer .xterm-viewport::-webkit-scrollbar,
 .terminal-renderer .xterm-scrollable-element::-webkit-scrollbar,
 .terminal-renderer .xterm .xterm-scrollable-element > .xterm-scrollbar,
