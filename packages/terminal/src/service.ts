@@ -86,7 +86,7 @@ function adjacentGroups<T>(
 		Array.reduce(Array.empty<T>(), (groups, item) => {
 			const next = groups
 			const previous = groups.at(-1)
-			if (!(previous && sameGroup(previous, item))) {
+			if (previous === undefined || !sameGroup(previous, item)) {
 				next.push(item)
 				return next
 			}
@@ -125,7 +125,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const eventSequenceRef = yield* Ref.make(0)
 		const parsedSequenceRef = yield* Ref.make(0)
 		const screenGenerationRef = yield* Ref.make(0)
-		const processRef = yield* Ref.make<RunningProcess | undefined>(undefined)
+		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command?.command ?? shell
@@ -139,12 +139,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 		const screen = new HeadlessModule.Terminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 10_000})
 		const serialize = new SerializeModule.SerializeAddon()
-		const progress = new ProgressModule.ProgressAddon()
+		const progressAddon = new ProgressModule.ProgressAddon()
 		screen.loadAddon(serialize)
-		screen.loadAddon(progress)
+		screen.loadAddon(progressAddon)
 
 		const publish = Effect.fnUntraced(function* (data: string) {
-			const sequence = yield* Ref.updateAndGet(eventSequenceRef, sequence => sequence + 1)
+			const sequence = yield* Ref.updateAndGet(eventSequenceRef, current => current + 1)
 			yield* PubSub.publish(events, {data, sequence, type: 'data' as const})
 
 			return sequence
@@ -163,11 +163,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			return SubscriptionRef.update(stateRef, current => ({...current, state}))
 		}
 
-		function setProgressState(progress: ProgressModule.IProgressState) {
+		function setProgressState(progressState: ProgressModule.IProgressState) {
 			return SubscriptionRef.update(stateRef, current => {
 				if (current.state === 'stopped' || current.state === 'exited' || current.state === 'failed') return current
 				const state = pipe(
-					progress.state,
+					progressState.state,
 					Match.value,
 					Match.when(0, () => 'idle' as const),
 					Match.when(2, () => 'failed' as const),
@@ -204,7 +204,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.runFork(setTitle(title))
 			return false
 		})
-		progress.onChange(nextProgress => {
+		progressAddon.onChange((nextProgress: ProgressModule.IProgressState) => {
 			Effect.runFork(setProgressState(nextProgress))
 		})
 
@@ -223,21 +223,21 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const writeScreen = Effect.fnUntraced(function* (input: QueuedData) {
-			const generation = yield* Ref.get(screenGenerationRef)
-			if (generation !== input.generation) return
+			const currentGeneration = yield* Ref.get(screenGenerationRef)
+			if (currentGeneration !== input.generation) return
 
 			yield* Semaphore.withPermit(
 				screenLock,
 				pipe(
-					Effect.callback<void>(resume => {
+					Effect.callback<undefined>(resume => {
 						screen.write(input.data, () => {
-							resume(Effect.void)
+							resume(Effect.succeed(void 0))
 						})
 					}),
 					Effect.andThen(
 						Effect.gen(function* () {
-							const generation = yield* Ref.get(screenGenerationRef)
-							if (generation === input.generation) {
+							const nextGeneration = yield* Ref.get(screenGenerationRef)
+							if (nextGeneration === input.generation) {
 								const sequence = yield* publish(input.data)
 								yield* Ref.set(parsedSequenceRef, sequence)
 							}
@@ -268,7 +268,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const spawnProcess = Effect.fnUntraced(function* () {
-			const generation = yield* Ref.updateAndGet(screenGenerationRef, generation => generation + 1)
+			const generation = yield* Ref.updateAndGet(screenGenerationRef, current => current + 1)
 			yield* Semaphore.withPermit(
 				screenLock,
 				pipe(
@@ -293,8 +293,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						rows: size.rows
 					})
 			})
-			const data = subprocess.onData(data => {
-				Queue.offerUnsafe(dataQueue, {data, generation})
+			const data = subprocess.onData(chunk => {
+				Queue.offerUnsafe(dataQueue, {data: chunk, generation})
 			})
 			const exit = subprocess.onExit(event => {
 				Effect.runFork(
@@ -366,7 +366,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					Queue.shutdown(screenQueue),
 					Queue.shutdown(writeQueue),
 					Queue.shutdown(resizeQueue),
-					Effect.sync(() => screen.dispose())
+					Effect.sync(() => {
+						screen.dispose()
+					})
 				],
 				{concurrency: 'unbounded', discard: true}
 			)

@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {Schema} from 'effect'
+import {Array, Predicate, Schema, pipe} from 'effect'
 
 import {createFileRoute, Navigate} from '@tanstack/react-router'
 
@@ -18,7 +18,10 @@ function PortlessPage() {
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
 	const origins = useAtomSuspense(portlessOriginsAtom(activeHome.value.activeWorktree?.root ?? ''))
 	if (!activeHome.value.activeWorktree) return <Navigate to="/" replace />
-	const origin = search.origin && origins.value.includes(search.origin) ? search.origin : origins.value[0]
+	const origin =
+		Predicate.isNotUndefined(search.origin) && pipe(origins.value, Array.contains(search.origin))
+			? search.origin
+			: origins.value[0]
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0 p-2">

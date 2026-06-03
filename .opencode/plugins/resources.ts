@@ -6,7 +6,7 @@ import type {Plugin} from '@opencode-ai/plugin'
 
 import {GitWorkspace} from '@deslop/git/service'
 
-export const plugin = (async context => {
+export const plugin = (context => {
 	void Effect.runPromise(
 		Effect.forEach(
 			[
@@ -58,5 +58,5 @@ export const plugin = (async context => {
 		)
 	)
 
-	return {}
+	return Effect.runPromise(Effect.succeed({}))
 }) satisfies Plugin

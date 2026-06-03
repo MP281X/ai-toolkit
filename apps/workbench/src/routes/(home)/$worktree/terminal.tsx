@@ -27,8 +27,12 @@ function WorktreeTerminal(input: {readonly cwd: string}) {
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				data={terminal.value.data}
 				frame={terminal.value.frame}
-				onData={data => write({payload: {cwd: input.cwd, data}})}
-				onResize={size => resize({payload: {cols: size.cols, cwd: input.cwd, rows: size.rows}})}
+				onData={data => {
+					write({payload: {cwd: input.cwd, data}})
+				}}
+				onResize={size => {
+					resize({payload: {cols: size.cols, cwd: input.cwd, rows: size.rows}})
+				}}
 				state={terminal.value.state.state}
 			/>
 		</div>

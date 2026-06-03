@@ -11,34 +11,32 @@ type SplitState = {
 }
 
 export function splitParallelCommands(script: string) {
+	const initialState: SplitState = {commands: [], current: '', escaped: false, skipNext: false}
 	const state = pipe(
 		String.split('')(script),
-		Array.reduce(
-			{commands: [], current: '', escaped: false, skipNext: false} as SplitState,
-			(state, char, index): SplitState => {
-				if (state.skipNext) return {...state, skipNext: false}
-				if (state.escaped) return {...state, current: state.current + char, escaped: false}
-				if (char === '\\') return {...state, current: state.current + char, escaped: true}
-				if (state.quote) {
-					return {...state, current: state.current + char, quote: char === state.quote ? undefined : state.quote}
-				}
-				if (char === '"' || char === "'") {
-					return {...state, current: state.current + char, quote: char as SplitState['quote']}
-				}
-				if (char === '&' && script[index + 1] === '&') {
-					return {...state, current: `${state.current}&&`, skipNext: true}
-				}
-				if (char !== '&') return {...state, current: state.current + char}
-
-				return pipe(
-					Option.liftPredicate(String.trim(state.current), String.isNonEmpty),
-					Option.match({
-						onNone: () => ({...state, current: ''}),
-						onSome: command => ({...state, commands: [...state.commands, command], current: ''})
-					})
-				)
+		Array.reduce(initialState, (current, char, index): SplitState => {
+			if (current.skipNext) return {...current, skipNext: false}
+			if (current.escaped) return {...current, current: current.current + char, escaped: false}
+			if (char === '\\') return {...current, current: current.current + char, escaped: true}
+			if (current.quote) {
+				return {...current, current: current.current + char, quote: char === current.quote ? undefined : current.quote}
 			}
-		)
+			if (char === '"' || char === "'") {
+				return {...current, current: current.current + char, quote: char}
+			}
+			if (char === '&' && script[index + 1] === '&') {
+				return {...current, current: `${current.current}&&`, skipNext: true}
+			}
+			if (char !== '&') return {...current, current: current.current + char}
+
+			return pipe(
+				Option.liftPredicate(String.trim(current.current), String.isNonEmpty),
+				Option.match({
+					onNone: () => ({...current, current: ''}),
+					onSome: command => ({...current, commands: [...current.commands, command], current: ''})
+				})
+			)
+		})
 	)
 
 	return pipe(

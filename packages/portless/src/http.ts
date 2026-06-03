@@ -14,10 +14,10 @@ const INJECTED_HEAD = `<script>
     if (typeof value === 'string') return value
     try { return JSON.stringify(value) } catch { return String(value) }
   }
-  const send = (level, message) => window.parent?.postMessage({__deslopBrowserLog: true, level, message}, '*')
+  const send = (level, message) => window.parent?.postMessage({deslopBrowserLog: true, level, message}, '*')
   const sendFavicon = () => {
     const icon = Array.from(document.head.querySelectorAll('link')).find(link => link.rel === 'shortcut icon' || link.rel.split(/\\s+/).includes('icon'))
-    window.parent?.postMessage({__deslopBrowserFavicon: true, href: icon?.href}, '*')
+    window.parent?.postMessage({deslopBrowserFavicon: true, href: icon?.href}, '*')
   }
 
   for (const level of ['debug', 'info', 'log', 'warn', 'error']) {
@@ -31,7 +31,7 @@ const INJECTED_HEAD = `<script>
   window.addEventListener('error', event => send('error', event.message || 'Resource failed to load'), true)
   window.addEventListener('unhandledrejection', event => send('error', serialize(event.reason)))
   window.addEventListener('message', event => {
-    if (event.data?.__deslopBrowserClear !== true) return
+    if (event.data?.deslopBrowserClear !== true) return
     localStorage.clear()
     sessionStorage.clear()
     document.cookie.split(';').forEach(cookie => {
@@ -42,7 +42,7 @@ const INJECTED_HEAD = `<script>
     location.reload()
   })
 
-  const sendLocation = () => window.parent?.postMessage({__deslopBrowserLocation: true, path: location.pathname + location.search + location.hash}, '*')
+  const sendLocation = () => window.parent?.postMessage({deslopBrowserLocation: true, path: location.pathname + location.search + location.hash}, '*')
   const wrapHistory = name => {
     const original = history[name]
     history[name] = function(...args) {
@@ -116,7 +116,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	const [pathname = '/', search = ''] = request.url.split('?')
 	const protocols = pipe(
 		Option.fromUndefinedOr(request.headers['sec-websocket-protocol']),
-		Option.map(protocols => pipe(protocols, String.split(','), Array.map(String.trim), Array.filter(String.isNonEmpty)))
+		Option.map(header => pipe(header, String.split(','), Array.map(String.trim), Array.filter(String.isNonEmpty)))
 	)
 	const inbound = yield* request.upgrade
 	const upstreamUrl = new URL(origin)
@@ -154,7 +154,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 function requestHostname(host: string | undefined) {
 	return pipe(
 		Option.fromUndefinedOr(host),
-		Option.flatMap(host => pipe(host, String.split(':'), Array.head))
+		Option.flatMap(value => pipe(value, String.split(':'), Array.head))
 	)
 }
 
@@ -203,15 +203,15 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/Port
 			if (existing !== undefined) return existing
 
 			const reserved = new Set(ports.values())
-			for (let port = 4000; port <= 4999; port += 1) {
+			for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
 				const occupied = yield* pipe(
-					Effect.tryPromise(() => fetch(`http://127.0.0.1:${port}`, {signal: AbortSignal.timeout(100)})),
+					Effect.tryPromise(() => fetch(`http://127.0.0.1:${candidatePort}`, {signal: AbortSignal.timeout(100)})),
 					Effect.as(true),
 					Effect.catch(() => Effect.succeed(false))
 				)
-				if (!reserved.has(port) && !occupied) {
-					ports.set(key, port)
-					return port
+				if (!reserved.has(candidatePort) && !occupied) {
+					ports.set(key, candidatePort)
+					return candidatePort
 				}
 			}
 			throw new Error('no portless app ports available')
@@ -224,8 +224,8 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/Port
 						for (const route of discovered) routes.set(route.host, `http://127.0.0.1:${route.port}`)
 					})
 				),
-				Effect.map(routes =>
-					routes.map(route => ({
+				Effect.map(discovered =>
+					discovered.map(route => ({
 						host: route.host,
 						port: route.port,
 						script: {...route.script, preparedCommand: command(route.script, route.port)}

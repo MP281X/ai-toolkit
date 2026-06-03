@@ -1,4 +1,4 @@
-import {Array} from 'effect'
+import {Array, Predicate} from 'effect'
 
 import {Marked} from 'marked'
 
@@ -29,7 +29,11 @@ export function Markdown(props: {readonly children: string; readonly className?:
 				}
 
 				return (
-					<Code key={index} className="border-border border" lang={token.lang}>
+					<Code
+						key={index}
+						className="border-border border"
+						lang={Predicate.isString(token.lang) ? token.lang : undefined}
+					>
 						{token.text}
 					</Code>
 				)

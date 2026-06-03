@@ -54,10 +54,10 @@ function AgentTerminal(input: {
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				data={terminal.value.data}
 				frame={terminal.value.frame}
-				onData={data =>
+				onData={data => {
 					write({payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}})
-				}
-				onResize={size =>
+				}}
+				onResize={size => {
 					resize({
 						payload: {
 							args: input.args,
@@ -68,7 +68,7 @@ function AgentTerminal(input: {
 							sessionId: input.sessionId
 						}
 					})
-				}
+				}}
 				state={terminal.value.state.state}
 			/>
 		</div>
