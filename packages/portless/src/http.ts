@@ -6,7 +6,7 @@ import {Socket} from 'effect/unstable/socket'
 import {command, discover} from '#lib/utils.ts'
 
 const INJECTED_HEAD = `<script>
-(() => {
+function deslopBrowserBridge() {
   if (window.__deslopBrowserBridge) return
   window.__deslopBrowserBridge = true
 
@@ -60,7 +60,8 @@ const INJECTED_HEAD = `<script>
   else sendFavicon()
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sendLocation, {once: true})
   else sendLocation()
-})()
+}
+deslopBrowserBridge()
 </script>
 <script crossorigin="anonymous" src="//unpkg.com/react-scan/dist/auto.global.js" onload="window.reactScan?.({allowInIframe: true, _debug: 'verbose'})"></script>
 <script src="https://unpkg.com/react-grab/dist/index.global.js"></script>`
@@ -71,7 +72,7 @@ function injectScripts(html: string) {
 		: `${INJECTED_HEAD}\n${html}`
 }
 
-const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
+const proxy = Effect.fn('Portless.proxy')(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
 	const [pathname = '/', search = ''] = request.url.split('?')
 	const upstreamHeaders = new Headers(webRequest.headers)
@@ -112,7 +113,10 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	)
 })
 
-const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
+const proxyWebSocket = Effect.fn('Portless.proxyWebSocket')(function* (
+	request: HttpServerRequest.HttpServerRequest,
+	origin: string
+) {
 	const [pathname = '/', search = ''] = request.url.split('?')
 	const protocols = pipe(
 		Option.fromUndefinedOr(request.headers['sec-websocket-protocol']),
@@ -123,30 +127,40 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 	upstreamUrl.pathname = pathname
 	upstreamUrl.search = search
-	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString(), {
-		protocols: Option.getOrUndefined(protocols)
-	}).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+	const outbound = yield* pipe(
+		Socket.makeWebSocket(upstreamUrl.toString(), {protocols: Option.getOrUndefined(protocols)}),
+		Effect.provide(Socket.layerWebSocketConstructorGlobal)
+	)
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
 
-	yield* outbound
-		.runRaw(message => writeInbound(message))
-		.pipe(
-			Effect.catchReason('SocketError', 'SocketCloseError', reason =>
-				writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.catch(() =>
-				writeInbound(new Socket.CloseEvent(1011, 'proxy error')).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.forkScoped
-		)
+	yield* pipe(
+		outbound.runRaw(message => writeInbound(message)),
+		Effect.catchReason('SocketError', 'SocketCloseError', reason =>
+			pipe(
+				writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)),
+				Effect.catch(() => Effect.void)
+			)
+		),
+		Effect.catch(() =>
+			pipe(
+				writeInbound(new Socket.CloseEvent(1011, 'proxy error')),
+				Effect.catch(() => Effect.void)
+			)
+		),
+		Effect.forkScoped
+	)
 
-	yield* inbound
-		.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-		.pipe(
-			Effect.catch(() => Effect.void),
-			Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
+	yield* pipe(
+		inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+		Effect.catch(() => Effect.void),
+		Effect.ensuring(
+			pipe(
+				writeOutbound(new Socket.CloseEvent()),
+				Effect.catch(() => Effect.void)
+			)
 		)
+	)
 
 	return HttpServerResponse.empty()
 })
@@ -163,83 +177,86 @@ function isLocalHostname(hostname: string) {
 }
 
 export class Portless extends Context.Service<Portless>()('@deslop/portless/Portless', {
-	make: Effect.gen(function* () {
-		const server = yield* HttpServer.HttpServer
-		const proxyPort =
-			server.address._tag === 'TcpAddress'
-				? server.address.port.toString()
-				: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
-		const ports = new Map<string, number>()
-		const routes = new Map<string, string>()
+	make: pipe(
+		Effect.gen(function* () {
+			const server = yield* HttpServer.HttpServer
+			const proxyPort =
+				server.address._tag === 'TcpAddress'
+					? server.address.port.toString()
+					: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
+			const ports = new Map<string, number>()
+			const routes = new Map<string, string>()
 
-		function origin(host: string) {
-			return `http://${host}:${proxyPort}`
-		}
-
-		const middleware = Effect.fnUntraced(function* <E, R>(
-			app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
-		) {
-			const request = yield* HttpServerRequest.HttpServerRequest
-			const hostname = requestHostname(request.headers['host'])
-			if (Option.isNone(hostname) || isLocalHostname(hostname.value)) return yield* app
-			if (!hostname.value.endsWith('.localhost')) return yield* app
-
-			const route = lookup(request.headers['host'])
-			if (Option.isNone(route)) return HttpServerResponse.empty({status: 404})
-			if (request.headers['upgrade']?.toLowerCase() === 'websocket') {
-				return yield* proxyWebSocket(request, route.value)
+			function origin(host: string) {
+				return `http://${host}:${proxyPort}`
 			}
 
-			return yield* proxy(request, route.value)
-		})
-		function lookup(host: string | undefined) {
-			return pipe(
-				requestHostname(host),
-				Option.flatMap(hostname => Option.fromUndefinedOr(routes.get(hostname)))
-			)
-		}
-		const port = Effect.fnUntraced(function* (key: string) {
-			const existing = ports.get(key)
-			if (existing !== undefined) return existing
+			const middleware = Effect.fn('Portless.middleware')(function* <E, R>(
+				app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
+			) {
+				const request = yield* HttpServerRequest.HttpServerRequest
+				const hostname = requestHostname(request.headers['host'])
+				if (Option.isNone(hostname) || isLocalHostname(hostname.value)) return yield* app
+				if (!hostname.value.endsWith('.localhost')) return yield* app
 
-			const reserved = new Set(ports.values())
-			for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
-				const occupied = yield* pipe(
-					Effect.tryPromise(() => fetch(`http://127.0.0.1:${candidatePort}`, {signal: AbortSignal.timeout(100)})),
-					Effect.as(true),
-					Effect.catch(() => Effect.succeed(false))
-				)
-				if (!reserved.has(candidatePort) && !occupied) {
-					ports.set(key, candidatePort)
-					return candidatePort
+				const route = lookup(request.headers['host'])
+				if (Option.isNone(route)) return HttpServerResponse.empty({status: 404})
+				if (request.headers['upgrade']?.toLowerCase() === 'websocket') {
+					return yield* proxyWebSocket(request, route.value)
 				}
-			}
-			throw new Error('no portless app ports available')
-		})
-		const scripts = Effect.fnUntraced(function* (cwd: string) {
-			return yield* pipe(
-				discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
-				Effect.tap(discovered =>
-					Effect.sync(() => {
-						for (const route of discovered) routes.set(route.host, `http://127.0.0.1:${route.port}`)
-					})
-				),
-				Effect.map(discovered =>
-					discovered.map(route => ({
-						host: route.host,
-						port: route.port,
-						script: {...route.script, preparedCommand: command(route.script, route.port)}
-					}))
-				)
-			)
-		})
 
-		return {middleware, scripts}
-	})
+				return yield* proxy(request, route.value)
+			})
+			function lookup(host: string | undefined) {
+				return pipe(
+					requestHostname(host),
+					Option.flatMap(hostname => Option.fromUndefinedOr(routes.get(hostname)))
+				)
+			}
+			const port = Effect.fn('Portless.port')(function* (key: string) {
+				const existing = ports.get(key)
+				if (existing !== undefined) return existing
+
+				const reserved = new Set(ports.values())
+				for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
+					const occupied = yield* pipe(
+						Effect.tryPromise(() => fetch(`http://127.0.0.1:${candidatePort}`, {signal: AbortSignal.timeout(100)})),
+						Effect.as(true),
+						Effect.catch(() => Effect.succeed(false))
+					)
+					if (!reserved.has(candidatePort) && !occupied) {
+						ports.set(key, candidatePort)
+						return candidatePort
+					}
+				}
+				throw new Error('no portless app ports available')
+			})
+			const scripts = Effect.fn('Portless.scripts')(function* (cwd: string) {
+				return yield* pipe(
+					discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
+					Effect.tap(discovered =>
+						Effect.sync(() => {
+							for (const route of discovered) routes.set(route.host, `http://127.0.0.1:${route.port}`)
+						})
+					),
+					Effect.map(discovered =>
+						discovered.map(route => ({
+							host: route.host,
+							port: route.port,
+							script: {...route.script, preparedCommand: command(route.script, route.port)}
+						}))
+					)
+				)
+			})
+
+			return {middleware, scripts}
+		}),
+		Effect.withSpan('Portless.make')
+	)
 }) {
 	public static layer = Layer.effect(this, this.make)
 
-	public static middleware = Effect.fnUntraced(function* <E, R>(
+	public static middleware = Effect.fn('Portless.middleware.static')(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 	) {
 		const portless = yield* Portless

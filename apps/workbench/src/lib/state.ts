@@ -74,8 +74,9 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 export const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])
+			pipe(
+				RpcClient,
+				Effect.flatMap(client => (String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])))
 			),
 			{initialValue: []}
 		)

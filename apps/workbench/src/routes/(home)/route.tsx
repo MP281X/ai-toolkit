@@ -407,11 +407,13 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 	const stopTerminal = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
+	async function createAgent(profile: (typeof agentProfiles)[number]) {
+		const session = await create({payload: {...profile, cwd: input.cwd}})
+		input.selectAgent(input.cwd, session.uuid)
+	}
+
 	function startAgent(profile: (typeof agentProfiles)[number]) {
-		void (async () => {
-			const session = await create({payload: {...profile, cwd: input.cwd}})
-			input.selectAgent(input.cwd, session.uuid)
-		})()
+		void createAgent(profile)
 	}
 
 	function stopAgent(session: AgentSession) {
@@ -530,7 +532,8 @@ function WorktreeManager(input: {
 			Array.findFirst(candidate => candidate.name === nextBranch),
 			Option.getOrUndefined
 		)
-		const mode = Match.value(nextSelectedBranch?.type).pipe(
+		const mode = pipe(
+			Match.value(nextSelectedBranch?.type),
 			Match.when('local', () => 'existing-local' as const),
 			Match.when('remote', () => 'existing-remote' as const),
 			Match.orElse(() => 'new-local' as const)

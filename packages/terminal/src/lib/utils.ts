@@ -46,7 +46,8 @@ export function splitParallelCommands(script: string) {
 }
 
 export function commandFromScript(script: string) {
-	const [command, args] = Match.value(/^vp\s+dev(?:\s|$)/u.test(script)).pipe(
+	const [command, args] = pipe(
+		Match.value(/^vp\s+dev(?:\s|$)/u.test(script)),
 		Match.when(true, () => ['vp', ['dev']] as const),
 		Match.orElse(() => ['sh', ['-lc', script]] as const)
 	)

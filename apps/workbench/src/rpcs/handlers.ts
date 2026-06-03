@@ -81,7 +81,7 @@ function markKey(input: {readonly filePath: string; readonly fingerprint: string
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (config: TerminalSessionInput) {
+	lookup: Effect.fn('TerminalSessions.lookup')(function* (config: TerminalSessionInput) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
@@ -90,7 +90,7 @@ const TerminalSessions = RcMap.make({
 
 const GitWorktreeSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(5),
-	lookup: Effect.fnUntraced(function* (cwd: string) {
+	lookup: Effect.fn('GitWorktreeSessions.lookup')(function* (cwd: string) {
 		const context = yield* Layer.buildWithScope(GitWorktree.layer({cwd}), yield* Effect.scope)
 
 		return Context.get(context, GitWorktree)
@@ -109,7 +109,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
-			lookup: Effect.fnUntraced(function* (cwd: string) {
+			lookup: Effect.fn('PortlessWorktrees.lookup')(function* (cwd: string) {
 				const scripts = yield* pipe(
 					portless.scripts(cwd),
 					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover portless scripts in ${cwd}`}))
@@ -185,7 +185,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		const reviewStates = yield* RcMap.make({
 			idleTimeToLive: Duration.minutes(5),
-			lookup: Effect.fnUntraced(function* (key: string) {
+			lookup: Effect.fn('ReviewStates.lookup')(function* (key: string) {
 				return yield* SubscriptionRef.make(yield* readReviewState(key))
 			})
 		})
@@ -216,96 +216,105 @@ export const RpcHandlers = RpcContracts.toLayer(
 		)
 
 		return RpcContracts.of({
-			'agents.create': payload =>
-				Effect.gen(function* () {
-					const currentAgents = yield* SubscriptionRef.get(agents)
-					const labelCount = pipe(
-						Array.fromIterable(HashMap.values(currentAgents)),
-						Array.filter(agentSession => agentSession.cwd === payload.cwd && agentSession.command === payload.command),
-						Array.length
-					)
-					const agentSession = {
-						args: [...payload.args],
-						command: payload.command,
-						cwd: payload.cwd,
-						icon: payload.icon,
-						label: `${payload.label} ${labelCount + 1}`,
-						uuid: randomUUID()
-					}
+			'agents.create': Effect.fnUntraced(function* (payload) {
+				const currentAgents = yield* SubscriptionRef.get(agents)
+				const labelCount = pipe(
+					Array.fromIterable(HashMap.values(currentAgents)),
+					Array.filter(agentSession => agentSession.cwd === payload.cwd && agentSession.command === payload.command),
+					Array.length
+				)
+				const agentSession = {
+					args: [...payload.args],
+					command: payload.command,
+					cwd: payload.cwd,
+					icon: payload.icon,
+					label: `${payload.label} ${labelCount + 1}`,
+					uuid: randomUUID()
+				}
 
-					yield* SubscriptionRef.update(agents, sessions =>
-						HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
-					)
-					const sessionTerminal = yield* terminalSession(
+				yield* SubscriptionRef.update(agents, sessions =>
+					HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
+				)
+				const sessionTerminal = yield* pipe(
+					terminalSession(
 						TerminalSessionKey.make({
 							args: agentSession.args,
 							command: agentSession.command,
 							cwd: agentSession.cwd,
 							sessionId: agentSession.uuid
 						})
-					).pipe(
-						Effect.map(terminalSessionInput),
-						Effect.flatMap(input => RcMap.get(terminals, input))
-					)
-					yield* sessionTerminal.restart()
-					yield* pipe(
-						sessionTerminal.stateUpdates,
-						Stream.map(state => state.state),
-						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
-						Stream.take(1),
-						Stream.runDrain,
-						Effect.andThen(
-							SubscriptionRef.update(agents, sessions =>
-								HashMap.remove(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}))
-							)
-						),
-						Effect.forkDetach
-					)
+					),
+					Effect.map(terminalSessionInput),
+					Effect.flatMap(input => RcMap.get(terminals, input))
+				)
+				yield* sessionTerminal.restart()
+				yield* pipe(
+					sessionTerminal.stateUpdates,
+					Stream.map(state => state.state),
+					Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
+					Stream.take(1),
+					Stream.runDrain,
+					Effect.andThen(
+						SubscriptionRef.update(agents, sessions =>
+							HashMap.remove(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}))
+						)
+					),
+					Effect.forkDetach
+				)
 
-					return agentSession
-				}),
-			'agents.remove': payload =>
-				SubscriptionRef.update(agents, current =>
+				return agentSession
+			}),
+			'agents.remove': Effect.fnUntraced(function* (payload) {
+				yield* SubscriptionRef.update(agents, current =>
 					HashMap.remove(current, AgentSessionKey.make({cwd: payload.cwd, uuid: payload.uuid}))
-				),
+				)
+			}),
 			'agents.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(agents),
-						Effect.map(current =>
-							pipe(
-								Stream.make(current),
-								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
-								Stream.map(sessions =>
-									pipe(
-										Array.fromIterable(HashMap.values(sessions)),
-										Array.filter(session => session.cwd === payload.cwd)
-									)
+				pipe(
+					SubscriptionRef.get(agents),
+					Effect.map(current =>
+						pipe(
+							Stream.make(current),
+							Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
+							Stream.map(sessions =>
+								pipe(
+									Array.fromIterable(HashMap.values(sessions)),
+									Array.filter(session => session.cwd === payload.cwd)
 								)
 							)
 						)
-					)
+					),
+					Stream.unwrap
 				),
-			'projects.branches': payload => git.branches(payload.cwd),
-			'projects.createWorktree': payload => git.createWorktree(payload),
-			'projects.deleteWorktree': payload => git.deleteWorktree(payload),
+			'projects.branches': Effect.fnUntraced(function* (payload) {
+				return yield* git.branches(payload.cwd)
+			}),
+			'projects.createWorktree': Effect.fnUntraced(function* (payload) {
+				return yield* git.createWorktree(payload)
+			}),
+			'projects.deleteWorktree': Effect.fnUntraced(function* (payload) {
+				return yield* git.deleteWorktree(payload)
+			}),
 			'projects.watch': () =>
-				Stream.unwrap(
-					Effect.map(SubscriptionRef.get(git.projects), projects =>
+				pipe(
+					SubscriptionRef.get(git.projects),
+					Effect.map(projects =>
 						pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
-					)
+					),
+					Stream.unwrap
 				),
-			'review.comments.resolve': payload =>
-				updateReviewState(payload, state => {
+			'review.comments.resolve': Effect.fnUntraced(function* (payload) {
+				yield* updateReviewState(payload, state => {
 					const key = commentKey(payload)
 
 					return new ReviewState({
 						comments: Array.filter(state.comments, comment => commentKey(comment) !== key),
 						marks: state.marks
 					})
-				}),
-			'review.comments.save': payload =>
-				updateReviewState(payload, state => {
+				})
+			}),
+			'review.comments.save': Effect.fnUntraced(function* (payload) {
+				yield* updateReviewState(payload, state => {
 					const key = commentKey(payload.comment)
 
 					return new ReviewState({
@@ -315,44 +324,52 @@ export const RpcHandlers = RpcContracts.toLayer(
 						),
 						marks: state.marks
 					})
-				}),
-			'review.commitAndPush': payload =>
-				pipe(
+				})
+			}),
+			'review.commitAndPush': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.commitAndPush({base: payload.base, message: payload.message}))
-				),
-			'review.createWipCommit': payload =>
-				pipe(
+				)
+			}),
+			'review.createWipCommit': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.createWipCommit(payload.message))
-				),
-			'review.discardFile': payload =>
-				pipe(
+				)
+			}),
+			'review.discardFile': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
-				),
-			'review.githubThreads': payload =>
-				pipe(
+				)
+			}),
+			'review.githubThreads': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.reviewThreads)
-				),
-			'review.githubThreads.resolve': payload =>
-				pipe(
+					Effect.flatMap(worktree => worktree.reviewThreads())
+				)
+			}),
+			'review.githubThreads.resolve': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.resolveReviewThread(payload.threadId))
-				),
-			'review.metadata': payload =>
-				pipe(
+				)
+			}),
+			'review.metadata': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.metadata({base: payload.base}))
-				),
-			'review.stageFile': payload =>
-				pipe(
+				)
+			}),
+			'review.stageFile': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.stageFile(payload.filePath))
-				),
-			'review.state.mark': payload =>
-				updateReviewState(payload, state => {
+				)
+			}),
+			'review.state.mark': Effect.fnUntraced(function* (payload) {
+				yield* updateReviewState(payload, state => {
 					const keys = new Set(Array.map(payload.marks, markKey))
 
 					return new ReviewState({
@@ -362,64 +379,81 @@ export const RpcHandlers = RpcContracts.toLayer(
 							payload.marks
 						)
 					})
-				}),
-			'review.state.unmark': payload =>
-				updateReviewState(payload, state => {
+				})
+			}),
+			'review.state.unmark': Effect.fnUntraced(function* (payload) {
+				yield* updateReviewState(payload, state => {
 					const keys = new Set(Array.map(payload.marks, markKey))
 
 					return new ReviewState({
 						comments: state.comments,
 						marks: Array.filter(state.marks, mark => !keys.has(markKey(mark)))
 					})
-				}),
+				})
+			}),
 			'review.state.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						reviewStateKey(payload),
-						Effect.flatMap(key => RcMap.get(reviewStates, key)),
-						Effect.flatMap(ref =>
-							pipe(
-								SubscriptionRef.get(ref),
-								Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(ref)))(Stream.make(state)))
-							)
-						)
-					)
-				),
-			'review.unstageFile': payload =>
 				pipe(
+					reviewStateKey(payload),
+					Effect.flatMap(key => RcMap.get(reviewStates, key)),
+					Effect.flatMap(ref =>
+						pipe(
+							SubscriptionRef.get(ref),
+							Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(ref)))(Stream.make(state)))
+						)
+					),
+					Stream.unwrap
+				),
+			'review.unstageFile': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					RcMap.get(gitWorktrees, payload.cwd),
 					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
-				),
+				)
+			}),
 			'review.watchRange': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
-					)
-				),
-			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
-			'terminal.resize': payload =>
 				pipe(
+					RcMap.get(gitWorktrees, payload.cwd),
+					Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to})),
+					Stream.unwrap
+				),
+			'runs.portless': Effect.fnUntraced(function* (payload) {
+				return yield* RcMap.get(portlessWorktrees, payload.cwd)
+			}),
+			'terminal.resize': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					getTerminal(TerminalSessionKey.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.resize({cols: payload.cols, rows: payload.rows}))
-				),
-			'terminal.restart': payload =>
-				Effect.flatMap(getTerminal(TerminalSessionKey.make(payload)), sessionTerminal => sessionTerminal.restart()),
+				)
+			}),
+			'terminal.restart': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
+					getTerminal(TerminalSessionKey.make(payload)),
+					Effect.flatMap(sessionTerminal => sessionTerminal.restart())
+				)
+			}),
 			'terminal.state.watch': payload =>
-				Stream.unwrap(
-					Effect.map(getTerminal(TerminalSessionKey.make(payload)), sessionTerminal => sessionTerminal.stateUpdates)
-				),
-			'terminal.stop': payload =>
-				Effect.flatMap(getTerminal(TerminalSessionKey.make(payload)), sessionTerminal => sessionTerminal.stop()),
-			'terminal.watch': payload =>
-				Stream.unwrap(
-					Effect.map(getTerminal(TerminalSessionKey.make(payload)), sessionTerminal => sessionTerminal.updates)
-				),
-			'terminal.write': payload =>
 				pipe(
+					getTerminal(TerminalSessionKey.make(payload)),
+					Effect.map(sessionTerminal => sessionTerminal.stateUpdates),
+					Stream.unwrap
+				),
+			'terminal.stop': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
+					getTerminal(TerminalSessionKey.make(payload)),
+					Effect.flatMap(sessionTerminal => sessionTerminal.stop())
+				)
+			}),
+			'terminal.watch': payload =>
+				pipe(
+					getTerminal(TerminalSessionKey.make(payload)),
+					Effect.map(sessionTerminal => sessionTerminal.updates),
+					Stream.unwrap
+				),
+			'terminal.write': Effect.fnUntraced(function* (payload) {
+				return yield* pipe(
 					getTerminal(TerminalSessionKey.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
 				)
+			})
 		})
 	})
 )

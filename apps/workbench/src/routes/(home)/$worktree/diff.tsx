@@ -398,13 +398,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				Option.getOrElse(() => Array.empty<ReviewMark>())
 			)
 			if (!Array.isReadonlyArrayEmpty(marks)) {
-				void (async () => {
-					try {
-						await markReviewed(marks)
-					} catch {
-						toast.error('Failed to mark file reviewed.')
-					}
-				})()
+				void markReviewed(marks).catch(() => {
+					toast.error('Failed to mark file reviewed.')
+				})
 			}
 		}
 	}, [markReviewed, reviewDiffsValue, selectedFilePath])
@@ -441,56 +437,54 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		refreshGithubThreads()
 	}
 
+	async function markReviewMarks(marks: readonly ReviewMark[]) {
+		try {
+			await markReviewed(marks)
+		} catch {
+			toast.error('Failed to mark file reviewed.')
+		}
+	}
+
 	function markFileReviewed(marks: readonly ReviewMark[]) {
-		void (async () => {
-			try {
-				await markReviewed(marks)
-			} catch {
-				toast.error('Failed to mark file reviewed.')
-			}
-		})()
+		void markReviewMarks(marks)
+	}
+
+	async function unmarkReviewMarks(marks: readonly ReviewMark[]) {
+		try {
+			await unmarkReviewed(marks)
+		} catch {
+			toast.error('Failed to unmark file reviewed.')
+		}
 	}
 
 	function unmarkFileReviewed(marks: readonly ReviewMark[]) {
-		void (async () => {
-			try {
-				await unmarkReviewed(marks)
-			} catch {
-				toast.error('Failed to unmark file reviewed.')
-			}
-		})()
+		void unmarkReviewMarks(marks)
 	}
 
-	function saveQueuedComment(comment: QueuedComment) {
-		void (async () => {
-			try {
-				await saveComment(comment)
-			} catch {
-				toast.error('Failed to save comment.')
-			}
-		})()
+	async function saveQueuedComment(comment: QueuedComment) {
+		try {
+			await saveComment(comment)
+		} catch {
+			toast.error('Failed to save comment.')
+		}
 	}
 
-	function resolveReviewComment(comment: DisplayComment) {
-		void (async () => {
-			try {
-				await resolveComment({comment, key: commentKey(comment)})
-				if (comment.source === 'github') refreshGithubThreads()
-			} catch {
-				toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
-			}
-		})()
+	async function resolveReviewComment(comment: DisplayComment) {
+		try {
+			await resolveComment({comment, key: commentKey(comment)})
+			if (comment.source === 'github') refreshGithubThreads()
+		} catch {
+			toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
+		}
 	}
 
-	function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
-		void (async () => {
-			try {
-				await resolveComments(commentsToResolve)
-				refreshGithubThreads()
-			} catch {
-				toast.error('Failed to resolve comment.')
-			}
-		})()
+	async function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
+		try {
+			await resolveComments(commentsToResolve)
+			refreshGithubThreads()
+		} catch {
+			toast.error('Failed to resolve comment.')
+		}
 	}
 
 	useHotkey({key: 'C', shift: true}, () => void copyComments(unresolvedComments), {
@@ -581,7 +575,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {
-											saveQueuedComment({
+											void saveQueuedComment({
 												body: comment.body,
 												filePath: comment.filePath,
 												lineNumber: comment.lineNumber,
@@ -590,7 +584,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											})
 										}}
 										onResolveComment={comment => {
-											resolveReviewComment({
+											void resolveReviewComment({
 												...comment,
 												resolved: comment.resolved === true,
 												source: comment.source ?? 'local'
@@ -647,7 +641,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											commentResolutionState.resolvingAll ? true : Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
 										}
 										onClick={() => {
-											resolveReviewComments(unresolvedCommentInputs)
+											void resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
 										{commentResolutionState.resolvingAll ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}

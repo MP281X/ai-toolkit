@@ -114,7 +114,10 @@ function queuedWriteGroups(items: readonly QueuedWrite[]) {
 }
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
-	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
+	make: Effect.fn('Terminal.make')(function* (config: {
+		readonly command?: ChildProcess.StandardCommand
+		readonly cwd: string
+	}) {
 		const dataQueue = yield* Queue.unbounded<QueuedData>()
 		const screenQueue = yield* Queue.unbounded<QueuedData>()
 		const writeQueue = yield* Queue.unbounded<QueuedWrite>()
@@ -127,7 +130,10 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const screenGenerationRef = yield* Ref.make(0)
 		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
-		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
+		const shell = yield* pipe(
+			Config.string('SHELL'),
+			Effect.orElseSucceed(() => 'bash')
+		)
 		const processCommand = config.command?.command ?? shell
 		const processArgs = config.command?.args ?? []
 		const processEnv = config.command?.options.env ?? {}
@@ -143,7 +149,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		screen.loadAddon(serialize)
 		screen.loadAddon(progressAddon)
 
-		const publish = Effect.fnUntraced(function* (data: string) {
+		const publish = Effect.fn('Terminal.publish')(function* (data: string) {
 			const sequence = yield* Ref.updateAndGet(eventSequenceRef, current => current + 1)
 			yield* PubSub.publish(events, {data, sequence, type: 'data' as const})
 
@@ -208,21 +214,22 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.runFork(setProgressState(nextProgress))
 		})
 
-		const interruptProcess = Effect.fnUntraced(function* (subprocess: IPty, signal: NodeJS.Signals) {
-			yield* Effect.sync(() => {
-				try {
-					subprocess.kill(signal)
-				} catch {}
-			})
+		const interruptProcess = Effect.fn('Terminal.interruptProcess')(function* (
+			subprocess: IPty,
+			signal: NodeJS.Signals
+		) {
+			try {
+				subprocess.kill(signal)
+			} catch {}
 		})
 
-		const terminateProcess = Effect.fnUntraced(function* (subprocess: IPty) {
+		const terminateProcess = Effect.fn('Terminal.terminateProcess')(function* (subprocess: IPty) {
 			yield* interruptProcess(subprocess, 'SIGTERM')
 			yield* Effect.sleep('250 millis')
 			yield* interruptProcess(subprocess, 'SIGKILL')
 		})
 
-		const writeScreen = Effect.fnUntraced(function* (input: QueuedData) {
+		const writeScreen = Effect.fn('Terminal.writeScreen')(function* (input: QueuedData) {
 			const currentGeneration = yield* Ref.get(screenGenerationRef)
 			if (currentGeneration !== input.generation) return
 
@@ -251,7 +258,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
 		})
 
-		const stopProcess = Effect.fnUntraced(function* (state?: TerminalState['state']) {
+		const stopProcess = Effect.fn('Terminal.stopProcess')(function* (state?: TerminalState['state']) {
 			const handle = yield* Ref.get(processRef)
 			if (!handle) {
 				if (state) yield* setState(state)
@@ -267,7 +274,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			if (state) yield* setState(state)
 		})
 
-		const spawnProcess = Effect.fnUntraced(function* () {
+		const spawnProcess = Effect.fn('Terminal.spawnProcess')(function* () {
 			const generation = yield* Ref.updateAndGet(screenGenerationRef, current => current + 1)
 			yield* Semaphore.withPermit(
 				screenLock,
@@ -381,7 +388,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		const resizeProcess = Effect.fnUntraced(function* (nextSize: TerminalSize) {
+		const resizeProcess = Effect.fn('Terminal.resizeProcess')(function* (nextSize: TerminalSize) {
 			const size = yield* Ref.get(sizeRef)
 			if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
@@ -411,7 +418,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			),
 			Effect.forkScoped
 		)
-		const writeProcess = Effect.fnUntraced(function* (input: QueuedWrite) {
+		const writeProcess = Effect.fn('Terminal.writeProcess')(function* (input: QueuedWrite) {
 			const process = yield* Ref.get(processRef)
 			if (process !== input.process) return
 
@@ -430,43 +437,50 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			),
 			Effect.forkScoped
 		)
-		const eventsStream = Stream.scoped(
-			Stream.unwrap(
-				Effect.gen(function* () {
-					const subscription = yield* PubSub.subscribe(events)
-					const snapshot = yield* requestSnapshot
-					const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
-					const replay = Array.filter(pending, event => event.sequence > snapshot.sequence)
-					const replaySequence = replay.at(-1)?.sequence ?? snapshot.sequence
+		const eventsStream = pipe(
+			Effect.gen(function* () {
+				const subscription = yield* PubSub.subscribe(events)
+				const snapshot = yield* requestSnapshot
+				const pending = yield* PubSub.takeUpTo(subscription, Number.POSITIVE_INFINITY)
+				const replay = Array.filter(pending, event => event.sequence > snapshot.sequence)
+				const replaySequence = replay.at(-1)?.sequence ?? snapshot.sequence
 
-					return pipe(
-						Stream.fromIterable([
-							{data: terminalReset, sequence: snapshot.sequence, type: 'data' as const},
-							...snapshotEvents(snapshot.data, snapshot.sequence),
-							...replay,
-							...Array.filter(pending, event => event.sequence > replaySequence)
-						]),
-						Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))
-					)
-				})
-			)
+				return pipe(
+					Stream.fromIterable([
+						{data: terminalReset, sequence: snapshot.sequence, type: 'data' as const},
+						...snapshotEvents(snapshot.data, snapshot.sequence),
+						...replay,
+						...Array.filter(pending, event => event.sequence > replaySequence)
+					]),
+					Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))
+				)
+			}),
+			Stream.unwrap,
+			Stream.scoped,
+			Stream.withSpan('Terminal.eventsStream', {attributes: {cwd: config.cwd}})
 		)
-		const stateUpdates = Stream.unwrap(
-			pipe(
-				SubscriptionRef.get(stateRef),
-				Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(stateRef)))(Stream.make(state)))
-			)
+		const stateUpdates = pipe(
+			SubscriptionRef.get(stateRef),
+			Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(stateRef)))(Stream.make(state))),
+			Stream.unwrap,
+			Stream.withSpan('Terminal.stateUpdates', {attributes: {cwd: config.cwd}})
 		)
-		const updates = Stream.merge(
-			stateUpdates.pipe(Stream.map(state => ({state, type: 'state' as const}))),
-			eventsStream
+		const updates = pipe(
+			Stream.merge(
+				pipe(
+					stateUpdates,
+					Stream.map(state => ({state, type: 'state' as const}))
+				),
+				eventsStream
+			),
+			Stream.withSpan('Terminal.updates', {attributes: {cwd: config.cwd}})
 		)
 
 		return {
-			resize: Effect.fnUntraced(function* (size: TerminalSize) {
+			resize: Effect.fn('Terminal.resize')(function* (size: TerminalSize) {
 				yield* Queue.offer(resizeQueue, size)
 			}),
-			restart: Effect.fnUntraced(function* () {
+			restart: Effect.fn('Terminal.restart')(function* () {
 				return yield* pipe(
 					startProcess(),
 					Semaphore.withPermit(lifecycleLock),
@@ -474,12 +488,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			}),
 			stateUpdates,
-			stop: Effect.fnUntraced(function* () {
+			stop: Effect.fn('Terminal.stop')(function* () {
 				yield* pipe(stopProcess('stopped'), Semaphore.withPermit(lifecycleLock))
 				return yield* SubscriptionRef.get(stateRef)
 			}),
 			updates,
-			write: Effect.fnUntraced(function* (data: string) {
+			write: Effect.fn('Terminal.write')(function* (data: string) {
 				if (data === '') return
 
 				const process = yield* Ref.get(processRef)

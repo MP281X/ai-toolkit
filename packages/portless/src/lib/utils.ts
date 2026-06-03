@@ -14,7 +14,7 @@ export function command(script: {readonly command: string; readonly name: string
 	])
 }
 
-export const discover = Effect.fnUntraced(function* (
+export const discover = Effect.fn('Portless.discover')(function* (
 	cwd: string,
 	input: {readonly origin: (host: string) => string; readonly port: (sessionId: string) => Effect.Effect<number>}
 ) {
