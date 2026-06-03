@@ -391,8 +391,23 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 		if (!Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePath)) {
 			setSelectedFilePath(firstFilePath)
+			const marks = pipe(
+				reviewDiffsValue,
+				Array.findFirst(diff => diff.filePath === firstFilePath),
+				Option.map(marksForDiff),
+				Option.getOrElse(() => Array.empty<ReviewMark>())
+			)
+			if (!Array.isReadonlyArrayEmpty(marks)) {
+				void (async () => {
+					try {
+						await markReviewed(marks)
+					} catch {
+						toast.error('Failed to mark file reviewed.')
+					}
+				})()
+			}
 		}
-	}, [reviewDiffsValue, selectedFilePath])
+	}, [markReviewed, reviewDiffsValue, selectedFilePath])
 
 	function marksForFile(filePath: string) {
 		return pipe(

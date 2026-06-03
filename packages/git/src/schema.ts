@@ -82,8 +82,8 @@ export const GitHubReviewThreadsResponse = Schema.Struct({
 												nodes: Schema.Array(
 													Schema.Struct({
 														body: Schema.String,
-														line: Schema.optional(Schema.Number),
-														originalLine: Schema.optional(Schema.Number),
+														line: Schema.optional(Schema.NullOr(Schema.Number)),
+														originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
 														path: Schema.String,
 														url: Schema.optional(Schema.String)
 													})

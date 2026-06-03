@@ -93,12 +93,18 @@ function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, rea
 		chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
 		''
 	const status = Match.value(chunk).pipe(
-		Match.when(/^new file mode /mu.test, () => 'added' as const),
+		Match.when(
+			value => /^new file mode /mu.test(value),
+			() => 'added' as const
+		),
 		Match.when(
 			() => deleted,
 			() => 'deleted' as const
 		),
-		Match.when(/^rename (from|to) /mu.test, () => 'renamed' as const),
+		Match.when(
+			value => /^rename (from|to) /mu.test(value),
+			() => 'renamed' as const
+		),
 		Match.orElse(() => 'modified' as const)
 	)
 

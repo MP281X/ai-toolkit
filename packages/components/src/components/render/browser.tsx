@@ -86,10 +86,11 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
 
 	useEffect(() => {
-		setCurrentUrl(origin ? browserUrl(origin, address) : '')
+		setAddress('/')
+		setCurrentUrl(origin ? browserUrl(origin, '/') : '')
 		setFaviconUrl(undefined)
 		setIsLoading(origin !== '')
-	}, [address, origin])
+	}, [origin])
 
 	useLayoutEffect(() => {
 		setIsListening(false)
