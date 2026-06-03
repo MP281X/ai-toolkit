@@ -1,6 +1,9 @@
 import {Match, pipe} from 'effect'
 
+import {ClipboardAddon} from '@xterm/addon-clipboard'
 import {FitAddon} from '@xterm/addon-fit'
+import {Unicode11Addon} from '@xterm/addon-unicode11'
+import {WebLinksAddon} from '@xterm/addon-web-links'
 import {WebglAddon} from '@xterm/addon-webgl'
 import {Terminal as XTerm} from '@xterm/xterm'
 import {useEffect, useRef} from 'react'
@@ -8,40 +11,14 @@ import {useEffect, useRef} from 'react'
 import {Fallback} from '#components/fallbacks.tsx'
 import {cn} from '#lib/utils.ts'
 
-type TerminalState = 'idle' | 'starting' | 'running' | 'waiting' | 'needs_input' | 'stopped' | 'exited' | 'failed'
-
-type TerminalEvent = {readonly data: string; readonly type: 'data'} | {readonly type: 'reset'}
-
-function terminalWriter(write: (data: string, done?: () => void) => void) {
-	let queue = Promise.resolve()
-
-	function enqueue(task: () => Promise<void> | void) {
-		queue = queue.then(task, task)
-		return queue
-	}
-
-	return {
-		barrier: (fn: () => void) => enqueue(fn),
-		push: (data: string) => {
-			if (data === '') return
-
-			void enqueue(
-				() =>
-					new Promise<void>(resolve => {
-						write(data, resolve)
-					})
-			)
-		}
-	}
-}
+type TerminalState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 
 function cssColor(element: HTMLElement, value: string) {
-	const ownerDocument = element.ownerDocument
-	const canvas = ownerDocument.createElement('canvas')
+	const canvas = element.ownerDocument.createElement('canvas')
 	canvas.width = 1
 	canvas.height = 1
 	const context = canvas.getContext('2d')
-	if (!context) return 'rgb(0, 0, 0)'
+	if (!context) return value
 
 	context.fillStyle = value
 	context.fillRect(0, 0, 1, 1)
@@ -50,21 +27,10 @@ function cssColor(element: HTMLElement, value: string) {
 	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
 }
 
-function solidCssColor(element: HTMLElement) {
-	const ownerDocument = element.ownerDocument
-	const rendererStyles = getComputedStyle(element.parentElement?.parentElement ?? element.parentElement ?? element)
-	const rootStyles = getComputedStyle(ownerDocument.documentElement)
-	const color =
-		rendererStyles.backgroundColor === 'rgba(0, 0, 0, 0)'
-			? rootStyles.getPropertyValue('--background').trim()
-			: rendererStyles.backgroundColor
-
-	return cssColor(element, color)
-}
-
 export function Terminal(input: {
 	readonly className?: string
-	readonly events: readonly TerminalEvent[]
+	readonly data: string
+	readonly frame: number
 	readonly onData: (data: string) => void
 	readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
 	readonly state?: TerminalState
@@ -72,7 +38,8 @@ export function Terminal(input: {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<XTerm>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
-	const writerRef = useRef<ReturnType<typeof terminalWriter>>(null)
+	const inputBufferRef = useRef('')
+	const inputFlushRef = useRef<ReturnType<typeof setTimeout>>(null)
 
 	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
 
@@ -80,31 +47,51 @@ export function Terminal(input: {
 		const element = elementRef.current
 		if (!element) return
 
+		const container = element
+		const timeouts: ReturnType<typeof setTimeout>[] = []
+		let animationFrame: number | undefined
+		let disposed = false
+		let lastSize: {readonly cols: number; readonly rows: number} | undefined
+
+		function flushInput() {
+			inputFlushRef.current = null
+			const data = inputBufferRef.current
+			if (data === '') return
+
+			inputBufferRef.current = ''
+			callbacksRef.current.onData(data)
+		}
+
+		function pushInput(data: string) {
+			inputBufferRef.current += data
+			if (inputFlushRef.current) return
+
+			inputFlushRef.current = setTimeout(flushInput, 4)
+		}
+
 		const style = getComputedStyle(element)
+		const rootStyle = getComputedStyle(element.ownerDocument.documentElement)
 		const fontSize = Number.parseFloat(style.fontSize)
 		const fontWeight = Number.parseInt(style.fontWeight, 10)
-		const container = element
-		const background = solidCssColor(element)
+		const background = cssColor(element, rootStyle.getPropertyValue('--background').trim())
 		const selectionBackground = cssColor(element, 'oklch(0.8214 0.1337 49.9802 / 30%)')
 		const terminal = new XTerm({
+			allowProposedApi: true,
 			customGlyphs: true,
+			fastScrollSensitivity: 10,
 			fontFamily: style.fontFamily,
 			fontSize: Number.isNaN(fontSize) ? 14 : fontSize,
 			fontWeight: Number.isNaN(fontWeight) ? 400 : fontWeight,
 			fontWeightBold: 600,
 			letterSpacing: 0,
 			lineHeight: 1,
+			scrollSensitivity: 2,
 			scrollback: 10_000,
 			smoothScrollDuration: 0,
 			theme: {background, selectionBackground, selectionInactiveBackground: selectionBackground}
 		})
 		Object.assign(terminal.options, {scrollbar: {showScrollbar: false}})
 		const fit = new FitAddon()
-		const timeouts: ReturnType<typeof setTimeout>[] = []
-		let animationFrame: number | undefined
-		let disposed = false
-		let lastSize: {readonly cols: number; readonly rows: number} | undefined
-		let suppressShortcutPaste = false
 
 		function alignScreen() {
 			const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen')
@@ -139,17 +126,13 @@ export function Terminal(input: {
 			})
 		}
 
+		terminal.loadAddon(new ClipboardAddon())
 		terminal.loadAddon(fit)
+		terminal.loadAddon(new Unicode11Addon())
+		terminal.unicode.activeVersion = '11'
+		terminal.loadAddon(new WebLinksAddon())
 		terminal.open(element)
 		terminal.focus()
-		const writer = terminalWriter((data, done) => {
-			if (disposed) {
-				done?.()
-				return
-			}
-			terminal.write(data, done)
-		})
-		writerRef.current = writer
 		try {
 			const webgl = new WebglAddon()
 			terminal.loadAddon(webgl)
@@ -159,36 +142,24 @@ export function Terminal(input: {
 		} catch {
 			// Canvas renderer fallback.
 		}
-		terminal.onData(data => {
-			callbacksRef.current.onData(data)
-		})
-		terminal.attachCustomKeyEventHandler(event => {
-			if (event.type === 'keyup') {
-				suppressShortcutPaste = false
-				return true
-			}
-			if (event.type !== 'keydown') return true
+		terminal.onData(pushInput)
 
-			const paste = (event.ctrlKey || event.metaKey) && (event.key === 'v' || event.key === 'V')
-			const alternatePaste = event.ctrlKey && event.shiftKey && (event.key === 'v' || event.key === 'V')
-			if (!(paste || alternatePaste)) return true
+		resize()
+		for (const delay of [16, 50, 100, 250, 500]) {
+			timeouts.push(setTimeout(resize, delay))
+		}
+		terminalRef.current = terminal
+
+		function paste(event: ClipboardEvent) {
+			const text = event.clipboardData?.getData('text/plain') ?? event.clipboardData?.getData('text') ?? ''
+			if (text === '') return
 
 			event.preventDefault()
-			suppressShortcutPaste = true
-			void navigator.clipboard.readText().then(text => {
-				if (text !== '') terminal.paste(text)
-			})
-			return false
-		})
-
-		function suppressNativePaste(event: ClipboardEvent) {
-			if (!suppressShortcutPaste) return
-
-			event.preventDefault()
-			event.stopImmediatePropagation()
+			event.stopPropagation()
+			terminal.paste(text)
 		}
 
-		element.addEventListener('paste', suppressNativePaste, {capture: true})
+		element.addEventListener('paste', paste, {capture: true})
 
 		const observer = new ResizeObserver(resize)
 		observer.observe(element)
@@ -197,53 +168,26 @@ export function Terminal(input: {
 		const window = element.ownerDocument.defaultView
 		window?.addEventListener('resize', resize)
 		void element.ownerDocument.fonts.ready.then(resize)
-		resize()
-		for (const delay of [16, 50, 100, 250, 500]) {
-			timeouts.push(setTimeout(resize, delay))
-		}
-		terminalRef.current = terminal
 
 		return () => {
 			disposed = true
 			terminalRef.current = null
-			writerRef.current = null
+			inputBufferRef.current = ''
+			if (inputFlushRef.current) clearTimeout(inputFlushRef.current)
+			inputFlushRef.current = null
 			for (const timeout of timeouts) clearTimeout(timeout)
 			if (animationFrame !== undefined) cancelAnimationFrame(animationFrame)
 			window?.removeEventListener('resize', resize)
-			element.removeEventListener('paste', suppressNativePaste, {capture: true})
+			element.removeEventListener('paste', paste, {capture: true})
 			observer.disconnect()
 			terminal.dispose()
 		}
 	}, [])
 	useEffect(() => {
-		let data = ''
-		function flush() {
-			const writer = writerRef.current
-			if (!(writer && data !== '')) return
+		if (input.data === '') return
 
-			writer.push(data)
-			data = ''
-		}
-
-		for (const event of input.events) {
-			const writer = writerRef.current
-			if (!writer) return
-
-			if (event.type === 'reset') {
-				flush()
-				void writer.barrier(() => {
-					const terminal = terminalRef.current
-					if (!terminal) return
-
-					terminal.reset()
-					terminal.clear()
-				})
-			} else {
-				data += event.data
-			}
-		}
-		flush()
-	}, [input.events])
+		terminalRef.current?.write(input.data)
+	}, [input.data, input.frame])
 
 	const terminalError = pipe(
 		Match.value(input.state),

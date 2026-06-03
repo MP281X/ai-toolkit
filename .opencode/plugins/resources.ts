@@ -28,7 +28,8 @@ export const plugin = (context => {
 				{name: 'portless', url: 'https://github.com/vercel-labs/portless'},
 				{name: 'lydell-node-pty', url: 'https://github.com/lydell/node-pty'},
 				{name: 'node-pty', url: 'https://github.com/microsoft/node-pty'},
-				{name: 'pi', url: 'https://github.com/earendil-works/pi'}
+				{name: 'pi', url: 'https://github.com/earendil-works/pi'},
+				{name: 'localterm', url: 'https://github.com/millionco/localterm.git'}
 			],
 			Effect.fnUntraced(function* (resource) {
 				yield* GitWorkspace.use(git =>

@@ -10,8 +10,9 @@
 	},
 
 	"dependencies": {
-		"@lydell/node-pty": "1.2.0-beta.12",
+    "@xterm/headless": "latest",
+		"@xterm/addon-progress": "latest",
 		"@xterm/addon-serialize": "latest",
-		"@xterm/headless": "latest"
+    "@lydell/node-pty": "1.2.0-beta.12"
 	}
 }

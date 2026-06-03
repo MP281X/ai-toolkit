@@ -17,17 +17,22 @@ function TerminalPage() {
 }
 
 function WorktreeTerminal(input: {readonly cwd: string}) {
-	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
-	const write = useAtomSet(RpcClient.mutation('terminal.write'), {mode: 'promise'})
+	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
+	const write = useAtomSet(RpcClient.mutation('terminal.write'))
 	const terminal = useAtomSuspense(terminalViewAtom({cwd: input.cwd}))
 
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0">
 			<Terminal
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
-				events={terminal.value.events}
-				onData={data => void write({payload: {cwd: input.cwd, data}})}
-				onResize={size => void resize({payload: {cols: size.cols, cwd: input.cwd, rows: size.rows}})}
+				data={terminal.value.data}
+				frame={terminal.value.frame}
+				onData={data => {
+					write({payload: {cwd: input.cwd, data}})
+				}}
+				onResize={size => {
+					resize({payload: {cols: size.cols, cwd: input.cwd, rows: size.rows}})
+				}}
 				state={terminal.value.state.state}
 			/>
 		</div>

@@ -55,8 +55,8 @@ function RunTerminal(input: {
 	readonly runId?: number
 	readonly sessionId: string
 }) {
-	const resize = useAtomSet(RpcClient.mutation('terminal.resize'), {mode: 'promise'})
-	const write = useAtomSet(RpcClient.mutation('terminal.write'), {mode: 'promise'})
+	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
+	const write = useAtomSet(RpcClient.mutation('terminal.write'))
 	const session =
 		input.command === undefined
 			? {cwd: input.cwd, sessionId: input.sessionId}
@@ -68,9 +68,14 @@ function RunTerminal(input: {
 			<Terminal
 				key={input.sessionId}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
-				events={terminal.value.events}
-				onData={data => void write({payload: {...session, data}})}
-				onResize={size => void resize({payload: {cols: size.cols, rows: size.rows, ...session}})}
+				data={terminal.value.data}
+				frame={terminal.value.frame}
+				onData={data => {
+					write({payload: {...session, data}})
+				}}
+				onResize={size => {
+					resize({payload: {cols: size.cols, rows: size.rows, ...session}})
+				}}
 				state={
 					input.runId !== undefined && terminal.value.state.runId < input.runId
 						? 'starting'

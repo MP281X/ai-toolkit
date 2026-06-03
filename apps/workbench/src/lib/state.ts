@@ -3,7 +3,7 @@ import {Array, Duration, Effect, Hash, Option, Order, Result, Stream, String, pi
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {TerminalEvent, TerminalState} from '@deslop/terminal/schema'
+import type {TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
@@ -26,27 +26,35 @@ function terminalStateInitialValue(input: TerminalSessionInput): TerminalState {
 }
 
 function terminalViewInitialValue(input: TerminalSessionInput) {
-	return {events: Array.empty<TerminalEvent>(), state: terminalStateInitialValue(input)}
+	return {data: '', frame: 0, state: terminalStateInitialValue(input)}
+}
+
+function terminalViewUpdates(current: ReturnType<typeof terminalViewInitialValue>, updates: Iterable<TerminalUpdate>) {
+	const nextView = pipe(
+		updates,
+		Array.reduce({data: '', frame: current.frame, state: current.state}, (currentView, update) => {
+			const next = currentView
+			if (update.type === 'state') {
+				next.state = update.state
+				return next
+			}
+
+			next.data += update.data
+			return next
+		})
+	)
+
+	return {data: nextView.data, frame: nextView.data === '' ? nextView.frame : nextView.frame + 1, state: nextView.state}
 }
 
 export const terminalViewAtom = Atom.family((input: TerminalSessionInput) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.watch', input)),
+			Effect.map(client => client('terminal.watch', input, {streamBufferSize: 256})),
 			Stream.unwrap,
 			Stream.groupedWithin(100, Duration.millis(16)),
-			Stream.scan(terminalViewInitialValue(input), (current, updates) => {
-				let state = current.state
-				const events = Array.empty<TerminalEvent>()
-
-				for (const update of updates) {
-					if (update.type === 'state') state = update.state
-					else events.push(update.event)
-				}
-
-				return {...current, events, state}
-			})
+			Stream.scan(terminalViewInitialValue(input), terminalViewUpdates)
 		),
 		{initialValue: terminalViewInitialValue(input)}
 	)
@@ -56,9 +64,8 @@ export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.watch', input)),
-			Stream.unwrap,
-			Stream.filterMap(update => (update.type === 'state' ? Result.succeed(update.state) : Result.failVoid))
+			Effect.map(client => client('terminal.state.watch', input)),
+			Stream.unwrap
 		),
 		{initialValue: terminalStateInitialValue(input)}
 	)
