@@ -184,7 +184,9 @@ function NumberField() {
 				name={field.name}
 				value={field.state.value}
 				onBlur={field.handleBlur}
-				onChange={event => Option.map(Number.parse(event.target.value), field.handleChange)}
+				onChange={event => {
+					Option.map(Number.parse(event.target.value), field.handleChange)
+				}}
 				autoComplete="off"
 				aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
 			/>
@@ -330,14 +332,16 @@ export function Form(props: Form.Props) {
 		<props.form.AppForm>
 			<form
 				className={cn('flex flex-1 items-center justify-center', props.className)}
-				onSubmit={async event => {
+				onSubmit={event => {
 					event.preventDefault()
-					try {
-						await props.form.handleSubmit()
-						props.form.reset()
-					} catch (error) {
-						toast.error(formatError(error))
-					}
+					void (async () => {
+						try {
+							await props.form.handleSubmit()
+							props.form.reset()
+						} catch (error) {
+							toast.error(formatError(error))
+						}
+					})()
 				}}
 			>
 				{props.children}

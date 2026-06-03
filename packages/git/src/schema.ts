@@ -62,6 +62,48 @@ export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHub
 	url: Schema.optional(Schema.String)
 }) {}
 
+export const GitHubRepositoryResponse = Schema.Struct({
+	name: Schema.String,
+	owner: Schema.Struct({login: Schema.String})
+})
+
+export const GitHubReviewThreadsResponse = Schema.Struct({
+	data: Schema.optional(
+		Schema.Struct({
+			repository: Schema.optional(
+				Schema.Struct({
+					pullRequest: Schema.optional(
+						Schema.Struct({
+							reviewThreads: Schema.optional(
+								Schema.Struct({
+									nodes: Schema.Array(
+										Schema.Struct({
+											comments: Schema.Struct({
+												nodes: Schema.Array(
+													Schema.Struct({
+														body: Schema.String,
+														line: Schema.optional(Schema.Number),
+														originalLine: Schema.optional(Schema.Number),
+														path: Schema.String,
+														url: Schema.optional(Schema.String)
+													})
+												)
+											}),
+											diffSide: Schema.optional(Schema.String),
+											id: Schema.String,
+											isResolved: Schema.Boolean
+										})
+									)
+								})
+							)
+						})
+					)
+				})
+			)
+		})
+	)
+})
+
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({
 	gitDirectory: Schema.String,
 	root: Schema.String

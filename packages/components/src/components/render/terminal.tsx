@@ -250,13 +250,13 @@ export function Terminal(input: {
 		Match.when('exited', () => 'Terminal exited.'),
 		Match.when('failed', () => 'Terminal failed.'),
 		Match.when('stopped', () => 'Terminal stopped.'),
-		Match.orElse(() => undefined)
+		Match.orElse(() => {})
 	)
 
 	return (
 		<div className={cn('terminal-renderer relative h-full min-h-0 w-full min-w-0 overflow-hidden', input.className)}>
 			<div ref={elementRef} className="absolute inset-0 h-full min-h-0 w-full min-w-0 overflow-hidden" />
-			{terminalError && (
+			{terminalError !== undefined && (
 				<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
 					<Fallback message={terminalError} />
 				</div>

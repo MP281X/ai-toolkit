@@ -28,7 +28,7 @@ export const discover = Effect.fnUntraced(function* (
 	return yield* pipe(
 		pipe(
 			String.split('\n')(output),
-			Array.filter(path => path === 'package.json' || String.endsWith('/package.json')(path))
+			Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
 		),
 		Array.map(packagePath =>
 			pipe(

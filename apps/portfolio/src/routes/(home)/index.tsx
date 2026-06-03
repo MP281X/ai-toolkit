@@ -744,8 +744,8 @@ function PortfolioRoute() {
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<Point | undefined>(undefined)
-	const lastSentPointerRef = useRef<(Point & {readonly sentAt: number}) | undefined>(undefined)
+	const queuedPointerRef = useRef<Point>(null)
+	const lastSentPointerRef = useRef<Point & {readonly sentAt: number}>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
@@ -815,7 +815,7 @@ function PortfolioRoute() {
 		<div
 			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
 			onPointerMove={event => {
-				if (!(viewport.width && viewport.height)) return
+				if (viewport.width === 0 || viewport.height === 0) return
 
 				const nextPointer = {
 					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
@@ -825,26 +825,26 @@ function PortfolioRoute() {
 				localPointer = nextPointer
 				queuedPointerRef.current = nextPointer
 
-				if (pointerFrameRef.current) return
+				if (pointerFrameRef.current !== 0) return
 
 				pointerFrameRef.current = requestAnimationFrame(() => {
 					pointerFrameRef.current = 0
 
-					if (!queuedPointerRef.current) return
+					if (Predicate.isNull(queuedPointerRef.current)) return
 
 					const now = performance.now()
 
-					if (lastSentPointerRef.current) {
+					if (Predicate.isNotNull(lastSentPointerRef.current)) {
 						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
 						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
 
 						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-							queuedPointerRef.current = undefined
+							queuedPointerRef.current = null
 							return
 						}
 					}
 
-					if (lastSentPointerRef.current && now - lastSentPointerRef.current.sentAt < 50) return
+					if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
 
 					lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 
@@ -857,7 +857,7 @@ function PortfolioRoute() {
 						}
 					})
 
-					queuedPointerRef.current = undefined
+					queuedPointerRef.current = null
 				})
 			}}
 			onScroll={event => {

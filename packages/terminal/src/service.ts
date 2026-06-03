@@ -1,5 +1,3 @@
-import {createRequire} from 'node:module'
-
 import {
 	Array,
 	Config,
@@ -19,8 +17,8 @@ import {
 
 import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
-import type * as SerializeModule from '@xterm/addon-serialize'
-import type * as HeadlessModule from '@xterm/headless'
+import {SerializeAddon} from '@xterm/addon-serialize'
+import {Terminal as HeadlessTerminal} from '@xterm/headless'
 import type {ChildProcess} from 'effect/unstable/process'
 
 import type {TerminalEvent, TerminalState} from './schema.ts'
@@ -95,7 +93,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const screenLock = yield* Semaphore.make(1)
 		const sequenceRef = yield* Ref.make(0)
 		const signalBuffer = yield* Ref.make('')
-		const processRef = yield* Ref.make<RunningProcess | undefined>(undefined)
+		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
 		const sizeRef = yield* Ref.make({cols: 120, rows: 32})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.preparedCommand?.command ?? config.command ?? shell
@@ -106,20 +104,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			state: autostart ? 'starting' : 'idle',
 			title: ''
 		})
-		const screen = new (createRequire(import.meta.url)('@xterm/headless') as typeof HeadlessModule).Terminal({
-			allowProposedApi: true,
-			cols: 120,
-			rows: 32,
-			scrollback: 10_000
-		})
-		const serialize = new (
-			createRequire(import.meta.url)('@xterm/addon-serialize') as typeof SerializeModule
-		).SerializeAddon()
+		const screen = new HeadlessTerminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 10_000})
+		const serialize = new SerializeAddon()
 		screen.loadAddon(serialize)
 
 		const publish = Effect.fnUntraced(function* (event: TerminalEvent) {
-			const sequence = yield* Ref.updateAndGet(sequenceRef, sequence => sequence + 1)
-			yield* PubSub.publish(events, {event, sequence})
+			const nextSequence = yield* Ref.updateAndGet(sequenceRef, sequence => sequence + 1)
+			yield* PubSub.publish(events, {event, sequence: nextSequence})
 		})
 		const requestSnapshot = Semaphore.withPermit(
 			screenLock,
@@ -194,7 +185,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* Semaphore.withPermit(
 				screenLock,
 				pipe(
-					Effect.callback<void>(resume => {
+					Effect.callback(resume => {
 						screen.write(data, () => {
 							resume(Effect.void)
 						})
@@ -206,7 +197,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const clearProcess = Effect.fnUntraced(function* (handle: RunningProcess) {
-			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
+			yield* Ref.update(processRef, current => (current === handle ? void 0 : current))
 		})
 
 		const stopProcess = Effect.fnUntraced(function* (state?: TerminalState['state']) {
@@ -249,8 +240,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						rows: size.rows
 					})
 			})
-			const data = subprocess.onData(data => {
-				Queue.offerUnsafe(dataQueue, data)
+			const data = subprocess.onData(chunk => {
+				Queue.offerUnsafe(dataQueue, chunk)
 			})
 			const exit = subprocess.onExit(event => {
 				Effect.runFork(
@@ -290,7 +281,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		yield* Effect.addFinalizer(() =>
 			Effect.all(
-				[stopProcess(), PubSub.shutdown(events), Queue.shutdown(dataQueue), Effect.sync(() => screen.dispose())],
+				[
+					stopProcess(),
+					PubSub.shutdown(events),
+					Queue.shutdown(dataQueue),
+					Effect.sync(() => {
+						screen.dispose()
+					})
+				],
 				{concurrency: 'unbounded', discard: true}
 			)
 		)

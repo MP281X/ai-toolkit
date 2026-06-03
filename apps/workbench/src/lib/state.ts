@@ -36,14 +36,17 @@ export const terminalViewAtom = Atom.family((input: TerminalSessionInput) =>
 			Effect.map(client => client('terminal.watch', input)),
 			Stream.unwrap,
 			Stream.groupedWithin(100, Duration.millis(16)),
-			Stream.scan(terminalViewInitialValue(input), (current, updates) =>
-				pipe(
-					Array.fromIterable(updates),
-					Array.reduce({...current, events: Array.empty<TerminalEvent>()}, (next, update) =>
-						update.type === 'state' ? {...next, state: update.state} : {...next, events: [...next.events, update.event]}
-					)
-				)
-			)
+			Stream.scan(terminalViewInitialValue(input), (current, updates) => {
+				let state = current.state
+				const events = Array.empty<TerminalEvent>()
+
+				for (const update of updates) {
+					if (update.type === 'state') state = update.state
+					else events.push(update.event)
+				}
+
+				return {...current, events, state}
+			})
 		),
 		{initialValue: terminalViewInitialValue(input)}
 	)
@@ -81,7 +84,7 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 					scripts,
 					Array.filterMap(script => (script.origin === undefined ? Result.failVoid : Result.succeed(script.origin))),
 					Array.dedupe,
-					Array.sort(Order.String)
+					Array.sortWith(origin => origin, Order.String)
 				)
 			)
 		)

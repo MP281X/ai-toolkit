@@ -10,11 +10,11 @@ const highlighter = await getSharedHighlighter({
 	themes: [HIGHLIGHT_THEMES.light, HIGHLIGHT_THEMES.dark]
 })
 
-export function resolveLanguage(lang = '') {
+export function resolveLanguage(lang?: string) {
 	return pipe(
 		Match.value(
 			pipe(
-				String.toLowerCase(lang),
+				String.toLowerCase(lang ?? ''),
 				String.split('.'),
 				Array.last,
 				Option.getOrElse(() => '')
