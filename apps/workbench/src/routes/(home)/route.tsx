@@ -365,15 +365,6 @@ function AgentSessionRow(input: {
 	readonly onStop: () => void
 	readonly session: AgentSession
 }) {
-	const state = useAtomSuspense(
-		terminalStateAtom({
-			args: input.session.args,
-			command: input.session.command,
-			cwd: input.session.cwd,
-			sessionId: input.session.uuid
-		})
-	)
-
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -390,12 +381,12 @@ function AgentSessionRow(input: {
 						<Square className="size-3" />
 					</button>
 				}
-				icon={<ProcessStateIcon state={state.value.state} />}
+				icon={<ProcessStateIcon state={input.session.state.state} />}
 				selected={false}
-				title={state.value.title ? `Title: ${state.value.title}` : input.session.label}
+				title={input.session.state.title ? `Title: ${input.session.state.title}` : input.session.label}
 				onClick={input.onSelect}
 			>
-				{state.value.title === '' ? input.session.label : state.value.title}
+				{input.session.state.title === '' ? input.session.label : input.session.state.title}
 			</TreeExplorerRow>
 		</li>
 	)
@@ -404,7 +395,6 @@ function AgentSessionRow(input: {
 function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd: string, agentId: string) => void}) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
-	const stopTerminal = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
 	function startAgent(profile: (typeof agentProfiles)[number]) {
@@ -416,9 +406,6 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 
 	function stopAgent(session: AgentSession) {
 		void remove({payload: {cwd: input.cwd, uuid: session.uuid}})
-		void stopTerminal({
-			payload: {args: session.args, command: session.command, cwd: session.cwd, sessionId: session.uuid}
-		})
 	}
 
 	return (

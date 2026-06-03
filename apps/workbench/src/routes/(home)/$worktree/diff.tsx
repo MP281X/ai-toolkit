@@ -51,31 +51,27 @@ type ReviewTarget =
 	| {readonly commit: string; readonly from: string; readonly type: 'commit-to-worktree'}
 
 const reviewDiffsAtom = Atom.family((input: {readonly cwd: string; readonly target: ReviewTarget}) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client =>
-					client('review.watchRange', {
-						cwd: input.cwd,
-						from: {ref: input.target.from, type: 'ref'},
-						to: {type: 'worktree'}
-					})
-				),
-				Stream.unwrap
-			)
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client =>
+				client('review.watchRange', {
+					cwd: input.cwd,
+					from: {ref: input.target.from, type: 'ref'},
+					to: {type: 'worktree'}
+				})
+			),
+			Stream.unwrap
 		)
 	)
 )
 
 const reviewStateAtom = Atom.family((input: {readonly base: string; readonly cwd: string}) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client => client('review.state.watch', input)),
-				Stream.unwrap
-			)
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('review.state.watch', input)),
+			Stream.unwrap
 		)
 	)
 )
@@ -225,9 +221,9 @@ const resolveCommentActionAtom = Atom.family((input: {readonly base: string; rea
 				})
 			})
 		),
-		reducer: (state, {key}) => ({
+		reducer: (state, resolveInput) => ({
 			resolvingAll: state.resolvingAll,
-			resolvingKeys: new Set([...state.resolvingKeys, key])
+			resolvingKeys: new Set([...state.resolvingKeys, resolveInput.key])
 		})
 	})
 )
@@ -271,20 +267,27 @@ const resolveCommentsActionAtom = Atom.family((input: {readonly base: string; re
 )
 
 function groupCommentsByFile<Comment extends {readonly filePath: string}>(comments: readonly Comment[]) {
-	const groups = new Map<string, {comments: Comment[]; filePath: string}>()
+	return pipe(
+		comments,
+		Array.reduce(Array.empty<{readonly comments: readonly Comment[]; readonly filePath: string}>(), (groups, comment) =>
+			pipe(
+				groups,
+				Array.findFirstIndex(group => group.filePath === comment.filePath),
+				Option.match({
+					onNone: () => Array.append(groups, {comments: [comment], filePath: comment.filePath}),
+					onSome: index =>
+						pipe(
+							groups,
+							Array.map((group, groupIndex) => {
+								if (groupIndex !== index) return group
 
-	for (const comment of comments) {
-		const key = comment.filePath
-		const group = groups.get(key)
-
-		if (group) {
-			group.comments.push(comment)
-		} else {
-			groups.set(key, {comments: [comment], filePath: comment.filePath})
-		}
-	}
-
-	return Array.fromIterable(groups.values())
+								return {comments: Array.append(group.comments, comment), filePath: group.filePath}
+							})
+						)
+				})
+			)
+		)
+	)
 }
 
 async function copyComments(commentsToCopy: readonly DisplayComment[]) {

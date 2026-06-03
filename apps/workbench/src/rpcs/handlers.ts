@@ -214,6 +214,24 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
 			HashMap.empty()
 		)
+		const removeAgent = Effect.fnUntraced(function* (payload: typeof AgentSessionKey.Type) {
+			const session = pipe(yield* SubscriptionRef.get(agents), HashMap.get(payload), Option.getOrUndefined)
+			yield* SubscriptionRef.update(agents, current => HashMap.remove(current, payload))
+			if (session === undefined) return
+
+			const input = terminalSessionInput({
+				args: session.args,
+				command: session.command,
+				cwd: session.cwd,
+				sessionId: session.uuid
+			})
+			yield* pipe(
+				RcMap.get(terminals, input),
+				Effect.flatMap(terminal => terminal.stop()),
+				Effect.ignore
+			)
+			yield* pipe(RcMap.invalidate(terminals, input), Effect.ignore)
+		})
 
 		return RpcContracts.of({
 			'agents.create': payload =>
@@ -230,6 +248,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						cwd: payload.cwd,
 						icon: payload.icon,
 						label: `${payload.label} ${labelCount + 1}`,
+						state: {runId: 0, state: 'starting' as const, title: ''},
 						uuid: randomUUID()
 					}
 
@@ -250,24 +269,42 @@ export const RpcHandlers = RpcContracts.toLayer(
 					yield* sessionTerminal.restart()
 					yield* pipe(
 						sessionTerminal.stateUpdates,
-						Stream.map(state => state.state),
-						Stream.filter(state => state === 'exited' || state === 'failed' || state === 'stopped'),
-						Stream.take(1),
-						Stream.runDrain,
-						Effect.andThen(
-							SubscriptionRef.update(agents, sessions =>
-								HashMap.remove(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}))
-							)
+						Stream.takeUntil(
+							state => state.state === 'exited' || state.state === 'failed' || state.state === 'stopped'
+						),
+						Stream.runForEach(state =>
+							Effect.gen(function* () {
+								const key = AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid})
+								yield* SubscriptionRef.update(agents, sessions =>
+									HashMap.modifyAt(
+										sessions,
+										key,
+										Option.match({onNone: () => Option.none(), onSome: session => Option.some({...session, state})})
+									)
+								)
+								if (state.state !== 'exited' && state.state !== 'failed' && state.state !== 'stopped') return
+
+								yield* SubscriptionRef.update(agents, sessions => HashMap.remove(sessions, key))
+								yield* pipe(
+									RcMap.invalidate(
+										terminals,
+										terminalSessionInput({
+											args: agentSession.args,
+											command: agentSession.command,
+											cwd: agentSession.cwd,
+											sessionId: agentSession.uuid
+										})
+									),
+									Effect.ignore
+								)
+							})
 						),
 						Effect.forkDetach
 					)
 
 					return agentSession
 				}),
-			'agents.remove': payload =>
-				SubscriptionRef.update(agents, current =>
-					HashMap.remove(current, AgentSessionKey.make({cwd: payload.cwd, uuid: payload.uuid}))
-				),
+			'agents.remove': payload => removeAgent(AgentSessionKey.make(payload)),
 			'agents.watch': payload =>
 				Stream.unwrap(
 					pipe(

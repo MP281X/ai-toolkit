@@ -17,7 +17,7 @@ export default defineConfig({
 		format: 'esm',
 		inputOptions: {external: ['@lydell/node-pty']},
 		outDir: 'dist',
-		outputOptions: {banner: '#!/usr/bin/env node', entryFileNames: 'server.js'},
+		outputOptions: {banner: '#!/usr/bin/env -S node --max-old-space-size=8192', entryFileNames: 'server.js'},
 		platform: 'node',
 		target: 'node24'
 	},
