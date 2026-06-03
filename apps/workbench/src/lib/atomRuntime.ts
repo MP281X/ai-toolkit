@@ -15,7 +15,16 @@ export const LiveLayers = pipe(
 	Layer.provideMerge(FetchHttpClient.layer),
 	Layer.provideMerge(Rpc.RpcSerialization.layerMsgPack),
 	// Envs
-	Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromEnv({env: import.meta.env})))
+	Layer.provideMerge(
+		ConfigProvider.layer(
+			ConfigProvider.fromUnknown({
+				// oxlint-disable-next-line typescript/no-unsafe-assignment -- Vite exposes env values through an index signature.
+				VITE_PORTLESS_BASE_ORIGIN: import.meta.env['VITE_PORTLESS_BASE_ORIGIN'],
+				// oxlint-disable-next-line typescript/no-unsafe-assignment -- Vite exposes env values through an index signature.
+				VITE_PORTLESS_ORIGIN: import.meta.env['VITE_PORTLESS_ORIGIN']
+			})
+		)
+	)
 )
 
 export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
