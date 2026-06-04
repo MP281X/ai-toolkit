@@ -59,25 +59,26 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const headReviewDiffsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('review.diffs', {cwd, target: {_tag: 'head'}})),
-			Stream.unwrap
-		)
-	)
-)
+function targetKey(target: GitReviewTarget) {
+	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
+}
 
-const commitReviewDiffsAtom = Atom.family((key: string) => {
-	const separator = key.lastIndexOf('\u0000')
-	const cwd = key.slice(0, separator)
-	const hash = key.slice(separator + 1)
+function targetFromKey(tag: string, hash = ''): GitReviewTarget {
+	if (tag === 'commit') return {_tag: 'commit', hash}
+	if (tag === 'local') return {_tag: 'local'}
+	if (tag === 'branch') return {_tag: 'branch'}
+	return {_tag: 'changes'}
+}
+
+const reviewDiffsAtom = Atom.family((key: string) => {
+	const parts = key.split('\u0000')
+	const cwd = parts[0] ?? ''
+	const target = targetFromKey(parts[1] ?? 'changes', parts[2] ?? '')
 
 	return RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('review.diffs', {cwd, target: {_tag: 'commit', hash}})),
+			Effect.map(client => client('review.diffs', {cwd, target})),
 			Stream.unwrap
 		)
 	)
@@ -87,7 +88,7 @@ const fullFileContentAtom = Atom.family((key: string) => {
 	const parts = key.split('\u0000')
 	const cwd = parts[0] ?? ''
 	const tag = parts[1]
-	const hash = parts[2] ?? ''
+	const hash = parts[2]
 	const filePath = parts[3] ?? ''
 
 	if (String.isEmpty(filePath)) return Atom.make(() => Effect.succeed(null))
@@ -96,7 +97,7 @@ const fullFileContentAtom = Atom.family((key: string) => {
 		pipe(
 			RpcClient,
 			Effect.map(client =>
-				client('review.diffs', {cwd, filePath, target: tag === 'commit' ? {_tag: 'commit', hash} : {_tag: 'head'}})
+				client('review.diffs', {cwd, filePath, target: targetFromKey(tag ?? 'changes', hash ?? '')})
 			),
 			Stream.unwrap,
 			Stream.runHead,
@@ -185,17 +186,31 @@ const unmarkReviewedAtom = Atom.family((cwd: string) =>
 	})
 )
 
-const reviewActionsStateAtom = Atom.family(() => Atom.optimistic(Atom.make(() => Effect.succeed({committing: false}))))
+const reviewActionsStateAtom = Atom.family(() =>
+	Atom.optimistic(Atom.make(() => Effect.succeed({committing: false, pushing: false})))
+)
 
 const commitReviewActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
 		fn: RpcClient.runtime.fn<string>()(
 			Effect.fn('DiffPage.commitReview')(function* (message) {
 				const client = yield* RpcClient
-				return yield* client('review.commitAndPush', {cwd, message})
+				return yield* client('review.commit', {cwd, message})
 			})
 		),
 		reducer: state => ({...state, committing: true})
+	})
+)
+
+const pushReviewActionAtom = Atom.family((cwd: string) =>
+	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
+		fn: RpcClient.runtime.fn<undefined>()(
+			Effect.fn('DiffPage.pushReview')(function* () {
+				const client = yield* RpcClient
+				return yield* client('review.push', {cwd})
+			})
+		),
+		reducer: state => ({...state, pushing: true})
 	})
 )
 
@@ -306,21 +321,23 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const githubThreadsLoaded = githubThreadsResult._tag === 'Success'
 	const githubThreads = githubThreadsLoaded ? githubThreadsResult.value : Array.empty<GitHubReviewThread>()
 	const shortcutsOpenState = useState(false)
+	const selectedScopeState = useState<GitReviewTarget>({_tag: 'changes'})
+	const allCommits = Array.appendAll(suggestedMetadata.value.localCommits, suggestedMetadata.value.branchCommits)
 	const selectedCommit = pipe(
-		suggestedMetadata.value.commits,
+		allCommits,
 		Array.findFirst(commit => commit.hash === search.commit),
 		Option.getOrUndefined
 	)
-	const reviewTarget: GitReviewTarget = selectedCommit ? {_tag: 'commit', hash: selectedCommit.hash} : {_tag: 'head'}
+	const reviewTarget: GitReviewTarget = selectedCommit
+		? {_tag: 'commit', hash: selectedCommit.hash}
+		: selectedScopeState[0]
 	const fullFilePathState = useState('')
-	const reviewDiffs = selectedCommit
-		? commitReviewDiffsAtom(`${input.cwd}\u0000${selectedCommit.hash}`)
-		: headReviewDiffsAtom(input.cwd)
+	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
 	const fullFileContent = useAtomValue(
 		fullFileContentAtom(
 			reviewTarget._tag === 'commit'
 				? `${input.cwd}\u0000commit\u0000${reviewTarget.hash}\u0000${fullFilePathState[0]}`
-				: `${input.cwd}\u0000head\u0000\u0000${fullFilePathState[0]}`
+				: `${input.cwd}\u0000${reviewTarget._tag}\u0000\u0000${fullFilePathState[0]}`
 		)
 	)
 	const selectedFilePathState = useState('')
@@ -372,7 +389,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			reviewDiffsValue,
 			Array.flatMap(diff =>
 				Array.map(diff.segments, segment =>
-					gitReviewMarkKey({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
+					gitReviewMarkKey({filePath: segment.filePath, fingerprint: segment.fingerprint})
 				)
 			)
 		)
@@ -403,6 +420,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		startTransition(() => {
 			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
 		})
+		if (target._tag !== 'commit') selectedScopeState[1](target)
 		fullFilePathState[1]('')
 		selectedFilePathState[1]('')
 	}
@@ -561,14 +579,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							<ResizablePanel defaultSize="45%" minSize="15%">
 								<div className="h-full min-h-0">
 									<CommitList
-										commits={suggestedMetadata.value.commits}
+										branchCommits={suggestedMetadata.value.branchCommits}
+										localCommits={suggestedMetadata.value.localCommits}
 										selected={reviewTarget}
 										selectCommit={commit => {
 											selectTarget({_tag: 'commit', hash: commit.hash})
 										}}
-										selectHead={() => {
-											selectTarget({_tag: 'head'})
-										}}
+										selectScope={selectTarget}
 									/>
 								</div>
 							</ResizablePanel>
@@ -699,18 +716,27 @@ function CommitActionForm(input: {
 }) {
 	const commitMessageState = useState('')
 	const actionStateResult = useAtomValue(reviewActionsStateAtom(input.cwd))
-	const actionState = actionStateResult._tag === 'Success' ? actionStateResult.value : {committing: false}
+	const actionState =
+		actionStateResult._tag === 'Success' ? actionStateResult.value : {committing: false, pushing: false}
 	const commit = useAtomSet(commitReviewActionAtom(input.cwd), {mode: 'promise'})
+	const push = useAtomSet(pushReviewActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
 	const missingMessage = String.isEmpty(trimmedCommitMessage)
-	const commitDisabled =
-		actionState.committing || (input.dirty && missingMessage) || (!input.dirty && !input.unpushedCommits)
+	const commitDisabled = actionState.committing || !input.dirty || missingMessage
+	const pushDisabled = actionState.pushing || !input.unpushedCommits
 
-	async function submit() {
+	async function submitCommit() {
 		if (commitDisabled) return
 
 		await commit(trimmedCommitMessage)
 		commitMessageState[1]('')
+		input.refreshReview()
+	}
+
+	async function submitPush() {
+		if (pushDisabled) return
+
+		await push(undefined)
 		input.refreshReview()
 	}
 
@@ -719,7 +745,7 @@ function CommitActionForm(input: {
 			className="flex items-center gap-1 border-b p-2"
 			onSubmit={event => {
 				event.preventDefault()
-				void submit()
+				void submitCommit()
 			}}
 		>
 			<InputGroup className="min-w-0 flex-1">
@@ -736,15 +762,28 @@ function CommitActionForm(input: {
 						type="submit"
 						variant="ghost"
 						size="icon-xs"
-						aria-label="Commit and push"
+						aria-label="Commit"
 						disabled={commitDisabled}
-						title="Commit and push"
+						title="Commit"
 					>
-						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
+						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>
-			<div className="inline-flex shrink-0 items-center">
+			<div className="inline-flex shrink-0 items-center gap-1">
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					aria-label="Push"
+					title="Push"
+					disabled={pushDisabled}
+					onClick={() => {
+						void submitPush()
+					}}
+				>
+					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
+				</Button>
 				<Button
 					type="button"
 					variant="outline"
@@ -764,53 +803,80 @@ function CommitActionForm(input: {
 }
 
 function CommitList(input: {
-	readonly commits: readonly GitCommit[]
+	readonly branchCommits: readonly GitCommit[]
+	readonly localCommits: readonly GitCommit[]
 	readonly selected: GitReviewTarget
 	readonly selectCommit: (commit: GitCommit) => void
-	readonly selectHead: () => void
+	readonly selectScope: (target: GitReviewTarget) => void
 }) {
+	const showLocal = !Array.isReadonlyArrayEmpty(input.localCommits)
+	const showBranch = !Array.isReadonlyArrayEmpty(input.branchCommits)
+
+	function renderScope(target: Exclude<GitReviewTarget, {_tag: 'commit'}>, label: string, detail: string) {
+		const selected = input.selected._tag === target._tag
+
+		return (
+			<li className="w-full min-w-0">
+				<button
+					type="button"
+					aria-current={selected ? 'page' : undefined}
+					onClick={() => {
+						input.selectScope(target)
+					}}
+					className={cn(
+						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
+						selected && 'bg-primary/15 text-primary'
+					)}
+				>
+					<span className="min-w-0 truncate">{label}</span>
+					<span className="text-muted-foreground min-w-0 truncate text-right">{detail}</span>
+				</button>
+			</li>
+		)
+	}
+
+	function renderCommit(commit: GitCommit) {
+		const selected = input.selected._tag === 'commit' && input.selected.hash === commit.hash
+
+		return (
+			<li key={commit.hash} className="w-full min-w-0">
+				<button
+					type="button"
+					aria-current={selected ? 'page' : undefined}
+					onClick={() => {
+						input.selectCommit(commit)
+					}}
+					className={cn(
+						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
+						selected && 'bg-primary/15 text-primary'
+					)}
+				>
+					<span className="min-w-0 truncate">
+						<span>{commit.subject}</span>
+					</span>
+					<span className="text-muted-foreground min-w-0 truncate text-right">{commit.shortHash}</span>
+				</button>
+			</li>
+		)
+	}
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
-				<TreeExplorerSection label="History" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-					<li className="w-full min-w-0">
-						<button
-							type="button"
-							aria-current={input.selected._tag === 'head' ? 'page' : undefined}
-							onClick={input.selectHead}
-							className={cn(
-								'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-								input.selected._tag === 'head' && 'bg-primary/15 text-primary'
-							)}
-						>
-							<span className="min-w-0 truncate">HEAD</span>
-							<span className="text-muted-foreground min-w-0 truncate text-right">worktree</span>
-						</button>
-					</li>
-					{Array.map(input.commits, commit => {
-						const selected = input.selected._tag === 'commit' && input.selected.hash === commit.hash
-
-						return (
-							<li key={commit.hash} className="w-full min-w-0">
-								<button
-									type="button"
-									aria-current={selected ? 'page' : undefined}
-									onClick={() => {
-										input.selectCommit(commit)
-									}}
-									className={cn(
-										'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-										selected && 'bg-primary/15 text-primary'
-									)}
-								>
-									<span className="min-w-0 truncate">
-										<span>{commit.subject}</span>
-									</span>
-									<span className="text-muted-foreground min-w-0 truncate text-right">{commit.shortHash}</span>
-								</button>
-							</li>
-						)
-					})}
+				<TreeExplorerSection label="Review" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+					{renderScope({_tag: 'changes'}, 'Changes', 'worktree')}
+					{showLocal && renderScope({_tag: 'local'}, 'Local', `${Array.length(input.localCommits)}`)}
+					{showLocal && !Array.isReadonlyArrayEmpty(input.localCommits) && (
+						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+							{Array.map(input.localCommits, renderCommit)}
+						</ul>
+					)}
+					{showBranch && renderScope({_tag: 'branch'}, 'Branch', `${Array.length(input.branchCommits)}`)}
+					{showBranch && !Array.isReadonlyArrayEmpty(input.branchCommits) && (
+						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+							{Array.map(input.branchCommits, renderCommit)}
+						</ul>
+					)}
 				</TreeExplorerSection>
 			</TreeExplorer>
 		</div>

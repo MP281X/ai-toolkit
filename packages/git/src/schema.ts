@@ -25,7 +25,9 @@ export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 
 export type GitReviewTarget = typeof GitReviewTarget.Type
 export const GitReviewTarget = Schema.Union([
-	Schema.Struct({_tag: Schema.Literal('head')}),
+	Schema.Struct({_tag: Schema.Literal('changes')}),
+	Schema.Struct({_tag: Schema.Literal('local')}),
+	Schema.Struct({_tag: Schema.Literal('branch')}),
 	Schema.Struct({_tag: Schema.Literal('commit'), hash: Schema.String})
 ])
 
@@ -36,8 +38,9 @@ export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 }) {}
 
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
-	commits: Schema.Array(GitCommit),
+	branchCommits: Schema.Array(GitCommit),
 	dirty: Schema.Boolean,
+	localCommits: Schema.Array(GitCommit),
 	prUrl: Schema.optional(Schema.String),
 	unpushedCommits: Schema.Boolean
 }) {}
@@ -144,12 +147,8 @@ export function gitReviewCommentKey(input: {
 	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
 }
 
-export function gitReviewMarkKey(input: {
-	readonly filePath: string
-	readonly fingerprint: string
-	readonly segmentId: string
-}) {
-	return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
+export function gitReviewMarkKey(input: {readonly filePath: string; readonly fingerprint: string}) {
+	return `${input.filePath}:${input.fingerprint}`
 }
 
 export function gitReviewMarksForDiff(diff: GitDiff) {

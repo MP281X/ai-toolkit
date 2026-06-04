@@ -61,4 +61,13 @@ describe('@deslop/git review state', () => {
 		expect(gitReviewStateForMarks(firstMarks, reviewedKeys)).toBe('checked')
 		expect(gitReviewStateForMarks(secondMarks, reviewedKeys)).toBe('unchecked')
 	})
+
+	it('shares reviewed state between commit segments with the same file diff', () => {
+		const firstMarks = [{filePath: 'src/file.ts', fingerprint: 'same diff', segmentId: 'first-parent->first-commit'}]
+		const secondMarks = [{filePath: 'src/file.ts', fingerprint: 'same diff', segmentId: 'second-parent->second-commit'}]
+		const reviewed = gitReviewStateMark(new GitReviewState({comments: Array.empty(), marks: Array.empty()}), firstMarks)
+		const reviewedKeys = new Set(Array.map(reviewed.marks, gitReviewMarkKey))
+
+		expect(gitReviewStateForMarks(secondMarks, reviewedKeys)).toBe('checked')
+	})
 })

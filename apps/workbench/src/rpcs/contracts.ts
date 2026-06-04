@@ -113,10 +113,8 @@ export class RpcContracts extends RpcGroup.make(
 			side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 		})
 	}),
-	Rpc.make('review.commitAndPush', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, message: Schema.String})
-	}),
+	Rpc.make('review.commit', {error: GitError, payload: Schema.Struct({cwd: Schema.String, message: Schema.String})}),
+	Rpc.make('review.push', {error: GitError, payload: Schema.Struct({cwd: Schema.String})}),
 	Rpc.make('review.githubThreads', {
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String}),

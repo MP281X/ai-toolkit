@@ -1,5 +1,3 @@
-import * as NodeFs from 'node:fs'
-
 import {
 	Array,
 	Config,
@@ -146,6 +144,20 @@ function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, rea
 	})
 }
 
+function withDisplayedPatchSegments(diffs: readonly GitDiff[], id: string, type: 'commit' | 'worktree') {
+	return Array.map(
+		diffs,
+		diff =>
+			new GitDiff({
+				fileContent: diff.fileContent,
+				filePath: diff.filePath,
+				patch: diff.patch,
+				segments: [new GitDiffSegment({filePath: diff.filePath, fingerprint: diff.patch, id, type})],
+				status: diff.status
+			})
+	)
+}
+
 function commitFromLogLine(line: string) {
 	const parts = String.split('\u0000')(line)
 
@@ -178,7 +190,6 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const path = yield* Path.Path
 		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
-		const run = Effect.runForkWith(yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>())
 
 		const getDefaultBranch = Effect.fn('GitWorkspace.getDefaultBranch')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
@@ -374,16 +385,12 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(home))
 		})
 		yield* refreshProjects()
-		yield* Effect.acquireRelease(
-			Effect.sync(() =>
-				NodeFs.watch(home, () => {
-					run(refreshProjects())
-				})
-			),
-			watcher =>
-				Effect.sync(() => {
-					watcher.close()
-				})
+		yield* pipe(
+			fs.watch(home),
+			Stream.debounce(Duration.millis(50)),
+			Stream.runForEach(() => refreshProjects()),
+			Effect.catch(() => Effect.void),
+			Effect.forkScoped
 		)
 
 		return {
@@ -769,21 +776,22 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 						pipe(
 							fs.readFileString(path.join(config.cwd, filePath)),
 							Effect.orElseSucceed(() => ''),
-							Effect.map(
-								content =>
-									new GitDiff({
-										filePath,
-										patch: `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-											String.split('\n')(content),
-											Array.map(line => `+${line}`),
-											Array.join('\n')
-										)}`,
-										segments: [
-											new GitDiffSegment({filePath, fingerprint: content, id: 'HEAD->worktree', type: 'worktree'})
-										],
-										status: 'added'
-									})
-							)
+							Effect.map(content => {
+								const patch = `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+									String.split('\n')(content),
+									Array.map(line => `+${line}`),
+									Array.join('\n')
+								)}`
+
+								return new GitDiff({
+									filePath,
+									patch,
+									segments: [
+										new GitDiffSegment({filePath, fingerprint: patch, id: 'HEAD->worktree', type: 'worktree'})
+									],
+									status: 'added'
+								})
+							})
 						),
 					{concurrency: 'unbounded'}
 				)
@@ -821,7 +829,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			readonly target: GitReviewTarget
 		}) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd, filePath: input.filePath, target: input.target._tag})
-			if (input.target._tag === 'head') {
+			if (input.target._tag !== 'commit') {
 				return yield* pipe(
 					fs.readFileString(path.join(config.cwd, input.filePath)),
 					Effect.orElseSucceed(() => '')
@@ -857,24 +865,20 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 		const reviewDiffs = Effect.fn('GitReview.reviewDiffs')(function* (target: GitReviewTarget, filePath?: string) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd, target: target._tag})
-			if (target._tag === 'head') return yield* withFileContent({diffs: yield* worktreeDiffs, filePath, target})
+			if (target._tag === 'changes') return yield* withFileContent({diffs: yield* worktreeDiffs, filePath, target})
 
-			const id = `${target.hash}^->${target.hash}`
-			const diffs = yield* gitDiffs({args: [`${target.hash}^`, target.hash], segments: Array.empty()})
-			const diffsWithSegments = pipe(
-				diffs,
-				Array.map(
-					diff =>
-						new GitDiff({
-							filePath: diff.filePath,
-							patch: diff.patch,
-							segments: [
-								new GitDiffSegment({filePath: diff.filePath, fingerprint: `${id}:${diff.filePath}`, id, type: 'commit'})
-							],
-							status: diff.status
-						})
-				)
-			)
+			if (target._tag === 'commit') {
+				const id = `${target.hash}^->${target.hash}`
+				const diffs = yield* gitDiffs({args: [`${target.hash}^`, target.hash], segments: Array.empty()})
+				const diffsWithSegments = withDisplayedPatchSegments(diffs, id, 'commit')
+				yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
+
+				return yield* withFileContent({diffs: diffsWithSegments, filePath, target})
+			}
+
+			const base = target._tag === 'local' ? yield* localBase() : yield* branchDiffBase()
+			const diffs = yield* aggregateDiffs(base)
+			const diffsWithSegments = withDisplayedPatchSegments(diffs, `${base}->worktree`, 'worktree')
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
 
 			return yield* withFileContent({diffs: diffsWithSegments, filePath, target})
@@ -969,6 +973,14 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 		})
 
+		const commitsBetween = Effect.fn('GitReview.commitsBetween')(function* (from: string, to: string) {
+			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
+			return yield* pipe(
+				git.lines(config.cwd, ['log', '--max-count=80', '--format=%H%x00%h%x00%s', `${from}..${to}`]),
+				Effect.map(Array.map(commitFromLogLine))
+			)
+		})
+
 		const firstParentCommits = pipe(
 			git.lines(config.cwd, ['log', '--first-parent', '--max-count=80', '--format=%H%x00%h%x00%s', 'HEAD']),
 			Effect.map(Array.map(commitFromLogLine))
@@ -1021,6 +1033,42 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			pushableCommitCount(),
 			Effect.map(count => count > 0)
 		)
+
+		const localBase = Effect.fn('GitReview.localBase')(function* () {
+			const branch = yield* currentBranch
+			const remoteBranch = `origin/${branch}`
+			const hasRemoteBranch = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--verify', remoteBranch]),
+				Effect.as(true),
+				Effect.orElseSucceed(() => false)
+			)
+
+			if (hasRemoteBranch) return remoteBranch
+
+			const defaultBranch = yield* defaultBranchName
+			const base = yield* branchBase(defaultBranch)
+			return yield* pipe(
+				git.string(config.cwd, ['merge-base', base, 'HEAD']),
+				Effect.map(String.trim),
+				Effect.catchTag('GitError', () => Effect.succeed(base))
+			)
+		})
+
+		const branchDiffBase = Effect.fn('GitReview.branchDiffBase')(function* () {
+			const defaultBranch = yield* defaultBranchName
+			const base = yield* branchBase(defaultBranch)
+			return yield* pipe(
+				git.string(config.cwd, ['merge-base', base, 'HEAD']),
+				Effect.map(String.trim),
+				Effect.catchTag('GitError', () => Effect.succeed(base))
+			)
+		})
+
+		const aggregateDiffs = Effect.fn('GitReview.aggregateDiffs')(function* (base: string) {
+			const trackedDiffs = yield* gitDiffs({args: [base], segments: Array.empty()})
+			const untracked = yield* untrackedDiffs
+			return Array.appendAll(trackedDiffs, untracked)
+		})
 
 		const prReviewThreads = Effect.gen(function* () {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
@@ -1116,12 +1164,18 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				yield* Effect.annotateCurrentSpan({cwd: config.cwd})
 				const branch = yield* currentBranch
 				const defaultBranch = yield* defaultBranchName
-				const base = yield* branchBase(defaultBranch)
-				const displayCommits = branch === defaultBranch ? yield* firstParentCommits : yield* commits(base)
+				const branchBaseRef = yield* branchDiffBase()
+				const localBaseRef = yield* localBase()
+				const localCommits = yield* commitsBetween(localBaseRef, 'HEAD')
+				const branchCommitCandidates =
+					branch === defaultBranch ? yield* firstParentCommits : yield* commits(branchBaseRef)
+				const localCommitHashes = new Set(Array.map(localCommits, commit => commit.hash))
+				const branchCommits = Array.filter(branchCommitCandidates, commit => !localCommitHashes.has(commit.hash))
 
 				return new GitReviewMetadata({
-					commits: displayCommits,
+					branchCommits,
 					dirty: yield* hasWorktreeChanges,
+					localCommits,
 					prUrl: Option.getOrUndefined(yield* branchPrUrl),
 					unpushedCommits: yield* hasPushableCommits
 				})
@@ -1312,24 +1366,26 @@ export class GitCommitAction extends Context.Service<GitCommitAction>()('@deslop
 		)
 
 		return {
-			commitAndPush: Effect.fn('GitCommitAction.commitAndPush')(function* (message: string) {
+			commit: Effect.fn('GitCommitAction.commit')(function* (message: string) {
 				yield* Effect.annotateCurrentSpan({cwd: config.cwd})
 				const dirty = yield* hasWorktreeChanges
 				yield* Effect.annotateCurrentSpan({dirty})
 
-				if (dirty) {
-					if (String.isEmpty(String.trim(message))) {
-						return yield* new GitError({message: 'Commit message required.'})
-					}
-					yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid, Effect.withSpan('GitCommitAction.stageAll'))
-					yield* pipe(
-						git.string(config.cwd, ['commit', '-m', message]),
-						Effect.asVoid,
-						Effect.withSpan('GitCommitAction.create')
-					)
-				} else if (!(yield* hasPushableCommits)) {
-					return yield* new GitError({message: 'No changes or unpushed commits.'})
+				if (!dirty) return yield* new GitError({message: 'No changes to commit.'})
+				if (String.isEmpty(String.trim(message))) {
+					return yield* new GitError({message: 'Commit message required.'})
 				}
+
+				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid, Effect.withSpan('GitCommitAction.stageAll'))
+				yield* pipe(
+					git.string(config.cwd, ['commit', '-m', message]),
+					Effect.asVoid,
+					Effect.withSpan('GitCommitAction.create')
+				)
+			}),
+			push: Effect.fn('GitCommitAction.push')(function* () {
+				yield* Effect.annotateCurrentSpan({cwd: config.cwd})
+				if (!(yield* hasPushableCommits)) return yield* new GitError({message: 'No unpushed commits.'})
 
 				const branch = yield* currentBranch
 				yield* Effect.annotateCurrentSpan({branch})

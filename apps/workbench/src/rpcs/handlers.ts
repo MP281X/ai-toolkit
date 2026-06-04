@@ -335,10 +335,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 						attributes: {cwd: payload.cwd, filePath: payload.comment.filePath}
 					})
 				),
-			'review.commitAndPush': payload =>
+			'review.commit': payload =>
 				pipe(
 					RcMap.get(gitCommits, payload.cwd),
-					Effect.flatMap(commit => commit.commitAndPush(payload.message))
+					Effect.flatMap(commit => commit.commit(payload.message))
 				),
 			'review.diffs': payload =>
 				Stream.unwrap(
@@ -361,6 +361,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					RcMap.get(gitReviews, payload.cwd),
 					Effect.flatMap(review => review.metadata())
+				),
+			'review.push': payload =>
+				pipe(
+					RcMap.get(gitCommits, payload.cwd),
+					Effect.flatMap(commit => commit.push())
 				),
 			'review.state.mark': payload =>
 				pipe(

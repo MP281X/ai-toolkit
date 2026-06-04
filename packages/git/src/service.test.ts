@@ -310,7 +310,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('builds head and commit review diffs from a temporary repository', async () => {
+	it('builds changes and commit review diffs from a temporary repository', async () => {
 		await withTempRoot(async root => {
 			const repo = initRepo(root)
 			writeFileSync(join(repo, 'README.md'), 'initial\nhead change\n')
@@ -323,19 +323,49 @@ describe('@deslop/git service', () => {
 				repo,
 				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: commit}))
 			)
-			const headDiffs = await runReview(
+			const changesDiffs = await runReview(
 				repo,
-				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}))
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
 			)
 
 			expect(diffs).toHaveLength(1)
 			expect(diffs[0]?.segments.map(segment => segment.type)).toEqual(['commit'])
-			expect(headDiffs[0]?.segments).toHaveLength(1)
-			expect(headDiffs[0]?.segments[0]?.type).toBe('worktree')
+			expect(diffs[0]?.segments[0]?.fingerprint).toBe(diffs[0]?.patch)
+			expect(changesDiffs[0]?.segments).toHaveLength(1)
+			expect(changesDiffs[0]?.segments[0]?.type).toBe('worktree')
 		})
 	})
 
-	it('returns clean head review diffs without running diff or untracked discovery', async () => {
+	it('builds local and branch review diffs around pushed and unpushed commits', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'branch.txt'), 'branch\n')
+			git(fixture.repo, ['add', 'branch.txt'])
+			git(fixture.repo, ['commit', '-m', 'branch change'])
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+			writeFileSync(join(fixture.repo, 'local.txt'), 'local\n')
+			git(fixture.repo, ['add', 'local.txt'])
+			git(fixture.repo, ['commit', '-m', 'local change'])
+			writeFileSync(join(fixture.repo, 'worktree.txt'), 'worktree\n')
+
+			const localDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'local'}))
+			)
+			const branchDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'branch'}))
+			)
+
+			expect(localDiffs.map(diff => diff.filePath)).toEqual(['local.txt', 'worktree.txt'])
+			expect(branchDiffs.map(diff => diff.filePath)).toEqual(['branch.txt', 'local.txt', 'worktree.txt'])
+			expect(localDiffs[1]?.segments[0]?.fingerprint).toBe(localDiffs[1]?.patch)
+			expect(branchDiffs[0]?.segments[0]?.fingerprint).toBe(branchDiffs[0]?.patch)
+		})
+	})
+
+	it('returns clean changes review diffs without running diff or untracked discovery', async () => {
 		await withTempRoot(async root => {
 			const fake = fakeGit(root)
 			const originalPath = process.env['PATH']
@@ -344,7 +374,7 @@ describe('@deslop/git service', () => {
 			try {
 				const diffs = await runReview(
 					root,
-					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}))
+					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
 				)
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
@@ -361,12 +391,12 @@ describe('@deslop/git service', () => {
 		await withTempRoot(async root => {
 			const repo = initRepo(root)
 			writeFileSync(join(repo, 'README.md'), 'current file content\n')
-			const headDiffs = await runReview(
+			const changesDiffs = await runReview(
 				repo,
-				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}, 'README.md'))
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}, 'README.md'))
 			)
 
-			expect(headDiffs[0]?.fileContent).toBe('current file content\n')
+			expect(changesDiffs[0]?.fileContent).toBe('current file content\n')
 
 			const fake = fakeGit(root)
 			const originalPath = process.env['PATH']
@@ -389,18 +419,18 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('changes head review fingerprints when a file changes', async () => {
+	it('changes changes review fingerprints when a file changes', async () => {
 		await withTempRoot(async root => {
 			const repo = initRepo(root)
 			writeFileSync(join(repo, 'README.md'), 'initial\nfirst change\n')
 			const first = await runReview(
 				repo,
-				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}))
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
 			)
 			writeFileSync(join(repo, 'README.md'), 'initial\nsecond change\n')
 			const second = await runReview(
 				repo,
-				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}))
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
 			)
 
 			expect(first[0]?.segments[0]?.fingerprint).not.toBe(second[0]?.segments[0]?.fingerprint)
@@ -586,31 +616,24 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('commitAndPush commits dirty work, pushes upstream, and creates a draft PR', async () => {
+	it('commit stages dirty work and creates a local commit', async () => {
 		await withTempRoot(async root => {
-			const gh = fakeGh(root)
-			const originalPath = process.env['PATH']
 			const fixture = initRemoteRepo(root)
-			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
 			git(fixture.repo, ['switch', '-c', 'feature'])
 			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
 
-			try {
-				await runCommit(
-					fixture.repo,
-					Effect.flatMap(GitCommitAction, service => service.commitAndPush('feature work'))
-				)
-			} finally {
-				process.env['PATH'] = originalPath
-			}
+			await runCommit(
+				fixture.repo,
+				Effect.flatMap(GitCommitAction, service => service.commit('feature work'))
+			)
 
-			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(git(fixture.repo, ['rev-parse', 'HEAD']).trim())
+			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('feature work')
 			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
-			expect(readFileSync(gh.log, 'utf8')).toContain('pr create --draft --fill')
+			expect(() => git(fixture.remote, ['rev-parse', 'feature'])).toThrow()
 		})
 	})
 
-	it('commitAndPush pushes clean unpushed commits without creating another commit', async () => {
+	it('push pushes clean unpushed commits and creates a draft PR', async () => {
 		await withTempRoot(async root => {
 			const gh = fakeGh(root)
 			const originalPath = process.env['PATH']
@@ -625,7 +648,7 @@ describe('@deslop/git service', () => {
 			try {
 				await runCommit(
 					fixture.repo,
-					Effect.flatMap(GitCommitAction, service => service.commitAndPush(''))
+					Effect.flatMap(GitCommitAction, service => service.push())
 				)
 			} finally {
 				process.env['PATH'] = originalPath
@@ -634,6 +657,33 @@ describe('@deslop/git service', () => {
 			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
 			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(head)
 			expect(readFileSync(gh.log, 'utf8')).toContain('pr create --draft --fill')
+		})
+	})
+
+	it('push leaves dirty work untouched while pushing unpushed commits', async () => {
+		await withTempRoot(async root => {
+			const gh = fakeGh(root)
+			const originalPath = process.env['PATH']
+			const fixture = initRemoteRepo(root)
+			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
+			git(fixture.repo, ['add', 'feature.txt'])
+			git(fixture.repo, ['commit', '-m', 'feature work'])
+			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+			writeFileSync(join(fixture.repo, 'dirty.txt'), 'dirty\n')
+
+			try {
+				await runCommit(
+					fixture.repo,
+					Effect.flatMap(GitCommitAction, service => service.push())
+				)
+			} finally {
+				process.env['PATH'] = originalPath
+			}
+
+			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(head)
+			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('?? dirty.txt')
 		})
 	})
 
