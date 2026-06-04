@@ -12,12 +12,13 @@ export default defineConfig({
 		rolldownOptions: {experimental: {lazyBarrel: true}}
 	},
 	pack: {
+		banner: '#!/usr/bin/env -S node --max-old-space-size=16384 --heapsnapshot-near-heap-limit=3 --report-on-fatalerror',
 		clean: false,
 		entry: ['src/main.server.ts'],
 		format: 'esm',
 		inputOptions: {external: ['@lydell/node-pty']},
 		outDir: 'dist',
-		outputOptions: {banner: '#!/usr/bin/env -S node --max-old-space-size=8192', entryFileNames: 'server.js'},
+		outputOptions: {entryFileNames: 'server.js'},
 		platform: 'node',
 		target: 'node24'
 	},

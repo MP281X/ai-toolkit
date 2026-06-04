@@ -321,6 +321,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		)
 		const listWorktrees = Effect.fn('GitWorkspace.listWorktrees')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
+			yield* git.string(cwd, ['worktree', 'prune'])
 			const worktrees = yield* pipe(
 				git.string(cwd, ['worktree', 'list', '--porcelain', '-z']),
 				Effect.flatMap(output =>

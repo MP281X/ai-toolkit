@@ -17,8 +17,9 @@
 
 	"scripts": {
 		"dev:client": "vp dev",
-		"dev:server": "node --watch ./src/main.server.ts",
-		"build": "rm -rf dist && vp build && vp pack",
+		"dev:server": "node --inspect=127.0.0.1:0 --watch ./src/main.server.ts",
+
+    "build": "rm -rf dist && vp build && vp pack",
 
 		"preview": "vp run build && PORT=7010 node ./dist/server.js"
 	},
