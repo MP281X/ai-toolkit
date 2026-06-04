@@ -304,7 +304,6 @@ function CommentAnnotation(props: {
 export function PatchDiff(props: {
 	readonly filePath: string
 	readonly fileContent?: string
-	readonly loadFile?: () => void
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
 	readonly onSaveComment?: (comment: DiffComment) => void
@@ -344,10 +343,7 @@ export function PatchDiff(props: {
 			? rect.top + rect.height / 2
 			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
 		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
-		setMode(current => {
-			if (current === 'diff') props.loadFile?.()
-			return current === 'diff' ? 'file' : 'diff'
-		})
+		setMode(current => (current === 'diff' ? 'file' : 'diff'))
 	}
 
 	useHotkey(

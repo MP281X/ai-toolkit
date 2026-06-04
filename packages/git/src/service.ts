@@ -211,14 +211,21 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 		const getWorktreeStatus = Effect.fn('GitWorkspace.getWorktreeStatus')(function* (cwd: string, branch?: string) {
 			yield* Effect.annotateCurrentSpan({branch: branch ?? '', cwd})
-			const counts =
+			const upstream =
 				branch === undefined
-					? ['0', '0']
+					? Option.none<string>()
 					: yield* pipe(
-							git.string(cwd, ['rev-list', '--left-right', '--count', `origin/${branch}...HEAD`]),
-							Effect.map(flow(String.trim, String.split(/\s+/u))),
-							Effect.orElseSucceed(() => ['0', '0'])
+							git.string(cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', `${branch}@{u}`]),
+							Effect.map(flow(String.trim, Option.some)),
+							Effect.orElseSucceed(() => Option.none<string>())
 						)
+			const counts = Option.isNone(upstream)
+				? ['0', '0']
+				: yield* pipe(
+						git.string(cwd, ['rev-list', '--left-right', '--count', `${upstream.value}...HEAD`]),
+						Effect.map(flow(String.trim, String.split(/\s+/u))),
+						Effect.orElseSucceed(() => ['0', '0'])
+					)
 			return new GitWorktreeStatus({
 				ahead: Option.getOrElse(Number.parse(counts[1] ?? '0'), () => 0),
 				behind: Option.getOrElse(Number.parse(counts[0] ?? '0'), () => 0),
@@ -768,6 +775,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'diff-tree',
 				'--root',
 				'--first-parent',
+				'-m',
 				'--patch',
 				'--ignore-all-space',
 				'--ignore-blank-lines',
@@ -858,16 +866,14 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 		const withFileContent = Effect.fn('GitReview.withFileContent')(function* (input: {
 			readonly diffs: readonly GitDiff[]
-			readonly filePath?: string
 			readonly target: GitReviewTarget
 		}) {
-			const filePaths = input.filePath === undefined ? Array.map(input.diffs, diff => diff.filePath) : [input.filePath]
 			const contents = yield* Effect.forEach(
-				filePaths,
-				filePath =>
+				input.diffs,
+				diff =>
 					pipe(
-						fileContent({filePath, target: input.target}),
-						Effect.map(content => [filePath, content] as const)
+						fileContent({filePath: diff.filePath, target: input.target}),
+						Effect.map(content => [diff.filePath, content] as const)
 					),
 				{concurrency: 'unbounded'}
 			)
@@ -886,9 +892,9 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 		})
 
-		const reviewDiffs = Effect.fn('GitReview.reviewDiffs')(function* (target: GitReviewTarget, filePath?: string) {
+		const reviewDiffs = Effect.fn('GitReview.reviewDiffs')(function* (target: GitReviewTarget) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd, target: target._tag})
-			if (target._tag === 'changes') return yield* withFileContent({diffs: yield* worktreeDiffs, filePath, target})
+			if (target._tag === 'changes') return yield* withFileContent({diffs: yield* worktreeDiffs, target})
 
 			if (target._tag === 'commit') {
 				const id = `${target.hash}^->${target.hash}`
@@ -896,7 +902,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				const diffsWithSegments = withDisplayedPatchSegments(diffs, id, 'commit')
 				yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
 
-				return yield* withFileContent({diffs: diffsWithSegments, filePath, target})
+				return yield* withFileContent({diffs: diffsWithSegments, target})
 			}
 
 			const base = target._tag === 'local' ? yield* localBase() : yield* branchDiffBase()
@@ -904,7 +910,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const diffsWithSegments = withDisplayedPatchSegments(diffs, `${base}->worktree`, 'worktree')
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
 
-			return yield* withFileContent({diffs: diffsWithSegments, filePath, target})
+			return yield* withFileContent({diffs: diffsWithSegments, target})
 		})
 
 		const ghString = Effect.fn('gh.string')(function* (args: readonly string[]) {
@@ -1011,17 +1017,15 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 		const pushableCommitCount = Effect.fn('GitReview.pushableCommitCount')(function* () {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
-			const branch = yield* currentBranch
-			const remoteBranch = `origin/${branch}`
-			const hasRemoteBranch = yield* pipe(
-				git.string(config.cwd, ['rev-parse', '--verify', remoteBranch]),
-				Effect.as(true),
-				Effect.orElseSucceed(() => false)
+			const upstream = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+				Effect.map(flow(String.trim, Option.some)),
+				Effect.orElseSucceed(() => Option.none<string>())
 			)
 
-			if (hasRemoteBranch) {
+			if (Option.isSome(upstream)) {
 				return yield* pipe(
-					git.string(config.cwd, ['rev-list', '--count', `${remoteBranch}..HEAD`]),
+					git.string(config.cwd, ['rev-list', '--count', `${upstream.value}..HEAD`]),
 					Effect.map(
 						flow(
 							String.trim,
@@ -1058,15 +1062,13 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 		)
 
 		const localBase = Effect.fn('GitReview.localBase')(function* () {
-			const branch = yield* currentBranch
-			const remoteBranch = `origin/${branch}`
-			const hasRemoteBranch = yield* pipe(
-				git.string(config.cwd, ['rev-parse', '--verify', remoteBranch]),
-				Effect.as(true),
-				Effect.orElseSucceed(() => false)
+			const upstream = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+				Effect.map(flow(String.trim, Option.some)),
+				Effect.orElseSucceed(() => Option.none<string>())
 			)
 
-			if (hasRemoteBranch) return remoteBranch
+			if (Option.isSome(upstream)) return upstream.value
 
 			const defaultBranch = yield* defaultBranchName
 			const base = yield* branchBase(defaultBranch)
@@ -1220,9 +1222,9 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				prReviewThreads,
 				Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitHubReviewThread>()))
 			),
-			watchReviewDiffs: (target: GitReviewTarget, filePath?: string) => {
+			watchReviewDiffs: (target: GitReviewTarget) => {
 				const diffs = pipe(
-					reviewDiffs(target, filePath),
+					reviewDiffs(target),
 					Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitDiff>()))
 				)
 				if (target._tag === 'commit') return Stream.fromEffect(diffs)
@@ -1336,17 +1338,15 @@ export class GitCommitAction extends Context.Service<GitCommitAction>()('@deslop
 		)
 		const pushableCommitCount = Effect.fn('GitCommitAction.pushableCommitCount')(function* () {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
-			const branch = yield* currentBranch
-			const remoteBranch = `origin/${branch}`
-			const hasRemoteBranch = yield* pipe(
-				git.string(config.cwd, ['rev-parse', '--verify', remoteBranch]),
-				Effect.as(true),
-				Effect.orElseSucceed(() => false)
+			const upstream = yield* pipe(
+				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
+				Effect.map(flow(String.trim, Option.some)),
+				Effect.orElseSucceed(() => Option.none<string>())
 			)
 
-			if (hasRemoteBranch) {
+			if (Option.isSome(upstream)) {
 				return yield* pipe(
-					git.string(config.cwd, ['rev-list', '--count', `${remoteBranch}..HEAD`]),
+					git.string(config.cwd, ['rev-list', '--count', `${upstream.value}..HEAD`]),
 					Effect.map(
 						flow(
 							String.trim,

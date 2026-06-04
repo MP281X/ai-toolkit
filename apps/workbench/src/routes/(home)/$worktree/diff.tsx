@@ -235,6 +235,14 @@ function groupCommentsByFile<Comment extends {readonly filePath: string}>(commen
 	)
 }
 
+async function copyReviewComments(commentsToCopy: readonly DisplayComment[]) {
+	try {
+		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
+	} catch {
+		toast.error('Failed to copy comments.')
+	}
+}
+
 function DiffPage() {
 	const params = Route.useParams()
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
@@ -336,7 +344,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			Option.map(gitReviewMarksForDiff),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
-		if (!Array.isReadonlyArrayEmpty(marks)) markFileReviewed(marks)
+		if (!Array.isReadonlyArrayEmpty(marks)) void markFileReviewed(marks)
 	}
 
 	function selectTarget(target: GitReviewTarget) {
@@ -353,83 +361,48 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		refreshGithubThreads()
 	}
 
-	function markFileReviewed(marks: readonly GitReviewMark[]) {
-		void (async () => {
-			try {
-				await markReviewed({payload: {cwd: input.cwd, marks}})
-			} catch {
-				toast.error('Failed to mark file reviewed.')
-			}
-		})()
+	async function markFileReviewed(marks: readonly GitReviewMark[]) {
+		try {
+			await markReviewed({payload: {cwd: input.cwd, marks}})
+		} catch {
+			toast.error('Failed to mark file reviewed.')
+		}
 	}
 
-	function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
-		void (async () => {
-			try {
-				await unmarkReviewed({payload: {cwd: input.cwd, marks}})
-			} catch {
-				toast.error('Failed to unmark file reviewed.')
-			}
-		})()
+	async function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
+		try {
+			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
+		} catch {
+			toast.error('Failed to unmark file reviewed.')
+		}
 	}
 
-	function saveQueuedComment(comment: QueuedComment) {
-		void (async () => {
-			try {
-				await saveComment({payload: {comment, cwd: input.cwd}})
-			} catch {
-				toast.error('Failed to save comment.')
-			}
-		})()
+	async function saveQueuedComment(comment: QueuedComment) {
+		try {
+			await saveComment({payload: {comment, cwd: input.cwd}})
+		} catch {
+			toast.error('Failed to save comment.')
+		}
 	}
 
-	function resolveReviewComment(comment: DisplayComment) {
-		void (async () => {
-			try {
-				await resolveComment({comment, key: gitReviewCommentKey(comment)})
-				if (comment.source === 'github') refreshGithubThreads()
-			} catch {
-				toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
-			}
-		})()
+	async function resolveReviewComment(comment: DisplayComment) {
+		try {
+			await resolveComment({comment, key: gitReviewCommentKey(comment)})
+			if (comment.source === 'github') refreshGithubThreads()
+		} catch {
+			toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
+		}
 	}
 
-	function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
-		void (async () => {
-			try {
-				await resolveComments(commentsToResolve)
-				refreshGithubThreads()
-			} catch {
-				toast.error('Failed to resolve comment.')
-			}
-		})()
+	async function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
+		try {
+			await resolveComments(commentsToResolve)
+			refreshGithubThreads()
+		} catch {
+			toast.error('Failed to resolve comment.')
+		}
 	}
 
-	function copyResolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
-		void (async () => {
-			try {
-				await navigator.clipboard.writeText(
-					pipe(
-						Array.map(commentsToResolve, resolveInput => resolveInput.comment),
-						Array.map(formatCopiedComment),
-						Array.join('\n\n')
-					)
-				)
-				await resolveComments(commentsToResolve)
-				refreshGithubThreads()
-			} catch {
-				toast.error('Failed to copy and resolve comments.')
-			}
-		})()
-	}
-
-	useHotkey(
-		{key: 'C', shift: true},
-		() => {
-			copyResolveReviewComments(unresolvedCommentInputs)
-		},
-		{enabled: !Array.isReadonlyArrayEmpty(unresolvedComments), preventDefault: true}
-	)
 	useHotkey({key: '?', shift: true}, () => {
 		shortcutsOpenState[1](true)
 	})
@@ -445,10 +418,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
 							<kbd className="border px-1.5 py-0.5 text-center">?</kbd>
 							<span>Show shortcuts</span>
-						</div>
-						<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-3">
-							<kbd className="border px-1.5 py-0.5 text-center">Shift+C</kbd>
-							<span>Copy all comments</span>
 						</div>
 					</div>
 				</DialogContent>
@@ -470,8 +439,12 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										<DiffList
 											diffs={reviewDiffsValue}
 											marks={validReviewMarks}
-											markReviewed={markFileReviewed}
-											unmarkReviewed={unmarkFileReviewed}
+											markReviewed={marks => {
+												void markFileReviewed(marks)
+											}}
+											unmarkReviewed={marks => {
+												void unmarkFileReviewed(marks)
+											}}
 											selectedEntry={selectedEntry}
 											openReviewEntry={openFile}
 										/>
@@ -521,7 +494,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {
-											saveQueuedComment({
+											void saveQueuedComment({
 												body: comment.body,
 												filePath: comment.filePath,
 												lineNumber: comment.lineNumber,
@@ -530,7 +503,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											})
 										}}
 										onResolveComment={comment => {
-											resolveReviewComment({
+											void resolveReviewComment({
 												...comment,
 												resolved: comment.resolved === true,
 												source: comment.source ?? 'local'
@@ -577,14 +550,12 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										size="icon-sm"
 										aria-label="Copy all comments"
 										title="Copy all comments"
-										disabled={
-											commentResolutionState.resolvingAll ? true : Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
-										}
+										disabled={Array.isReadonlyArrayEmpty(unresolvedComments)}
 										onClick={() => {
-											copyResolveReviewComments(unresolvedCommentInputs)
+											void copyReviewComments(unresolvedComments)
 										}}
 									>
-										{commentResolutionState.resolvingAll ? <Loader2Icon className="animate-spin" /> : <CopyIcon />}
+										<CopyIcon />
 									</Button>
 									<Button
 										type="button"
@@ -596,7 +567,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											commentResolutionState.resolvingAll ? true : Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
 										}
 										onClick={() => {
-											resolveReviewComments(unresolvedCommentInputs)
+											void resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
 										{commentResolutionState.resolvingAll ? (

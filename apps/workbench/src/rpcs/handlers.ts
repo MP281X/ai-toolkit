@@ -343,7 +343,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewDiffs(payload.target, payload.filePath))
+						Effect.map(review => review.watchReviewDiffs(payload.target))
 					)
 				),
 			'review.githubThreads': payload =>

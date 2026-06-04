@@ -398,11 +398,9 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
-	function startAgent(profile: (typeof agentProfiles)[number]) {
-		void (async () => {
-			const session = await create({payload: {...profile, cwd: input.cwd}})
-			input.selectAgent(input.cwd, session.uuid)
-		})()
+	async function startAgent(profile: (typeof agentProfiles)[number]) {
+		const session = await create({payload: {...profile, cwd: input.cwd}})
+		input.selectAgent(input.cwd, session.uuid)
 	}
 
 	function stopAgent(session: AgentSession) {
@@ -429,7 +427,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 										className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
 										onClick={event => {
 											event.stopPropagation()
-											startAgent(profile)
+											void startAgent(profile)
 										}}
 										title={`Start ${profile.label}`}
 									>
@@ -500,9 +498,15 @@ function WorktreeManager(input: {
 			Option.getOrUndefined
 		) ?? input.activeProject
 	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
+	const localBranchNames = pipe(
+		branchSnapshot.value.branches,
+		Array.filter(candidate => candidate.type === 'local'),
+		Array.map(candidate => candidate.name)
+	)
 	const availableBranches = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => String.isNonEmpty(candidate.name)),
+		Array.filter(candidate => candidate.type === 'local' || !Array.contains(localBranchNames, candidate.name)),
 		Array.dedupeWith(
 			(left, right) => left.name === right.name && left.type === right.type && left.remote === right.remote
 		),
@@ -612,7 +616,13 @@ function WorktreeManager(input: {
 						onKeyDown={event => {
 							if (event.key === 'Enter' && String.isNonEmpty(branchState[0]) && createWorktreeProject) {
 								event.preventDefault()
-								void createFastWorktree()
+								void createFastWorktree(
+									pipe(
+										availableBranches,
+										Array.findFirst(candidate => candidate.name === branchState[0]),
+										Option.getOrUndefined
+									)
+								)
 							}
 						}}
 					/>

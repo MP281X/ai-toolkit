@@ -88,7 +88,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('review.diffs', {
 		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.optional(Schema.String), target: GitReviewTarget}),
+		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget}),
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),

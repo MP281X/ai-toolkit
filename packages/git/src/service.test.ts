@@ -408,14 +408,15 @@ describe('@deslop/git service', () => {
 			try {
 				const commitDiffs = await runReview(
 					root,
-					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: 'commit'}, 'file-1.txt'))
+					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: 'commit'}))
 				)
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
 				expect(commitDiffs[0]?.fileContent).toBe('commit file content\n')
-				expect(commands).toHaveLength(2)
+				expect(commands).toHaveLength(81)
 				expect(commands[0]).toContain(' diff-tree ')
 				expect(commands[1]).toContain(' show commit:file-1.txt')
+				expect(commands.at(-1)).toContain(' show commit:file-80.txt')
 			} finally {
 				process.env['PATH'] = originalPath
 			}
@@ -463,6 +464,53 @@ describe('@deslop/git service', () => {
 			} finally {
 				process.env['PATH'] = originalPath
 			}
+		})
+	})
+
+	it('builds local review diffs from the configured upstream', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			const upstream = join(root, 'upstream.git')
+			git(root, ['init', '--bare', upstream])
+			git(fixture.repo, ['remote', 'add', 'upstream', upstream])
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'upstream.txt'), 'upstream\n')
+			git(fixture.repo, ['add', 'upstream.txt'])
+			git(fixture.repo, ['commit', '-m', 'upstream change'])
+			git(fixture.repo, ['push', '-u', 'upstream', 'feature'])
+			writeFileSync(join(fixture.repo, 'local.txt'), 'local\n')
+			git(fixture.repo, ['add', 'local.txt'])
+			git(fixture.repo, ['commit', '-m', 'local change'])
+
+			const localDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'local'}))
+			)
+
+			expect(localDiffs.map(diff => diff.filePath)).toEqual(['local.txt'])
+		})
+	})
+
+	it('builds selected merge commit review diffs against the first parent', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(root)
+			git(repo, ['switch', '-c', 'side'])
+			writeFileSync(join(repo, 'side.txt'), 'side\n')
+			git(repo, ['add', 'side.txt'])
+			git(repo, ['commit', '-m', 'side change'])
+			git(repo, ['switch', 'main'])
+			writeFileSync(join(repo, 'main.txt'), 'main\n')
+			git(repo, ['add', 'main.txt'])
+			git(repo, ['commit', '-m', 'main change'])
+			git(repo, ['merge', '--no-ff', 'side', '-m', 'merge side'])
+			const merge = git(repo, ['rev-parse', 'HEAD']).trim()
+
+			const diffs = await runReview(
+				repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: merge}))
+			)
+
+			expect(diffs.map(diff => diff.filePath)).toEqual(['side.txt'])
 		})
 	})
 
