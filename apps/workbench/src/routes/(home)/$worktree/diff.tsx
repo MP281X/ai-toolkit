@@ -12,13 +12,15 @@ import {activeHomeAtom} from '#lib/state.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	CheckIcon,
+	CircleCheckIcon,
 	CopyIcon,
 	ExternalLinkIcon,
 	FileIcon,
 	FolderIcon,
 	GitPullRequestArrowIcon,
 	Loader2Icon,
-	MinusIcon
+	MinusIcon,
+	UploadIcon
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
@@ -695,7 +697,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
-										{commentResolutionState.resolvingAll ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
+										{commentResolutionState.resolvingAll ? (
+											<Loader2Icon className="animate-spin" />
+										) : (
+											<CircleCheckIcon />
+										)}
 									</Button>
 								</div>
 							</footer>
@@ -766,7 +772,7 @@ function CommitActionForm(input: {
 						disabled={commitDisabled}
 						title="Commit"
 					>
-						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
+						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>
@@ -782,7 +788,7 @@ function CommitActionForm(input: {
 						void submitPush()
 					}}
 				>
-					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
+					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
 				</Button>
 				<Button
 					type="button"
@@ -824,12 +830,12 @@ function CommitList(input: {
 						input.selectScope(target)
 					}}
 					className={cn(
-						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
+						'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
 						selected && 'bg-primary/15 text-primary'
 					)}
 				>
 					<span className="min-w-0 truncate">{label}</span>
-					<span className="text-muted-foreground min-w-0 truncate text-right">{detail}</span>
+					<span className="min-w-0 truncate text-right opacity-70">{detail}</span>
 				</button>
 			</li>
 		)
@@ -862,23 +868,13 @@ function CommitList(input: {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
-				<TreeExplorerSection label="Review" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-					{renderScope({_tag: 'changes'}, 'Changes', 'worktree')}
-					{showLocal && renderScope({_tag: 'local'}, 'Local', `${Array.length(input.localCommits)}`)}
-					{showLocal && !Array.isReadonlyArrayEmpty(input.localCommits) && (
-						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-							{Array.map(input.localCommits, renderCommit)}
-						</ul>
-					)}
-					{showBranch && renderScope({_tag: 'branch'}, 'Branch', `${Array.length(input.branchCommits)}`)}
-					{showBranch && !Array.isReadonlyArrayEmpty(input.branchCommits) && (
-						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-							{Array.map(input.branchCommits, renderCommit)}
-						</ul>
-					)}
-				</TreeExplorerSection>
-			</TreeExplorer>
+			<ul className="min-h-0 flex-1 overflow-y-auto py-1">
+				{renderScope({_tag: 'changes'}, 'Changes', 'worktree')}
+				{showLocal && renderScope({_tag: 'local'}, 'Local', `${Array.length(input.localCommits)}`)}
+				{Array.map(input.localCommits, renderCommit)}
+				{showBranch && renderScope({_tag: 'branch'}, 'Branch', `${Array.length(input.branchCommits)}`)}
+				{Array.map(input.branchCommits, renderCommit)}
+			</ul>
 		</div>
 	)
 }
@@ -1029,7 +1025,7 @@ function DiffList(input: {
 
 	return (
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
-			<TreeExplorerSection label="Changed files" className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+			<TreeExplorerSection className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
 				{Array.isReadonlyArrayEmpty(input.diffs) ? (
 					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2">No changed files.</li>
 				) : (

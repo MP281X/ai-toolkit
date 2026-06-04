@@ -4,7 +4,7 @@ import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
-import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
+import {CircleCheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {GithubLight} from '../ui/svgs/githubLight.tsx'
@@ -293,7 +293,7 @@ function CommentAnnotation(props: {
 						{props.comment.resolving === true ? (
 							<Loader2Icon className="size-3 animate-spin" />
 						) : (
-							<CheckIcon className="size-3" />
+							<CircleCheckIcon className="size-3" />
 						)}
 					</button>
 				)}
