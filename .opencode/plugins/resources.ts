@@ -1,10 +1,9 @@
 import {NodeServices} from '@effect/platform-node'
 
-import {Effect} from 'effect'
+import {Effect, pipe} from 'effect'
 
 import type {Plugin} from '@opencode-ai/plugin'
-
-import {GitWorkspace} from '@deslop/git/service'
+import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 export const plugin = (context => {
 	void Effect.runPromise(
@@ -32,8 +31,12 @@ export const plugin = (context => {
 				{name: 'localterm', url: 'https://github.com/millionco/localterm.git'}
 			],
 			Effect.fnUntraced(function* (resource) {
-				yield* GitWorkspace.use(git =>
-					git.clone({cwd: process.cwd(), directory: `.opencode/resources/${resource.name}`, url: resource.url})
+				const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
+				const directory = `.opencode/resources/${resource.name}`
+
+				yield* pipe(
+					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', resource.url, directory])),
+					Effect.catch(() => execString(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only'])))
 				)
 				yield* Effect.promise(async () => {
 					await context.client.tui.showToast({
@@ -53,7 +56,6 @@ export const plugin = (context => {
 					await context.client.tui.showToast({body: {message: JSON.stringify(message), variant: 'error'}})
 				})
 			),
-			Effect.provide(GitWorkspace.layer),
 			Effect.provide(NodeServices.layer)
 		)
 	)

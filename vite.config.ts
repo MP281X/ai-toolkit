@@ -194,5 +194,6 @@ export default defineConfig({
 			'vite-plus/prefer-vite-plus-imports': 'error'
 		},
 		settings: {react: {version: '19.0'}}
-	}
+	},
+	test: {environment: 'node', include: ['packages/*/src/**/*.test.ts'], pool: 'forks'}
 })

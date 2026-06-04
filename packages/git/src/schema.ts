@@ -1,4 +1,4 @@
-import {Schema} from 'effect'
+import {Array, Schema} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
@@ -22,34 +22,42 @@ export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 	status: GitDiffStatus
 }) {}
 
-export type GitReviewFrom = typeof GitReviewFrom.Type
-export const GitReviewFrom = Schema.Union([
-	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
-	Schema.Struct({base: Schema.String, type: Schema.Literal('merge-base')})
-])
-
-export type GitReviewTo = typeof GitReviewTo.Type
-export const GitReviewTo = Schema.Union([
-	Schema.Struct({ref: Schema.String, type: Schema.Literal('ref')}),
-	Schema.Struct({type: Schema.Literal('worktree')})
+export type GitReviewTarget = typeof GitReviewTarget.Type
+export const GitReviewTarget = Schema.Union([
+	Schema.Struct({_tag: Schema.Literal('head')}),
+	Schema.Struct({_tag: Schema.Literal('commit'), hash: Schema.String})
 ])
 
 export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 	hash: Schema.String,
-	parents: Schema.Array(Schema.String),
 	shortHash: Schema.String,
-	subject: Schema.String,
-	wip: Schema.Boolean
+	subject: Schema.String
 }) {}
 
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
-	base: Schema.String,
-	branch: Schema.String,
 	commits: Schema.Array(GitCommit),
-	defaultBranch: Schema.String,
 	dirty: Schema.Boolean,
 	prUrl: Schema.optional(Schema.String),
 	unpushedCommits: Schema.Boolean
+}) {}
+
+export class GitReviewMark extends Schema.Class<GitReviewMark>('GitReviewMark')({
+	filePath: Schema.String,
+	fingerprint: Schema.String,
+	segmentId: Schema.String
+}) {}
+
+export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewComment')({
+	body: Schema.String,
+	filePath: Schema.String,
+	lineNumber: Schema.Number,
+	resolved: Schema.Boolean,
+	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
+}) {}
+
+export class GitReviewState extends Schema.Class<GitReviewState>('GitReviewState')({
+	comments: Schema.Array(GitReviewComment),
+	marks: Schema.Array(GitReviewMark)
 }) {}
 
 export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHubReviewThread')({
@@ -126,3 +134,83 @@ export class GitProject extends Schema.Class<GitProject>('GitProject')({
 	repository: GitRepository,
 	worktrees: Schema.Array(GitWorktree)
 }) {}
+
+export function gitReviewCommentKey(input: {
+	readonly filePath: string
+	readonly lineNumber: number
+	readonly side?: 'additions' | 'deletions'
+}) {
+	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
+}
+
+export function gitReviewMarkKey(input: {
+	readonly filePath: string
+	readonly fingerprint: string
+	readonly segmentId: string
+}) {
+	return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
+}
+
+export function gitReviewMarksForDiff(diff: GitDiff) {
+	return Array.map(diff.segments, segment => ({
+		filePath: segment.filePath,
+		fingerprint: segment.fingerprint,
+		segmentId: segment.id
+	}))
+}
+
+export function gitReviewStateForMarks(segments: readonly GitReviewMark[], reviewedKeys: ReadonlySet<string>) {
+	const reviewed = Array.filter(segments, segment => reviewedKeys.has(gitReviewMarkKey(segment)))
+
+	if (Array.isReadonlyArrayEmpty(segments) || Array.isReadonlyArrayEmpty(reviewed)) return 'unchecked' as const
+	if (Array.length(reviewed) === Array.length(segments)) return 'checked' as const
+
+	return 'indeterminate' as const
+}
+
+export function gitReviewStateSaveComment(state: GitReviewState, comment: GitReviewComment) {
+	const key = gitReviewCommentKey(comment)
+
+	return new GitReviewState({
+		comments: Array.append(
+			Array.filter(state.comments, currentComment => gitReviewCommentKey(currentComment) !== key),
+			new GitReviewComment({...comment, resolved: false})
+		),
+		marks: state.marks
+	})
+}
+
+export function gitReviewStateResolveComment(
+	state: GitReviewState,
+	input: {readonly filePath: string; readonly lineNumber: number; readonly side?: 'additions' | 'deletions'}
+) {
+	const key = gitReviewCommentKey(input)
+
+	return new GitReviewState({
+		comments: Array.map(state.comments, comment =>
+			gitReviewCommentKey(comment) === key ? new GitReviewComment({...comment, resolved: true}) : comment
+		),
+		marks: state.marks
+	})
+}
+
+export function gitReviewStateMark(state: GitReviewState, marks: readonly GitReviewMark[]) {
+	const keys = new Set(Array.map(marks, gitReviewMarkKey))
+
+	return new GitReviewState({
+		comments: state.comments,
+		marks: Array.appendAll(
+			Array.filter(state.marks, mark => !keys.has(gitReviewMarkKey(mark))),
+			marks
+		)
+	})
+}
+
+export function gitReviewStateUnmark(state: GitReviewState, marks: readonly GitReviewMark[]) {
+	const keys = new Set(Array.map(marks, gitReviewMarkKey))
+
+	return new GitReviewState({
+		comments: state.comments,
+		marks: Array.filter(state.marks, mark => !keys.has(gitReviewMarkKey(mark)))
+	})
+}

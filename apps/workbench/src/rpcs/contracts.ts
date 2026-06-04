@@ -8,9 +8,11 @@ import {
 	GitError,
 	GitHubReviewThread,
 	GitProject,
-	GitReviewFrom,
+	GitReviewComment,
+	GitReviewMark,
 	GitReviewMetadata,
-	GitReviewTo
+	GitReviewState,
+	GitReviewTarget
 } from '@deslop/git/schema'
 import {TerminalError, TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
 
@@ -48,25 +50,6 @@ export const AgentSession = Schema.Struct({
 })
 export type AgentSession = typeof AgentSession.Type
 
-export class ReviewMark extends Schema.Class<ReviewMark>('ReviewMark')({
-	filePath: Schema.String,
-	fingerprint: Schema.String,
-	segmentId: Schema.String
-}) {}
-
-export class ReviewComment extends Schema.Class<ReviewComment>('ReviewComment')({
-	body: Schema.String,
-	filePath: Schema.String,
-	lineNumber: Schema.Number,
-	resolved: Schema.optional(Schema.Boolean),
-	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
-}) {}
-
-export class ReviewState extends Schema.Class<ReviewState>('ReviewState')({
-	comments: Schema.Array(ReviewComment),
-	marks: Schema.Array(ReviewMark)
-}) {}
-
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agents.create', {
 		error: TerminalError,
@@ -94,50 +77,45 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('review.metadata', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.optional(Schema.String), cwd: Schema.String}),
+		payload: Schema.Struct({cwd: Schema.String}),
 		success: GitReviewMetadata
 	}),
-	Rpc.make('review.watchRange', {
+	Rpc.make('review.diffs', {
 		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, from: GitReviewFrom, to: GitReviewTo}),
+		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget}),
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),
 	Rpc.make('review.state.watch', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String}),
+		payload: Schema.Struct({cwd: Schema.String}),
 		stream: true,
-		success: ReviewState
+		success: GitReviewState
 	}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.state.unmark', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, marks: Schema.Array(ReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.String, comment: ReviewComment, cwd: Schema.String})
+		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
 	}),
 	Rpc.make('review.comments.resolve', {
 		error: GitError,
 		payload: Schema.Struct({
-			base: Schema.String,
 			cwd: Schema.String,
 			filePath: Schema.String,
 			lineNumber: Schema.Number,
 			side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 		})
 	}),
-	Rpc.make('review.createWipCommit', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, message: Schema.String})
-	}),
 	Rpc.make('review.commitAndPush', {
 		error: GitError,
-		payload: Schema.Struct({base: Schema.String, cwd: Schema.String, message: Schema.String})
+		payload: Schema.Struct({cwd: Schema.String, message: Schema.String})
 	}),
 	Rpc.make('review.githubThreads', {
 		error: GitError,
@@ -148,32 +126,12 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, threadId: Schema.String})
 	}),
-	Rpc.make('review.stageFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
-	}),
-	Rpc.make('review.unstageFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
-	}),
-	Rpc.make('review.discardFile', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String})
-	}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
-		payload: Schema.Struct({
-			baseBranch: Schema.String,
-			branch: Schema.String,
-			cwd: Schema.String,
-			mode: Schema.Literals(['existing-local', 'existing-remote', 'new-local'])
-		}),
+		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String}),
 		success: Schema.String
 	}),
-	Rpc.make('projects.deleteWorktree', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, force: Schema.Boolean})
-	}),
+	Rpc.make('projects.deleteWorktree', {error: GitError, payload: Schema.Struct({cwd: Schema.String})}),
 	Rpc.make('runs.portless', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String}),
