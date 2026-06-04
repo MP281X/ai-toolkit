@@ -41,10 +41,7 @@ import {
 	gitReviewCommentKey,
 	gitReviewMarkKey,
 	gitReviewMarksForDiff,
-	gitReviewStateForMarks,
-	gitReviewStateMark,
-	gitReviewStateSaveComment,
-	gitReviewStateUnmark
+	gitReviewStateForMarks
 } from '@deslop/git/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/diff')({
@@ -86,34 +83,6 @@ const reviewDiffsAtom = Atom.family((key: string) => {
 	)
 })
 
-const fullFileContentAtom = Atom.family((key: string) => {
-	const parts = key.split('\u0000')
-	const cwd = parts[0] ?? ''
-	const tag = parts[1]
-	const hash = parts[2]
-	const filePath = parts[3] ?? ''
-
-	if (String.isEmpty(filePath)) return Atom.make(() => Effect.succeed(null))
-
-	return RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client =>
-				client('review.diffs', {cwd, filePath, target: targetFromKey(tag ?? 'changes', hash ?? '')})
-			),
-			Stream.unwrap,
-			Stream.map(diffs =>
-				pipe(
-					diffs,
-					Array.findFirst(diff => diff.filePath === filePath),
-					Option.flatMap(diff => Option.fromUndefinedOr(diff.fileContent)),
-					Option.getOrNull
-				)
-			)
-		)
-	)
-})
-
 const reviewStateAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
 		pipe(
@@ -147,44 +116,6 @@ const emptyReviewState = new GitReviewState({comments: Array.empty(), marks: Arr
 
 const reviewStateValueAtom = Atom.family((cwd: string) =>
 	Atom.map(reviewStateAtom(cwd), result => (result._tag === 'Success' ? result.value : emptyReviewState))
-)
-
-const optimisticReviewStateAtom = Atom.family((cwd: string) => Atom.optimistic(reviewStateValueAtom(cwd)))
-
-const saveQueuedCommentAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(optimisticReviewStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<QueuedComment>()(
-			Effect.fn('DiffPage.saveQueuedComment')(function* (comment) {
-				const client = yield* RpcClient
-				return yield* client('review.comments.save', {comment, cwd})
-			})
-		),
-		reducer: (state, comment: QueuedComment) => gitReviewStateSaveComment(state, comment)
-	})
-)
-
-const markReviewedAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(optimisticReviewStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<readonly GitReviewMark[]>()(
-			Effect.fn('DiffPage.markReviewed')(function* (marks) {
-				const client = yield* RpcClient
-				return yield* client('review.state.mark', {cwd, marks})
-			})
-		),
-		reducer: (state, marks: readonly GitReviewMark[]) => gitReviewStateMark(state, marks)
-	})
-)
-
-const unmarkReviewedAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(optimisticReviewStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<readonly GitReviewMark[]>()(
-			Effect.fn('DiffPage.unmarkReviewed')(function* (marks) {
-				const client = yield* RpcClient
-				return yield* client('review.state.unmark', {cwd, marks})
-			})
-		),
-		reducer: (state, marks: readonly GitReviewMark[]) => gitReviewStateUnmark(state, marks)
-	})
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
@@ -317,7 +248,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
 	const githubThreadsResult = useAtomValue(githubThreadsAtom(input.cwd))
-	const reviewStateValue = useAtomValue(optimisticReviewStateAtom(input.cwd))
+	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const comments = reviewStateValue.comments
 	const githubThreadsLoaded = githubThreadsResult._tag === 'Success'
 	const githubThreads = githubThreadsLoaded ? githubThreadsResult.value : Array.empty<GitHubReviewThread>()
@@ -332,15 +263,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const reviewTarget: GitReviewTarget = selectedCommit
 		? {_tag: 'commit', hash: selectedCommit.hash}
 		: selectedScopeState[0]
-	const fullFilePathState = useState('')
 	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
-	const fullFileContent = useAtomValue(
-		fullFileContentAtom(
-			reviewTarget._tag === 'commit'
-				? `${input.cwd}\u0000commit\u0000${reviewTarget.hash}\u0000${fullFilePathState[0]}`
-				: `${input.cwd}\u0000${reviewTarget._tag}\u0000\u0000${fullFilePathState[0]}`
-		)
-	)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
@@ -356,13 +279,12 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshGithubThreads = useAtomRefresh(githubThreadsAtom(input.cwd))
-	const saveComment = useAtomSet(saveQueuedCommentAtom(input.cwd), {mode: 'promise'})
+	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
 	const resolveComments = useAtomSet(resolveCommentsActionAtom(input.cwd), {mode: 'promise'})
 	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
-	const markReviewed = useAtomSet(markReviewedAtom(input.cwd), {mode: 'promise'})
-	const unmarkReviewed = useAtomSet(unmarkReviewedAtom(input.cwd), {mode: 'promise'})
-	const reviewedMarkKeysState = useState<ReadonlySet<string>>(new Set())
+	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
+	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
 	const effectiveComments: readonly DisplayComment[] = Array.appendAll(
 		Array.map(comments, comment => ({
 			...comment,
@@ -408,7 +330,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function openFile(filePath: string) {
 		selectedFilePathState[1](filePath)
-		fullFilePathState[1]('')
 		const marks = pipe(
 			reviewDiffsValue,
 			Array.findFirst(diff => diff.filePath === filePath),
@@ -423,7 +344,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
 		})
 		if (target._tag !== 'commit') selectedScopeState[1](target)
-		fullFilePathState[1]('')
 		selectedFilePathState[1]('')
 	}
 
@@ -435,34 +355,20 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function markFileReviewed(marks: readonly GitReviewMark[]) {
 		void (async () => {
-			reviewedMarkKeysState[1](current => new Set([...current, ...Array.map(marks, gitReviewMarkKey)]))
 			try {
-				await markReviewed(marks)
+				await markReviewed({payload: {cwd: input.cwd, marks}})
 			} catch {
 				toast.error('Failed to mark file reviewed.')
-			} finally {
-				reviewedMarkKeysState[1](current => {
-					const next = new Set(current)
-					for (const mark of marks) next.delete(gitReviewMarkKey(mark))
-					return next
-				})
 			}
 		})()
 	}
 
 	function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
 		void (async () => {
-			reviewedMarkKeysState[1](current => new Set([...current, ...Array.map(marks, gitReviewMarkKey)]))
 			try {
-				await unmarkReviewed(marks)
+				await unmarkReviewed({payload: {cwd: input.cwd, marks}})
 			} catch {
 				toast.error('Failed to unmark file reviewed.')
-			} finally {
-				reviewedMarkKeysState[1](current => {
-					const next = new Set(current)
-					for (const mark of marks) next.delete(gitReviewMarkKey(mark))
-					return next
-				})
 			}
 		})()
 	}
@@ -470,7 +376,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	function saveQueuedComment(comment: QueuedComment) {
 		void (async () => {
 			try {
-				await saveComment(comment)
+				await saveComment({payload: {comment, cwd: input.cwd}})
 			} catch {
 				toast.error('Failed to save comment.')
 			}
@@ -566,7 +472,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											marks={validReviewMarks}
 											markReviewed={markFileReviewed}
 											unmarkReviewed={unmarkFileReviewed}
-											pendingMarkKeys={reviewedMarkKeysState[0]}
 											selectedEntry={selectedEntry}
 											openReviewEntry={openFile}
 										/>
@@ -612,10 +517,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								<div className="h-full min-h-0 min-w-0">
 									<PatchDiff
 										filePath={selectedEntry.filePath}
-										fileContent={fullFileContent._tag === 'Success' ? (fullFileContent.value ?? undefined) : undefined}
-										loadFile={() => {
-											fullFilePathState[1](selectedEntry.filePath)
-										}}
+										fileContent={selectedEntry.fileContent}
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {
@@ -936,7 +838,6 @@ function DiffList(input: {
 	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
 	readonly marks: readonly GitReviewMark[]
 	readonly openReviewEntry: (filePath: string) => void
-	readonly pendingMarkKeys: ReadonlySet<string>
 	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
@@ -988,7 +889,6 @@ function DiffList(input: {
 
 		const marks = marksByDiff.get(node.diff.filePath) ?? Array.empty()
 		const state = gitReviewStateForMarks(marks, reviewedKeys)
-		const pending = Array.some(marks, mark => input.pendingMarkKeys.has(gitReviewMarkKey(mark)))
 
 		return (
 			<li key={node.path} className="w-full min-w-0">
@@ -998,11 +898,10 @@ function DiffList(input: {
 					actions={
 						<div className="flex items-center gap-2">
 							<ReviewCheckbox
-								loading={pending}
 								state={state}
 								onClick={event => {
 									event.stopPropagation()
-									if (pending || Array.isReadonlyArrayEmpty(marks)) return
+									if (Array.isReadonlyArrayEmpty(marks)) return
 									if (state === 'checked') {
 										input.unmarkReviewed(marks)
 									} else {
@@ -1037,7 +936,6 @@ function DiffList(input: {
 }
 
 function ReviewCheckbox(input: {
-	readonly loading: boolean
 	readonly onClick: (event: MouseEvent<HTMLButtonElement>) => void
 	readonly state: 'checked' | 'indeterminate' | 'unchecked'
 }) {
@@ -1050,12 +948,10 @@ function ReviewCheckbox(input: {
 				input.state !== 'unchecked' && 'border-primary bg-primary'
 			)}
 			role="checkbox"
-			disabled={input.loading}
 			onClick={input.onClick}
 		>
-			{input.loading ? <Loader2Icon className="size-2.5 animate-spin" /> : null}
-			{!input.loading && input.state === 'checked' && <CheckIcon className="size-2.5" />}
-			{!input.loading && input.state === 'indeterminate' && <MinusIcon className="size-2.5" />}
+			{input.state === 'checked' && <CheckIcon className="size-2.5" />}
+			{input.state === 'indeterminate' && <MinusIcon className="size-2.5" />}
 		</button>
 	)
 }

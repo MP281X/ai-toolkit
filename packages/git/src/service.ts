@@ -861,13 +861,22 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			readonly filePath?: string
 			readonly target: GitReviewTarget
 		}) {
-			if (input.filePath === undefined) return input.diffs
+			const filePaths = input.filePath === undefined ? Array.map(input.diffs, diff => diff.filePath) : [input.filePath]
+			const contents = yield* Effect.forEach(
+				filePaths,
+				filePath =>
+					pipe(
+						fileContent({filePath, target: input.target}),
+						Effect.map(content => [filePath, content] as const)
+					),
+				{concurrency: 'unbounded'}
+			)
+			const contentByFilePath = new Map(contents)
 
-			const content = yield* fileContent({filePath: input.filePath, target: input.target})
 			return Array.map(input.diffs, diff =>
-				diff.filePath === input.filePath
+				contentByFilePath.has(diff.filePath)
 					? new GitDiff({
-							fileContent: content,
+							fileContent: contentByFilePath.get(diff.filePath),
 							filePath: diff.filePath,
 							patch: diff.patch,
 							segments: diff.segments,

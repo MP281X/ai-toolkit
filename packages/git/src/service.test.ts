@@ -390,13 +390,13 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('loads selected file content through review diffs only when requested', async () => {
+	it('loads file content with review diffs', async () => {
 		await withTempRoot(async root => {
 			const repo = initRepo(root)
 			writeFileSync(join(repo, 'README.md'), 'current file content\n')
 			const changesDiffs = await runReview(
 				repo,
-				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}, 'README.md'))
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
 			)
 
 			expect(changesDiffs[0]?.fileContent).toBe('current file content\n')
@@ -440,7 +440,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('builds commit review diffs with one git command for many files', async () => {
+	it('builds commit review diffs with file content for many files', async () => {
 		await withTempRoot(async root => {
 			const fake = fakeGit(root)
 			const originalPath = process.env['PATH']
@@ -455,7 +455,8 @@ describe('@deslop/git service', () => {
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
 				expect(diffs).toHaveLength(80)
-				expect(commands).toHaveLength(1)
+				expect(diffs[0]?.fileContent).toBe('commit file content\n')
+				expect(commands).toHaveLength(81)
 				expect(commands[0]).toContain(' diff-tree ')
 				expect(commands[0]).not.toContain('-U999999')
 				expect(performance.now() - started).toBeLessThan(1_000)

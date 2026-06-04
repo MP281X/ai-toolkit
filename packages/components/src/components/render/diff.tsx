@@ -314,7 +314,6 @@ export function PatchDiff(props: {
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
 	const [draftComment, setDraftComment] = useState<DiffComment>()
-	const [focused, setFocused] = useState(false)
 	const [mode, setMode] = useState<'diff' | 'file'>('diff')
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
@@ -336,23 +335,28 @@ export function PatchDiff(props: {
 		if (restoreScrollAnchor(container, anchor, mode)) scrollAnchorRef.current = null
 	}, [mode, props.fileContent])
 
+	function toggleMode() {
+		const container = containerRef.current
+		if (Predicate.isNull(container)) return
+
+		const rect = container.getBoundingClientRect()
+		const clientY = Predicate.isNull(pointerClientYRef.current)
+			? rect.top + rect.height / 2
+			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
+		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
+		setMode(current => {
+			if (current === 'diff') props.loadFile?.()
+			return current === 'diff' ? 'file' : 'diff'
+		})
+	}
+
 	useHotkey(
 		'Tab',
-		() => {
-			const container = containerRef.current
-			if (Predicate.isNull(container)) return
-
-			const rect = container.getBoundingClientRect()
-			const clientY = Predicate.isNull(pointerClientYRef.current)
-				? rect.top + rect.height / 2
-				: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-			scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
-			setMode(current => {
-				if (current === 'diff') props.loadFile?.()
-				return current === 'diff' ? 'file' : 'diff'
-			})
+		event => {
+			event.preventDefault()
+			toggleMode()
 		},
-		{enabled: focused, preventDefault: true}
+		{preventDefault: false, target: containerRef}
 	)
 
 	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
@@ -387,12 +391,6 @@ export function PatchDiff(props: {
 			tabIndex={-1}
 			aria-label="Diff viewer"
 			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none select-text"
-			onFocusCapture={() => {
-				setFocused(true)
-			}}
-			onBlurCapture={event => {
-				if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false)
-			}}
 			onPointerMoveCapture={event => {
 				pointerClientYRef.current = event.clientY
 			}}
