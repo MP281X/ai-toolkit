@@ -16,6 +16,12 @@ import {
 } from '@deslop/git/schema'
 import {TerminalError, TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
 
+const CreateWorktreeSource = Schema.Union([
+	Schema.Struct({_tag: Schema.Literal('local')}),
+	Schema.Struct({_tag: Schema.Literal('remote'), remote: Schema.String}),
+	Schema.Struct({_tag: Schema.Literal('new')})
+])
+
 const TerminalPayload = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
@@ -126,7 +132,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
-		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String}),
+		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String, source: CreateWorktreeSource}),
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: Schema.Struct({cwd: Schema.String})}),

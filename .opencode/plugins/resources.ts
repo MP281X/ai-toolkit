@@ -1,6 +1,6 @@
 import {NodeServices} from '@effect/platform-node'
 
-import {Effect, pipe} from 'effect'
+import {Effect, FileSystem, pipe} from 'effect'
 
 import type {Plugin} from '@opencode-ai/plugin'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
@@ -32,8 +32,10 @@ export const plugin = (context => {
 			],
 			Effect.fnUntraced(function* (resource) {
 				const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
+				const fs = yield* FileSystem.FileSystem
 				const directory = `.opencode/resources/${resource.name}`
 
+				yield* fs.makeDirectory('.opencode/resources', {recursive: true})
 				yield* pipe(
 					execString(ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', resource.url, directory])),
 					Effect.catch(() => execString(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only'])))

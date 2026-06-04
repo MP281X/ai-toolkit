@@ -588,25 +588,52 @@ describe('@deslop/git service', () => {
 			git(other, ['commit', '-m', 'remote only'])
 			git(other, ['push', '-u', 'origin', 'remote-only'])
 			git(fixture.repo, ['fetch', 'origin'])
+			git(other, ['switch', '-c', 'upstream-only'])
+			writeFileSync(join(other, 'upstream.txt'), 'upstream\n')
+			git(other, ['add', 'upstream.txt'])
+			git(other, ['commit', '-m', 'upstream only'])
+			git(other, ['push', '-u', 'origin', 'upstream-only'])
+			git(fixture.repo, ['remote', 'add', 'upstream', fixture.remote])
+			git(fixture.repo, ['fetch', 'upstream'])
 			git(fixture.repo, ['branch', 'local-only'])
 
 			const localWorktree = await runWorkspace(
 				root,
-				Effect.flatMap(GitWorkspace, service => service.createWorktree({branch: 'local-only', cwd: fixture.repo}))
+				Effect.flatMap(GitWorkspace, service =>
+					service.createWorktree({branch: 'local-only', cwd: fixture.repo, source: {_tag: 'local'}})
+				)
 			)
 			const remoteWorktree = await runWorkspace(
 				root,
-				Effect.flatMap(GitWorkspace, service => service.createWorktree({branch: 'remote-only', cwd: fixture.repo}))
+				Effect.flatMap(GitWorkspace, service =>
+					service.createWorktree({branch: 'remote-only', cwd: fixture.repo, source: {_tag: 'remote', remote: 'origin'}})
+				)
+			)
+			const upstreamWorktree = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service =>
+					service.createWorktree({
+						branch: 'upstream-only',
+						cwd: fixture.repo,
+						source: {_tag: 'remote', remote: 'upstream'}
+					})
+				)
 			)
 			const newWorktree = await runWorkspace(
 				root,
-				Effect.flatMap(GitWorkspace, service => service.createWorktree({branch: 'new-local', cwd: fixture.repo}))
+				Effect.flatMap(GitWorkspace, service =>
+					service.createWorktree({branch: 'new-local', cwd: fixture.repo, source: {_tag: 'new'}})
+				)
 			)
 
 			expect(git(localWorktree, ['branch', '--show-current']).trim()).toBe('local-only')
 			expect(git(remoteWorktree, ['branch', '--show-current']).trim()).toBe('remote-only')
 			expect(git(remoteWorktree, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).trim()).toBe(
 				'origin/remote-only'
+			)
+			expect(git(upstreamWorktree, ['branch', '--show-current']).trim()).toBe('upstream-only')
+			expect(git(upstreamWorktree, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']).trim()).toBe(
+				'upstream/upstream-only'
 			)
 			expect(existsSync(newWorktree), newWorktree).toBe(true)
 			expect(git(newWorktree, ['branch', '--show-current']).trim()).toBe('new-local')

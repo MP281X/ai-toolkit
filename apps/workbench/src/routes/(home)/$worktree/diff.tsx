@@ -346,13 +346,14 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
 	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
-	const selectedEntry = String.isNonEmpty(selectedFilePathState[0])
-		? pipe(
-				reviewDiffsValue,
-				Array.findFirst(diff => diff.filePath === selectedFilePathState[0]),
-				Option.getOrUndefined
-			)
-		: undefined
+	const selectedEntry =
+		(String.isNonEmpty(selectedFilePathState[0])
+			? pipe(
+					reviewDiffsValue,
+					Array.findFirst(diff => diff.filePath === selectedFilePathState[0]),
+					Option.getOrUndefined
+				)
+			: undefined) ?? reviewDiffsValue[0]
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshGithubThreads = useAtomRefresh(githubThreadsAtom(input.cwd))
@@ -603,7 +604,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 									<Loading />
 								</div>
 							)}
-							{reviewDiffsLoaded && !selectedEntry && (
+							{reviewDiffsLoaded && Array.isReadonlyArrayEmpty(reviewDiffsValue) && (
 								<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 									No changed files.
 								</div>

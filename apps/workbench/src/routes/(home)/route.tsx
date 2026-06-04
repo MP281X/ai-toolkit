@@ -45,7 +45,7 @@ import {
 	CommandShortcut
 } from '@deslop/components/ui/command'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
-import type {GitProject} from '@deslop/git/schema'
+import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
 import {terminalStateActive} from '@deslop/terminal/schema'
 
@@ -503,7 +503,9 @@ function WorktreeManager(input: {
 	const availableBranches = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => String.isNonEmpty(candidate.name)),
-		Array.dedupeWith((left, right) => left.name === right.name),
+		Array.dedupeWith(
+			(left, right) => left.name === right.name && left.type === right.type && left.remote === right.remote
+		),
 		Array.filter(
 			candidate =>
 				!pipe(
@@ -514,13 +516,26 @@ function WorktreeManager(input: {
 				)
 		)
 	)
-	async function createFastWorktree(nextBranch = branchState[0]) {
+	async function createFastWorktree(candidate?: GitBranchSchema) {
+		const nextBranch = candidate?.name ?? branchState[0]
 		if (String.isEmpty(nextBranch) || String.isNonEmpty(creatingBranchState[0])) return
+
+		const source =
+			candidate === undefined
+				? {_tag: 'new' as const}
+				: Match.value(candidate).pipe(
+						Match.when({type: 'local'}, () => ({_tag: 'local' as const})),
+						Match.orElse(branch => ({_tag: 'remote' as const, remote: branch.remote ?? 'origin'}))
+					)
 
 		creatingBranchState[1](nextBranch)
 		try {
 			const worktreeRoot = await createWorktree({
-				payload: {branch: nextBranch, cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? ''}
+				payload: {
+					branch: nextBranch,
+					cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
+					source
+				}
 			})
 			actionsOpenState[1](false)
 			branchState[1]('')
@@ -622,7 +637,7 @@ function WorktreeManager(input: {
 											value={candidate.name}
 											onSelect={() => {
 												branchState[1](candidate.name)
-												void createFastWorktree(candidate.name)
+												void createFastWorktree(candidate)
 											}}
 										>
 											{icon}

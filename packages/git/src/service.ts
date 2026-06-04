@@ -1,3 +1,5 @@
+import * as NodeFs from 'node:fs'
+
 import {
 	Array,
 	Config,
@@ -190,6 +192,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const path = yield* Path.Path
 		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
+		const run = Effect.runForkWith(yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>())
 
 		const getDefaultBranch = Effect.fn('GitWorkspace.getDefaultBranch')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
@@ -385,12 +388,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			yield* SubscriptionRef.set(projects, yield* listProjectsFrom(home))
 		})
 		yield* refreshProjects()
-		yield* pipe(
-			fs.watch(home),
-			Stream.debounce(Duration.millis(50)),
-			Stream.runForEach(() => refreshProjects()),
-			Effect.catch(() => Effect.void),
-			Effect.forkScoped
+		yield* Effect.acquireRelease(
+			Effect.sync(() => NodeFs.watch(home, () => void run(refreshProjects()))),
+			watcher => Effect.sync(() => watcher.close())
 		)
 
 		return {
@@ -428,6 +428,10 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			createWorktree: Effect.fn('GitWorkspace.createWorktree')(function* (input: {
 				readonly branch: string
 				readonly cwd: string
+				readonly source:
+					| {readonly _tag: 'local'}
+					| {readonly _tag: 'remote'; readonly remote: string}
+					| {readonly _tag: 'new'}
 			}) {
 				yield* Effect.annotateCurrentSpan({branch: input.branch, cwd: input.cwd})
 				const targetDirectory = path.join(
@@ -439,26 +443,16 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 				yield* pipe(fs.makeDirectory(path.dirname(targetDirectory), {recursive: true}), Effect.ignore)
 
-				const localExists = yield* pipe(
-					git.string(input.cwd, ['rev-parse', '--verify', input.branch]),
-					Effect.as(true),
-					Effect.orElseSucceed(() => false)
-				)
-				if (localExists) {
+				if (input.source._tag === 'local') {
 					yield* Effect.annotateCurrentSpan({source: 'local'})
 					yield* pipe(git.string(input.cwd, ['worktree', 'add', targetDirectory, input.branch]), Effect.asVoid)
 					yield* refreshProjects()
 					return targetDirectory
 				}
 
-				const remoteBranch = `origin/${input.branch}`
-				const remoteExists = yield* pipe(
-					git.string(input.cwd, ['rev-parse', '--verify', remoteBranch]),
-					Effect.as(true),
-					Effect.orElseSucceed(() => false)
-				)
-				if (remoteExists) {
-					yield* Effect.annotateCurrentSpan({source: 'remote'})
+				if (input.source._tag === 'remote') {
+					const remoteBranch = `${input.source.remote}/${input.branch}`
+					yield* Effect.annotateCurrentSpan({remote: input.source.remote, source: 'remote'})
 					yield* pipe(
 						git.string(input.cwd, ['worktree', 'add', '-b', input.branch, targetDirectory, remoteBranch]),
 						Effect.asVoid
@@ -470,7 +464,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				const defaultBranch = yield* getDefaultBranch(input.cwd)
 				yield* Effect.annotateCurrentSpan({source: 'new'})
 				yield* pipe(
-					git.string(input.cwd, ['worktree', 'add', '-b', input.branch, targetDirectory, defaultBranch]),
+					git.string(input.cwd, ['worktree', 'add', '-b', input.branch, targetDirectory, `origin/${defaultBranch}`]),
 					Effect.asVoid
 				)
 				yield* refreshProjects()

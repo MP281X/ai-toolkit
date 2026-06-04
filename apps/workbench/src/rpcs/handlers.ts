@@ -174,7 +174,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 
 		const reviewStates = yield* RcMap.make({
-			idleTimeToLive: Duration.minutes(5),
 			lookup: Effect.fnUntraced(function* () {
 				return yield* SubscriptionRef.make(emptyReviewState)
 			})
