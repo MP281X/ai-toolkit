@@ -102,11 +102,10 @@ const fullFileContentAtom = Atom.family((key: string) => {
 				client('review.diffs', {cwd, filePath, target: targetFromKey(tag ?? 'changes', hash ?? '')})
 			),
 			Stream.unwrap,
-			Stream.runHead,
-			Effect.map(diffs =>
+			Stream.map(diffs =>
 				pipe(
 					diffs,
-					Option.flatMap(currentDiffs => Array.findFirst(currentDiffs, diff => diff.filePath === filePath)),
+					Array.findFirst(diff => diff.filePath === filePath),
 					Option.flatMap(diff => Option.fromUndefinedOr(diff.fileContent)),
 					Option.getOrNull
 				)
@@ -385,7 +384,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}))
 	const commentsByFile = groupCommentsByFile(unresolvedComments)
 	const selectedEntryComments = selectedEntry
-		? Array.filter(unresolvedComments, comment => comment.filePath === selectedEntry.filePath)
+		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
 	const visibleSegmentKeys = new Set(
 		pipe(
