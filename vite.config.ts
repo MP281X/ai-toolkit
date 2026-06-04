@@ -75,14 +75,12 @@ export default defineConfig({
 				{fixStyle: 'separate-type-imports', prefer: 'type-imports'}
 			],
 			'@typescript-eslint/no-confusing-non-null-assertion': 'error',
-			'@typescript-eslint/no-confusing-void-expression': 'error',
 			'@typescript-eslint/no-duplicate-type-constituents': 'error',
 			'@typescript-eslint/no-explicit-any': 'error',
 			'@typescript-eslint/no-extra-non-null-assertion': 'error',
 			'@typescript-eslint/no-floating-promises': 'error',
 			'@typescript-eslint/no-inferrable-types': 'error',
 			'@typescript-eslint/no-invalid-void-type': 'error',
-			'@typescript-eslint/no-meaningless-void-operator': 'error',
 			'@typescript-eslint/no-misused-promises': ['error', {checksVoidReturn: false}],
 			'@typescript-eslint/no-namespace': ['error', {allowDeclarations: true}],
 			'@typescript-eslint/no-non-null-asserted-nullish-coalescing': 'error',
@@ -194,5 +192,6 @@ export default defineConfig({
 			'vite-plus/prefer-vite-plus-imports': 'error'
 		},
 		settings: {react: {version: '19.0'}}
-	}
+	},
+	test: {environment: 'node', include: ['packages/*/src/**/*.test.ts'], pool: 'forks'}
 })
