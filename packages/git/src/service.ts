@@ -739,21 +739,6 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 		}
 
-		function attachSegments(diffs: readonly GitDiff[], segments: readonly GitDiffSegment[]) {
-			const groupedSegments = segmentsByFile(segments)
-
-			return Array.map(
-				diffs,
-				diff =>
-					new GitDiff({
-						filePath: diff.filePath,
-						patch: diff.patch,
-						segments: Option.getOrElse(HashMap.get(groupedSegments, diff.filePath), () => Array.empty()),
-						status: diff.status
-					})
-			)
-		}
-
 		const gitDiffs = Effect.fn('GitReview.gitDiffs')(function* (input: {
 			readonly args: readonly string[]
 			readonly segments: readonly GitDiffSegment[]
@@ -767,7 +752,6 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'--ignore-cr-at-eol',
 				'--patch',
 				'--find-renames',
-				'-U999999',
 				'--no-ext-diff'
 			])
 
@@ -806,107 +790,94 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 		)
 
-		const commitSegmentDiffs = Effect.fn('GitReview.commitSegmentDiffs')(function* (input: {
-			readonly from: string
-			readonly to: string
-		}) {
-			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
-			const log = yield* git.string(config.cwd, [
-				'log',
-				'--reverse',
-				'--format=%x00DESLOP-COMMIT%x00%H%x00%P',
-				'--find-renames',
-				'--name-only',
-				`${input.from}..${input.to}`
-			])
-
-			const segments = pipe(
-				log.split('\u0000DESLOP-COMMIT\u0000'),
-				Array.filter(String.isNonEmpty),
-				Array.flatMap(entry => {
-					const lines = String.split('\n')(entry)
-					const header = lines[0]
-					const parts = String.split('\u0000')(header)
-					const commit = parts[0]
-					const parent = pipe(parts[1] ?? '', String.split(' '), Array.filter(String.isNonEmpty))[0] ?? `${commit}^`
-					const id = `${parent}->${commit}`
-
-					return pipe(
-						Array.drop(lines, 1),
-						Array.filter(String.isNonEmpty),
-						Array.map(filePath => new GitDiffSegment({filePath, fingerprint: `${id}:${filePath}`, id, type: 'commit'}))
-					)
-				})
-			)
-			yield* Effect.annotateCurrentSpan({segmentCount: Array.length(segments)})
-			return segments
-		})
-
 		const worktreeDiffs = Effect.gen(function* () {
-			const trackedDiffs = yield* gitDiffs({args: ['HEAD'], segments: Array.empty()})
-			const diffs = pipe(
-				trackedDiffs,
-				Array.map(diff => {
-					const segment = new GitDiffSegment({
-						filePath: diff.filePath,
-						fingerprint: diff.patch,
-						id: 'HEAD->worktree',
-						type: 'worktree'
-					})
+			const status = yield* git.lines(config.cwd, ['status', '--porcelain'])
+			if (Array.isReadonlyArrayEmpty(status)) return Array.empty<GitDiff>()
 
-					return new GitDiff({filePath: diff.filePath, patch: diff.patch, segments: [segment], status: diff.status})
-				})
+			const diffs = yield* pipe(
+				Effect.all([gitDiffs({args: ['HEAD'], segments: Array.empty()}), untrackedDiffs], {concurrency: 'unbounded'}),
+				Effect.map(([trackedDiffs, untracked]) =>
+					Array.appendAll(
+						Array.map(trackedDiffs, diff => {
+							const segment = new GitDiffSegment({
+								filePath: diff.filePath,
+								fingerprint: diff.patch,
+								id: 'HEAD->worktree',
+								type: 'worktree'
+							})
+
+							return new GitDiff({filePath: diff.filePath, patch: diff.patch, segments: [segment], status: diff.status})
+						}),
+						untracked
+					)
+				)
 			)
 
-			return yield* pipe(untrackedDiffs, Effect.map(Array.appendAll(diffs)))
+			return diffs
 		}).pipe(Effect.withSpan('GitReview.worktreeDiffs', {attributes: {cwd: config.cwd}}))
 
-		const commitParent = Effect.fn('GitReview.commitParent')(function* (hash: string) {
-			yield* Effect.annotateCurrentSpan({cwd: config.cwd, hash})
+		const fileContent = Effect.fn('GitReview.fileContent')(function* (input: {
+			readonly filePath: string
+			readonly target: GitReviewTarget
+		}) {
+			yield* Effect.annotateCurrentSpan({cwd: config.cwd, filePath: input.filePath, target: input.target._tag})
+			if (input.target._tag === 'head') {
+				return yield* pipe(
+					fs.readFileString(path.join(config.cwd, input.filePath)),
+					Effect.orElseSucceed(() => '')
+				)
+			}
+
 			return yield* pipe(
-				git.string(config.cwd, ['rev-list', '--parents', '-n', '1', hash]),
-				Effect.map(output => {
-					const parts = String.split(/\s+/u)(String.trim(output))
-					return parts[1] ?? `${parts[0]}^`
-				})
+				git.string(config.cwd, ['show', `${input.target.hash}:${input.filePath}`]),
+				Effect.orElseSucceed(() => '')
 			)
 		})
 
-		const reviewDiffs = Effect.fn('GitReview.reviewDiffs')(function* (target: GitReviewTarget) {
-			yield* Effect.annotateCurrentSpan({cwd: config.cwd, target: target._tag})
-			if (target._tag === 'head') return yield* worktreeDiffs
+		const withFileContent = Effect.fn('GitReview.withFileContent')(function* (input: {
+			readonly diffs: readonly GitDiff[]
+			readonly filePath?: string
+			readonly target: GitReviewTarget
+		}) {
+			if (input.filePath === undefined) return input.diffs
 
-			const from = yield* commitParent(target.hash)
-			const diffInputs = yield* Effect.all(
-				[
-					commitSegmentDiffs({from, to: target.hash}),
-					gitDiffs({args: ['HEAD'], segments: Array.empty()}),
-					untrackedDiffs,
-					gitDiffs({args: [from, target.hash], segments: Array.empty()})
-				],
-				{concurrency: 'unbounded'}
+			const content = yield* fileContent({filePath: input.filePath, target: input.target})
+			return Array.map(input.diffs, diff =>
+				diff.filePath === input.filePath
+					? new GitDiff({
+							fileContent: content,
+							filePath: diff.filePath,
+							patch: diff.patch,
+							segments: diff.segments,
+							status: diff.status
+						})
+					: diff
 			)
-			const worktreeSegments = pipe(
-				diffInputs[1],
+		})
+
+		const reviewDiffs = Effect.fn('GitReview.reviewDiffs')(function* (target: GitReviewTarget, filePath?: string) {
+			yield* Effect.annotateCurrentSpan({cwd: config.cwd, target: target._tag})
+			if (target._tag === 'head') return yield* withFileContent({diffs: yield* worktreeDiffs, filePath, target})
+
+			const id = `${target.hash}^->${target.hash}`
+			const diffs = yield* gitDiffs({args: [`${target.hash}^`, target.hash], segments: Array.empty()})
+			const diffsWithSegments = pipe(
+				diffs,
 				Array.map(
 					diff =>
-						new GitDiffSegment({
+						new GitDiff({
 							filePath: diff.filePath,
-							fingerprint: diff.patch,
-							id: 'HEAD->worktree',
-							type: 'worktree'
+							patch: diff.patch,
+							segments: [
+								new GitDiffSegment({filePath: diff.filePath, fingerprint: `${id}:${diff.filePath}`, id, type: 'commit'})
+							],
+							status: diff.status
 						})
-				),
-				Array.appendAll(Array.flatMap(diffInputs[2], diff => diff.segments))
+				)
 			)
-			const segments = Array.appendAll(diffInputs[0], worktreeSegments)
-			const diffsWithSegments = attachSegments(diffInputs[3], segments)
-			yield* Effect.annotateCurrentSpan({
-				diffCount: Array.length(diffsWithSegments) + Array.length(diffInputs[2]),
-				segmentCount: Array.length(segments)
-			})
+			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
 
-			return Array.appendAll(diffsWithSegments, diffInputs[2])
+			return yield* withFileContent({diffs: diffsWithSegments, filePath, target})
 		})
 
 		const ghString = Effect.fn('gh.string')(function* (args: readonly string[]) {
@@ -1172,13 +1143,18 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				prReviewThreads,
 				Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitHubReviewThread>()))
 			),
-			watchReviewDiffs: (target: GitReviewTarget) =>
-				pipe(
-					worktreeChanges,
-					Stream.mapEffect(() =>
+			watchReviewDiffs: (target: GitReviewTarget, filePath?: string) => {
+				const diffs = pipe(
+					reviewDiffs(target, filePath),
+					Effect.catchTag('GitError', () => Effect.succeed(Array.empty<GitDiff>()))
+				)
+				if (target._tag === 'commit') return Stream.fromEffect(diffs)
+
+				return Stream.fromEffect(diffs).pipe(
+					Stream.concat(
 						pipe(
-							reviewDiffs(target),
-							Effect.catchTag('GitError', () => Effect.succeed(Array.empty()))
+							worktreeChanges,
+							Stream.mapEffect(() => diffs)
 						)
 					),
 					Stream.changesWith(
@@ -1194,6 +1170,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 							)
 					)
 				)
+			}
 		}
 	})
 }) {

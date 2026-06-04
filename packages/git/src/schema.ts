@@ -16,6 +16,7 @@ export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment
 }) {}
 
 export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
+	fileContent: Schema.optional(Schema.String),
 	filePath: Schema.String,
 	patch: Schema.String,
 	segments: Schema.Array(GitDiffSegment),

@@ -59,15 +59,58 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const reviewDiffsAtom = Atom.family((input: {readonly cwd: string; readonly target: GitReviewTarget}) =>
+const headReviewDiffsAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('review.diffs', input)),
+			Effect.map(client => client('review.diffs', {cwd, target: {_tag: 'head'}})),
 			Stream.unwrap
 		)
 	)
 )
+
+const commitReviewDiffsAtom = Atom.family((key: string) => {
+	const separator = key.lastIndexOf('\u0000')
+	const cwd = key.slice(0, separator)
+	const hash = key.slice(separator + 1)
+
+	return RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('review.diffs', {cwd, target: {_tag: 'commit', hash}})),
+			Stream.unwrap
+		)
+	)
+})
+
+const fullFileContentAtom = Atom.family((key: string) => {
+	const parts = key.split('\u0000')
+	const cwd = parts[0] ?? ''
+	const tag = parts[1]
+	const hash = parts[2] ?? ''
+	const filePath = parts[3] ?? ''
+
+	if (String.isEmpty(filePath)) return Atom.make(() => Effect.succeed(null))
+
+	return RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client =>
+				client('review.diffs', {cwd, filePath, target: tag === 'commit' ? {_tag: 'commit', hash} : {_tag: 'head'}})
+			),
+			Stream.unwrap,
+			Stream.runHead,
+			Effect.map(diffs =>
+				pipe(
+					diffs,
+					Option.flatMap(currentDiffs => Array.findFirst(currentDiffs, diff => diff.filePath === filePath)),
+					Option.flatMap(diff => Option.fromUndefinedOr(diff.fileContent)),
+					Option.getOrNull
+				)
+			)
+		)
+	)
+})
 
 const reviewStateAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
@@ -269,8 +312,19 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		Option.getOrUndefined
 	)
 	const reviewTarget: GitReviewTarget = selectedCommit ? {_tag: 'commit', hash: selectedCommit.hash} : {_tag: 'head'}
+	const fullFilePathState = useState('')
+	const reviewDiffs = selectedCommit
+		? commitReviewDiffsAtom(`${input.cwd}\u0000${selectedCommit.hash}`)
+		: headReviewDiffsAtom(input.cwd)
+	const fullFileContent = useAtomValue(
+		fullFileContentAtom(
+			reviewTarget._tag === 'commit'
+				? `${input.cwd}\u0000commit\u0000${reviewTarget.hash}\u0000${fullFilePathState[0]}`
+				: `${input.cwd}\u0000head\u0000\u0000${fullFilePathState[0]}`
+		)
+	)
 	const selectedFilePathState = useState('')
-	const reviewDiffsResult = useAtomValue(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
 	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedEntry = String.isNonEmpty(selectedFilePathState[0])
@@ -281,7 +335,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			)
 		: undefined
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
-	const refreshDiffs = useAtomRefresh(reviewDiffsAtom({cwd: input.cwd, target: reviewTarget}))
+	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshGithubThreads = useAtomRefresh(githubThreadsAtom(input.cwd))
 	const saveComment = useAtomSet(saveQueuedCommentAtom(input.cwd), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
@@ -335,6 +389,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function openFile(filePath: string) {
 		selectedFilePathState[1](filePath)
+		fullFilePathState[1]('')
 		const marks = pipe(
 			reviewDiffsValue,
 			Array.findFirst(diff => diff.filePath === filePath),
@@ -348,6 +403,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		startTransition(() => {
 			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
 		})
+		fullFilePathState[1]('')
 		selectedFilePathState[1]('')
 	}
 
@@ -537,6 +593,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								<div className="h-full min-h-0 min-w-0">
 									<PatchDiff
 										filePath={selectedEntry.filePath}
+										fileContent={fullFileContent._tag === 'Success' ? (fullFileContent.value ?? undefined) : undefined}
+										loadFile={() => {
+											fullFilePathState[1](selectedEntry.filePath)
+										}}
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {

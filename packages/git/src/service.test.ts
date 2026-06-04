@@ -130,6 +130,9 @@ if [ "$1 $2" = "rev-list --parents" ]; then
 	printf '%s\\n' 'commit parent'
 	exit 0
 fi
+if [ "$1 $2" = "status --porcelain" ]; then
+	exit 0
+fi
 if [ "$1" = "log" ]; then
 	printf '\\0DESLOP-COMMIT\\0commit\\0parent\\n'
 	index=1
@@ -148,6 +151,10 @@ if [ "$1" = "diff" ]; then
 		printf 'diff --git a/file-%s.txt b/file-%s.txt\\n--- a/file-%s.txt\\n+++ b/file-%s.txt\\n@@ -1 +1 @@\\n-old\\n+new\\n' "$index" "$index" "$index" "$index"
 		index=$((index + 1))
 	done
+	exit 0
+fi
+if [ "$1" = "show" ]; then
+	printf '%s\\n' 'commit file content'
 	exit 0
 fi
 exit 1
@@ -322,9 +329,63 @@ describe('@deslop/git service', () => {
 			)
 
 			expect(diffs).toHaveLength(1)
-			expect(diffs[0]?.segments.map(segment => segment.type)).toEqual(['commit', 'worktree'])
+			expect(diffs[0]?.segments.map(segment => segment.type)).toEqual(['commit'])
 			expect(headDiffs[0]?.segments).toHaveLength(1)
 			expect(headDiffs[0]?.segments[0]?.type).toBe('worktree')
+		})
+	})
+
+	it('returns clean head review diffs without running diff or untracked discovery', async () => {
+		await withTempRoot(async root => {
+			const fake = fakeGit(root)
+			const originalPath = process.env['PATH']
+			process.env['PATH'] = `${fake.bin}:${process.env['PATH'] ?? ''}`
+
+			try {
+				const diffs = await runReview(
+					root,
+					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}))
+				)
+				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
+
+				expect(diffs).toEqual([])
+				expect(commands).toHaveLength(1)
+				expect(commands[0]).toContain(' status --porcelain')
+			} finally {
+				process.env['PATH'] = originalPath
+			}
+		})
+	})
+
+	it('loads selected file content through review diffs only when requested', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(root)
+			writeFileSync(join(repo, 'README.md'), 'current file content\n')
+			const headDiffs = await runReview(
+				repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'head'}, 'README.md'))
+			)
+
+			expect(headDiffs[0]?.fileContent).toBe('current file content\n')
+
+			const fake = fakeGit(root)
+			const originalPath = process.env['PATH']
+			process.env['PATH'] = `${fake.bin}:${process.env['PATH'] ?? ''}`
+
+			try {
+				const commitDiffs = await runReview(
+					root,
+					Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: 'commit'}, 'file-1.txt'))
+				)
+				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
+
+				expect(commitDiffs[0]?.fileContent).toBe('commit file content\n')
+				expect(commands).toHaveLength(2)
+				expect(commands[0]).toContain(' diff ')
+				expect(commands[1]).toContain(' show commit:file-1.txt')
+			} finally {
+				process.env['PATH'] = originalPath
+			}
 		})
 	})
 
@@ -346,7 +407,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('keeps commit review diff generation to fixed git commands for many files', async () => {
+	it('builds commit review diffs with one git command for many files', async () => {
 		await withTempRoot(async root => {
 			const fake = fakeGit(root)
 			const originalPath = process.env['PATH']
@@ -361,8 +422,9 @@ describe('@deslop/git service', () => {
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
 				expect(diffs).toHaveLength(80)
-				expect(commands).toHaveLength(5)
-				expect(commands.filter(command => command.includes(' diff '))).toHaveLength(2)
+				expect(commands).toHaveLength(1)
+				expect(commands[0]).toContain(' diff ')
+				expect(commands[0]).not.toContain('-U999999')
 				expect(performance.now() - started).toBeLessThan(1_000)
 			} finally {
 				process.env['PATH'] = originalPath

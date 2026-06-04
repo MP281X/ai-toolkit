@@ -82,7 +82,7 @@ const TerminalSessions = RcMap.make({
 })
 
 const GitReviewSessions = RcMap.make({
-	idleTimeToLive: Duration.minutes(5),
+	idleTimeToLive: Duration.zero,
 	lookup: Effect.fnUntraced(function* (cwd: string) {
 		const context = yield* Layer.buildWithScope(
 			pipe(GitReview.layer({cwd}), Layer.provide(GitCommand.layer)),
@@ -344,7 +344,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewDiffs(payload.target))
+						Effect.map(review => review.watchReviewDiffs(payload.target, payload.filePath))
 					)
 				),
 			'review.githubThreads': payload =>
