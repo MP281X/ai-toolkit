@@ -23,6 +23,7 @@ import {
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
+	Loader2Icon,
 	PanelTop,
 	PlayIcon,
 	ProcessStateIcon,
@@ -44,7 +45,7 @@ import {
 	CommandShortcut
 } from '@deslop/components/ui/command'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
-import type {GitProject} from '@deslop/git/schema'
+import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
 import {terminalStateActive} from '@deslop/terminal/schema'
 
@@ -397,11 +398,9 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
 	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 
-	function startAgent(profile: (typeof agentProfiles)[number]) {
-		void (async () => {
-			const session = await create({payload: {...profile, cwd: input.cwd}})
-			input.selectAgent(input.cwd, session.uuid)
-		})()
+	async function startAgent(profile: (typeof agentProfiles)[number]) {
+		const session = await create({payload: {...profile, cwd: input.cwd}})
+		input.selectAgent(input.cwd, session.uuid)
 	}
 
 	function stopAgent(session: AgentSession) {
@@ -428,7 +427,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 										className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
 										onClick={event => {
 											event.stopPropagation()
-											startAgent(profile)
+											void startAgent(profile)
 										}}
 										title={`Start ${profile.label}`}
 									>
@@ -487,20 +486,30 @@ function WorktreeManager(input: {
 	const refreshProjects = useAtomRefresh(projectsAtom)
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
-	const [branch, setBranch] = useState('')
-	const [actionsOpen, setActionsOpen] = useState(false)
-	const [createWorktreeProjectRoot, setCreateWorktreeProjectRoot] = useState(input.activeProject?.repository.root)
+	const branchState = useState('')
+	const actionsOpenState = useState(false)
+	const createWorktreeProjectRootState = useState(input.activeProject?.repository.root)
+	const creatingBranchState = useState('')
+	const deletingWorktreeState = useState(false)
 	const createWorktreeProject =
 		pipe(
 			input.projects,
-			Array.findFirst(project => project.repository.root === createWorktreeProjectRoot),
+			Array.findFirst(project => project.repository.root === createWorktreeProjectRootState[0]),
 			Option.getOrUndefined
 		) ?? input.activeProject
 	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
+	const localBranchNames = pipe(
+		branchSnapshot.value.branches,
+		Array.filter(candidate => candidate.type === 'local'),
+		Array.map(candidate => candidate.name)
+	)
 	const availableBranches = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => String.isNonEmpty(candidate.name)),
-		Array.dedupeWith((left, right) => left.name === right.name),
+		Array.filter(candidate => candidate.type === 'local' || !Array.contains(localBranchNames, candidate.name)),
+		Array.dedupeWith(
+			(left, right) => left.name === right.name && left.type === right.type && left.remote === right.remote
+		),
 		Array.filter(
 			candidate =>
 				!pipe(
@@ -511,37 +520,45 @@ function WorktreeManager(input: {
 				)
 		)
 	)
-	async function createFastWorktree(nextBranch = branch) {
-		const nextSelectedBranch = pipe(
-			availableBranches,
-			Array.findFirst(candidate => candidate.name === nextBranch),
-			Option.getOrUndefined
-		)
-		const mode = Match.value(nextSelectedBranch?.type).pipe(
-			Match.when('local', () => 'existing-local' as const),
-			Match.when('remote', () => 'existing-remote' as const),
-			Match.orElse(() => 'new-local' as const)
-		)
-		const worktreeRoot = await createWorktree({
-			payload: {
-				baseBranch:
-					nextSelectedBranch?.type === 'remote'
-						? `${nextSelectedBranch.remote}/${nextSelectedBranch.name}`
-						: `origin/${branchSnapshot.value.defaultBranch}`,
-				branch: nextBranch,
-				cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
-				mode
-			}
-		})
-		setActionsOpen(false)
-		setBranch('')
-		refreshProjects()
-		input.selectWorktree(worktreeRoot)
+	async function createFastWorktree(candidate?: GitBranchSchema) {
+		const nextBranch = candidate?.name ?? branchState[0]
+		if (String.isEmpty(nextBranch) || String.isNonEmpty(creatingBranchState[0])) return
+
+		const source =
+			candidate === undefined
+				? {_tag: 'new' as const}
+				: Match.value(candidate).pipe(
+						Match.when({type: 'local'}, () => ({_tag: 'local' as const})),
+						Match.orElse(branch => ({_tag: 'remote' as const, remote: branch.remote ?? 'origin'}))
+					)
+
+		creatingBranchState[1](nextBranch)
+		try {
+			const worktreeRoot = await createWorktree({
+				payload: {
+					branch: nextBranch,
+					cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
+					source
+				}
+			})
+			actionsOpenState[1](false)
+			branchState[1]('')
+			refreshProjects()
+			input.selectWorktree(worktreeRoot)
+		} finally {
+			creatingBranchState[1]('')
+		}
 	}
 	async function deleteActiveWorktree() {
-		if (!input.activeWorktree) return
-		await deleteWorktree({payload: {cwd: input.activeWorktree.root, force: true}})
-		refreshProjects()
+		if (!input.activeWorktree || deletingWorktreeState[0]) return
+
+		deletingWorktreeState[1](true)
+		try {
+			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
+			refreshProjects()
+		} finally {
+			deletingWorktreeState[1](false)
+		}
 	}
 
 	return (
@@ -562,6 +579,7 @@ function WorktreeManager(input: {
 					<button
 						type="button"
 						className="text-destructive hover:bg-muted hover:text-destructive flex h-8 w-8 items-center justify-center"
+						disabled={deletingWorktreeState[0]}
 						onClick={() => {
 							if (!input.activeWorktree) return
 							if (!confirm(`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`)) {
@@ -569,18 +587,18 @@ function WorktreeManager(input: {
 							}
 
 							void deleteActiveWorktree()
-							setActionsOpen(false)
+							actionsOpenState[1](false)
 						}}
 						title="Delete worktree"
 					>
-						<Trash className="size-3" />
+						{deletingWorktreeState[0] ? <Loader2Icon className="size-3 animate-spin" /> : <Trash className="size-3" />}
 					</button>
 				)}
 			</div>
 
 			<CommandDialog
-				open={actionsOpen}
-				onOpenChange={setActionsOpen}
+				open={actionsOpenState[0]}
+				onOpenChange={actionsOpenState[1]}
 				title="Create worktree"
 				description="Create or open a worktree branch."
 				className="sm:max-w-2xl"
@@ -588,17 +606,23 @@ function WorktreeManager(input: {
 				<Command
 					onKeyDown={event => {
 						event.stopPropagation()
-						if (event.key === 'Escape') setActionsOpen(false)
+						if (event.key === 'Escape') actionsOpenState[1](false)
 					}}
 				>
 					<CommandInput
 						placeholder={`Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
-						value={branch}
-						onValueChange={setBranch}
+						value={branchState[0]}
+						onValueChange={branchState[1]}
 						onKeyDown={event => {
-							if (event.key === 'Enter' && branch !== '' && createWorktreeProject) {
+							if (event.key === 'Enter' && String.isNonEmpty(branchState[0]) && createWorktreeProject) {
 								event.preventDefault()
-								void createFastWorktree()
+								void createFastWorktree(
+									pipe(
+										availableBranches,
+										Array.findFirst(candidate => candidate.name === branchState[0]),
+										Option.getOrUndefined
+									)
+								)
 							}
 						}}
 					/>
@@ -606,25 +630,41 @@ function WorktreeManager(input: {
 						<CommandEmpty>No command found.</CommandEmpty>
 						{createWorktreeProject && (
 							<CommandGroup>
-								{Array.map(availableBranches, candidate => (
-									<CommandItem
-										key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
-										value={candidate.name}
-										onSelect={() => {
-											setBranch(candidate.name)
-											void createFastWorktree(candidate.name)
-										}}
-									>
-										{candidate.type === 'local' ? <GitBranch /> : <Square />}
-										<span className="min-w-0 truncate">{candidate.name}</span>
-										<CommandShortcut>{candidate.type}</CommandShortcut>
-									</CommandItem>
-								))}
-								{branch !== '' &&
-									Option.isNone(Array.findFirst(availableBranches, candidate => candidate.name === branch)) && (
-										<CommandItem value={`create ${branch}`} onSelect={() => void createFastWorktree()}>
-											<GitBranchPlus />
-											Create {branch}
+								{Array.map(availableBranches, candidate => {
+									const icon =
+										creatingBranchState[0] === candidate.name ? (
+											<Loader2Icon className="animate-spin" />
+										) : (
+											Match.value(candidate.type).pipe(
+												Match.when('local', () => <GitBranch />),
+												Match.orElse(() => <Square />)
+											)
+										)
+
+									return (
+										<CommandItem
+											key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
+											value={candidate.name}
+											onSelect={() => {
+												branchState[1](candidate.name)
+												void createFastWorktree(candidate)
+											}}
+										>
+											{icon}
+											<span className="min-w-0 truncate">{candidate.name}</span>
+											<CommandShortcut>{candidate.type}</CommandShortcut>
+										</CommandItem>
+									)
+								})}
+								{String.isNonEmpty(branchState[0]) &&
+									Option.isNone(Array.findFirst(availableBranches, candidate => candidate.name === branchState[0])) && (
+										<CommandItem value={`create ${branchState[0]}`} onSelect={() => void createFastWorktree()}>
+											{creatingBranchState[0] === branchState[0] ? (
+												<Loader2Icon className="animate-spin" />
+											) : (
+												<GitBranchPlus />
+											)}
+											Create {branchState[0]}
 											<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
 										</CommandItem>
 									)}
@@ -669,9 +709,9 @@ function WorktreeManager(input: {
 										className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
 										onClick={event => {
 											event.stopPropagation()
-											setCreateWorktreeProjectRoot(project.repository.root)
-											setBranch('')
-											setActionsOpen(true)
+											createWorktreeProjectRootState[1](project.repository.root)
+											branchState[1]('')
+											actionsOpenState[1](true)
 										}}
 										title="Create worktree"
 									>

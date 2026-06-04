@@ -1,9 +1,10 @@
 import {Array, Predicate, String} from 'effect'
 
-import type {AnnotationSide, FileDiffMetadata} from '@pierre/diffs'
-import {getSingularPatch, parseDiffFromFile, setLanguageOverride} from '@pierre/diffs'
+import type {AnnotationSide} from '@pierre/diffs'
+import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
-import {CheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
+import {useHotkey} from '@tanstack/react-hotkeys'
+import {CircleCheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {GithubLight} from '../ui/svgs/githubLight.tsx'
@@ -112,17 +113,27 @@ function captureScrollAnchor(container: HTMLElement, clientY: number) {
 		return clientY >= rect.top && clientY <= rect.bottom
 	})
 
-	if (!lineElement || lineElement.dataset['lineType'] === 'change-deletion') return
+	if (!lineElement) return
 
 	const lineNumber = lineElement.dataset['line']
 	if (Predicate.isUndefined(lineNumber) || String.isEmpty(lineNumber)) return
 
-	return {clientY, lineNumber, offsetWithinLine: clientY - lineElement.getBoundingClientRect().top}
+	return {
+		clientY,
+		lineNumber,
+		offsetWithinLine: clientY - lineElement.getBoundingClientRect().top,
+		scrollTop: container.scrollTop
+	}
 }
 
 function restoreScrollAnchor(
 	container: HTMLElement,
-	anchor: {readonly clientY: number; readonly offsetWithinLine: number; readonly lineNumber: string},
+	anchor: {
+		readonly clientY: number
+		readonly offsetWithinLine: number
+		readonly lineNumber: string
+		readonly scrollTop: number
+	},
 	mode: 'diff' | 'file'
 ) {
 	const targetLine = container
@@ -133,12 +144,16 @@ function restoreScrollAnchor(
 				: `[data-line="${CSS.escape(anchor.lineNumber)}"]`
 		)
 
-	if (!(targetLine instanceof HTMLElement)) return
+	if (!(targetLine instanceof HTMLElement)) {
+		container.scrollTo({behavior: 'instant', top: anchor.scrollTop})
+		return true
+	}
 
 	container.scrollTo({
 		behavior: 'instant',
 		top: container.scrollTop + targetLine.getBoundingClientRect().top - (anchor.clientY - anchor.offsetWithinLine)
 	})
+	return true
 }
 
 function CommentAnnotation(props: {
@@ -277,7 +292,7 @@ function CommentAnnotation(props: {
 						{props.comment.resolving === true ? (
 							<Loader2Icon className="size-3 animate-spin" />
 						) : (
-							<CheckIcon className="size-3" />
+							<CircleCheckIcon className="size-3" />
 						)}
 					</button>
 				)}
@@ -286,22 +301,9 @@ function CommentAnnotation(props: {
 	)
 }
 
-function patchResultContent(fileDiff: FileDiffMetadata) {
-	if (fileDiff.type === 'deleted') return ''
-
-	return Array.join(fileDiff.additionLines, '')
-}
-
-function compactFileDiff(filePath: string, fileDiff: FileDiffMetadata) {
-	return parseDiffFromFile(
-		{contents: Array.join(fileDiff.deletionLines, ''), name: fileDiff.prevName ?? filePath},
-		{contents: patchResultContent(fileDiff), name: filePath},
-		{context: 3}
-	)
-}
-
 export function PatchDiff(props: {
 	readonly filePath: string
+	readonly fileContent?: string
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
 	readonly onSaveComment?: (comment: DiffComment) => void
@@ -310,11 +312,10 @@ export function PatchDiff(props: {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
-	const [mode, setMode] = useState<'diff' | 'file'>('diff')
 	const [draftComment, setDraftComment] = useState<DiffComment>()
+	const [mode, setMode] = useState<'diff' | 'file'>('diff')
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
-	const compactDiff = setLanguageOverride(compactFileDiff(props.filePath, fileDiff), language)
 	const comments = props.comments ?? []
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
@@ -322,14 +323,37 @@ export function PatchDiff(props: {
 		containerRef.current?.focus()
 	}, [mode, props.filePath, props.patch])
 
+	useEffect(() => {
+		setMode('diff')
+	}, [props.filePath, props.patch])
+
 	useLayoutEffect(() => {
 		const container = containerRef.current
 		const anchor = scrollAnchorRef.current
 		if (Predicate.isNull(container) || Predicate.isNull(anchor)) return
+		if (restoreScrollAnchor(container, anchor, mode)) scrollAnchorRef.current = null
+	}, [mode, props.fileContent])
 
-		restoreScrollAnchor(container, anchor, mode)
-		scrollAnchorRef.current = null
-	}, [mode])
+	function toggleMode() {
+		const container = containerRef.current
+		if (Predicate.isNull(container)) return
+
+		const rect = container.getBoundingClientRect()
+		const clientY = Predicate.isNull(pointerClientYRef.current)
+			? rect.top + rect.height / 2
+			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
+		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
+		setMode(current => (current === 'diff' ? 'file' : 'diff'))
+	}
+
+	useHotkey(
+		'Tab',
+		event => {
+			event.preventDefault()
+			toggleMode()
+		},
+		{preventDefault: false, target: containerRef}
+	)
 
 	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
 		if (!props.onSaveComment) return
@@ -373,24 +397,11 @@ export function PatchDiff(props: {
 					event.currentTarget.focus()
 				}
 			}}
-			onKeyDownCapture={event => {
-				if (event.key === 'Tab') {
-					event.preventDefault()
-					event.stopPropagation()
-
-					const rect = event.currentTarget.getBoundingClientRect()
-					const clientY = Predicate.isNull(pointerClientYRef.current)
-						? rect.top + rect.height / 2
-						: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-					scrollAnchorRef.current = captureScrollAnchor(event.currentTarget, clientY) ?? null
-					setMode(current => (current === 'diff' ? 'file' : 'diff'))
-				}
-			}}
 		>
 			{mode === 'diff' ? (
 				<PierreFileDiff<DiffComment>
 					key={props.patch}
-					fileDiff={compactDiff}
+					fileDiff={fileDiff}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
@@ -425,8 +436,8 @@ export function PatchDiff(props: {
 				/>
 			) : (
 				<File<DiffComment>
-					key={props.patch}
-					file={{contents: patchResultContent(fileDiff), lang: language, name: props.filePath}}
+					key={props.filePath}
+					file={{contents: props.fileContent ?? '', lang: language, name: props.filePath}}
 					options={{
 						disableFileHeader: true,
 						disableLineNumbers: false,

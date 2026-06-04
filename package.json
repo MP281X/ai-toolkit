@@ -13,6 +13,7 @@
 
     "fix": "vp check --fix",
     "check": "vp check",
+    "test":"vp test",
 
     "shadcn": "cd packages/components && vp dlx shadcn@latest"
   },

@@ -5,7 +5,6 @@ import {
 	Context,
 	Duration,
 	Effect,
-	FileSystem,
 	HashMap,
 	Layer,
 	Option,
@@ -17,12 +16,18 @@ import {
 	pipe
 } from 'effect'
 
-import {KeyValueStore} from 'effect/unstable/persistence'
 import {ChildProcess} from 'effect/unstable/process'
 
-import {ReviewComment, ReviewState, RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
-import {GitError} from '@deslop/git/schema'
-import {GitWorkspace, GitWorktree} from '@deslop/git/service'
+import {RpcContracts, type AgentSession, type RunScript} from '#rpcs/contracts.ts'
+import {
+	GitError,
+	GitReviewState,
+	gitReviewStateMark,
+	gitReviewStateResolveComment,
+	gitReviewStateSaveComment,
+	gitReviewStateUnmark
+} from '@deslop/git/schema'
+import {GitCommand, GitCommitAction, GitReview, GitWorkspace} from '@deslop/git/service'
 import {Portless} from '@deslop/portless/http'
 import {TerminalError} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
@@ -45,7 +50,7 @@ type PortlessScript = Omit<RunScript, 'env'> & {
 	readonly preparedCommand: ChildProcess.StandardCommand
 }
 
-const emptyReviewState = new ReviewState({comments: Array.empty(), marks: Array.empty()})
+const emptyReviewState = new GitReviewState({comments: Array.empty(), marks: Array.empty()})
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
@@ -67,18 +72,6 @@ function terminalSessionInput(session: typeof TerminalSessionKey.Type | Terminal
 	return {command: session.command, cwd: session.cwd, sessionId: session.sessionId}
 }
 
-function commentKey(input: {
-	readonly filePath: string
-	readonly lineNumber: number
-	readonly side?: 'additions' | 'deletions'
-}) {
-	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
-}
-
-function markKey(input: {readonly filePath: string; readonly fingerprint: string; readonly segmentId: string}) {
-	return `${input.filePath}:${input.segmentId}:${input.fingerprint}`
-}
-
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
 	lookup: Effect.fnUntraced(function* (config: TerminalSessionInput) {
@@ -88,12 +81,27 @@ const TerminalSessions = RcMap.make({
 	})
 })
 
-const GitWorktreeSessions = RcMap.make({
+const GitReviewSessions = RcMap.make({
+	idleTimeToLive: Duration.zero,
+	lookup: Effect.fnUntraced(function* (cwd: string) {
+		const context = yield* Layer.buildWithScope(
+			pipe(GitReview.layer({cwd}), Layer.provide(GitCommand.layer)),
+			yield* Effect.scope
+		)
+
+		return Context.get(context, GitReview)
+	})
+})
+
+const GitCommitSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(5),
 	lookup: Effect.fnUntraced(function* (cwd: string) {
-		const context = yield* Layer.buildWithScope(GitWorktree.layer({cwd}), yield* Effect.scope)
+		const context = yield* Layer.buildWithScope(
+			pipe(GitCommitAction.layer({cwd}), Layer.provide(GitCommand.layer)),
+			yield* Effect.scope
+		)
 
-		return Context.get(context, GitWorktree)
+		return Context.get(context, GitCommitAction)
 	})
 })
 
@@ -101,11 +109,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
 		const git = yield* GitWorkspace
 		const terminals = yield* TerminalSessions
-		const gitWorktrees = yield* GitWorktreeSessions
-		const fs = yield* FileSystem.FileSystem
+		const gitReviews = yield* GitReviewSessions
+		const gitCommits = yield* GitCommitSessions
 		const portless = yield* Portless
 		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessScript>())
-		const reviewStore = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, ReviewState)
 
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
@@ -166,45 +173,26 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 		})
 
-		const reviewStateKey = Effect.fnUntraced(function* (input: {readonly base: string; readonly cwd: string}) {
-			const root = yield* pipe(
-				fs.realPath(input.cwd),
-				Effect.orElseSucceed(() => input.cwd)
-			)
-
-			return Buffer.from(`${root}\u0000${input.base}`, 'utf8').toString('base64url')
-		})
-
-		const readReviewState = Effect.fnUntraced(function* (key: string) {
-			return yield* pipe(
-				reviewStore.get(`review-state/${key}`),
-				Effect.map(Option.getOrElse(() => emptyReviewState)),
-				Effect.orElseSucceed(() => emptyReviewState)
-			)
-		})
-
 		const reviewStates = yield* RcMap.make({
-			idleTimeToLive: Duration.minutes(5),
-			lookup: Effect.fnUntraced(function* (key: string) {
-				return yield* SubscriptionRef.make(yield* readReviewState(key))
+			lookup: Effect.fnUntraced(function* () {
+				return yield* SubscriptionRef.make(emptyReviewState)
 			})
 		})
 
-		const updateReviewState = Effect.fnUntraced(function* (
-			input: {readonly base: string; readonly cwd: string},
-			f: (state: ReviewState) => ReviewState
+		const updateReviewState = Effect.fn('RpcHandlers.updateReviewState')(function* (
+			cwd: string,
+			f: (state: GitReviewState) => GitReviewState
 		) {
+			yield* Effect.annotateCurrentSpan({cwd})
 			return yield* pipe(
 				Effect.scoped(
 					Effect.gen(function* () {
-						const key = yield* reviewStateKey(input)
-						const ref = yield* RcMap.get(reviewStates, key)
-						const state = yield* SubscriptionRef.modify(ref, current => {
+						const ref = yield* RcMap.get(reviewStates, cwd)
+						yield* SubscriptionRef.modify(ref, current => {
 							const next = f(current)
 
 							return [next, next] as const
 						})
-						yield* reviewStore.set(`review-state/${key}`, state)
 					})
 				),
 				Effect.mapError(cause => new GitError({cause}))
@@ -333,105 +321,75 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'review.comments.resolve': payload =>
-				updateReviewState(payload, state => {
-					const key = commentKey(payload)
-
-					return new ReviewState({
-						comments: Array.filter(state.comments, comment => commentKey(comment) !== key),
-						marks: state.marks
+				pipe(
+					updateReviewState(payload.cwd, state => gitReviewStateResolveComment(state, payload)),
+					Effect.withSpan('RpcHandlers.review.comments.resolve', {
+						attributes: {cwd: payload.cwd, filePath: payload.filePath}
 					})
-				}),
+				),
 			'review.comments.save': payload =>
-				updateReviewState(payload, state => {
-					const key = commentKey(payload.comment)
-
-					return new ReviewState({
-						comments: Array.append(
-							Array.filter(state.comments, comment => commentKey(comment) !== key),
-							new ReviewComment({...payload.comment, resolved: false})
-						),
-						marks: state.marks
+				pipe(
+					updateReviewState(payload.cwd, state => gitReviewStateSaveComment(state, payload.comment)),
+					Effect.withSpan('RpcHandlers.review.comments.save', {
+						attributes: {cwd: payload.cwd, filePath: payload.comment.filePath}
 					})
-				}),
-			'review.commitAndPush': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.commitAndPush({base: payload.base, message: payload.message}))
 				),
-			'review.createWipCommit': payload =>
+			'review.commit': payload =>
 				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.createWipCommit(payload.message))
+					RcMap.get(gitCommits, payload.cwd),
+					Effect.flatMap(commit => commit.commit(payload.message))
 				),
-			'review.discardFile': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.discardFile(payload.filePath))
+			'review.diffs': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitReviews, payload.cwd),
+						Effect.map(review => review.watchReviewDiffs(payload.target))
+					)
 				),
 			'review.githubThreads': payload =>
 				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.reviewThreads)
+					RcMap.get(gitReviews, payload.cwd),
+					Effect.flatMap(review => review.reviewThreads)
 				),
 			'review.githubThreads.resolve': payload =>
 				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.resolveReviewThread(payload.threadId))
+					RcMap.get(gitReviews, payload.cwd),
+					Effect.flatMap(review => review.resolveReviewThread(payload.threadId))
 				),
 			'review.metadata': payload =>
 				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.metadata({base: payload.base}))
+					RcMap.get(gitReviews, payload.cwd),
+					Effect.flatMap(review => review.metadata())
 				),
-			'review.stageFile': payload =>
+			'review.push': payload =>
 				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.stageFile(payload.filePath))
+					RcMap.get(gitCommits, payload.cwd),
+					Effect.flatMap(commit => commit.push())
 				),
 			'review.state.mark': payload =>
-				updateReviewState(payload, state => {
-					const keys = new Set(Array.map(payload.marks, markKey))
-
-					return new ReviewState({
-						comments: state.comments,
-						marks: Array.appendAll(
-							Array.filter(state.marks, mark => !keys.has(markKey(mark))),
-							payload.marks
-						)
+				pipe(
+					updateReviewState(payload.cwd, state => gitReviewStateMark(state, payload.marks)),
+					Effect.withSpan('RpcHandlers.review.state.mark', {
+						attributes: {cwd: payload.cwd, markCount: Array.length(payload.marks)}
 					})
-				}),
+				),
 			'review.state.unmark': payload =>
-				updateReviewState(payload, state => {
-					const keys = new Set(Array.map(payload.marks, markKey))
-
-					return new ReviewState({
-						comments: state.comments,
-						marks: Array.filter(state.marks, mark => !keys.has(markKey(mark)))
+				pipe(
+					updateReviewState(payload.cwd, state => gitReviewStateUnmark(state, payload.marks)),
+					Effect.withSpan('RpcHandlers.review.state.unmark', {
+						attributes: {cwd: payload.cwd, markCount: Array.length(payload.marks)}
 					})
-				}),
+				),
 			'review.state.watch': payload =>
 				Stream.unwrap(
 					pipe(
-						reviewStateKey(payload),
-						Effect.flatMap(key => RcMap.get(reviewStates, key)),
+						RcMap.get(reviewStates, payload.cwd),
 						Effect.flatMap(ref =>
 							pipe(
 								SubscriptionRef.get(ref),
 								Effect.map(state => Stream.concat(Stream.drop(1)(SubscriptionRef.changes(ref)))(Stream.make(state)))
 							)
 						)
-					)
-				),
-			'review.unstageFile': payload =>
-				pipe(
-					RcMap.get(gitWorktrees, payload.cwd),
-					Effect.flatMap(worktree => worktree.unstageFile(payload.filePath))
-				),
-			'review.watchRange': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitWorktrees, payload.cwd),
-						Effect.map(worktree => worktree.watchReviewRangeDiffs({from: payload.from, to: payload.to}))
 					)
 				),
 			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
