@@ -453,6 +453,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				if (input.source._tag === 'remote') {
 					const remoteBranch = `${input.source.remote}/${input.branch}`
 					yield* Effect.annotateCurrentSpan({remote: input.source.remote, source: 'remote'})
+					yield* pipe(git.string(input.cwd, ['fetch', '--prune', input.source.remote]), Effect.asVoid)
 					yield* pipe(
 						git.string(input.cwd, ['worktree', 'add', '-b', input.branch, targetDirectory, remoteBranch]),
 						Effect.asVoid
@@ -735,7 +736,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 			return pipe(
 				patch.split(/(?=^diff --git )/mu),
-				Array.filter(String.isNonEmpty),
+				Array.filter(chunk => /^diff --git /u.test(chunk)),
 				Array.map(chunk => diffFromPatchChunk(chunk, groupedSegments))
 			)
 		}
@@ -757,6 +758,25 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			])
 
 			const diffs = diffsFromPatch(patch, input.segments)
+			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
+			return diffs
+		})
+
+		const commitDiffs = Effect.fn('GitReview.commitDiffs')(function* (hash: string) {
+			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
+			const patch = yield* git.string(config.cwd, [
+				'diff-tree',
+				'--root',
+				'--first-parent',
+				'--patch',
+				'--ignore-all-space',
+				'--ignore-blank-lines',
+				'--ignore-cr-at-eol',
+				'--find-renames',
+				'--no-ext-diff',
+				hash
+			])
+			const diffs = diffsFromPatch(patch, Array.empty())
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
 			return diffs
 		})
@@ -863,7 +883,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 			if (target._tag === 'commit') {
 				const id = `${target.hash}^->${target.hash}`
-				const diffs = yield* gitDiffs({args: [`${target.hash}^`, target.hash], segments: Array.empty()})
+				const diffs = yield* commitDiffs(target.hash)
 				const diffsWithSegments = withDisplayedPatchSegments(diffs, id, 'commit')
 				yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffsWithSegments)})
 

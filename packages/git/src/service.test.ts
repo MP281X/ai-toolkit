@@ -145,7 +145,10 @@ fi
 if [ "$1" = "ls-files" ]; then
 	exit 0
 fi
-if [ "$1" = "diff" ]; then
+if [ "$1" = "diff" ] || [ "$1" = "diff-tree" ]; then
+	if [ "$1" = "diff-tree" ]; then
+		printf '%s\\n' 'commit'
+	fi
 	index=1
 	while [ "$index" -le 80 ]; do
 		printf 'diff --git a/file-%s.txt b/file-%s.txt\\n--- a/file-%s.txt\\n+++ b/file-%s.txt\\n@@ -1 +1 @@\\n-old\\n+new\\n' "$index" "$index" "$index" "$index"
@@ -411,7 +414,7 @@ describe('@deslop/git service', () => {
 
 				expect(commitDiffs[0]?.fileContent).toBe('commit file content\n')
 				expect(commands).toHaveLength(2)
-				expect(commands[0]).toContain(' diff ')
+				expect(commands[0]).toContain(' diff-tree ')
 				expect(commands[1]).toContain(' show commit:file-1.txt')
 			} finally {
 				process.env['PATH'] = originalPath
@@ -453,7 +456,7 @@ describe('@deslop/git service', () => {
 
 				expect(diffs).toHaveLength(80)
 				expect(commands).toHaveLength(1)
-				expect(commands[0]).toContain(' diff ')
+				expect(commands[0]).toContain(' diff-tree ')
 				expect(commands[0]).not.toContain('-U999999')
 				expect(performance.now() - started).toBeLessThan(1_000)
 			} finally {

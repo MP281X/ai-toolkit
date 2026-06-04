@@ -173,7 +173,6 @@ function CommentAnnotation(props: {
 
 	async function copyComment() {
 		await navigator.clipboard.writeText(formatCopiedComment(props.comment))
-		props.onResolveComment?.(props.comment)
 	}
 
 	function saveDraft() {
