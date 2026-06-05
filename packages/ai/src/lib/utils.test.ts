@@ -1,9 +1,36 @@
+import {Effect, Fiber, Stream} from 'effect'
+
 import {Prompt, Response} from 'effect/unstable/ai'
 import {describe, expect, it} from 'vite-plus/test'
 
-import {compactResponseParts, serializePromptMessagesToMarkdown, serializeResponsePartsToMarkdown} from './utils.ts'
+import {
+	compactResponseParts,
+	makeResumableStream,
+	serializePromptMessagesToMarkdown,
+	serializeResponsePartsToMarkdown
+} from './utils.ts'
 
 describe('@deslop/ai utils', () => {
+	it('replays history and continues with live stream parts', async () => {
+		const values = await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const resumable = yield* makeResumableStream<number>()
+					yield* resumable.append(1)
+					yield* resumable.append(2)
+
+					const stream = yield* Effect.forkScoped(Stream.runCollect(Stream.take(resumable.stream, 3)))
+					yield* Effect.sleep('10 millis')
+					yield* resumable.append(3)
+
+					return yield* Fiber.join(stream)
+				})
+			)
+		)
+
+		expect(values).toEqual([1, 2, 3])
+	})
+
 	it('compacts adjacent text and reasoning deltas while dropping stream markers', () => {
 		const compacted = compactResponseParts([
 			Response.makePart('text-start', {id: 'text'}),

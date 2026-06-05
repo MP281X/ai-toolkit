@@ -1,4 +1,4 @@
-import {Array, Effect, Predicate, PubSub, Ref, Stream, String, pipe} from 'effect'
+import {Array, Effect, Predicate, PubSub, Queue, Ref, Stream, String, pipe} from 'effect'
 
 import type {Prompt, Response, Tool} from 'effect/unstable/ai'
 
@@ -12,7 +12,25 @@ export const makeResumableStream = Effect.fnUntraced(function* <A>() {
 			yield* PubSub.publish(pubsub, part)
 		}),
 		history: Ref.get(history),
-		stream: Stream.concat(Stream.fromIterableEffect(Ref.get(history)), Stream.fromPubSub(pubsub))
+		stream: Stream.callback<A>(queue =>
+			Effect.gen(function* () {
+				const subscription = yield* PubSub.subscribe(pubsub)
+				const snapshot = yield* Ref.get(history)
+
+				for (const part of snapshot) {
+					yield* Queue.offer(queue, part)
+				}
+
+				yield* Effect.forkScoped(
+					Effect.forever(
+						pipe(
+							PubSub.take(subscription),
+							Effect.flatMap(part => Queue.offer(queue, part))
+						)
+					)
+				)
+			})
+		)
 	}
 })
 

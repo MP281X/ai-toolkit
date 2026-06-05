@@ -2,7 +2,7 @@ import {DateTime, Effect, Queue, Ref, Stream, SubscriptionRef, pipe} from 'effec
 
 import {getModel} from '@earendil-works/pi-ai'
 import type {AgentSessionEvent} from '@earendil-works/pi-coding-agent'
-import {SessionManager, createAgentSession} from '@earendil-works/pi-coding-agent'
+import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
@@ -85,21 +85,21 @@ function partFromEvent(event: AgentSessionEvent): AgentPart | undefined {
 		})
 	}
 
-	if (event.type === 'turn_end') {
-		const message = event.message
-		return Response.makePart('finish', {
-			reason: message.role === 'assistant' ? finishReason(message.stopReason) : 'stop',
-			response: undefined,
-			usage: message.role === 'assistant' ? usageFromAssistant(message) : emptyUsage
-		})
-	}
-
 	if (event.type === 'auto_retry_start') return Response.makePart('error', {error: event.errorMessage})
 	if (event.type === 'compaction_end' && event.errorMessage !== undefined) {
 		return Response.makePart('error', {error: event.errorMessage})
 	}
 
 	return undefined
+}
+
+function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_end'}>) {
+	const message = event.message
+	return Response.makePart('finish', {
+		reason: message.role === 'assistant' ? finishReason(message.stopReason) : 'stop',
+		response: undefined,
+		usage: message.role === 'assistant' ? usageFromAssistant(message) : emptyUsage
+	})
 }
 
 export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig) {
@@ -127,6 +127,16 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 		const noTools = config.tools === 'none' ? 'all' : undefined
 		const tools =
 			config.tools === undefined || config.tools === 'all' || config.tools === 'none' ? undefined : [...config.tools]
+		const resourceLoader = new DefaultResourceLoader({
+			agentDir: getAgentDir(),
+			appendSystemPromptOverride: () => [],
+			cwd: config.cwd,
+			systemPromptOverride: () => config.systemPrompt.content
+		})
+		yield* Effect.tryPromise({
+			catch: cause => new AiErrorSchema({cause, message: 'failed to load pi agent resources'}),
+			try: () => resourceLoader.reload()
+		})
 		const result = yield* Effect.tryPromise({
 			catch: cause => new AiErrorSchema({cause, message: 'failed to create pi agent session'}),
 			try: () =>
@@ -134,13 +144,13 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 					cwd: config.cwd,
 					model,
 					noTools,
+					resourceLoader,
 					sessionManager,
 					thinkingLevel: input.thinkingLevel ?? 'low',
 					tools
 				})
 		})
 
-		result.session.agent.state.systemPrompt = config.systemPrompt.content
 		yield* Ref.set(sessionRef, result.session)
 		yield* Effect.addFinalizer(() => Effect.sync(() => result.session.dispose()))
 		return result.session
@@ -154,6 +164,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 				Effect.gen(function* () {
 					const current = yield* session(input)
 					const finished = yield* Ref.make(false)
+					const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
 					yield* Ref.set(history, input.messages)
 					yield* setStatus('running')
 					const unsubscribe = current.subscribe(event => {
@@ -161,10 +172,13 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 							Effect.gen(function* () {
 								if (event.type === 'auto_retry_start') yield* setStatus('retrying')
 								if (event.type === 'agent_start') yield* setStatus('running')
-								if (event.type === 'agent_end') yield* setStatus('idle')
+								if (event.type === 'turn_end') yield* Ref.set(finishPart, finishPartFromTurnEnd(event))
 								const part = partFromEvent(event)
 								if (part !== undefined) yield* Queue.offer(queue, part)
 								if (event.type === 'agent_end') {
+									const finish = yield* Ref.get(finishPart)
+									if (finish !== undefined) yield* Queue.offer(queue, finish)
+									yield* setStatus('idle')
 									yield* Ref.set(finished, true)
 									unsubscribe()
 									yield* Queue.end(queue)
