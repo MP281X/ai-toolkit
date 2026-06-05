@@ -1,12 +1,11 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Option, Schema, pipe} from 'effect'
 
 import {Navigate, createFileRoute} from '@tanstack/react-router'
 
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeHomeAtom, agentsAtom, terminalViewAtom} from '#lib/state.ts'
-import {Terminal} from '@deslop/components/render/terminal'
+import {activeHomeAtom, agentsAtom} from '#lib/state.ts'
+import {WorkbenchTerminal} from '#routes/components/-workbench-terminal.tsx'
 
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
@@ -43,33 +42,12 @@ function AgentTerminal(input: {
 	readonly cwd: string
 	readonly sessionId: string
 }) {
-	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
-	const write = useAtomSet(RpcClient.mutation('terminal.write'))
-	const terminal = useAtomSuspense(terminalViewAtom(input))
-
 	return (
 		<div className="bg-background h-full min-h-0 min-w-0">
-			<Terminal
+			<WorkbenchTerminal
 				key={input.sessionId}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
-				data={terminal.value.data}
-				frame={terminal.value.frame}
-				onData={data => {
-					write({payload: {args: input.args, command: input.command, cwd: input.cwd, data, sessionId: input.sessionId}})
-				}}
-				onResize={size => {
-					resize({
-						payload: {
-							args: input.args,
-							cols: size.cols,
-							command: input.command,
-							cwd: input.cwd,
-							rows: size.rows,
-							sessionId: input.sessionId
-						}
-					})
-				}}
-				state={terminal.value.state.state}
+				session={input}
 			/>
 		</div>
 	)
