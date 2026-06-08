@@ -1,6 +1,7 @@
-import {DateTime, Effect, Queue, Ref, Stream, SubscriptionRef, pipe} from 'effect'
+import {DateTime, Effect, Encoding, Queue, Ref, Semaphore, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {getModel} from '@earendil-works/pi-ai'
+import type {ImageContent} from '@earendil-works/pi-ai'
 import type {AgentSessionEvent} from '@earendil-works/pi-coding-agent'
 import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
@@ -43,6 +44,45 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 }
 
 type AgentPart = Response.StreamPart<Toolkit.Any['tools']>
+
+function imageDataFromFilePart(part: Prompt.FilePart) {
+	if (part.data instanceof URL) return
+	if (typeof part.data !== 'string') return Encoding.encodeBase64(part.data)
+
+	const dataUrlPrefix = `data:${part.mediaType};base64,`
+	return part.data.startsWith(dataUrlPrefix) ? part.data.slice(dataUrlPrefix.length) : part.data
+}
+
+function imageFromFilePart(part: Prompt.FilePart): ImageContent | undefined {
+	if (!part.mediaType.startsWith('image/')) return undefined
+	const data = imageDataFromFilePart(part)
+	if (data === undefined) return undefined
+	return {data, mimeType: part.mediaType, type: 'image'}
+}
+
+const promptFromMessages = Effect.fnUntraced(function* (messages: readonly Prompt.Message[]) {
+	const images: ImageContent[] = []
+	for (const message of messages) {
+		if (message.role === 'system') continue
+
+		for (const part of message.content) {
+			if (part.type !== 'file') continue
+
+			const image = imageFromFilePart(part)
+			if (image === undefined) {
+				return yield* new AiErrorSchema({
+					message:
+						part.data instanceof URL
+							? 'Pi agent does not support URL file prompt parts'
+							: `Pi agent does not support ${part.mediaType} file prompt parts`
+				})
+			}
+			images.push(image)
+		}
+	}
+
+	return {images: images.length === 0 ? undefined : images, text: serializePromptMessagesToMarkdown(messages)}
+})
 
 function partFromEvent(event: AgentSessionEvent): AgentPart | undefined {
 	if (event.type === 'message_update') {
@@ -107,6 +147,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 	const history = yield* Ref.make<readonly Prompt.Message[]>([])
 	const sessionRef = yield* Ref.make<Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined>(void 0)
 	const sessionManager = SessionManager.inMemory(config.cwd)
+	const promptLock = yield* Semaphore.make(1)
 
 	const setStatus = Effect.fnUntraced(function* (state: AgentStatus['state']) {
 		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
@@ -161,65 +202,78 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 		status,
 		streamText: (input: AgentPrompt) =>
 			Stream.callback<AgentPart, AiError>(queue =>
-				Effect.gen(function* () {
-					const current = yield* session(input)
-					const finished = yield* Ref.make(false)
-					const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
-					yield* Ref.set(history, input.messages)
-					yield* setStatus('running')
-					const unsubscribe = current.subscribe(event => {
-						Effect.runFork(
-							Effect.gen(function* () {
-								if (event.type === 'auto_retry_start') yield* setStatus('retrying')
-								if (event.type === 'agent_start') yield* setStatus('running')
-								if (event.type === 'turn_end') yield* Ref.set(finishPart, finishPartFromTurnEnd(event))
-								const part = partFromEvent(event)
-								if (part !== undefined) yield* Queue.offer(queue, part)
-								if (event.type === 'agent_end') {
-									const finish = yield* Ref.get(finishPart)
-									if (finish !== undefined) yield* Queue.offer(queue, finish)
-									yield* setStatus('idle')
-									yield* Ref.set(finished, true)
-									unsubscribe()
-									yield* Queue.end(queue)
-								}
-							})
-						)
-					})
-					yield* Effect.addFinalizer(() =>
-						pipe(
-							Effect.gen(function* () {
-								const completed = yield* Ref.get(finished)
-								yield* Effect.sync(unsubscribe)
-								if (completed) return
-
-								yield* setStatus('stopping')
-								yield* Effect.tryPromise({
-									catch: cause => new AiErrorSchema({cause, message: 'failed to abort agent'}),
-									try: () => current.abort()
-								})
-								yield* setStatus('idle')
-							}),
-							Effect.catch(() => setStatus('idle'))
-						)
-					)
-
-					yield* pipe(
-						Effect.tryPromise({
-							catch: cause => new AiErrorSchema({cause, message: 'agent prompt failed'}),
-							try: () => current.prompt(serializePromptMessagesToMarkdown(input.messages))
-						}),
-						Effect.catch(error =>
+				pipe(
+					Effect.gen(function* () {
+						const current = yield* session(input)
+						const events = yield* Queue.unbounded<AgentSessionEvent>()
+						const finished = yield* Ref.make(false)
+						const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
+						yield* Ref.set(history, input.messages)
+						yield* setStatus('running')
+						const unsubscribe = current.subscribe(event => {
+							Queue.offerUnsafe(events, event)
+						})
+						yield* Effect.addFinalizer(() =>
 							pipe(
-								Ref.set(finished, true),
-								Effect.andThen(setStatus('error')),
-								Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: error.message}))),
-								Effect.andThen(Queue.end(queue)),
-								Effect.ensuring(Effect.sync(unsubscribe))
+								Effect.gen(function* () {
+									yield* Effect.sync(unsubscribe)
+									const completed = yield* Ref.get(finished)
+									if (completed) return
+
+									yield* setStatus('stopping')
+									yield* Effect.tryPromise({
+										catch: cause => new AiErrorSchema({cause, message: 'failed to abort agent'}),
+										try: () => current.abort()
+									})
+									yield* setStatus('idle')
+								}),
+								Effect.catch(() => setStatus('idle'))
 							)
 						)
-					)
-				})
+						yield* Effect.forkScoped(
+							Effect.forever(
+								pipe(
+									Queue.take(events),
+									Effect.flatMap(event =>
+										Effect.gen(function* () {
+											if (event.type === 'auto_retry_start') yield* setStatus('retrying')
+											if (event.type === 'agent_start') yield* setStatus('running')
+											if (event.type === 'turn_end') yield* Ref.set(finishPart, finishPartFromTurnEnd(event))
+											const part = partFromEvent(event)
+											if (part !== undefined) yield* Queue.offer(queue, part)
+											if (event.type === 'agent_end' && !event.willRetry) {
+												const finish = yield* Ref.get(finishPart)
+												if (finish !== undefined) yield* Queue.offer(queue, finish)
+												yield* setStatus('idle')
+												yield* Ref.set(finished, true)
+												yield* Queue.end(queue)
+											}
+										})
+									)
+								)
+							)
+						)
+
+						yield* pipe(
+							promptFromMessages(input.messages),
+							Effect.flatMap(prompt =>
+								Effect.tryPromise({
+									catch: cause => new AiErrorSchema({cause, message: 'agent prompt failed'}),
+									try: () => current.prompt(prompt.text, {images: prompt.images})
+								})
+							),
+							Effect.catch(error =>
+								pipe(
+									Ref.set(finished, true),
+									Effect.andThen(setStatus('error')),
+									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: error.message}))),
+									Effect.andThen(Queue.end(queue))
+								)
+							)
+						)
+					}),
+					Semaphore.withPermit(promptLock)
+				)
 			)
 	}
 })

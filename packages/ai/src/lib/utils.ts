@@ -1,34 +1,43 @@
-import {Array, Effect, Predicate, PubSub, Queue, Ref, Stream, String, pipe} from 'effect'
+import {Array, Effect, Predicate, Queue, Ref, Stream, String, pipe} from 'effect'
 
 import type {Prompt, Response, Tool} from 'effect/unstable/ai'
 
 export const makeResumableStream = Effect.fnUntraced(function* <A>() {
-	const history = yield* Ref.make<readonly A[]>([])
-	const pubsub = yield* PubSub.unbounded<A>()
+	const state = yield* Ref.make<{readonly history: readonly A[]; readonly subscribers: readonly Queue.Enqueue<A>[]}>({
+		history: [],
+		subscribers: []
+	})
 
 	return {
 		append: Effect.fnUntraced(function* (part: A) {
-			yield* Ref.update(history, parts => [...parts, part])
-			yield* PubSub.publish(pubsub, part)
+			const subscribers = yield* Ref.modify(state, current => [
+				current.subscribers,
+				{...current, history: [...current.history, part]}
+			])
+			for (const subscriber of subscribers) {
+				yield* Queue.offer(subscriber, part)
+			}
 		}),
-		history: Ref.get(history),
+		history: pipe(
+			Ref.get(state),
+			Effect.map(current => current.history)
+		),
 		stream: Stream.callback<A>(queue =>
 			Effect.gen(function* () {
-				const subscription = yield* PubSub.subscribe(pubsub)
-				const snapshot = yield* Ref.get(history)
+				const snapshot = yield* Ref.modify(state, current => [
+					current.history,
+					{...current, subscribers: [...current.subscribers, queue]}
+				])
+				yield* Effect.addFinalizer(() =>
+					Ref.update(state, current => ({
+						...current,
+						subscribers: current.subscribers.filter(subscriber => subscriber !== queue)
+					}))
+				)
 
 				for (const part of snapshot) {
 					yield* Queue.offer(queue, part)
 				}
-
-				yield* Effect.forkScoped(
-					Effect.forever(
-						pipe(
-							PubSub.take(subscription),
-							Effect.flatMap(part => Queue.offer(queue, part))
-						)
-					)
-				)
 			})
 		)
 	}
@@ -49,10 +58,10 @@ export function compactResponseParts<Tools extends Record<string, Tool.Any>>(
 		if (!Array.isArrayNonEmpty(parts)) return Array.append(parts, part)
 
 		const [previousParts, lastPart] = Array.unappend(parts)
-		if (part.type === 'text-delta' && lastPart.type === 'text-delta') {
+		if (part.type === 'text-delta' && lastPart.type === 'text-delta' && part.id === lastPart.id) {
 			return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
 		}
-		if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta') {
+		if (part.type === 'reasoning-delta' && lastPart.type === 'reasoning-delta' && part.id === lastPart.id) {
 			return [...previousParts, {...lastPart, delta: `${lastPart.delta}${part.delta}`}]
 		}
 
