@@ -31,6 +31,7 @@ type RunningProcess = {
 }
 
 type TerminalSize = {readonly cols: number; readonly rows: number}
+type QueuedOutput = {readonly data: string; readonly process: IPty}
 type QueuedWrite = {readonly data: string; readonly process: RunningProcess}
 
 function mergeWrites(items: readonly QueuedWrite[]) {
@@ -55,11 +56,12 @@ function resumeProcess(subprocess: IPty) {
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
-		const dataQueue = yield* Queue.bounded<string>(128)
+		const dataQueue = yield* Queue.bounded<QueuedOutput>(128)
 		const writeQueue = yield* Queue.bounded<QueuedWrite>(128)
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
+		const replayProcessRef = yield* Ref.make<IPty | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
 		const replayRef = yield* Ref.make<readonly string[]>(Array.empty())
 		const oscRef = yield* Ref.make('')
@@ -138,6 +140,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const spawnProcess = Effect.fnUntraced(function* () {
 			yield* stopProcess()
+			yield* Ref.set(replayProcessRef, undefined)
 			yield* Ref.set(replayRef, [terminalReset])
 			yield* Ref.set(oscRef, '')
 			yield* publishStatus({state: 'starting', title: ''})
@@ -157,10 +160,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					})
 			})
 			const data = subprocess.onData(chunk => {
-				if (Queue.offerUnsafe(dataQueue, chunk)) return
+				const output = {data: chunk, process: subprocess}
+				if (Queue.offerUnsafe(dataQueue, output)) return
 
 				pauseProcess(subprocess)
-				Effect.runFork(Queue.offer(dataQueue, chunk).pipe(Effect.andThen(Effect.sync(() => resumeProcess(subprocess)))))
+				Effect.runFork(
+					Queue.offer(dataQueue, output).pipe(Effect.andThen(Effect.sync(() => resumeProcess(subprocess))))
+				)
 			})
 			const exit = subprocess.onExit(event => {
 				Effect.runFork(
@@ -186,6 +192,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			})
 			const handle = {data, exit, process: subprocess}
 			yield* Ref.set(processRef, handle)
+			yield* Ref.set(replayProcessRef, subprocess)
 			yield* setStatus('running')
 
 			return yield* SubscriptionRef.get(statusRef)
@@ -224,19 +231,24 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Stream.groupedWithin(128, Duration.millis(16)),
 			Stream.runForEach(items =>
 				Effect.forEach(
-					terminalChunks(pipe(Array.fromIterable(items), Array.join(''))),
-					chunk =>
+					Array.fromIterable(items),
+					output =>
 						Effect.gen(function* () {
-							yield* Ref.update(replayRef, ring => terminalReplayPush(ring, chunk))
-							const updates = yield* Ref.modify(oscRef, carry => {
-								const parsed = terminalOscUpdates(chunk, carry)
-								return [parsed.updates, parsed.carry] as const
-							})
-							for (const update of updates) {
-								yield* update.type === 'title' ? setTitle(update.title) : setProgress(update.state)
+							const replayProcess = yield* Ref.get(replayProcessRef)
+							if (replayProcess !== output.process) return
+
+							for (const chunk of terminalChunks(output.data)) {
+								yield* Ref.update(replayRef, ring => terminalReplayPush(ring, chunk))
+								const updates = yield* Ref.modify(oscRef, carry => {
+									const parsed = terminalOscUpdates(chunk, carry)
+									return [parsed.updates, parsed.carry] as const
+								})
+								for (const update of updates) {
+									yield* update.type === 'title' ? setTitle(update.title) : setProgress(update.state)
+								}
+								const attach = yield* Ref.get(attachRef)
+								if (attach) yield* Queue.offer(attach, {data: chunk, type: 'data' as const})
 							}
-							const attach = yield* Ref.get(attachRef)
-							if (attach) yield* Queue.offer(attach, {data: chunk, type: 'data' as const})
 						}),
 					{discard: true}
 				)
@@ -282,17 +294,16 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const attachQueue = Effect.gen(function* () {
 			const previous = yield* Ref.get(attachRef)
-			if (previous) yield* Queue.end(previous)
-
 			const queue = yield* Queue.bounded<TerminalAttachUpdate, Cause.Done>(16)
+			yield* Queue.offer(queue, {status: yield* SubscriptionRef.get(statusRef), type: 'status' as const})
+			yield* Queue.offer(queue, {data: pipe(yield* Ref.get(replayRef), Array.join('')), type: 'snapshot' as const})
 			yield* Ref.set(attachRef, queue)
+			if (previous) yield* Queue.end(previous)
 			yield* Effect.addFinalizer(() =>
 				Ref.update(attachRef, current => (current === queue ? undefined : current)).pipe(
 					Effect.andThen(Queue.end(queue))
 				)
 			)
-			yield* Queue.offer(queue, {status: yield* SubscriptionRef.get(statusRef), type: 'status' as const})
-			yield* Queue.offer(queue, {data: pipe(yield* Ref.get(replayRef), Array.join('')), type: 'snapshot' as const})
 
 			return queue
 		})
