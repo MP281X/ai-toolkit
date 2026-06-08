@@ -13,9 +13,9 @@ export const AgentId = Schema.Literals(['pi'] as const)
 export const models = [
 	{
 		agents: ['pi'],
-		contextWindow: 400_000,
+		contextWindow: 272_000,
 		model: 'gpt-5.5',
-		pricing: {input: 0, output: 0},
+		pricing: {input: 5, output: 30},
 		provider: 'openai-codex',
 		thinkingLevel: 'low'
 	}

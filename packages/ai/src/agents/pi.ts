@@ -1,13 +1,12 @@
-import {DateTime, Effect, Encoding, Queue, Ref, Semaphore, Stream, SubscriptionRef, pipe} from 'effect'
+import {DateTime, Effect, Encoding, Predicate, Queue, Ref, Semaphore, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {getModel} from '@earendil-works/pi-ai'
-import type {ImageContent} from '@earendil-works/pi-ai'
+import type {AssistantMessage, ImageContent, Message, TextContent, ToolResultMessage} from '@earendil-works/pi-ai'
 import type {AgentSessionEvent} from '@earendil-works/pi-coding-agent'
 import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import {serializePromptMessagesToMarkdown} from '../lib/utils.ts'
 import type {AiError, AgentStatus} from '../schema.ts'
 import {AiError as AiErrorSchema} from '../schema.ts'
 import type {AgentLayerConfig, AgentPrompt} from '../service.ts'
@@ -60,14 +59,22 @@ function imageFromFilePart(part: Prompt.FilePart): ImageContent | undefined {
 	return {data, mimeType: part.mediaType, type: 'image'}
 }
 
-const promptFromMessages = Effect.fnUntraced(function* (messages: readonly Prompt.Message[]) {
-	const images: ImageContent[] = []
-	for (const message of messages) {
-		if (message.role === 'system') continue
+function textFromResult(result: unknown) {
+	if (Predicate.isString(result)) return result
+	if (Predicate.isUndefined(result)) return 'undefined'
+	return JSON.stringify(result, undefined, 2)
+}
 
-		for (const part of message.content) {
-			if (part.type !== 'file') continue
+function toolArgumentsFromParams(params: unknown): Record<string, unknown> | undefined {
+	if (!Predicate.isObject(params)) return
+	return Object.fromEntries(Object.entries(params))
+}
 
+const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.Part[]) {
+	const content: (TextContent | ImageContent)[] = []
+	for (const part of parts) {
+		if (part.type === 'text') content.push({text: part.text, type: 'text'})
+		if (part.type === 'file') {
 			const image = imageFromFilePart(part)
 			if (image === undefined) {
 				return yield* new AiErrorSchema({
@@ -77,11 +84,97 @@ const promptFromMessages = Effect.fnUntraced(function* (messages: readonly Promp
 							: `Pi agent does not support ${part.mediaType} file prompt parts`
 				})
 			}
-			images.push(image)
+			content.push(image)
+		}
+	}
+	return content
+})
+
+const piAssistantContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.AssistantMessagePart[]) {
+	const content: AssistantMessage['content'] = []
+	for (const part of parts) {
+		if (part.type === 'text') content.push({text: part.text, type: 'text'})
+		if (part.type === 'reasoning') content.push({thinking: part.text, type: 'thinking'})
+		if (part.type === 'tool-call') {
+			const args = toolArgumentsFromParams(part.params)
+			if (args === undefined) {
+				return yield* new AiErrorSchema({
+					message: `Pi agent cannot restore non-object tool call params for ${part.name}`
+				})
+			}
+			content.push({arguments: args, id: part.id, name: part.name, type: 'toolCall'})
+		}
+		if (part.type === 'file') return
+		if (part.type === 'tool-approval-request') return
+	}
+	return content
+})
+
+const piToolResultsFromPromptParts = Effect.fnUntraced(function* (
+	parts: readonly (Prompt.ToolResultPart | Prompt.ToolApprovalResponsePart)[]
+) {
+	const messages: ToolResultMessage[] = []
+	for (const part of parts) {
+		if (part.type === 'tool-approval-response') {
+			return yield* new AiErrorSchema({message: 'Pi agent does not support tool approval response prompt parts'})
+		}
+		messages.push({
+			content: [{text: textFromResult(part.result), type: 'text'}],
+			isError: part.isFailure,
+			role: 'toolResult',
+			timestamp: Date.now(),
+			toolCallId: part.id,
+			toolName: part.name
+		})
+	}
+	return messages
+})
+
+const piMessagesFromPromptHistory = Effect.fnUntraced(function* (
+	messages: readonly Prompt.Message[],
+	input: AgentPrompt,
+	currentUserMessage: Prompt.UserMessage
+) {
+	const history: Message[] = []
+	for (const message of messages.slice(0, -1)) {
+		if (message.role === 'system') continue
+		if (message.role === 'user') {
+			history.push({content: yield* piContentFromPromptParts(message.content), role: 'user', timestamp: Date.now()})
+		}
+		if (message.role === 'assistant') {
+			const content = yield* piAssistantContentFromPromptParts(message.content)
+			if (content === undefined) {
+				return yield* new AiErrorSchema({message: 'Pi agent does not support assistant file or approval prompt parts'})
+			}
+			const hasToolCalls = content.some(part => part.type === 'toolCall')
+			history.push({
+				api: 'openai-codex-responses',
+				content,
+				model: input.model,
+				provider: input.provider,
+				role: 'assistant',
+				stopReason: hasToolCalls ? 'toolUse' : 'stop',
+				timestamp: Date.now(),
+				usage: {
+					cacheRead: 0,
+					cacheWrite: 0,
+					cost: {cacheRead: 0, cacheWrite: 0, input: 0, output: 0, total: 0},
+					input: 0,
+					output: 0,
+					totalTokens: 0
+				}
+			})
+			const toolResults = yield* piToolResultsFromPromptParts(
+				message.content.filter(part => part.type === 'tool-result')
+			)
+			history.push(...toolResults)
+		}
+		if (message.role === 'tool') {
+			history.push(...(yield* piToolResultsFromPromptParts(message.content)))
 		}
 	}
 
-	return {images: images.length === 0 ? undefined : images, text: serializePromptMessagesToMarkdown(messages)}
+	return {history, prompt: yield* piContentFromPromptParts(currentUserMessage.content)}
 })
 
 function partFromEvent(event: AgentSessionEvent): AgentPart | undefined {
@@ -145,8 +238,6 @@ function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_en
 export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const status = yield* SubscriptionRef.make<AgentStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const history = yield* Ref.make<readonly Prompt.Message[]>([])
-	const sessionRef = yield* Ref.make<Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined>(void 0)
-	const sessionManager = SessionManager.inMemory(config.cwd)
 	const promptLock = yield* Semaphore.make(1)
 
 	const setStatus = Effect.fnUntraced(function* (state: AgentStatus['state']) {
@@ -155,19 +246,13 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 
 	const session = Effect.fnUntraced(function* (input: AgentPrompt) {
 		const model = getModel(input.provider, input.model)
-		const current = yield* Ref.get(sessionRef)
-		if (current !== undefined) {
-			yield* Effect.tryPromise({
-				catch: cause => new AiErrorSchema({cause, message: 'failed to update pi agent model'}),
-				try: () => current.setModel(model)
-			})
-			current.setThinkingLevel(input.thinkingLevel ?? 'low')
-			return current
-		}
-
 		const noTools = config.tools === 'none' ? 'all' : undefined
-		const tools =
-			config.tools === undefined || config.tools === 'all' || config.tools === 'none' ? undefined : [...config.tools]
+		let tools: string[] | undefined
+		if (config.tools === 'all') {
+			tools = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls']
+		} else if (config.tools !== undefined && config.tools !== 'none') {
+			tools = [...config.tools]
+		}
 		const resourceLoader = new DefaultResourceLoader({
 			agentDir: getAgentDir(),
 			appendSystemPromptOverride: () => [],
@@ -178,6 +263,15 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 			catch: cause => new AiErrorSchema({cause, message: 'failed to load pi agent resources'}),
 			try: () => resourceLoader.reload()
 		})
+		const currentUserMessage = input.messages.findLast(message => message.role === 'user')
+		if (currentUserMessage === undefined || input.messages.at(-1) !== currentUserMessage) {
+			return yield* new AiErrorSchema({message: 'Pi agent prompts must end with a user message'})
+		}
+		const prompt = yield* piMessagesFromPromptHistory(input.messages, input, currentUserMessage)
+		const sessionManager = SessionManager.inMemory(config.cwd)
+		for (const message of prompt.history) {
+			sessionManager.appendMessage(message)
+		}
 		const result = yield* Effect.tryPromise({
 			catch: cause => new AiErrorSchema({cause, message: 'failed to create pi agent session'}),
 			try: () =>
@@ -192,9 +286,8 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 				})
 		})
 
-		yield* Ref.set(sessionRef, result.session)
 		yield* Effect.addFinalizer(() => Effect.sync(() => result.session.dispose()))
-		return result.session
+		return {prompt, session: result.session}
 	})
 
 	return {
@@ -210,7 +303,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 						const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
 						yield* Ref.set(history, input.messages)
 						yield* setStatus('running')
-						const unsubscribe = current.subscribe(event => {
+						const unsubscribe = current.session.subscribe(event => {
 							Queue.offerUnsafe(events, event)
 						})
 						yield* Effect.addFinalizer(() =>
@@ -223,7 +316,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 									yield* setStatus('stopping')
 									yield* Effect.tryPromise({
 										catch: cause => new AiErrorSchema({cause, message: 'failed to abort agent'}),
-										try: () => current.abort()
+										try: () => current.session.abort()
 									})
 									yield* setStatus('idle')
 								}),
@@ -255,13 +348,17 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 						)
 
 						yield* pipe(
-							promptFromMessages(input.messages),
-							Effect.flatMap(prompt =>
-								Effect.tryPromise({
-									catch: cause => new AiErrorSchema({cause, message: 'agent prompt failed'}),
-									try: () => current.prompt(prompt.text, {images: prompt.images})
-								})
-							),
+							Effect.tryPromise({
+								catch: cause => new AiErrorSchema({cause, message: 'agent prompt failed'}),
+								try: () => {
+									const text = current.prompt.prompt
+										.filter((part): part is TextContent => part.type === 'text')
+										.map(part => part.text)
+										.join('\n\n')
+									const images = current.prompt.prompt.filter((part): part is ImageContent => part.type === 'image')
+									return current.session.prompt(text, {images})
+								}
+							}),
 							Effect.catch(error =>
 								pipe(
 									Ref.set(finished, true),
