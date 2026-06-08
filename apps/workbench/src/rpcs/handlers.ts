@@ -28,7 +28,7 @@ import {
 	gitReviewStateSaveComment,
 	gitReviewStateUnmark
 } from '@deslop/git/schema'
-import {GitCommand, GitCommitAction, GitReview, GitWorkspace} from '@deslop/git/service'
+import {GitCommand, GitCommitAction, GitReview, GitWorkspace, cleanupGitProject} from '@deslop/git/service'
 import {Portless} from '@deslop/portless/http'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
@@ -321,6 +321,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'projects.branches': payload => git.branches(payload.cwd),
+			'projects.cleanup': payload =>
+				pipe(
+					cleanupGitProject(payload.cwd),
+					Effect.provide(GitCommand.layer),
+					Effect.tap(() => git.refreshProjects()),
+					Effect.map(failures =>
+						pipe(
+							failures,
+							Array.map(failure => failure.message),
+							Array.join('\n')
+						)
+					)
+				),
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload => git.deleteWorktree(payload),
 			'projects.watch': () =>

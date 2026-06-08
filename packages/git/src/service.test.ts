@@ -12,7 +12,7 @@ import {Array, ConfigProvider, Effect, Order} from 'effect'
 import type {ChildProcessSpawner} from 'effect/unstable/process'
 import {describe, expect, it} from 'vite-plus/test'
 
-import {GitCommand, GitCommitAction, GitMaintenance, GitReview, GitWorkspace} from './service.ts'
+import {GitCommand, GitCommitAction, GitReview, GitWorkspace, cleanupGitProject} from './service.ts'
 
 function withTempRoot<T>(test: (root: string) => Promise<T> | T) {
 	return Effect.runPromise(
@@ -168,20 +168,20 @@ exit 1
 	return {bin, log}
 }
 
-function fakeMaintenanceGit(root: string) {
+function fakeCleanupGit(root: string) {
 	const bin = join(root, 'bin')
-	const log = join(root, 'maintenance-git.log')
+	const log = join(root, 'cleanup-git.log')
 	mkdirSync(bin, {recursive: true})
 	writeFileSync(
 		join(bin, 'git'),
 		`#!/bin/sh
 printf '%s %s\\n' "$PWD" "$*" >> "${log}"
-if [ "$1 $2" = "rev-parse --path-format=absolute" ]; then
-	printf '%s\\n' "$PWD/.git"
-	exit 0
-fi
 if [ "$1 $2 $3" = "worktree list --porcelain" ]; then
 	printf 'worktree %s\\0HEAD commit\\0branch refs/heads/main\\0' "$PWD"
+	exit 0
+fi
+if [ "$1 $2" = "symbolic-ref --short" ]; then
+	printf '%s\\n' 'origin/main'
 	exit 0
 fi
 if [ "$1" = "fetch" ]; then
@@ -236,19 +236,9 @@ function runWorkspace<T, E>(
 	)
 }
 
-function runMaintenance<T, E>(
-	home: string,
-	effect: Effect.Effect<T, E, GitMaintenance | GitWorkspace | GitCommand | ChildProcessSpawner.ChildProcessSpawner>
-) {
+function runCleanup<T, E>(effect: Effect.Effect<T, E, GitCommand | ChildProcessSpawner.ChildProcessSpawner>) {
 	return Effect.runPromise(
-		effect.pipe(
-			Effect.provide(GitMaintenance.layer),
-			Effect.provide(GitWorkspace.layer),
-			Effect.provide(GitCommand.layer),
-			Effect.provide(NodeServices.layer),
-			Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({HOME: home}))),
-			Effect.scoped
-		)
+		effect.pipe(Effect.provide(GitCommand.layer), Effect.provide(NodeServices.layer), Effect.scoped)
 	)
 }
 
@@ -532,7 +522,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('maintenance deletes gone upstream branches and linked worktrees', async () => {
+	it('cleanup deletes gone upstream branches and linked worktrees', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			git(fixture.repo, ['switch', '-c', 'stale'])
@@ -543,33 +533,88 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['switch', 'main'])
 			const staleWorktree = join(root, 'stale-worktree')
 			git(fixture.repo, ['worktree', 'add', staleWorktree, 'stale'])
+			writeFileSync(join(staleWorktree, 'dirty.txt'), 'dirty\n')
+			writeFileSync(join(staleWorktree, 'unpushed.txt'), 'unpushed\n')
+			git(staleWorktree, ['add', 'unpushed.txt'])
+			git(staleWorktree, ['commit', '-m', 'unpushed stale'])
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale'])
 
-			await runMaintenance(
-				root,
-				Effect.flatMap(GitMaintenance, service => service.maintain(root))
-			)
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
 
+			expect(failures).toEqual([])
 			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
 			expect(existsSync(staleWorktree)).toBe(false)
 		})
 	})
 
-	it('maintenance preserves unpublished local branches with no upstream', async () => {
+	it('cleanup reports gone upstream root worktree refusal and continues', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
-			git(fixture.repo, ['branch', 'unpublished'])
+			git(fixture.repo, ['switch', '-c', 'stale-root'])
+			writeFileSync(join(fixture.repo, 'stale-root.txt'), 'stale root\n')
+			git(fixture.repo, ['add', 'stale-root.txt'])
+			git(fixture.repo, ['commit', '-m', 'stale root'])
+			git(fixture.repo, ['push', '-u', 'origin', 'stale-root'])
+			git(fixture.repo, ['switch', 'main'])
+			git(fixture.repo, ['switch', '-c', 'stale-linked'])
+			writeFileSync(join(fixture.repo, 'stale-linked.txt'), 'stale linked\n')
+			git(fixture.repo, ['add', 'stale-linked.txt'])
+			git(fixture.repo, ['commit', '-m', 'stale linked'])
+			git(fixture.repo, ['push', '-u', 'origin', 'stale-linked'])
+			const staleLinkedWorktree = join(root, 'stale-linked-worktree')
+			git(fixture.repo, ['switch', 'stale-root'])
+			git(fixture.repo, ['worktree', 'add', staleLinkedWorktree, 'stale-linked'])
+			git(fixture.repo, ['push', 'origin', '--delete', 'stale-root'])
+			git(fixture.repo, ['push', 'origin', '--delete', 'stale-linked'])
 
-			await runMaintenance(
-				root,
-				Effect.flatMap(GitMaintenance, service => service.maintain(root))
-			)
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(git(fixture.repo, ['branch', '--list', 'unpublished']).trim()).toContain('unpublished')
+			expect(failures.map(failure => failure.message).join('\n')).toContain('delete stale-root')
+			expect(git(fixture.repo, ['branch', '--list', 'stale-root']).trim()).toContain('stale-root')
+			expect(git(fixture.repo, ['branch', '--list', 'stale-linked']).trim()).toBe('')
+			expect(existsSync(staleLinkedWorktree)).toBe(false)
 		})
 	})
 
-	it('maintenance fast-forwards only directly fast-forwardable branches', async () => {
+	it('cleanup deletes merged local-only branches and preserves unmerged and dirty local-only branches', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			git(fixture.repo, ['branch', 'merged-local'])
+			git(fixture.repo, ['switch', '-c', 'unmerged-local'])
+			writeFileSync(join(fixture.repo, 'unmerged.txt'), 'unmerged\n')
+			git(fixture.repo, ['add', 'unmerged.txt'])
+			git(fixture.repo, ['commit', '-m', 'unmerged local'])
+			git(fixture.repo, ['switch', '-c', 'dirty-local', 'main'])
+			git(fixture.repo, ['switch', 'main'])
+			const dirtyLocalWorktree = join(root, 'dirty-local-worktree')
+			git(fixture.repo, ['worktree', 'add', dirtyLocalWorktree, 'dirty-local'])
+			writeFileSync(join(dirtyLocalWorktree, 'dirty.txt'), 'dirty\n')
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(failures.map(failure => failure.message)).toContain('dirty-local: skipped dirty local-only branch')
+			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
+			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toContain('dirty-local')
+			expect(existsSync(dirtyLocalWorktree)).toBe(true)
+			expect(git(fixture.repo, ['branch', '--list', 'unmerged-local']).trim()).toContain('unmerged-local')
+		})
+	})
+
+	it('cleanup preserves the default branch when its upstream is unset', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			git(fixture.repo, ['branch', '--unset-upstream', 'main'])
+			git(fixture.repo, ['branch', 'merged-local'])
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(failures).toEqual([])
+			expect(git(fixture.repo, ['branch', '--list', 'main']).trim()).toContain('main')
+			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
+		})
+	})
+
+	it('cleanup fast-forwards clean branches and reports detached branch rebases', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			const other = join(root, 'other')
@@ -587,37 +632,123 @@ describe('@deslop/git service', () => {
 			const divergedHead = git(fixture.repo, ['rev-parse', 'diverged']).trim()
 			git(fixture.repo, ['switch', 'main'])
 
-			await runMaintenance(
-				root,
-				Effect.flatMap(GitMaintenance, service => service.maintain(root))
-			)
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
 
 			expect(git(fixture.repo, ['rev-parse', 'main']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'origin/main']).trim()
 			)
 			expect(git(fixture.repo, ['rev-parse', 'diverged']).trim()).toBe(divergedHead)
+			expect(failures.map(failure => failure.message)).toContain(
+				'diverged: skipped rebase for branch without linked worktree'
+			)
 		})
 	})
 
-	it('keeps maintenance command count independent of branch count for no-op branches', async () => {
+	it('cleanup skips dirty branches with existing upstreams', async () => {
 		await withTempRoot(async root => {
-			const home = join(root, 'home')
+			const fixture = initRemoteRepo(root)
+			const other = join(root, 'other')
+			git(root, ['clone', fixture.remote, other])
+			git(other, ['config', 'user.email', 'test@example.com'])
+			git(other, ['config', 'user.name', 'Test User'])
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'local dirty\n')
+			git(fixture.repo, ['add', 'feature.txt'])
+			git(fixture.repo, ['commit', '-m', 'feature'])
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+			git(other, ['fetch', 'origin'])
+			git(other, ['switch', 'feature'])
+			writeFileSync(join(other, 'remote.txt'), 'remote\n')
+			git(other, ['add', 'remote.txt'])
+			git(other, ['commit', '-m', 'remote feature'])
+			git(other, ['push'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'local dirty\nuncommitted\n')
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(readFileSync(join(fixture.repo, 'feature.txt'), 'utf8')).toBe('local dirty\nuncommitted\n')
+			expect(failures.map(failure => failure.message)).toContain('feature: skipped dirty worktree')
+		})
+	})
+
+	it('cleanup rebases clean checked-out branches with local and upstream commits', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			const other = join(root, 'other')
+			git(root, ['clone', fixture.remote, other])
+			git(other, ['config', 'user.email', 'test@example.com'])
+			git(other, ['config', 'user.name', 'Test User'])
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'local.txt'), 'local\n')
+			git(fixture.repo, ['add', 'local.txt'])
+			git(fixture.repo, ['commit', '-m', 'local feature'])
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+			git(other, ['fetch', 'origin'])
+			git(other, ['switch', 'feature'])
+			writeFileSync(join(other, 'remote.txt'), 'remote\n')
+			git(other, ['add', 'remote.txt'])
+			git(other, ['commit', '-m', 'remote feature'])
+			git(other, ['push'])
+			writeFileSync(join(fixture.repo, 'local-only.txt'), 'local only\n')
+			git(fixture.repo, ['add', 'local-only.txt'])
+			git(fixture.repo, ['commit', '-m', 'local only feature'])
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(failures).toEqual([])
+			expect(git(fixture.repo, ['rev-parse', 'HEAD~1']).trim()).toBe(
+				git(fixture.repo, ['rev-parse', 'origin/feature']).trim()
+			)
+			expect(readFileSync(join(fixture.repo, 'local.txt'), 'utf8')).toBe('local\n')
+			expect(readFileSync(join(fixture.repo, 'local-only.txt'), 'utf8')).toBe('local only\n')
+			expect(readFileSync(join(fixture.repo, 'remote.txt'), 'utf8')).toBe('remote\n')
+		})
+	})
+
+	it('cleanup aborts and reports rebase conflicts', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			const other = join(root, 'other')
+			git(root, ['clone', fixture.remote, other])
+			git(other, ['config', 'user.email', 'test@example.com'])
+			git(other, ['config', 'user.name', 'Test User'])
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'README.md'), 'initial\nlocal\n')
+			git(fixture.repo, ['commit', '-am', 'local feature'])
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+			git(other, ['fetch', 'origin'])
+			git(other, ['switch', 'feature'])
+			writeFileSync(join(other, 'README.md'), 'initial\nremote\n')
+			git(other, ['commit', '-am', 'remote feature'])
+			git(other, ['push'])
+			writeFileSync(join(fixture.repo, 'README.md'), 'initial\nlocal again\n')
+			git(fixture.repo, ['commit', '-am', 'local conflict'])
+			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
+			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
+			expect(failures.map(failure => failure.message).join('\n')).toContain('feature: update failed')
+		})
+	})
+
+	it('keeps cleanup command count independent of branch count for no-op branches', async () => {
+		await withTempRoot(async root => {
 			const repo = join(root, 'repo')
-			const fake = fakeMaintenanceGit(root)
+			const fake = fakeCleanupGit(root)
 			const originalPath = process.env['PATH']
-			mkdirSync(join(home, 'empty'), {recursive: true})
 			mkdirSync(join(repo, '.git'), {recursive: true})
 			process.env['PATH'] = `${fake.bin}:${process.env['PATH'] ?? ''}`
 			const started = performance.now()
 
 			try {
-				await runMaintenance(
-					home,
-					Effect.flatMap(GitMaintenance, service => service.maintain(root))
-				)
+				await runCleanup(cleanupGitProject(repo))
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
-				expect(commands).toHaveLength(9)
+				expect(commands).toHaveLength(8)
+				expect(commands.filter(command => command.includes(' fetch --prune origin'))).toHaveLength(1)
+				expect(commands.filter(command => command.includes(' fetch --all'))).toHaveLength(0)
 				expect(commands.filter(command => command.includes(' for-each-ref '))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' branch-40'))).toHaveLength(0)
 				expect(performance.now() - started).toBeLessThan(1_000)
