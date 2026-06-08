@@ -1,9 +1,9 @@
-import {Array, Duration, Effect, Hash, Option, Order, Result, Stream, String, pipe} from 'effect'
+import {Array, Data, Effect, Hash, Option, Order, Result, Stream, String, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
+import type {TerminalStatus} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
@@ -13,63 +13,53 @@ export type TerminalSessionInput = {
 	readonly sessionId?: string
 }
 
+class TerminalSessionAtomKey extends Data.Class<TerminalSessionInput> {}
+
+function terminalSessionInput(input: TerminalSessionInput): TerminalSessionInput {
+	return {
+		...(input.args === undefined ? {} : {args: [...input.args]}),
+		...(input.command === undefined ? {} : {command: input.command}),
+		cwd: input.cwd,
+		...(input.env === undefined ? {} : {env: {...input.env}}),
+		...(input.sessionId === undefined ? {} : {sessionId: input.sessionId})
+	}
+}
+
 export function worktreeRouteId(root: string) {
 	return Math.abs(Hash.string(root)).toString(36)
 }
 
-function terminalStateInitialValue(input: TerminalSessionInput): TerminalState {
-	return {
-		runId: 0,
-		state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle',
-		title: ''
-	}
+export function terminalSessionStatus(input: TerminalSessionInput): TerminalStatus {
+	return {state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle', title: ''}
 }
 
-function terminalViewInitialValue(input: TerminalSessionInput) {
-	return {data: '', frame: 0, state: terminalStateInitialValue(input)}
-}
-
-function terminalViewUpdates(current: ReturnType<typeof terminalViewInitialValue>, updates: Iterable<TerminalUpdate>) {
-	const nextView = pipe(
-		updates,
-		Array.reduce({data: '', frame: current.frame, state: current.state}, (currentView, update) => {
-			const next = currentView
-			if (update.type === 'state') {
-				next.state = update.state
-				return next
-			}
-
-			next.data += update.data
-			return next
-		})
-	)
-
-	return {data: nextView.data, frame: nextView.data === '' ? nextView.frame : nextView.frame + 1, state: nextView.state}
-}
-
-export const terminalViewAtom = Atom.family((input: TerminalSessionInput) =>
+const terminalAttachQueueAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.watch', input, {streamBufferSize: 256})),
-			Stream.unwrap,
-			Stream.groupedWithin(100, Duration.millis(16)),
-			Stream.scan(terminalViewInitialValue(input), terminalViewUpdates)
-		),
-		{initialValue: terminalViewInitialValue(input)}
+			Effect.flatMap(client => client('terminal.attach', terminalSessionInput(input), {asQueue: true}))
+		)
 	)
 )
 
-export const terminalStateAtom = Atom.family((input: TerminalSessionInput) =>
+export function terminalAttachQueueAtom(input: TerminalSessionInput) {
+	return terminalAttachQueueAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
+}
+
+const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.state.watch', input)),
+			Effect.map(client => client('terminal.status.watch', terminalSessionInput(input))),
 			Stream.unwrap
 		),
-		{initialValue: terminalStateInitialValue(input)}
+		{initialValue: terminalSessionStatus(input)}
 	)
 )
+
+export function terminalStatusAtom(input: TerminalSessionInput) {
+	return terminalStatusAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
+}
 
 export const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(

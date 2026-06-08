@@ -5,22 +5,23 @@ export class TerminalError extends Schema.TaggedErrorClass<TerminalError>()('Ter
 	message: Schema.optional(Schema.String)
 }) {}
 
-export type TerminalEvent = typeof TerminalEvent.Type
-export const TerminalEvent = Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('data')})
-
-export type TerminalState = typeof TerminalState.Type
-export const TerminalState = Schema.Struct({
-	runId: Schema.Number,
+export type TerminalStatus = typeof TerminalStatus.Type
+export const TerminalStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'starting', 'running', 'waiting', 'stopped', 'exited', 'failed']),
 	title: Schema.String
 })
 
-export function terminalStateActive(state: TerminalState['state']) {
+export function terminalStatusActive(state: TerminalStatus['state']) {
 	return state === 'idle' || state === 'starting' || state === 'running' || state === 'waiting'
 }
 
-export type TerminalUpdate = typeof TerminalUpdate.Type
-export const TerminalUpdate = Schema.Union([
-	Schema.Struct({state: TerminalState, type: Schema.Literal('state')}),
-	TerminalEvent
+export type TerminalAttachUpdate =
+	| {readonly data: string; readonly type: 'snapshot'}
+	| {readonly data: string; readonly type: 'data'}
+	| {readonly status: TerminalStatus; readonly type: 'status'}
+
+export const TerminalAttachUpdate = Schema.Union([
+	Schema.Struct({data: Schema.String, type: Schema.Literal('snapshot')}),
+	Schema.Struct({data: Schema.String, type: Schema.Literal('data')}),
+	Schema.Struct({status: TerminalStatus, type: Schema.Literal('status')})
 ])
