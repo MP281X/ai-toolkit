@@ -294,7 +294,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const attachQueue = Effect.gen(function* () {
 			const previous = yield* Ref.get(attachRef)
-			const queue = yield* Queue.bounded<TerminalAttachUpdate, Cause.Done>(16)
+			const queue = yield* Queue.dropping<TerminalAttachUpdate, Cause.Done>(16)
 			yield* Queue.offer(queue, {status: yield* SubscriptionRef.get(statusRef), type: 'status' as const})
 			yield* Queue.offer(queue, {data: pipe(yield* Ref.get(replayRef), Array.join('')), type: 'snapshot' as const})
 			yield* Ref.set(attachRef, queue)
