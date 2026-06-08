@@ -6,12 +6,12 @@ import {Unicode11Addon} from '@xterm/addon-unicode11'
 import {WebLinksAddon} from '@xterm/addon-web-links'
 import {WebglAddon} from '@xterm/addon-webgl'
 import {Terminal as XTerm} from '@xterm/xterm'
-import {useEffect, useRef} from 'react'
+import {forwardRef, useEffect, useImperativeHandle, useRef} from 'react'
 
 import {Fallback} from '#components/fallbacks.tsx'
 import {cn} from '#lib/utils.ts'
 
-type TerminalState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
+type TerminalStatusState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 
 function cssColor(element: HTMLElement, value: string) {
 	const canvas = element.ownerDocument.createElement('canvas')
@@ -27,14 +27,17 @@ function cssColor(element: HTMLElement, value: string) {
 	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
 }
 
-export function Terminal(input: {
-	readonly className?: string
-	readonly data: string
-	readonly frame: number
-	readonly onData: (data: string) => void
-	readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
-	readonly state?: TerminalState
-}) {
+export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string) => void}
+
+export const Terminal = forwardRef<
+	TerminalHandle,
+	{
+		readonly className?: string
+		readonly onData: (data: string) => void
+		readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
+		readonly state?: TerminalStatusState
+	}
+>(function Terminal(input, ref) {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<XTerm>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
@@ -42,6 +45,21 @@ export function Terminal(input: {
 	const inputFlushRef = useRef<ReturnType<typeof setTimeout>>(null)
 
 	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
+	useImperativeHandle(
+		ref,
+		() => ({
+			reset() {
+				terminalRef.current?.reset()
+			},
+			write(data: string) {
+				const terminal = terminalRef.current
+				if (!terminal || data === '') return
+
+				terminal.write(data)
+			}
+		}),
+		[]
+	)
 
 	useEffect(() => {
 		const element = elementRef.current
@@ -183,12 +201,6 @@ export function Terminal(input: {
 			terminal.dispose()
 		}
 	}, [])
-	useEffect(() => {
-		if (input.data === '') return
-
-		terminalRef.current?.write(input.data)
-	}, [input.data, input.frame])
-
 	const terminalError = pipe(
 		Match.value(input.state),
 		Match.when('exited', () => 'Terminal exited.'),
@@ -207,4 +219,4 @@ export function Terminal(input: {
 			)}
 		</div>
 	)
-}
+})

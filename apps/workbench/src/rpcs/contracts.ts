@@ -14,7 +14,7 @@ import {
 	GitReviewState,
 	GitReviewTarget
 } from '@deslop/git/schema'
-import {TerminalError, TerminalState, TerminalUpdate} from '@deslop/terminal/schema'
+import {TerminalAttachUpdate, TerminalError, TerminalStatus} from '@deslop/terminal/schema'
 
 const CreateWorktreeSource = Schema.Union([
 	Schema.Struct({_tag: Schema.Literal('local')}),
@@ -51,7 +51,7 @@ export const AgentSession = Schema.Struct({
 	cwd: Schema.String,
 	icon: Schema.Literals(['opencode', 'codex', 'pi']),
 	label: Schema.String,
-	state: TerminalState,
+	state: TerminalStatus,
 	uuid: Schema.String
 })
 export type AgentSession = typeof AgentSession.Type
@@ -164,13 +164,18 @@ export class RpcContracts extends RpcGroup.make(
 			sessionId: Schema.optional(Schema.String)
 		})
 	}),
-	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
-	Rpc.make('terminal.state.watch', {
+	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
+	Rpc.make('terminal.status.watch', {
 		error: TerminalError,
 		payload: TerminalPayload,
 		stream: true,
-		success: TerminalState
+		success: TerminalStatus
 	}),
-	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalState}),
-	Rpc.make('terminal.watch', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalUpdate})
+	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
+	Rpc.make('terminal.attach', {
+		error: TerminalError,
+		payload: TerminalPayload,
+		stream: true,
+		success: TerminalAttachUpdate
+	})
 ) {}

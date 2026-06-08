@@ -12,7 +12,7 @@ import {
 	agentsAtom,
 	portlessRunsAtom,
 	projectsAtom,
-	terminalStateAtom,
+	terminalStatusAtom,
 	worktreeRouteId
 } from '#lib/state.ts'
 import type {AgentSession, RunScript} from '#rpcs/contracts.ts'
@@ -47,7 +47,7 @@ import {
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
-import {terminalStateActive} from '@deslop/terminal/schema'
+import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -130,11 +130,11 @@ function HomeLayout() {
 								})
 							})
 						}}
-						selectRun={(worktreeRoot, sessionId, command, runId, inactive, env, cwd) => {
+						selectRun={(worktreeRoot, sessionId, command, inactive, env, cwd) => {
 							startTransition(() => {
 								void navigate({
 									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {command, cwd, env, inactive, runId, sessionId},
+									search: {command, cwd, env, inactive, sessionId},
 									to: '/$worktree/run'
 								})
 							})
@@ -215,10 +215,10 @@ const portlessActiveAtom = Atom.family((scripts: readonly RunScript[]) =>
 		pipe(
 			pipe(
 				scripts,
-				Array.map(script => get.result(terminalStateAtom(scriptSession(script))))
+				Array.map(script => get.result(terminalStatusAtom(scriptSession(script))))
 			),
 			Effect.all,
-			Effect.map(Array.some(state => state.runId > 0 && terminalStateActive(state.state)))
+			Effect.map(Array.some(status => terminalStatusActive(status.state) && status.state !== 'idle'))
 		)
 	)
 )
@@ -230,7 +230,6 @@ function WorktreePortless(input: {
 		worktreeRoot: string,
 		sessionId: string,
 		command?: string,
-		runId?: number,
 		inactive?: boolean,
 		env?: Readonly<Record<string, string>>,
 		runCwd?: string
@@ -305,14 +304,13 @@ function PortlessServiceRow(input: {
 		worktreeRoot: string,
 		sessionId: string,
 		command?: string,
-		runId?: number,
 		inactive?: boolean,
 		env?: Readonly<Record<string, string>>,
 		runCwd?: string
 	) => void
 }) {
 	const session = scriptSession(input.script)
-	const firstState = useAtomSuspense(terminalStateAtom(session))
+	const firstState = useAtomSuspense(terminalStatusAtom(session))
 
 	return (
 		<li className="w-full min-w-0">
@@ -324,13 +322,7 @@ function PortlessServiceRow(input: {
 							className="text-muted-foreground hover:text-foreground flex size-6 items-center justify-center"
 							onClick={event => {
 								event.stopPropagation()
-								input.selectRun(
-									input.cwd,
-									input.script.sessionId,
-									undefined,
-									firstState.value.runId,
-									firstState.value.runId === 0
-								)
+								input.selectRun(input.cwd, input.script.sessionId, undefined, firstState.value.state === 'idle')
 							}}
 							title={`Open ${input.label} terminal`}
 						>
@@ -477,7 +469,6 @@ function WorktreeManager(input: {
 		worktreeRoot: string,
 		sessionId: string,
 		command?: string,
-		runId?: number,
 		inactive?: boolean,
 		env?: Readonly<Record<string, string>>,
 		runCwd?: string
