@@ -136,6 +136,7 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: Schema.Struct({cwd: Schema.String})}),
+	Rpc.make('projects.cleanup', {error: GitError, payload: Schema.Struct({cwd: Schema.String})}),
 	Rpc.make('runs.portless', {
 		error: TerminalError,
 		payload: Schema.Struct({cwd: Schema.String}),
