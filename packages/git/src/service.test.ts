@@ -600,6 +600,19 @@ describe('@deslop/git service', () => {
 		})
 	})
 
+	it('cleanup deletes clean merged new worktree branches without upstreams', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			const newWorktree = join(root, 'new-worktree')
+			git(fixture.repo, ['worktree', 'add', '--no-track', '-b', 'new-local', newWorktree, 'origin/main'])
+
+			await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(git(fixture.repo, ['branch', '--list', 'new-local']).trim()).toBe('')
+			expect(existsSync(newWorktree)).toBe(false)
+		})
+	})
+
 	it('cleanup preserves the default branch when its upstream is unset', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
@@ -825,6 +838,8 @@ describe('@deslop/git service', () => {
 			expect(git(newWorktree, ['rev-parse', 'HEAD']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'origin/main']).trim()
 			)
+			expect(() => git(newWorktree, ['config', '--get', 'branch.new-local.remote'])).toThrow()
+			expect(() => git(newWorktree, ['config', '--get', 'branch.new-local.merge'])).toThrow()
 		})
 	})
 
