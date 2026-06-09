@@ -5,42 +5,29 @@ description: Use when the user asks the agent to create and push a git commit fr
 
 # Commit
 
-Create a commit and push it.
-
-## Workflow
+## Flow
 
 1. Inspect `git status --short`
-2. Inspect the full local diff against `HEAD`
-3. Draft a concise commit message from the local changes
+2. Inspect full `HEAD` diff, including untracked files
+3. Draft message from diff
 4. Run `git add -A`
 5. Commit
-6. Push the current branch
+6. Push current branch
 
 ## Message
 
-Use this subject format:
+- Match repo history
+- Prefer:
 
 ```text
-<prefix>: <imperative description>
+<type>: <imperative summary>
 ```
 
-Prefixes:
+- Subject <= 72 chars
+- Body only for non-obvious scope, risk, or rationale
 
-- `feat`: new capability
-- `fix`: bug fix
-- `refactor`: restructuring without behavior change
-- `perf`: performance improvement
-- `chore`: dependencies, config, tooling
-- `docs`: documentation
-- `test`: tests
-- `ci`: CI/CD
-- `style`: formatting only
+## Guardrails
 
-Keep the subject under 72 characters. Add a short bullet body only when the subject cannot explain the change.
-
-## Constraints
-
-- Treat staged and unstaged changes as one local change set
-- Include untracked files that belong to the requested change
-- Never force-push
-- Report the commit hash and pushed branch
+- Include relevant untracked files
+- No force-push
+- Report hash and branch

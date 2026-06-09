@@ -5,55 +5,50 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 
 # Effect
 
-Treat Effect as the programming model.
-
 ## Programs
 
-- Use `Effect`, `Stream`, `Layer`, `Context`, `Scope`, `RcMap`, `SubscriptionRef`, `Ref`, `Queue`, `PubSub`, and `Schema` before custom runtime code
-- Use `Effect.gen` or `Effect.fn` for effectful functions
-- Use `Effect.fn("Service.method")` for public service methods so spans are attached
-- Use `Effect.fnUntraced` only for private hot helpers or code that should not create spans
-- Keep resource lifetime in `Scope`
-- Keep concurrency, retries, scheduling, and cleanup inside Effect primitives
-- Do not wrap TypeScript async code in Effect as an afterthought
+- Effect-first: no ad-hoc async/runtime when an Effect primitive exists
+- Use `Effect.gen` or `Effect.fn`; public service methods use `Effect.fn("Service.method")`
+- `Effect.fnUntraced`: private hot path or intentionally untraced code only
+- Resource lifetime: `Scope`
+- Concurrency, retry, schedule, interruption, cleanup: Effect APIs
 
 ## Services
 
-- Define services with `Context.Service`
-- Provide dependencies through `Layer`
-- Keep service methods free of external requirements when exposed publicly
+- Service shape: `Context.Service` + `Layer`
+- Public methods expose `R = never`
 - Accept stable constructor inputs in the layer when every method needs them
-- Model a single service instance; put multi-instance ownership in the app with `RcMap`
-- Do not put ids in a package service only because an app needs multiple instances
+- One package service = one instance
+- Multi-instance ownership: app `RcMap`
+- No app ids, route ids, tab ids, or UI state in package services
 
 ## Reactive Data
 
-- Use `SubscriptionRef` for state that is held and synchronized
-- Use `Stream` for events, partial results, and incremental output
-- Use `Effect` for static or computed values
-- Use functions returning `Effect` for commands
-- Do not add `stream`, `watch`, `changes`, or service-name suffixes when the type already says it
-- Do not expose duplicate ways to read the same information
-- If one value is a superset of another, expose only the superset
+- `SubscriptionRef`: held synchronized state/stateful frontend sync
+- `Stream`: events, partial results, incremental output
+- `Effect`: static or computed values
+- `(...args) => Effect`: commands
+- Type-said, name-silent: no `stream`, `watch`, `changes`, or service-name suffixes
+- One fact, one read path; superset wins
 
 ## Schemas
 
-- Prefer `Schema.Class`, `Schema.TaggedClass`, and `Schema.TaggedErrorClass`
-- Prefer literals and branded schemas over generic strings
-- Infer types from schemas
-- For non-class schemas, define `type Name = typeof Name.Type` next to `const Name = ...`
-- Validate at external boundaries and trust typed values inside the program
+- Schema-owned types: infer from schema, not inverse
+- Schema classes/tagged classes/tagged errors preferred
+- Literals/brands over generic strings
+- Plain schemas: `type Name = typeof Name.Type` immediately before `const Name = ...`
+- Validate at boundaries; trust typed internals
 
 ## Errors
 
-- Each service owns one typed error class
-- Service errors may contain optional `cause` and optional `message`
-- Public service methods expose only the service error in the error channel
+- Each service owns one tagged error class
+- Service error shape: optional `cause`, optional `message`
+- Public service methods expose only the service error
 - RPC handlers may expose the full error channel
-- Do not recover, suppress, or convert failures to empty fallback values unless the domain requires it
+- Fail loud: no suppression, fake empty values, or generic fallback
 
 ## Equality
 
-- Prefer schema-backed classes and Effect data structures for structural comparison
-- Use Effect equality helpers for dedupe and state-change detection
-- Do not create custom string keys when a structured value can be compared directly
+- Structural equality: schema-backed classes or Effect data structures
+- Dedupe/change detection: Effect equality helpers
+- No custom string keys when structured comparison works

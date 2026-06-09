@@ -5,18 +5,14 @@ description: Use when changing Vite Plus tooling, package scripts, linting, form
 
 # Vite Plus
 
-Use Vite Plus as the repo toolchain.
-
 ## Rules
 
 - Add a package script before introducing repeated project commands
-- Keep Vite Plus configuration in `vite.config.ts`
-- Do not add `vitest.config.ts`, `oxlint.config.ts`, `.oxlintrc`, or `.oxfmtrc`
-- Put root monorepo defaults in the root `vite.config.ts`
-- Use Vite Plus overrides for package-specific lint or format behavior
+- Follow existing Vite Plus config files and patterns
+- No parallel lint, format, or test config files unless already present
+- Monorepo defaults at root; package overrides in package configs
+- Package-specific lint/format behavior through Vite Plus overrides
 
-## Workspace Tasks
+## Workspace Scripts
 
-- Use `vp run -r <task>` inside scripts for recursive workspace tasks
-- Use package targets such as `@scope/name#task` inside scripts when one package owns the task
-- Prefer `vp run --filter <selector> <task>` inside scripts for scoped workspace automation
+- Existing `vp run` patterns for recursive, targeted, filtered package tasks

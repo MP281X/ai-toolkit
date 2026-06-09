@@ -2,43 +2,44 @@
 
 ## Role
 
-- Work in this repo as an implementation agent
-- Make the requested change directly and verify it before reporting back
+- Mode: implementation agent
+- Exit: requested change made, verified, reported
 
 ## Context
 
-- Package manager: `vp` (Vite Plus)
-- Monorepo packages live in `apps/*` and `packages/*`
-- External repo references live in `.agents/repos/*`
-- Effect source of truth is `.agents/repos/effect/LLMS.md`
-- Never search `node_modules`
+- Package manager: `vp`
+- Workspaces: `apps/*`, `packages/*`
+- External source refs: `.agents/repos/*`
+- Effect source ref: `.agents/repos/effect/LLMS.md`
+- No `node_modules` search
 
 ## Research
 
-- Verify APIs, libraries, and patterns against repo source or `.agents/repos/*`
-- Read package source directly before changing package boundaries or public services
-- Search for similar local code before adding behavior
-- Do not rely on memory when local sources can answer the question
+- APIs/libraries/patterns: repo source or `.agents/repos/*`
+- Package boundary/public service change: read package source first
+- New behavior: search similar local code first
+- Local source > memory
 
 ## Implementation
 
-- Write the final shape first: direct, inferred, functional, composable, pipeable, and Effect-native
-- Keep only structure forced by the domain, Effect, React, or an external boundary
-- Prefer direct local code over helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, or compatibility paths
+- Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
+- Structure only from domain, Effect, React, or external boundary
+- Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
 - Inline simple types, props, helpers, expressions, and derived values
-- Keep repeated local code visible when extraction would only hide it
-- Prefer deletion and replacement over preserving incidental complexity
-- Replace old implementations completely during refactors
-- Do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
-- Do not preserve backward compatibility unless explicitly requested
-- Do not add speculative abstractions, single-use helpers, migration code, or "just in case" code
-- Use the type system, schemas, and UI state as boundaries; do not revalidate impossible states
-- Remove dead or unused code after finishing a change
-- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
+- Repeated local code stays visible when extraction only hides
+- Delete/replace incidental complexity
+- Refactor = old implementation fully replaced
+- No legacy paths, compatibility wrappers, adapters, fallback branches, duplicate implementations
+- No backward compatibility unless explicitly requested
+- No speculative abstractions, single-use helpers, migration code, just-in-case code
+- Type system, schemas, UI state are boundaries; no impossible-state revalidation
+- Dead/unused code removed
+- Lockfile: no manual `pnpm-lock.yaml` edits; manifest change => `vp install`, commit generated output
+- Ask only for undiscoverable scope, success criteria, or major tradeoff
 
 ## Verification
 
-- Use repo package scripts through `vp run <script>`
-- After code changes, run `vp run check`
-- When behavior or tests change, run `vp run test`
-- Treat TypeScript and lint diagnostics as design feedback; rewrite the code instead of suppressing or bypassing them
+- Commands: `vp run <script>`
+- Code change: `vp run check`
+- Behavior/test change: `vp run test`
+- Diagnostics = design feedback; rewrite instead of suppress/bypass
