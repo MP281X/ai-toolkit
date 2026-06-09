@@ -472,7 +472,15 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				const defaultBranch = yield* getDefaultBranch(input.cwd)
 				yield* Effect.annotateCurrentSpan({source: 'new'})
 				yield* pipe(
-					git.string(input.cwd, ['worktree', 'add', '-b', input.branch, targetDirectory, `origin/${defaultBranch}`]),
+					git.string(input.cwd, [
+						'worktree',
+						'add',
+						'--no-track',
+						'-b',
+						input.branch,
+						targetDirectory,
+						`origin/${defaultBranch}`
+					]),
 					Effect.asVoid
 				)
 				yield* refreshProjects()
