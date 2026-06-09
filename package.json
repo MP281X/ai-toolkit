@@ -1,37 +1,37 @@
 {
   "name": "@deslop",
   "type": "module",
-  "sideEffects": false,
+	"sideEffects": false,
 
-  "engines": {"node": ">=24"},
-  "packageManager": "pnpm@11.5.0",
-  "workspaces": ["apps/*", "packages/*", ".opencode"],
+	"engines": {"node": ">=24"},
+	"packageManager": "pnpm@11.5.0",
+	"workspaces": ["apps/*", "packages/*"],
 
-  "scripts": {
+	"scripts": {
 		"build": "vp run -r build",
-    "preview": "mprocs 'vp run @deslop/workbench#preview' 'vp run @deslop/portfolio#preview'",
 
-    "fix": "vp check --fix",
-    "check": "vp check",
-    "test":"vp test",
+		"fix": "vp check --fix",
+		"check": "vp check",
+		"test": "vp test",
 
-    "shadcn": "cd packages/components && vp dlx shadcn@latest"
-  },
+		"shadcn": "cd packages/components && vp dlx shadcn@latest",
 
-  "dependencies": {
-    "effect": "^4.0.0-beta",
-    "@effect/atom-react": "^4.0.0-beta",
-    "@effect/platform-node": "^4.0.0-beta",
-    "@effect/openapi-generator": "^4.0.0-beta"
-  },
-  "devDependencies": {
-    "typescript": "latest",
-    "@types/node": "latest",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+		"postinstall": "node scripts/clone-source-repos.ts"
+	},
 
-    "mprocs": "latest",
-    "vite": "catalog:",
-    "vite-plus": "catalog:"
-  }
+	"dependencies": {
+		"effect": "^4.0.0-beta",
+		"@effect/atom-react": "^4.0.0-beta",
+		"@effect/platform-node": "^4.0.0-beta",
+		"@effect/openapi-generator": "^4.0.0-beta"
+	},
+	"devDependencies": {
+		"typescript": "latest",
+		"@types/node": "latest",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+
+		"vite": "catalog:",
+		"vite-plus": "catalog:"
+	}
 }

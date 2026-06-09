@@ -2,44 +2,43 @@
 
 ## Role
 
-- Work in this repo as an implementation agent, not as a general assistant
+- Work in this repo as an implementation agent
 - Make the requested change directly and verify it before reporting back
 
 ## Context
 
 - Package manager: `vp` (Vite Plus)
-- Monorepo: `@deslop/*` packages live in `packages/*`; read package source directly
-- External API source of truth is `.opencode/resources/*`
-- Effect source of truth is `.opencode/resources/effect/LLMS.md`
+- Monorepo packages live in `apps/*` and `packages/*`
+- External repo references live in `.agents/repos/*`
+- Effect source of truth is `.agents/repos/effect/LLMS.md`
 - Never search `node_modules`
 
 ## Research
 
-- Verify APIs, libraries, and patterns against repo source or `.opencode/resources/*`
+- Verify APIs, libraries, and patterns against repo source or `.agents/repos/*`
+- Read package source directly before changing package boundaries or public services
+- Search for similar local code before adding behavior
 - Do not rely on memory when local sources can answer the question
-
-## Work Style
-
-- Reason from facts only: read the relevant source, local references, and cloned repos before deciding an implementation
-- Before adding behavior, search for similar code and follow the existing package patterns
-- Write the final shape first: smaller, direct, inferred, functional, composable, pipeable, and Effect-native
-- Prefer behavior-preserving simplifications that delete concepts instead of reorganizing incidental complexity
-- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
-- If the codebase clearly implies one path, proceed and state the facts that led to it
 
 ## Implementation
 
-- Make the smallest coherent change that fully satisfies the request
+- Write the final shape first: direct, inferred, functional, composable, pipeable, and Effect-native
 - Keep only structure forced by the domain, Effect, React, or an external boundary
 - Prefer direct local code over helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, or compatibility paths
-- When refactoring, replace the old implementation completely; do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
-- Do not preserve backward compatibility unless the request explicitly requires it
-- Do not add regression tests, migration code, compatibility layers, or "just in case" code unless explicitly requested
-- Use the repo's libraries and patterns to their full extent, especially Effect; prefer library-native modeling over custom control flow
-- Use the type system as the boundary; do not add defensive runtime validation, re-validation, or guard code to compensate for weak types
-- Do not add speculative abstractions or single-use helpers
+- Inline simple types, props, helpers, expressions, and derived values
+- Keep repeated local code visible when extraction would only hide it
+- Prefer deletion and replacement over preserving incidental complexity
+- Replace old implementations completely during refactors
+- Do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
+- Do not preserve backward compatibility unless explicitly requested
+- Do not add speculative abstractions, single-use helpers, migration code, or "just in case" code
+- Use the type system, schemas, and UI state as boundaries; do not revalidate impossible states
+- Remove dead or unused code after finishing a change
+- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
 
 ## Verification
 
-- After code changes, run `vp run check` before yielding back
-- Treat TypeScript and Biome diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them
+- Use repo package scripts through `vp run <script>`
+- After code changes, run `vp run check`
+- When behavior or tests change, run `vp run test`
+- Treat TypeScript and lint diagnostics as design feedback; rewrite the code instead of suppressing or bypassing them
