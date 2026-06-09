@@ -104,7 +104,7 @@ export const Terminal = forwardRef<
 			letterSpacing: 0,
 			lineHeight: 1,
 			scrollSensitivity: 2,
-			scrollback: 10_000,
+			scrollback: 5_000,
 			smoothScrollDuration: 0,
 			theme: {background, selectionBackground, selectionInactiveBackground: selectionBackground}
 		})

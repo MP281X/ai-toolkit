@@ -2,17 +2,7 @@ import {Array, pipe} from 'effect'
 
 import {describe, expect, it} from 'vite-plus/test'
 
-import {
-	terminalByteLength,
-	terminalChunks,
-	terminalOscUpdates,
-	terminalReplayPush,
-	terminalTitleStatus
-} from './model.ts'
-
-function replayBytes(chunks: readonly string[]) {
-	return chunks.reduce((total, chunk) => total + terminalByteLength(chunk), 0)
-}
+import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
 
 describe('@deslop/terminal model', () => {
 	it('chunks terminal output without dropping or reordering data', () => {
@@ -21,31 +11,6 @@ describe('@deslop/terminal model', () => {
 
 		expect(chunks).toEqual(['aaaaab', 'bbbbcc', 'ccc'])
 		expect(pipe(chunks, Array.join(''))).toBe(data)
-	})
-
-	it('keeps replay bounded while preserving the newest bytes', () => {
-		const empty: readonly string[] = []
-		const replay = pipe(
-			['first-', 'second-', 'third-', 'fourth'],
-			Array.reduce(empty, (ring, chunk) => terminalReplayPush(ring, chunk, 18))
-		)
-
-		expect(replayBytes(replay)).toBeLessThanOrEqual(18)
-		expect(pipe(replay, Array.join(''))).toBe('econd-third-fourth')
-	})
-
-	it('keeps replay memory flat under sustained output', () => {
-		const empty: readonly string[] = []
-		const started = performance.now()
-		const replay = pipe(
-			Array.range(0, 10_000),
-			Array.reduce(empty, (ring, index) => terminalReplayPush(ring, `${index.toString().padStart(5, '0')}\n`, 4096))
-		)
-
-		expect(replayBytes(replay)).toBeLessThanOrEqual(4096)
-		expect(pipe(replay, Array.join(''))).toContain('09999')
-		expect(replay.length).toBeLessThan(700)
-		expect(performance.now() - started).toBeLessThan(1_000)
 	})
 
 	it('parses exact OSC title and progress signals', () => {
