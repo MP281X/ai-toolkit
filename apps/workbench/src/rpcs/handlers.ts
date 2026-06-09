@@ -325,14 +325,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					cleanupGitProject(payload.cwd),
 					Effect.provide(GitCommand.layer),
-					Effect.tap(() => git.refreshProjects()),
-					Effect.map(failures =>
-						pipe(
-							failures,
-							Array.map(failure => failure.message),
-							Array.join('\n')
-						)
-					)
+					Effect.ensuring(pipe(git.refreshProjects(), Effect.ignore))
 				),
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload => git.deleteWorktree(payload),

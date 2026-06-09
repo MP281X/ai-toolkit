@@ -16,7 +16,6 @@ import {
 	Path,
 	Predicate,
 	Random,
-	Result,
 	Schema,
 	Stream,
 	String,
@@ -183,21 +182,6 @@ function parseWorktreeRecords(output: string) {
 
 	if (String.isNonEmpty(current.root) && current.hasHead) records.push(current)
 	return records
-}
-
-type WorktreeRecord = ReturnType<typeof parseWorktreeRecords>[number]
-type GitCleanupFailure = {readonly cwd: string; readonly message: string}
-
-function cleanupFailure(cwd: string, message: string) {
-	return {cwd, message}
-}
-
-function gitErrorMessage(error: GitError) {
-	return error.message || `${error.cause ?? 'git command failed'}`
-}
-
-function gitCleanupFailure(cwd: string, action: string) {
-	return (error: GitError) => cleanupFailure(cwd, `${action}: ${gitErrorMessage(error)}`)
 }
 
 export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/service/GitWorkspace', {
@@ -529,105 +513,8 @@ export const cleanupGitProject = Effect.fn('Git.cleanupProject')(function* (cwd:
 	const git = yield* GitCommand
 	yield* Effect.annotateCurrentSpan({cwd})
 
-	function worktreeClean(worktreeCwd: string) {
-		return pipe(git.lines(worktreeCwd, ['status', '--porcelain']), Effect.map(Array.isReadonlyArrayEmpty))
-	}
-
-	function deleteBranch(branch: string, worktreePath: string) {
-		return Effect.gen(function* () {
-			if (String.isNonEmpty(worktreePath)) {
-				yield* git.string(cwd, ['worktree', 'remove', '--force', worktreePath])
-			}
-			yield* git.string(cwd, ['branch', '-D', branch])
-		})
-	}
-
-	function cleanupBranch(worktrees: readonly WorktreeRecord[], row: string) {
-		return Effect.gen(function* () {
-			const fields = String.split('\u0000')(row)
-			const branch = fields[0]
-			const upstream = fields[1] ?? ''
-			const track = fields[2] ?? ''
-			const worktreePath = String.isNonEmpty(fields[3] ?? '')
-				? (fields[3] ?? '')
-				: pipe(
-						worktrees,
-						Array.findFirst(worktree => worktree.branch === branch),
-						Option.map(worktree => worktree.root),
-						Option.getOrElse(() => '')
-					)
-
-			if (String.isEmpty(branch)) return
-			if (track === '[gone]') {
-				return yield* pipe(
-					deleteBranch(branch, worktreePath),
-					Effect.asVoid,
-					Effect.mapError(gitCleanupFailure(String.isNonEmpty(worktreePath) ? worktreePath : cwd, `delete ${branch}`))
-				)
-			}
-			if (String.isEmpty(upstream)) {
-				if (branch === defaultBranch) return
-
-				const target = String.isNonEmpty(worktreePath) ? worktreePath : cwd
-				if (String.isNonEmpty(worktreePath) && !(yield* worktreeClean(worktreePath))) {
-					return yield* Effect.fail(cleanupFailure(target, `${branch}: skipped dirty local-only branch`))
-				}
-
-				const merged = yield* pipe(
-					git.string(cwd, ['merge-base', '--is-ancestor', branch, `origin/${defaultBranch}`]),
-					Effect.as(true),
-					Effect.catchTag('GitError', () => Effect.succeed(false))
-				)
-				if (!merged) return
-
-				return yield* pipe(
-					deleteBranch(branch, worktreePath),
-					Effect.asVoid,
-					Effect.mapError(gitCleanupFailure(target, `delete merged local branch ${branch}`))
-				)
-			}
-			if (String.isNonEmpty(worktreePath)) {
-				if (!(yield* worktreeClean(worktreePath))) {
-					return yield* Effect.fail(cleanupFailure(worktreePath, `${branch}: skipped dirty worktree`))
-				}
-				if (!String.includes('behind')(track)) return
-
-				const hasLocalCommits = String.includes('ahead')(track)
-				return yield* pipe(
-					git.string(worktreePath, hasLocalCommits ? ['rebase', upstream] : ['merge', '--ff-only', upstream]),
-					Effect.asVoid,
-					Effect.catchTag('GitError', error =>
-						pipe(
-							hasLocalCommits ? git.string(worktreePath, ['rebase', '--abort']) : Effect.void,
-							Effect.ignore,
-							Effect.andThen(
-								Effect.fail(cleanupFailure(worktreePath, `${branch}: update failed: ${gitErrorMessage(error)}`))
-							)
-						)
-					)
-				)
-			}
-			if (!String.includes('behind')(track)) return
-			if (String.includes('ahead')(track)) {
-				return yield* Effect.fail(cleanupFailure(cwd, `${branch}: skipped rebase for branch without linked worktree`))
-			}
-
-			return yield* pipe(
-				git.string(cwd, ['merge-base', '--is-ancestor', branch, upstream]),
-				Effect.andThen(git.string(cwd, ['branch', '-f', branch, upstream])),
-				Effect.asVoid,
-				Effect.mapError(gitCleanupFailure(cwd, `fast-forward ${branch}`))
-			)
-		})
-	}
-
-	const fetchFailure = yield* pipe(
-		git.string(cwd, ['fetch', '--all', '--prune']),
-		Effect.as(Option.none<GitCleanupFailure>()),
-		Effect.catchTag('GitError', error =>
-			Effect.succeed(Option.some(gitCleanupFailure(cwd, 'fetch all remotes')(error)))
-		)
-	)
+	const root = yield* Effect.sync(() => NodeFs.realpathSync.native(cwd))
+	yield* pipe(git.string(cwd, ['fetch', '--all', '--prune']), Effect.asVoid)
 	const defaultBranch = yield* pipe(
 		git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
 		Effect.map(flow(String.trim, String.replace(/^origin\//u, ''))),
@@ -639,35 +526,69 @@ export const cleanupGitProject = Effect.fn('Git.cleanupProject')(function* (cwd:
 			)
 		)
 	)
-	const worktreeResult = yield* pipe(
-		git.string(cwd, ['worktree', 'list', '--porcelain', '-z']),
-		Effect.map(parseWorktreeRecords),
-		Effect.result
+	const mergedBranches = new Set(
+		yield* git.lines(cwd, ['branch', '--merged', `origin/${defaultBranch}`, '--format=%(refname:short)'])
 	)
-	const failures = pipe(fetchFailure, Option.match({onNone: () => Array.empty<GitCleanupFailure>(), onSome: Array.of}))
-	if (Result.isFailure(worktreeResult)) {
-		return Array.append(failures, gitCleanupFailure(cwd, 'list worktrees')(worktreeResult.failure))
+	const branchLines = yield* git.lines(cwd, [
+		'for-each-ref',
+		'refs/heads',
+		'--format=%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)'
+	])
+
+	function cleanupBranch(branchLine: string) {
+		return Effect.gen(function* () {
+			const fields = String.split('\u0000')(branchLine)
+			const branch = fields[0]
+			const upstream = fields[1] ?? ''
+			const track = fields[2] ?? ''
+			const worktreePath = fields[3] ?? ''
+			const worktreeRoot = String.isNonEmpty(worktreePath)
+				? yield* Effect.sync(() =>
+						NodeFs.existsSync(worktreePath) ? NodeFs.realpathSync.native(worktreePath) : worktreePath
+					)
+				: ''
+
+			if (String.isEmpty(branch)) return
+			if (track === '[gone]') {
+				if (worktreeRoot === root) return
+				if (String.isNonEmpty(worktreePath)) {
+					yield* git.string(cwd, ['worktree', 'remove', '--force', worktreePath])
+				}
+				yield* git.string(cwd, ['branch', '-D', branch])
+				return
+			}
+			if (String.isEmpty(upstream)) {
+				if (branch === defaultBranch) return
+				if (!mergedBranches.has(branch)) return
+				if (worktreeRoot === root) return
+				if (String.isNonEmpty(worktreePath)) {
+					const clean = yield* pipe(
+						git.lines(worktreePath, ['status', '--porcelain']),
+						Effect.map(Array.isReadonlyArrayEmpty)
+					)
+					if (!clean) return
+					yield* git.string(cwd, ['worktree', 'remove', '--force', worktreePath])
+				}
+
+				yield* git.string(cwd, ['branch', '-D', branch])
+				return
+			}
+			if (!String.includes('behind')(track) || String.includes('ahead')(track)) return
+			if (String.isNonEmpty(worktreePath)) {
+				const clean = yield* pipe(
+					git.lines(worktreePath, ['status', '--porcelain']),
+					Effect.map(Array.isReadonlyArrayEmpty)
+				)
+				if (!clean) return
+				yield* pipe(git.string(worktreePath, ['merge', '--ff-only', upstream]), Effect.asVoid)
+				return
+			}
+
+			yield* pipe(git.string(cwd, ['branch', '-f', branch, upstream]), Effect.asVoid)
+		})
 	}
 
-	const branchResult = yield* pipe(
-		git.lines(cwd, [
-			'for-each-ref',
-			'refs/heads',
-			'--format=%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)'
-		]),
-		Effect.result
-	)
-	if (Result.isFailure(branchResult)) {
-		return Array.append(failures, gitCleanupFailure(cwd, 'list branches')(branchResult.failure))
-	}
-
-	const [branchFailures] = yield* Effect.partition(
-		branchResult.success,
-		row => cleanupBranch(worktreeResult.success, row),
-		{concurrency: 16}
-	)
-
-	return Array.appendAll(failures, branchFailures)
+	yield* Effect.forEach(branchLines, cleanupBranch, {concurrency: 16, discard: true})
 })
 
 export class GitReview extends Context.Service<GitReview>()('@deslop/git/service/GitReview', {

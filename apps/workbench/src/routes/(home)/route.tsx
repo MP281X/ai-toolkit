@@ -1,9 +1,9 @@
-import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtom, useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Cause, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
+import {AsyncResult, Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -46,6 +46,7 @@ import {
 	CommandShortcut
 } from '@deslop/components/ui/command'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
+import {formatError} from '@deslop/components/utils'
 import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
@@ -476,13 +477,11 @@ function WorktreeManager(input: {
 	) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
-	const cleanupProject = useAtomSet(RpcClient.mutation('projects.cleanup'), {mode: 'promise'})
+	const [cleanupResult, cleanupProject] = useAtom(RpcClient.mutation('projects.cleanup'))
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const branchState = useState('')
 	const actionsOpenState = useState(false)
-	const cleanupFailuresState = useState<Readonly<Record<string, string>>>({})
-	const cleanupRootState = useState('')
 	const createWorktreeProjectRootState = useState(input.activeProject?.repository.root)
 	const creatingBranchState = useState('')
 	const deletingWorktreeState = useState(false)
@@ -553,18 +552,6 @@ function WorktreeManager(input: {
 			refreshProjects()
 		} finally {
 			deletingWorktreeState[1](false)
-		}
-	}
-	async function cleanupProjectRoot(cwd: string) {
-		if (String.isNonEmpty(cleanupRootState[0])) return
-
-		cleanupFailuresState[1](current => ({...current, [cwd]: ''}))
-		cleanupRootState[1](cwd)
-		try {
-			const failure = await cleanupProject({payload: {cwd}})
-			cleanupFailuresState[1](current => ({...current, [cwd]: failure}))
-		} finally {
-			cleanupRootState[1]('')
 		}
 	}
 
@@ -684,7 +671,6 @@ function WorktreeManager(input: {
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
 					{Array.map(input.projects, (project, index) => {
-						const cleanupFailure = cleanupFailuresState[0][project.repository.root] ?? ''
 						const projectWorktree =
 							Option.getOrUndefined(
 								Array.findFirst(project.worktrees, candidate => candidate.root === project.repository.root)
@@ -716,13 +702,18 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
+											disabled={AsyncResult.isWaiting(cleanupResult)}
 											onClick={event => {
 												event.stopPropagation()
-												void cleanupProjectRoot(project.repository.root)
+												cleanupProject({payload: {cwd: project.repository.root}})
 											}}
-											title={String.isNonEmpty(cleanupFailure) ? cleanupFailure : 'Cleanup project'}
+											title={
+												AsyncResult.isFailure(cleanupResult)
+													? formatError(Cause.squash(cleanupResult.cause))
+													: 'Cleanup project'
+											}
 										>
-											{cleanupRootState[0] === project.repository.root ? (
+											{AsyncResult.isWaiting(cleanupResult) ? (
 												<Loader2Icon className="size-3 animate-spin" />
 											) : (
 												<RefreshCwIcon className="size-3" />

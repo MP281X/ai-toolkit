@@ -197,6 +197,9 @@ if [ "$1" = "for-each-ref" ]; then
 	printf 'behind\\0origin/behind\\0[behind 1]\\0\\n'
 	exit 0
 fi
+if [ "$1 $2" = "branch --merged" ]; then
+	exit 0
+fi
 if [ "$1 $2" = "worktree remove" ]; then
 	exit 0
 fi
@@ -539,15 +542,14 @@ describe('@deslop/git service', () => {
 			git(staleWorktree, ['commit', '-m', 'unpushed stale'])
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale'])
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures).toEqual([])
 			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
 			expect(existsSync(staleWorktree)).toBe(false)
 		})
 	})
 
-	it('cleanup reports gone upstream root worktree refusal and continues', async () => {
+	it('cleanup preserves gone upstream root worktrees and continues', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			git(fixture.repo, ['switch', '-c', 'stale-root'])
@@ -567,9 +569,8 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale-root'])
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale-linked'])
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures.map(failure => failure.message).join('\n')).toContain('delete stale-root')
 			expect(git(fixture.repo, ['branch', '--list', 'stale-root']).trim()).toContain('stale-root')
 			expect(git(fixture.repo, ['branch', '--list', 'stale-linked']).trim()).toBe('')
 			expect(existsSync(staleLinkedWorktree)).toBe(false)
@@ -590,9 +591,8 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['worktree', 'add', dirtyLocalWorktree, 'dirty-local'])
 			writeFileSync(join(dirtyLocalWorktree, 'dirty.txt'), 'dirty\n')
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures.map(failure => failure.message)).toContain('dirty-local: skipped dirty local-only branch')
 			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
 			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toContain('dirty-local')
 			expect(existsSync(dirtyLocalWorktree)).toBe(true)
@@ -606,15 +606,14 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['branch', '--unset-upstream', 'main'])
 			git(fixture.repo, ['branch', 'merged-local'])
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures).toEqual([])
 			expect(git(fixture.repo, ['branch', '--list', 'main']).trim()).toContain('main')
 			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
 		})
 	})
 
-	it('cleanup fast-forwards clean branches and reports detached branch rebases', async () => {
+	it('cleanup fast-forwards clean branches and skips diverged branches', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			const other = join(root, 'other')
@@ -632,15 +631,12 @@ describe('@deslop/git service', () => {
 			const divergedHead = git(fixture.repo, ['rev-parse', 'diverged']).trim()
 			git(fixture.repo, ['switch', 'main'])
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
 			expect(git(fixture.repo, ['rev-parse', 'main']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'origin/main']).trim()
 			)
 			expect(git(fixture.repo, ['rev-parse', 'diverged']).trim()).toBe(divergedHead)
-			expect(failures.map(failure => failure.message)).toContain(
-				'diverged: skipped rebase for branch without linked worktree'
-			)
 		})
 	})
 
@@ -664,14 +660,13 @@ describe('@deslop/git service', () => {
 			git(other, ['push'])
 			writeFileSync(join(fixture.repo, 'feature.txt'), 'local dirty\nuncommitted\n')
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
 			expect(readFileSync(join(fixture.repo, 'feature.txt'), 'utf8')).toBe('local dirty\nuncommitted\n')
-			expect(failures.map(failure => failure.message)).toContain('feature: skipped dirty worktree')
 		})
 	})
 
-	it('cleanup rebases clean checked-out branches with local and upstream commits', async () => {
+	it('cleanup skips clean checked-out branches with local and upstream commits', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			const other = join(root, 'other')
@@ -692,16 +687,14 @@ describe('@deslop/git service', () => {
 			writeFileSync(join(fixture.repo, 'local-only.txt'), 'local only\n')
 			git(fixture.repo, ['add', 'local-only.txt'])
 			git(fixture.repo, ['commit', '-m', 'local only feature'])
+			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures).toEqual([])
-			expect(git(fixture.repo, ['rev-parse', 'HEAD~1']).trim()).toBe(
-				git(fixture.repo, ['rev-parse', 'origin/feature']).trim()
-			)
+			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
 			expect(readFileSync(join(fixture.repo, 'local.txt'), 'utf8')).toBe('local\n')
 			expect(readFileSync(join(fixture.repo, 'local-only.txt'), 'utf8')).toBe('local only\n')
-			expect(readFileSync(join(fixture.repo, 'remote.txt'), 'utf8')).toBe('remote\n')
+			expect(existsSync(join(fixture.repo, 'remote.txt'))).toBe(false)
 		})
 	})
 
@@ -733,41 +726,12 @@ describe('@deslop/git service', () => {
 			git(other, ['push'])
 			git(fixture.repo, ['push', 'upstream', '--delete', 'stale'])
 
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(cleanupGitProject(fixture.repo))
 
-			expect(failures).toEqual([])
 			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
 			expect(git(fixture.repo, ['rev-parse', 'feature']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'upstream/feature']).trim()
 			)
-		})
-	})
-
-	it('cleanup aborts and reports rebase conflicts', async () => {
-		await withTempRoot(async root => {
-			const fixture = initRemoteRepo(root)
-			const other = join(root, 'other')
-			git(root, ['clone', fixture.remote, other])
-			git(other, ['config', 'user.email', 'test@example.com'])
-			git(other, ['config', 'user.name', 'Test User'])
-			git(fixture.repo, ['switch', '-c', 'feature'])
-			writeFileSync(join(fixture.repo, 'README.md'), 'initial\nlocal\n')
-			git(fixture.repo, ['commit', '-am', 'local feature'])
-			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
-			git(other, ['fetch', 'origin'])
-			git(other, ['switch', 'feature'])
-			writeFileSync(join(other, 'README.md'), 'initial\nremote\n')
-			git(other, ['commit', '-am', 'remote feature'])
-			git(other, ['push'])
-			writeFileSync(join(fixture.repo, 'README.md'), 'initial\nlocal again\n')
-			git(fixture.repo, ['commit', '-am', 'local conflict'])
-			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
-
-			const failures = await runCleanup(cleanupGitProject(fixture.repo))
-
-			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
-			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
-			expect(failures.map(failure => failure.message).join('\n')).toContain('feature: update failed')
 		})
 	})
 
@@ -784,8 +748,9 @@ describe('@deslop/git service', () => {
 				await runCleanup(cleanupGitProject(repo))
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
-				expect(commands).toHaveLength(8)
+				expect(commands).toHaveLength(7)
 				expect(commands.filter(command => command.includes(' fetch --all --prune'))).toHaveLength(1)
+				expect(commands.filter(command => command.includes(' branch --merged '))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' for-each-ref '))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' branch-40'))).toHaveLength(0)
 				expect(performance.now() - started).toBeLessThan(1_000)
