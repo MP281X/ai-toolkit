@@ -5,7 +5,15 @@ packages:
 
 allowBuilds:
   msw: true
+  protobufjs: true
+  '@google/genai': true
   msgpackr-extract: true
+
+onlyBuiltDependencies:
+  - msw
+  - protobufjs
+  - '@google/genai'
+  - msgpackr-extract
 
 catalogMode: prefer
 
