@@ -17,7 +17,6 @@ import {
 	Predicate,
 	Random,
 	Schema,
-	Semaphore,
 	Stream,
 	String,
 	SubscriptionRef,
@@ -510,222 +509,87 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 	public static layer = Layer.effect(this, this.make)
 }
 
-export class GitMaintenance extends Context.Service<GitMaintenance>()('@deslop/git/service/GitMaintenance', {
-	make: Effect.gen(function* () {
-		const git = yield* GitCommand
-		const fs = yield* FileSystem.FileSystem
-		const path = yield* Path.Path
-		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
-		const maintenanceLock = yield* Semaphore.make(1)
+export const cleanupGitProject = Effect.fn('Git.cleanupProject')(function* (cwd: string) {
+	const git = yield* GitCommand
+	yield* Effect.annotateCurrentSpan({cwd})
 
-		const collectRepositoriesFromRoots: (
-			roots: readonly string[],
-			repositories: readonly GitRepository[]
-		) => Effect.Effect<readonly GitRepository[], GitError> = Effect.fn('GitMaintenance.collectRepositoriesFromRoots')(
-			function* (roots, repositories) {
-				yield* Effect.annotateCurrentSpan({repositoryCount: Array.length(repositories), rootCount: Array.length(roots)})
-				return yield* Array.match(roots, {
-					onEmpty: () => Effect.succeed(repositories),
-					onNonEmpty: remainingRoots => {
-						const root = remainingRoots[0]
+	const root = yield* Effect.sync(() => NodeFs.realpathSync.native(cwd))
+	yield* pipe(git.string(cwd, ['fetch', '--all', '--prune']), Effect.asVoid)
+	const defaultBranch = yield* pipe(
+		git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
+		Effect.map(flow(String.trim, String.replace(/^origin\//u, ''))),
+		Effect.catchTag('GitError', () =>
+			pipe(
+				git.string(cwd, ['rev-parse', '--verify', 'main']),
+				Effect.as('main'),
+				Effect.catchTag('GitError', () => Effect.succeed('master'))
+			)
+		)
+	)
+	const mergedBranches = new Set(
+		yield* git.lines(cwd, ['branch', '--merged', `origin/${defaultBranch}`, '--format=%(refname:short)'])
+	)
+	const branchLines = yield* git.lines(cwd, [
+		'for-each-ref',
+		'refs/heads',
+		'--format=%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)'
+	])
 
-						return pipe(
-							fs.readDirectory(root),
-							Effect.orElseSucceed(() => Array.empty<string>()),
-							Effect.flatMap(entries => {
-								if (Array.contains(entries, '.git')) {
-									return pipe(
-										Effect.all(
-											{
-												gitDirectory: pipe(
-													git.string(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
-													Effect.map(String.trim)
-												),
-												worktrees: pipe(
-													git.string(root, ['worktree', 'list', '--porcelain', '-z']),
-													Effect.map(parseWorktreeRecords)
-												)
-											},
-											{concurrency: 'unbounded'}
-										),
-										Effect.map(
-											repository =>
-												new GitRepository({
-													gitDirectory: repository.gitDirectory,
-													root: repository.worktrees[0]?.root ?? root
-												})
-										),
-										Effect.option,
-										Effect.flatMap(repository =>
-											collectRepositoriesFromRoots(
-												Array.drop(remainingRoots, 1),
-												pipe(
-													repository,
-													Option.match({onNone: () => repositories, onSome: value => Array.append(repositories, value)})
-												)
-											)
-										)
-									)
-								}
+	function cleanupBranch(branchLine: string) {
+		return Effect.gen(function* () {
+			const fields = String.split('\u0000')(branchLine)
+			const branch = fields[0]
+			const upstream = fields[1] ?? ''
+			const track = fields[2] ?? ''
+			const worktreePath = fields[3] ?? ''
+			const worktreeRoot = String.isNonEmpty(worktreePath)
+				? yield* Effect.sync(() =>
+						NodeFs.existsSync(worktreePath) ? NodeFs.realpathSync.native(worktreePath) : worktreePath
+					)
+				: ''
 
-								return pipe(
-									entries,
-									Array.filter(
-										entry =>
-											!excludedDiscoveryEntries.has(entry) && !(String.startsWith('.')(entry) && entry !== '.git')
-									),
-									Effect.forEach(entry =>
-										pipe(
-											fs.stat(path.join(root, entry)),
-											Effect.map(info => (info.type === 'Directory' ? path.join(root, entry) : '')),
-											Effect.orElseSucceed(() => '')
-										)
-									),
-									Effect.flatMap(nextRoots =>
-										collectRepositoriesFromRoots(
-											pipe(nextRoots, Array.filter(String.isNonEmpty), Array.appendAll(Array.drop(roots, 1))),
-											repositories
-										)
-									)
-								)
-							})
-						)
-					}
-				})
+			if (String.isEmpty(branch)) return
+			if (track === '[gone]') {
+				if (worktreeRoot === root) return
+				if (String.isNonEmpty(worktreePath)) {
+					yield* git.string(cwd, ['worktree', 'remove', '--force', worktreePath])
+				}
+				yield* git.string(cwd, ['branch', '-D', branch])
+				return
 			}
-		)
-		const listRepositoriesFrom = Effect.fn('GitMaintenance.listRepositoriesFrom')(function* (cwd: string) {
-			yield* Effect.annotateCurrentSpan({cwd})
-			return yield* pipe(
-				fs.realPath(cwd),
-				Effect.orElseSucceed(() => cwd),
-				Effect.flatMap(root => collectRepositoriesFromRoots([root], Array.empty())),
-				Effect.map(repositories =>
-					pipe(
-						repositories,
-						Array.dedupeWith((left, right) => left.gitDirectory === right.gitDirectory || left.root === right.root)
+			if (String.isEmpty(upstream)) {
+				if (branch === defaultBranch) return
+				if (!mergedBranches.has(branch)) return
+				if (worktreeRoot === root) return
+				if (String.isNonEmpty(worktreePath)) {
+					const clean = yield* pipe(
+						git.lines(worktreePath, ['status', '--porcelain']),
+						Effect.map(Array.isReadonlyArrayEmpty)
 					)
+					if (!clean) return
+					yield* git.string(cwd, ['worktree', 'remove', '--force', worktreePath])
+				}
+
+				yield* git.string(cwd, ['branch', '-D', branch])
+				return
+			}
+			if (!String.includes('behind')(track) || String.includes('ahead')(track)) return
+			if (String.isNonEmpty(worktreePath)) {
+				const clean = yield* pipe(
+					git.lines(worktreePath, ['status', '--porcelain']),
+					Effect.map(Array.isReadonlyArrayEmpty)
 				)
-			)
+				if (!clean) return
+				yield* pipe(git.string(worktreePath, ['merge', '--ff-only', upstream]), Effect.asVoid)
+				return
+			}
+
+			yield* pipe(git.string(cwd, ['branch', '-f', branch, upstream]), Effect.asVoid)
 		})
+	}
 
-		const maintain = Effect.fn('GitMaintenance.maintain')(function* (cwd: string) {
-			yield* Effect.annotateCurrentSpan({cwd})
-			yield* pipe(
-				Effect.gen(function* () {
-					const repositories = yield* listRepositoriesFrom(cwd)
-					yield* Effect.annotateCurrentSpan({repositoryCount: Array.length(repositories)})
-
-					yield* Effect.forEach(
-						repositories,
-						repository =>
-							Effect.gen(function* () {
-								yield* pipe(
-									git.string(repository.root, ['fetch', '--all', '--prune']),
-									Effect.asVoid,
-									Effect.withSpan('GitMaintenance.fetch', {attributes: {cwd: repository.root}})
-								)
-								const worktrees = parseWorktreeRecords(
-									yield* git.string(repository.root, ['worktree', 'list', '--porcelain', '-z'])
-								)
-								const branchRows = yield* git.lines(repository.root, [
-									'for-each-ref',
-									'refs/heads',
-									'--format=%(refname:short)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)'
-								])
-
-								yield* Effect.forEach(
-									branchRows,
-									row =>
-										pipe(
-											Effect.gen(function* () {
-												const fields = String.split('\u0000')(row)
-												const branch = fields[0]
-												const upstream = fields[1] ?? ''
-												const track = fields[2] ?? ''
-												const worktreePath =
-													fields[3] ??
-													pipe(
-														worktrees,
-														Array.findFirst(worktree => worktree.branch === branch),
-														Option.map(worktree => worktree.root),
-														Option.getOrElse(() => '')
-													)
-												yield* Effect.annotateCurrentSpan({branch, cwd: repository.root})
-
-												if (String.isEmpty(branch)) return
-
-												if (track === '[gone]') {
-													if (String.isNonEmpty(worktreePath)) {
-														yield* pipe(
-															git.string(repository.root, ['worktree', 'remove', '--force', worktreePath]),
-															Effect.asVoid,
-															Effect.withSpan('GitMaintenance.deleteWorktree', {
-																attributes: {branch, cwd: repository.root}
-															})
-														)
-													}
-													yield* pipe(
-														git.string(repository.root, ['branch', '-D', branch]),
-														Effect.asVoid,
-														Effect.withSpan('GitMaintenance.deleteBranch', {attributes: {branch, cwd: repository.root}})
-													)
-													return
-												}
-
-												if (
-													String.isEmpty(upstream) ||
-													!String.includes('behind')(track) ||
-													String.includes('ahead')(track)
-												) {
-													return
-												}
-
-												if (String.isNonEmpty(worktreePath)) {
-													yield* pipe(
-														git.string(worktreePath, ['merge', '--ff-only', upstream]),
-														Effect.ignore,
-														Effect.withSpan('GitMaintenance.fastForwardWorktree', {
-															attributes: {branch, cwd: worktreePath}
-														})
-													)
-													return
-												}
-
-												yield* pipe(
-													git.string(repository.root, ['merge-base', '--is-ancestor', branch, upstream]),
-													Effect.andThen(git.string(repository.root, ['branch', '-f', branch, upstream])),
-													Effect.ignore,
-													Effect.withSpan('GitMaintenance.fastForwardBranch', {
-														attributes: {branch, cwd: repository.root}
-													})
-												)
-											}),
-											Effect.withSpan('GitMaintenance.classifyBranch', {attributes: {cwd: repository.root}})
-										),
-									{concurrency: 'unbounded'}
-								)
-							}),
-						{concurrency: 'unbounded'}
-					)
-				}),
-				Semaphore.withPermit(maintenanceLock)
-			)
-		})
-
-		yield* pipe(
-			maintain(home),
-			Effect.ignore,
-			Effect.andThen(Effect.sleep(Duration.seconds(180))),
-			Effect.forever,
-			Effect.forkScoped
-		)
-
-		return {maintain}
-	})
-}) {
-	public static layer = Layer.effect(this, this.make)
-}
+	yield* Effect.forEach(branchLines, cleanupBranch, {concurrency: 16, discard: true})
+})
 
 export class GitReview extends Context.Service<GitReview>()('@deslop/git/service/GitReview', {
 	make: Effect.fn('GitReview.make')(function* (config: {readonly cwd: string}) {

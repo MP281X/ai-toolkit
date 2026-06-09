@@ -7,7 +7,7 @@ import {KeyValueStore} from 'effect/unstable/persistence'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
-import {GitCommand, GitMaintenance, GitWorkspace} from '@deslop/git/service'
+import {GitCommand, GitWorkspace} from '@deslop/git/service'
 import {OtelLayer} from '@deslop/opentelemetry/server'
 import {Portless} from '@deslop/portless/http'
 
@@ -18,7 +18,6 @@ export const LiveLayers = pipe(
 	// Application layers
 	Layer.provideMerge(Portless.layer),
 	Layer.provideMerge(pipe(GitWorkspace.layer, Layer.provide(GitCommand.layer))),
-	Layer.provideMerge(pipe(GitMaintenance.layer, Layer.provide(GitCommand.layer))),
 	Layer.provideMerge(
 		Layer.unwrap(
 			pipe(

@@ -1,9 +1,9 @@
-import {useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtom, useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Cause, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
+import {AsyncResult, Atom} from 'effect/unstable/reactivity'
 import {startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -27,6 +27,7 @@ import {
 	PanelTop,
 	PlayIcon,
 	ProcessStateIcon,
+	RefreshCwIcon,
 	SparklesIcon,
 	Square,
 	TerminalIcon,
@@ -45,6 +46,7 @@ import {
 	CommandShortcut
 } from '@deslop/components/ui/command'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
+import {formatError} from '@deslop/components/utils'
 import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
@@ -475,6 +477,7 @@ function WorktreeManager(input: {
 	) => void
 }) {
 	const refreshProjects = useAtomRefresh(projectsAtom)
+	const [cleanupResult, cleanupProject] = useAtom(RpcClient.mutation('projects.cleanup'))
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const branchState = useState('')
@@ -694,20 +697,43 @@ function WorktreeManager(input: {
 											</button>
 										</span>
 									</span>
-									<Button
-										variant="ghost"
-										size="icon-xs"
-										className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-										onClick={event => {
-											event.stopPropagation()
-											createWorktreeProjectRootState[1](project.repository.root)
-											branchState[1]('')
-											actionsOpenState[1](true)
-										}}
-										title="Create worktree"
-									>
-										<GitBranchPlus className="size-3" />
-									</Button>
+									<span className="flex items-center">
+										<Button
+											variant="ghost"
+											size="icon-xs"
+											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
+											disabled={AsyncResult.isWaiting(cleanupResult)}
+											onClick={event => {
+												event.stopPropagation()
+												cleanupProject({payload: {cwd: project.repository.root}})
+											}}
+											title={
+												AsyncResult.isFailure(cleanupResult)
+													? formatError(Cause.squash(cleanupResult.cause))
+													: 'Cleanup project'
+											}
+										>
+											{AsyncResult.isWaiting(cleanupResult) ? (
+												<Loader2Icon className="size-3 animate-spin" />
+											) : (
+												<RefreshCwIcon className="size-3" />
+											)}
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon-xs"
+											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
+											onClick={event => {
+												event.stopPropagation()
+												createWorktreeProjectRootState[1](project.repository.root)
+												branchState[1]('')
+												actionsOpenState[1](true)
+											}}
+											title="Create worktree"
+										>
+											<GitBranchPlus className="size-3" />
+										</Button>
+									</span>
 								</div>
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 									{Array.map(project.worktrees, worktree => (
