@@ -2,15 +2,10 @@ import {Array, pipe} from 'effect'
 
 import type {TerminalStatus} from './schema.ts'
 
-export const terminalReplayBytes = 8 * 1024 * 1024
 export const terminalChunkBytes = 64 * 1024
 export const terminalReset = '\u001bc'
 
 const terminalOscCarryBytes = 4096
-
-export function terminalByteLength(data: string) {
-	return Buffer.byteLength(data)
-}
 
 export function terminalChunks(data: string, chunkSize = terminalChunkBytes) {
 	if (data === '') return Array.empty<string>()
@@ -19,32 +14,6 @@ export function terminalChunks(data: string, chunkSize = terminalChunkBytes) {
 		Array.range(0, Math.floor((data.length - 1) / chunkSize)),
 		Array.map(index => data.slice(index * chunkSize, (index + 1) * chunkSize))
 	)
-}
-
-export function terminalReplayPush(ring: readonly string[], data: string, maxBytes = terminalReplayBytes) {
-	let chunks = [...ring, data]
-	let bytes = chunks.reduce((total, chunk) => total + terminalByteLength(chunk), 0)
-	while (bytes > maxBytes) {
-		const head = chunks[0]
-		if (head === undefined) break
-
-		const excess = bytes - maxBytes
-		const headBytes = terminalByteLength(head)
-		if (headBytes <= excess) {
-			chunks = chunks.slice(1)
-			bytes -= headBytes
-			continue
-		}
-
-		let offset = Math.min(head.length, excess)
-		while (offset < head.length && terminalByteLength(head.slice(offset)) > maxBytes - (bytes - headBytes)) {
-			offset += 1
-		}
-		chunks[0] = head.slice(offset)
-		bytes = chunks.reduce((total, chunk) => total + terminalByteLength(chunk), 0)
-	}
-
-	return chunks
 }
 
 export function terminalTitleStatus(title: string): TerminalStatus {
@@ -106,5 +75,5 @@ export function terminalOscUpdates(data: string, carry = '') {
 		index = end + skip - 1
 	}
 
-	return {carry: terminalByteLength(nextCarry) > terminalOscCarryBytes ? '' : nextCarry, updates}
+	return {carry: Buffer.byteLength(nextCarry) > terminalOscCarryBytes ? '' : nextCarry, updates}
 }
