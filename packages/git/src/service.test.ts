@@ -705,6 +705,44 @@ describe('@deslop/git service', () => {
 		})
 	})
 
+	it('cleanup refreshes and prunes branches tracking non-origin remotes', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			const other = join(root, 'other')
+			git(root, ['clone', fixture.remote, other])
+			git(other, ['config', 'user.email', 'test@example.com'])
+			git(other, ['config', 'user.name', 'Test User'])
+			git(fixture.repo, ['remote', 'add', 'upstream', fixture.remote])
+			git(fixture.repo, ['switch', '-c', 'stale'])
+			writeFileSync(join(fixture.repo, 'stale.txt'), 'stale\n')
+			git(fixture.repo, ['add', 'stale.txt'])
+			git(fixture.repo, ['commit', '-m', 'stale'])
+			git(fixture.repo, ['push', '-u', 'upstream', 'stale'])
+			git(fixture.repo, ['switch', 'main'])
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
+			git(fixture.repo, ['add', 'feature.txt'])
+			git(fixture.repo, ['commit', '-m', 'feature'])
+			git(fixture.repo, ['push', '-u', 'upstream', 'feature'])
+			git(fixture.repo, ['switch', 'main'])
+			git(other, ['fetch', 'origin'])
+			git(other, ['switch', 'feature'])
+			writeFileSync(join(other, 'upstream.txt'), 'upstream\n')
+			git(other, ['add', 'upstream.txt'])
+			git(other, ['commit', '-m', 'upstream feature'])
+			git(other, ['push'])
+			git(fixture.repo, ['push', 'upstream', '--delete', 'stale'])
+
+			const failures = await runCleanup(cleanupGitProject(fixture.repo))
+
+			expect(failures).toEqual([])
+			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
+			expect(git(fixture.repo, ['rev-parse', 'feature']).trim()).toBe(
+				git(fixture.repo, ['rev-parse', 'upstream/feature']).trim()
+			)
+		})
+	})
+
 	it('cleanup aborts and reports rebase conflicts', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
@@ -747,8 +785,7 @@ describe('@deslop/git service', () => {
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
 				expect(commands).toHaveLength(8)
-				expect(commands.filter(command => command.includes(' fetch --prune origin'))).toHaveLength(1)
-				expect(commands.filter(command => command.includes(' fetch --all'))).toHaveLength(0)
+				expect(commands.filter(command => command.includes(' fetch --all --prune'))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' for-each-ref '))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' branch-40'))).toHaveLength(0)
 				expect(performance.now() - started).toBeLessThan(1_000)

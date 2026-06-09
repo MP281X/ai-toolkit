@@ -622,9 +622,11 @@ export const cleanupGitProject = Effect.fn('Git.cleanupProject')(function* (cwd:
 	}
 
 	const fetchFailure = yield* pipe(
-		git.string(cwd, ['fetch', '--prune', 'origin']),
+		git.string(cwd, ['fetch', '--all', '--prune']),
 		Effect.as(Option.none<GitCleanupFailure>()),
-		Effect.catchTag('GitError', error => Effect.succeed(Option.some(gitCleanupFailure(cwd, 'fetch origin')(error))))
+		Effect.catchTag('GitError', error =>
+			Effect.succeed(Option.some(gitCleanupFailure(cwd, 'fetch all remotes')(error)))
+		)
 	)
 	const defaultBranch = yield* pipe(
 		git.string(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
