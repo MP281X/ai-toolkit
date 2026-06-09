@@ -9,8 +9,17 @@ description: Use when changing component layout, visual styling, controls, icons
 
 1. Use existing component package exports
 2. Compose existing primitives with local layout
-3. Add missing generated primitives with `vp run shadcn`
+3. Missing generated primitive: list registry, then add through root script
 4. Write custom UI only when no existing primitive fits
+
+## Shadcn
+
+- List available primitives first: `vp run shadcn -- list @shadcn`
+- Add primitive: `vp run shadcn -- add <component>`
+- Add multiple: `vp run shadcn -- add <component> <component>`
+- Examples: `button`, `tabs`, `tooltip`
+- Manual edits to `packages/components/src/components/ui/*`: forbidden
+- Generated UI changes only through `vp run shadcn`
 
 ## Style
 
