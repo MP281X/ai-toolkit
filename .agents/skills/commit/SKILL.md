@@ -23,6 +23,7 @@ description: Use when the user asks the agent to create and push a git commit fr
 <type>: <imperative summary>
 ```
 
+- Types: `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `ci`, `style`
 - Subject <= 72 chars
 - Body only for non-obvious scope, risk, or rationale
 

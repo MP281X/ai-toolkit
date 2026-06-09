@@ -9,7 +9,7 @@ description: Use when changing component layout, visual styling, controls, icons
 
 1. Use existing component package exports
 2. Compose existing primitives with local layout
-3. Add missing generated primitives through the repo script when needed
+3. Add missing generated primitives with `vp run shadcn`
 4. Write custom UI only when no existing primitive fits
 
 ## Style

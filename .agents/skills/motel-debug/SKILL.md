@@ -7,6 +7,7 @@ description: Use when debugging with local OpenTelemetry traces or logs through 
 
 ## Runtime
 
+- URL: `http://127.0.0.1:27686`
 - Start:
 
 ```bash
@@ -17,6 +18,18 @@ motel start
 
 ```bash
 vpx @kitlangton/motel start
+```
+
+## Endpoints
+
+```text
+GET /api/health
+GET /api/services
+GET /api/traces/search
+GET /api/spans/search
+GET /api/logs/search
+GET /api/ai/calls
+GET /openapi.json
 ```
 
 ## Workflow
@@ -38,6 +51,16 @@ vpx @kitlangton/motel start
 - Attributes: `debug.session`, `debug.hypothesis`, `debug.step`, `debug.label`
 - Existing tracing/logging path
 - No secrets, tokens, passwords, raw private data
+
+## Queries
+
+```bash
+curl "http://127.0.0.1:27686/api/services"
+curl "http://127.0.0.1:27686/api/traces/search?service=<service>&attr.debug.session=<session>"
+curl "http://127.0.0.1:27686/api/spans/search?service=<service>&attr.debug.hypothesis=<id>"
+curl "http://127.0.0.1:27686/api/logs/search?service=<service>&attr.debug.session=<session>"
+curl "http://127.0.0.1:27686/api/ai/calls?text=<text>"
+```
 
 ## Constraints
 

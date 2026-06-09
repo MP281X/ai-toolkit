@@ -21,6 +21,12 @@ description: Use when changing package boundaries, public exports, service inter
 - Private aliases only for private imports
 - Package scripts only for package-local commands
 - File/alias/entrypoint names: consistent with nearby peers
+- Apps: no `exports`; use `imports`, `scripts`, `dependencies`, `devDependencies`
+- Packages: `exports` for public entrypoints; `imports` for private aliases
+- Package source: `src/schema.ts` public schemas, `src/service.ts` main service, `src/lib/*` private implementation
+- App entrypoints: `src/main.client.tsx`, `src/main.server.ts`
+- App aliases: `#lib/*`, `#rpcs/*`, `#routes/*`
+- Package private alias: `#lib/*`
 
 ## Services
 

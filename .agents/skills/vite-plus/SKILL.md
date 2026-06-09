@@ -16,3 +16,6 @@ description: Use when changing Vite Plus tooling, package scripts, linting, form
 ## Workspace Scripts
 
 - Existing `vp run` patterns for recursive, targeted, filtered package tasks
+- Recursive: `vp run -r <task>`
+- Targeted: `vp run @scope/name#<task>`
+- Filtered: `vp run --filter <selector> <task>`

@@ -8,6 +8,7 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 ## Programs
 
 - Effect-first: no ad-hoc async/runtime when an Effect primitive exists
+- Common primitives: `Effect`, `Stream`, `Layer`, `Context`, `Scope`, `RcMap`, `SubscriptionRef`, `Ref`, `Queue`, `PubSub`, `Schema`
 - Use `Effect.gen` or `Effect.fn`; public service methods use `Effect.fn("Service.method")`
 - `Effect.fnUntraced`: private hot path or intentionally untraced code only
 - Resource lifetime: `Scope`
