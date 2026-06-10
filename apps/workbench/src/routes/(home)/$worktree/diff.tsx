@@ -709,9 +709,11 @@ function CommitActionForm(input: {
 				<InputGroup className="min-w-0 flex-1">
 					<InputGroupInput
 						autoComplete="off"
-						readOnly
 						value={commitMessageState[0]}
 						placeholder={input.dirty ? 'Generate commit message' : 'No commit message needed'}
+						onChange={event => {
+							commitMessageState[1](event.currentTarget.value)
+						}}
 					/>
 					<InputGroupAddon align="inline-end">
 						<InputGroupButton

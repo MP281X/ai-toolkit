@@ -146,8 +146,7 @@ export const projectsAtom = Atom.keepAlive(
 			RpcClient,
 			Effect.map(client => client('projects.watch', void 0)),
 			Stream.unwrap
-		),
-		{initialValue: []}
+		)
 	)
 )
 

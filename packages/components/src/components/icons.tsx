@@ -3,6 +3,7 @@ import {Function, Match, pipe} from 'effect'
 import {Braces, CirclePauseIcon, CircleIcon, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
 import {BashDark} from './svgs/bashDark.tsx'
+import {ClaudeDark} from './svgs/claudeDark.tsx'
 import {CodexDark} from './svgs/codexDark.tsx'
 import {EffectDark} from './svgs/effectDark.tsx'
 import {MarkdownDark} from './svgs/markdownDark.tsx'
@@ -18,11 +19,12 @@ import {cn} from '#lib/utils.ts'
 export * from 'lucide-react'
 
 export function AgentIcon(props: {
-	readonly layer: 'codex' | 'effect' | 'opencode' | 'pi'
+	readonly layer: 'claude' | 'codex' | 'effect' | 'opencode' | 'pi'
 	readonly className?: string
 }) {
 	return pipe(
 		Match.value(props.layer),
+		Match.when('claude', () => <ClaudeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('codex', () => <CodexDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('effect', () => <EffectDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('opencode', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),

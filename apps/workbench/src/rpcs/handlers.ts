@@ -453,14 +453,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
-			'projects.watch': () =>
-				Stream.unwrap(
-					Effect.gen(function* () {
-						yield* git.refreshProjects()
-						const projects = yield* SubscriptionRef.get(git.projects)
-						return pipe(Stream.make(projects), Stream.concat(Stream.drop(1)(SubscriptionRef.changes(git.projects))))
-					})
-				),
+			'projects.watch': () => SubscriptionRef.changes(git.projects),
 			'publish.approve': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),

@@ -14,13 +14,20 @@ import {cn} from '#lib/utils.ts'
 type TerminalStatusState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 
 function cssColor(element: HTMLElement, value: string) {
+	const probe = element.ownerDocument.createElement('span')
+	probe.style.color = value
+	probe.style.display = 'none'
+	element.append(probe)
+	const resolved = getComputedStyle(probe).color
+	probe.remove()
+
 	const canvas = element.ownerDocument.createElement('canvas')
 	canvas.width = 1
 	canvas.height = 1
 	const context = canvas.getContext('2d')
-	if (!context) return value
+	if (!context) return resolved || value
 
-	context.fillStyle = value
+	context.fillStyle = resolved || value
 	context.fillRect(0, 0, 1, 1)
 	const [red, green, blue, alpha = 255] = context.getImageData(0, 0, 1, 1).data
 

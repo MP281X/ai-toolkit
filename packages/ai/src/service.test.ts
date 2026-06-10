@@ -46,8 +46,13 @@ describe('@deslop/ai AgentCommand', () => {
 			)
 		)
 
-		expect(profiles.map(profile => profile.id)).toEqual(['opencode-gpt-5.5', 'codex-gpt-5.5-low', 'pi-gpt-5.5-low'])
-		expect(profiles.map(profile => profile.icon)).toEqual(['opencode', 'codex', 'pi'])
+		expect(profiles.map(profile => profile.id)).toEqual([
+			'opencode-gpt-5.5',
+			'codex-gpt-5.5-low',
+			'pi-gpt-5.5-low',
+			'claude-code-opus-4.8-bypass'
+		])
+		expect(profiles.map(profile => profile.icon)).toEqual(['opencode', 'codex', 'pi', 'claude'])
 	})
 
 	it('builds static terminal commands for each profile and cwd', async () => {
@@ -56,6 +61,7 @@ describe('@deslop/ai AgentCommand', () => {
 				AgentCommand,
 				Effect.flatMap(service =>
 					Effect.all({
+						claude: service.command({cwd: '/tmp/worktree', profileId: 'claude-code-opus-4.8-bypass'}),
 						codex: service.command({cwd: '/tmp/worktree', profileId: 'codex-gpt-5.5-low'}),
 						opencode: service.command({cwd: '/tmp/worktree', profileId: 'opencode-gpt-5.5'}),
 						pi: service.command({cwd: '/tmp/worktree', profileId: 'pi-gpt-5.5-low'})
@@ -67,10 +73,15 @@ describe('@deslop/ai AgentCommand', () => {
 
 		expect(commands.opencode.command).toBe('opencode')
 		expect(commands.opencode.args).toEqual(['--model', 'openai/gpt-5.5'])
+		expect(commands.opencode.options.env).toEqual({OPENCODE_PERMISSION: '"allow"'})
+		expect(commands.opencode.options.extendEnv).toBe(true)
 		expect(commands.opencode.options.cwd).toBe('/tmp/worktree')
 		expect(commands.codex.command).toBe('codex')
 		expect(commands.codex.args).toContain('--dangerously-bypass-approvals-and-sandbox')
 		expect(commands.codex.options.cwd).toBe('/tmp/worktree')
+		expect(commands.claude.command).toBe('claude')
+		expect(commands.claude.args).toEqual(['--model', 'claude-opus-4-8', '--permission-mode', 'bypassPermissions'])
+		expect(commands.claude.options.cwd).toBe('/tmp/worktree')
 		expect(commands.pi.command).toBe('pi')
 		expect(commands.pi.args).toEqual(['--provider', 'openai-codex', '--model', 'gpt-5.5:low'])
 		expect(commands.pi.options.cwd).toBe('/tmp/worktree')

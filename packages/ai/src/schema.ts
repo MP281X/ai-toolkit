@@ -39,10 +39,15 @@ export class AgentLayerConfig extends Schema.Class<AgentLayerConfig>('AgentLayer
 }) {}
 
 export type AgentCommandProfileId = typeof AgentCommandProfileId.Type
-export const AgentCommandProfileId = Schema.Literals(['opencode-gpt-5.5', 'codex-gpt-5.5-low', 'pi-gpt-5.5-low'])
+export const AgentCommandProfileId = Schema.Literals([
+	'opencode-gpt-5.5',
+	'codex-gpt-5.5-low',
+	'pi-gpt-5.5-low',
+	'claude-code-opus-4.8-bypass'
+])
 
 export type AgentCommandIcon = typeof AgentCommandIcon.Type
-export const AgentCommandIcon = Schema.Literals(['opencode', 'codex', 'pi'])
+export const AgentCommandIcon = Schema.Literals(['opencode', 'codex', 'pi', 'claude'])
 
 export class AgentCommandProfile extends Schema.Class<AgentCommandProfile>('AgentCommandProfile')({
 	icon: AgentCommandIcon,

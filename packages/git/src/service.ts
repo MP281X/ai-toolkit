@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto'
 import * as NodeFs from 'node:fs'
+import {homedir} from 'node:os'
 
 import {
 	Array,
@@ -105,7 +106,16 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 	public static layer = Layer.effect(this, this.make)
 }
 
-const excludedDiscoveryEntries = new Set(['.git', 'dist', 'node_modules'])
+const excludedDiscoveryEntries = new Set(['.git', 'build', 'dist', 'node_modules', 'target'])
+const excludedHomeDiscoveryEntries = new Set(['Applications', 'Library', 'Movies', 'Music', 'Pictures', 'Public'])
+const repositoryProbeGlobs = [
+	'!**/.*/**',
+	'**/.git/HEAD',
+	'!**/node_modules/**',
+	'!**/dist/**',
+	'!**/build/**',
+	'!**/target/**'
+]
 
 const GitHubPullRequestViewResponse = Schema.Struct({
 	body: Schema.optional(Schema.String),
@@ -340,7 +350,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const git = yield* GitCommand
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
-		const home = yield* pipe(Config.string('HOME'), Config.withDefault(process.cwd()))
+		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+		const home = yield* pipe(Config.string('HOME'), Config.withDefault(homedir()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
 
 		const cleanupProject = Effect.fn('GitWorkspace.cleanupProject')(function* (cwd: string) {
@@ -478,118 +489,122 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				untracked: status.untracked
 			})
 		})
-		const gitRootForPath = Effect.fn('GitWorkspace.gitRootForPath')(function* (cwd: string) {
-			return yield* pipe(
-				git.string(cwd, ['rev-parse', '--show-toplevel']),
-				Effect.map(flow(String.trim, normalizePublicPath, Option.some)),
-				Effect.catchTag('GitError', () => Effect.succeed(Option.none<string>()))
-			)
-		})
-		const gitIgnoredDirectory = Effect.fn('GitWorkspace.gitIgnoredDirectory')(function* (
-			root: string,
-			directory: string
-		) {
-			const gitRoot = yield* gitRootForPath(root)
-			if (Option.isNone(gitRoot)) return false
-
-			const relative = path.relative(gitRoot.value, directory)
-			if (String.isEmpty(relative) || relative === '..' || String.startsWith('../')(relative)) return false
-
-			return yield* pipe(
-				git.string(gitRoot.value, ['check-ignore', '-q', '--', relative]),
-				Effect.as(true),
-				Effect.catchTag('GitError', () => Effect.succeed(false))
-			)
-		})
-
-		const collectRepositoriesFromRoots: (
-			roots: readonly string[],
-			repositories: readonly GitRepository[]
-		) => Effect.Effect<readonly GitRepository[], GitError> = Effect.fn('GitWorkspace.collectRepositoriesFromRoots')(
-			function* (roots, repositories) {
-				yield* Effect.annotateCurrentSpan({repositoryCount: Array.length(repositories), rootCount: Array.length(roots)})
-				if (Array.isReadonlyArrayEmpty(roots)) return repositories
-
-				const discovered = yield* Effect.forEach(
-					roots,
-					root =>
-						pipe(
-							fs.readDirectory(root),
-							Effect.orElseSucceed(() => Array.empty<string>()),
-							Effect.flatMap(entries => {
-								if (Array.contains(entries, '.git')) {
-									return pipe(
-										Effect.all(
-											{
-												gitDirectory: pipe(
-													git.string(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
-													Effect.map(flow(String.trim, normalizePublicPath))
-												),
-												worktrees: pipe(
-													git.string(root, ['worktree', 'list', '--porcelain', '-z']),
-													Effect.map(parseWorktreeRecords)
-												)
-											},
-											{concurrency: 'unbounded'}
-										),
-										Effect.map(repository => ({
-											nextRoots: Array.empty<string>(),
-											repository: Option.some(
-												new GitRepository({
-													gitDirectory: repository.gitDirectory,
-													root: normalizePublicPath(repository.worktrees[0]?.root ?? root)
-												})
-											)
-										})),
-										Effect.catchTag('GitError', () =>
-											Effect.succeed({nextRoots: Array.empty<string>(), repository: Option.none<GitRepository>()})
-										)
-									)
-								}
-
-								return pipe(
-									entries,
-									Array.filter(
-										entry =>
-											!excludedDiscoveryEntries.has(entry) && !(String.startsWith('.')(entry) && entry !== '.git')
-									),
-									Effect.forEach(entry =>
-										Effect.gen(function* () {
-											const directory = path.join(root, entry)
-											const info = yield* pipe(
-												fs.stat(directory),
-												Effect.orElseSucceed(() => {})
-											)
-											if (info?.type !== 'Directory') return ''
-											if (yield* gitIgnoredDirectory(root, directory)) return ''
-											return directory
-										})
-									),
-									Effect.map(nextRoots => ({
-										nextRoots: Array.filter(nextRoots, String.isNonEmpty),
-										repository: Option.none<GitRepository>()
-									}))
-								)
-							})
-						),
-					{concurrency: 32}
-				)
-				return yield* collectRepositoriesFromRoots(
-					pipe(
-						discovered,
-						Array.flatMap(entry => entry.nextRoots)
-					),
-					Array.appendAll(
-						repositories,
-						pipe(
-							discovered,
-							Array.map(entry => entry.repository),
-							Array.getSomes
-						)
+		const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[]) {
+			return yield* Effect.scoped(
+				Effect.gen(function* () {
+					const handle = yield* pipe(
+						spawner.spawn(ChildProcess.make(command, args, {stderr: 'pipe', stdout: 'pipe'})),
+						Effect.mapError(cause => new GitError({cause}))
 					)
+					const output = yield* Effect.all(
+						{
+							stderr: pipe(
+								Stream.decodeText(handle.stderr),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							),
+							stdout: pipe(
+								Stream.decodeText(handle.stdout),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							)
+						},
+						{concurrency: 'unbounded'}
+					)
+					const exitCode = yield* pipe(
+						handle.exitCode,
+						Effect.mapError(cause => new GitError({cause}))
+					)
+
+					if (exitCode === ChildProcessSpawner.ExitCode(0) || exitCode === ChildProcessSpawner.ExitCode(1)) {
+						return output.stdout
+					}
+
+					return yield* new GitError({
+						cause: new Error(
+							output.stderr || output.stdout || `${command} ${Array.join(' ')(args)} exited with ${exitCode}`
+						)
+					})
+				})
+			)
+		})
+		const directRepositoryRoot = Effect.fnUntraced(function* (root: string) {
+			return NodeFs.existsSync(path.join(root, '.git', 'HEAD'))
+				? Option.some(normalizePublicPath(root))
+				: Option.none<string>()
+		})
+		const repositorySearchRoots = Effect.fn('GitWorkspace.repositorySearchRoots')(function* (root: string) {
+			if (root !== home) return [root]
+
+			const entries = yield* pipe(
+				fs.readDirectory(root),
+				Effect.orElseSucceed(() => Array.empty<string>())
+			)
+			return yield* pipe(
+				entries,
+				Array.filter(entry => !excludedHomeDiscoveryEntries.has(entry)),
+				Array.filter(entry => !excludedDiscoveryEntries.has(entry)),
+				Array.filter(entry => !String.startsWith('.')(entry)),
+				Effect.forEach(entry =>
+					Effect.gen(function* () {
+						const directory = path.join(root, entry)
+						const info = yield* pipe(
+							fs.stat(directory),
+							Effect.orElseSucceed(() => {})
+						)
+						return info?.type === 'Directory' ? directory : ''
+					})
+				),
+				Effect.map(Array.filter(String.isNonEmpty))
+			)
+		})
+		const repositoryRootsFromProbe = Effect.fn('GitWorkspace.repositoryRootsFromProbe')(function* (root: string) {
+			const directRoot = yield* directRepositoryRoot(root)
+			if (Option.isSome(directRoot)) return [directRoot.value]
+
+			const searchRoots = yield* repositorySearchRoots(root)
+			if (Array.isReadonlyArrayEmpty(searchRoots)) return Array.getSomes([directRoot])
+
+			const output = yield* commandString('rg', [
+				'--hidden',
+				'--files',
+				...Array.flatMap(repositoryProbeGlobs, glob => ['-g', glob]),
+				...searchRoots
+			])
+
+			return pipe(
+				output,
+				String.split(/\r?\n/u),
+				Array.filter(String.isNonEmpty),
+				Array.map(head => normalizePublicPath(path.dirname(path.dirname(head)))),
+				Array.dedupe,
+				Array.sortWith(repositoryRoot => repositoryRoot, Order.String)
+			)
+		})
+		const repositoryFromRoot = Effect.fn('GitWorkspace.repositoryFromRoot')(function* (root: string) {
+			return yield* pipe(
+				Effect.all(
+					{
+						gitDirectory: pipe(
+							git.string(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+							Effect.map(flow(String.trim, normalizePublicPath))
+						),
+						worktrees: pipe(
+							git.string(root, ['worktree', 'list', '--porcelain', '-z']),
+							Effect.map(parseWorktreeRecords)
+						)
+					},
+					{concurrency: 'unbounded'}
+				),
+				Effect.map(
+					repository =>
+						new GitRepository({
+							gitDirectory: repository.gitDirectory,
+							root: normalizePublicPath(repository.worktrees[0]?.root ?? root)
+						})
 				)
-			}
-		)
+			)
+		})
 		const listWorktrees = Effect.fn('GitWorkspace.listWorktrees')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
 			yield* git.string(cwd, ['worktree', 'prune'])
@@ -621,10 +636,12 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const listRepositoriesFrom = Effect.fn('GitWorkspace.listRepositoriesFrom')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
 			return yield* pipe(
-				collectRepositoriesFromRoots([cwd], Array.empty()),
+				repositoryRootsFromProbe(cwd),
+				Effect.flatMap(Effect.forEach(root => Effect.option(repositoryFromRoot(root)), {concurrency: 32})),
 				Effect.map(repositories =>
 					pipe(
 						repositories,
+						Array.getSomes,
 						Array.dedupeWith((left, right) => left.gitDirectory === right.gitDirectory || left.root === right.root)
 					)
 				)
@@ -672,6 +689,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			const current = yield* SubscriptionRef.get(projects)
 			if (!sameProjectSnapshot(current, next)) yield* SubscriptionRef.set(projects, next)
 		})
+		yield* refreshProjects()
 		yield* pipe(
 			fs.watch(home),
 			Stream.catch(() => Stream.empty),

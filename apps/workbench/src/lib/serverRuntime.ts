@@ -1,3 +1,4 @@
+import {homedir} from 'node:os'
 import path from 'node:path'
 
 import {Config, Effect, Layer, pipe} from 'effect'
@@ -22,7 +23,7 @@ export const LiveLayers = pipe(
 		Layer.unwrap(
 			pipe(
 				Config.string('HOME'),
-				Config.withDefault(process.cwd()),
+				Config.withDefault(homedir()),
 				Effect.map(home => KeyValueStore.layerFileSystem(path.join(home, '.deslop')))
 			)
 		)

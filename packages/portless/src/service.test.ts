@@ -367,6 +367,42 @@ describe('@deslop/portless service', () => {
 		})
 	})
 
+	it('clears every preview route owned by a worktree', async () => {
+		await withTempRoot(async root => {
+			initRepo(root, {dev: 'vp dev', 'dev:api': 'node server.js'})
+			const proxyPort = await availablePort()
+
+			await Effect.runPromise(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const context = yield* Layer.buildWithScope(liveLayer(proxyPort), yield* Effect.scope)
+						yield* pipe(Layer.launch(TestServer), Effect.provide(context), Effect.forkScoped)
+						const portless = Context.get(context, Portless)
+						const runs = yield* portless.scripts(root)
+						expect(runs).toHaveLength(2)
+
+						const origin = `http://127.0.0.1:${proxyPort}`
+						for (const run of runs) {
+							const proxied = yield* Effect.promise(() =>
+								withUpstream(run.origin.port, '<!doctype html><html><head></head><body>preview</body></html>', () =>
+									requestThrough(origin, run.origin.host)
+								)
+							)
+							expect(proxied.status).toBe(200)
+						}
+
+						yield* portless.clear(root)
+
+						for (const run of runs) {
+							const removed = yield* Effect.promise(() => requestThrough(origin, run.origin.host))
+							expect(removed.status).toBe(404)
+						}
+					})
+				)
+			)
+		})
+	})
+
 	it('replaces stale preview routes when scripts are rediscovered', async () => {
 		await withTempRoot(async root => {
 			initRepo(root, {dev: 'vp dev', 'dev:api': 'node server.js'})

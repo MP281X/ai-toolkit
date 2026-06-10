@@ -586,6 +586,20 @@ describe('@deslop/git service', () => {
 		})
 	})
 
+	it('skips non-source home folders while discovering project repositories', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(join(root, 'projects', 'repo'))
+			initRepo(join(root, 'Library', 'cache-repo'))
+
+			const projects = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service => service.listProjectsFrom(root))
+			)
+
+			expect(projects.map(project => project.repository.root)).toEqual([repo])
+		})
+	})
+
 	it('does not publish duplicate project snapshots when refresh is structurally unchanged', async () => {
 		await withTempRoot(async root => {
 			initRepo(join(root, 'repo'))

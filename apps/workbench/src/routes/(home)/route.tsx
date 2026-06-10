@@ -44,6 +44,14 @@ import {
 	CommandList,
 	CommandShortcut
 } from '@deslop/components/ui/command'
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle
+} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
@@ -203,7 +211,7 @@ function sortPortlessRuns(runs: readonly PortlessRun[]) {
 }
 
 function validNewWorktreeBranch(branch: string) {
-	return /^(feat|fix|refactor|perf|test|docs|chore)\/[a-z0-9-]+$/u.test(branch)
+	return String.isNonEmpty(String.trim(branch)) && !/\s/u.test(branch)
 }
 
 const portlessActiveAtom = Atom.family((runs: readonly PortlessRun[]) =>
@@ -538,6 +546,7 @@ function WorktreeManager(input: {
 	const createWorktreeProjectRootState = useState(input.activeProject?.repository.root)
 	const creatingBranchState = useState('')
 	const deletingWorktreeState = useState(false)
+	const deleteDialogOpenState = useState(false)
 	const createWorktreeProject =
 		pipe(
 			input.projects,
@@ -567,11 +576,17 @@ function WorktreeManager(input: {
 				)
 		)
 	)
+	const newBranch = String.trim(branchState[0])
+	const branchAvailable = pipe(
+		availableBranches,
+		Array.some(candidate => candidate.name === newBranch)
+	)
+	const canCreateNewBranch = String.isNonEmpty(newBranch) && validNewWorktreeBranch(newBranch) && !branchAvailable
 	async function createFastWorktree(candidate?: GitBranchSchema) {
-		const nextBranch = candidate?.name ?? branchState[0]
+		const nextBranch = candidate?.name ?? newBranch
 		if (String.isEmpty(nextBranch) || String.isNonEmpty(creatingBranchState[0])) return
 		if (candidate === undefined && !validNewWorktreeBranch(nextBranch)) {
-			toast.error('New branches must use feat/, fix/, refactor/, perf/, test/, docs/, or chore/.')
+			toast.error('Branch names cannot contain spaces.')
 			return
 		}
 
@@ -580,7 +595,7 @@ function WorktreeManager(input: {
 				? {_tag: 'new' as const}
 				: Match.value(candidate).pipe(
 						Match.when({type: 'local'}, () => ({_tag: 'local' as const})),
-						Match.orElse(branch => ({_tag: 'remote' as const, remote: branch.remote ?? 'origin'}))
+						Match.orElse(remoteBranch => ({_tag: 'remote' as const, remote: remoteBranch.remote ?? 'origin'}))
 					)
 
 		creatingBranchState[1](nextBranch)
@@ -608,6 +623,7 @@ function WorktreeManager(input: {
 		deletingWorktreeState[1](true)
 		try {
 			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
+			deleteDialogOpenState[1](false)
 			refreshProjects()
 		} catch (error) {
 			toast.error(formatError(error))
@@ -640,13 +656,7 @@ function WorktreeManager(input: {
 						className="h-8 w-8"
 						disabled={deletingWorktreeState[0]}
 						onClick={() => {
-							if (!input.activeWorktree) return
-							if (!confirm(`Delete worktree ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`)) {
-								return
-							}
-
-							void deleteActiveWorktree()
-							actionsOpenState[1](false)
+							deleteDialogOpenState[1](true)
 						}}
 						title="Delete worktree"
 					>
@@ -654,6 +664,43 @@ function WorktreeManager(input: {
 					</Button>
 				)}
 			</div>
+
+			<Dialog open={deleteDialogOpenState[0]} onOpenChange={deleteDialogOpenState[1]}>
+				<DialogContent showCloseButton={!deletingWorktreeState[0]}>
+					<DialogHeader>
+						<DialogTitle>Delete worktree</DialogTitle>
+						<DialogDescription>
+							{input.activeWorktree
+								? `Delete ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`
+								: 'No worktree selected.'}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={deletingWorktreeState[0]}
+							onClick={() => {
+								deleteDialogOpenState[1](false)
+							}}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							disabled={!input.activeWorktree || deletingWorktreeState[0]}
+							onClick={() => {
+								void deleteActiveWorktree()
+								actionsOpenState[1](false)
+							}}
+						>
+							{deletingWorktreeState[0] ? <Spinner className="size-3" /> : <Trash className="size-3" />}
+							Delete
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 			<CommandDialog
 				open={actionsOpenState[0]}
@@ -669,16 +716,16 @@ function WorktreeManager(input: {
 					}}
 				>
 					<CommandInput
-						placeholder={`Create in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
+						placeholder={`Find or create branch in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
 						value={branchState[0]}
 						onValueChange={branchState[1]}
 						onKeyDown={event => {
-							if (event.key === 'Enter' && String.isNonEmpty(branchState[0]) && createWorktreeProject) {
+							if (event.key === 'Enter' && String.isNonEmpty(newBranch) && createWorktreeProject) {
 								event.preventDefault()
 								void createFastWorktree(
 									pipe(
 										availableBranches,
-										Array.findFirst(candidate => candidate.name === branchState[0]),
+										Array.findFirst(candidate => candidate.name === newBranch),
 										Option.getOrUndefined
 									)
 								)
@@ -686,9 +733,26 @@ function WorktreeManager(input: {
 						}}
 					/>
 					<CommandList>
-						<CommandEmpty>No command found.</CommandEmpty>
+						<CommandEmpty>
+							{String.isNonEmpty(newBranch) && !validNewWorktreeBranch(newBranch)
+								? 'Branch names cannot contain spaces.'
+								: 'No matching branch.'}
+						</CommandEmpty>
 						{createWorktreeProject && (
 							<CommandGroup>
+								{canCreateNewBranch && (
+									<CommandItem
+										value={newBranch}
+										disabled={String.isNonEmpty(creatingBranchState[0])}
+										onSelect={() => {
+											void createFastWorktree()
+										}}
+									>
+										{creatingBranchState[0] === newBranch ? <Spinner /> : <GitBranchPlus />}
+										<span className="min-w-0 truncate">Create {newBranch}</span>
+										<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
+									</CommandItem>
+								)}
 								{Array.map(availableBranches, candidate => {
 									const icon =
 										creatingBranchState[0] === candidate.name ? (
@@ -715,15 +779,6 @@ function WorktreeManager(input: {
 										</CommandItem>
 									)
 								})}
-								{String.isNonEmpty(branchState[0]) &&
-									validNewWorktreeBranch(branchState[0]) &&
-									Option.isNone(Array.findFirst(availableBranches, candidate => candidate.name === branchState[0])) && (
-										<CommandItem value={`create ${branchState[0]}`} onSelect={() => void createFastWorktree()}>
-											{creatingBranchState[0] === branchState[0] ? <Spinner /> : <GitBranchPlus />}
-											Create {branchState[0]}
-											<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
-										</CommandItem>
-									)}
 							</CommandGroup>
 						)}
 					</CommandList>

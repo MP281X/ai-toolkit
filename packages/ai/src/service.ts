@@ -86,7 +86,8 @@ export class Agent extends Context.Service<
 const agentCommandProfiles = [
 	new AgentCommandProfile({icon: 'opencode', id: 'opencode-gpt-5.5', label: 'opencode'}),
 	new AgentCommandProfile({icon: 'codex', id: 'codex-gpt-5.5-low', label: 'codex'}),
-	new AgentCommandProfile({icon: 'pi', id: 'pi-gpt-5.5-low', label: 'pi'})
+	new AgentCommandProfile({icon: 'pi', id: 'pi-gpt-5.5-low', label: 'pi'}),
+	new AgentCommandProfile({icon: 'claude', id: 'claude-code-opus-4.8-bypass', label: 'claude'})
 ] as const
 
 type AgentCommandMock = {
@@ -96,7 +97,11 @@ type AgentCommandMock = {
 
 function commandForProfile(id: AgentCommandProfileId, cwd: string) {
 	if (id === 'opencode-gpt-5.5') {
-		return ChildProcess.make('opencode', ['--model', 'openai/gpt-5.5'], {cwd})
+		return ChildProcess.make('opencode', ['--model', 'openai/gpt-5.5'], {
+			cwd,
+			env: {OPENCODE_PERMISSION: '"allow"'},
+			extendEnv: true
+		})
 	}
 	if (id === 'codex-gpt-5.5-low') {
 		return ChildProcess.make(
@@ -104,6 +109,9 @@ function commandForProfile(id: AgentCommandProfileId, cwd: string) {
 			['--model', 'gpt-5.5', '-c', 'model_reasoning_effort=low', '--dangerously-bypass-approvals-and-sandbox'],
 			{cwd}
 		)
+	}
+	if (id === 'claude-code-opus-4.8-bypass') {
+		return ChildProcess.make('claude', ['--model', 'claude-opus-4-8', '--permission-mode', 'bypassPermissions'], {cwd})
 	}
 
 	return ChildProcess.make('pi', ['--provider', 'openai-codex', '--model', 'gpt-5.5:low'], {cwd})
