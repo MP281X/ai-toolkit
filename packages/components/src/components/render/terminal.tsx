@@ -27,7 +27,7 @@ function cssColor(element: HTMLElement, value: string) {
 	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
 }
 
-export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string) => void}
+export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string, done?: () => void) => void}
 
 export const Terminal = forwardRef<
 	TerminalHandle,
@@ -51,11 +51,14 @@ export const Terminal = forwardRef<
 			reset() {
 				terminalRef.current?.reset()
 			},
-			write(data: string) {
+			write(data: string, done?: () => void) {
 				const terminal = terminalRef.current
-				if (!terminal || data === '') return
+				if (!terminal || data === '') {
+					done?.()
+					return
+				}
 
-				terminal.write(data)
+				terminal.write(data, done)
 			}
 		}),
 		[]

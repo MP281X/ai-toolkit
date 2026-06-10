@@ -10,7 +10,6 @@ import {
 	Queue,
 	Ref,
 	Semaphore,
-	ScopedRef,
 	Stream,
 	SubscriptionRef,
 	flow,
@@ -19,13 +18,10 @@ import {
 
 import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
-import {SerializeAddon} from '@xterm/addon-serialize'
-import {Unicode11Addon} from '@xterm/addon-unicode11'
-import headless from '@xterm/headless'
 import type {ChildProcess} from 'effect/unstable/process'
 
-import {terminalChunks, terminalOscUpdates, terminalReset, terminalTitleStatus} from './model.ts'
-import type {TerminalAttachUpdate, TerminalStatus} from './schema.ts'
+import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
+import type {TerminalCursor, TerminalFrame, TerminalInput, TerminalSize, TerminalStatus} from './schema.ts'
 import {TerminalError, terminalStatusActive} from './schema.ts'
 
 type RunningProcess = {
@@ -34,70 +30,150 @@ type RunningProcess = {
 	readonly process: IPty
 }
 
-type TerminalSize = {readonly cols: number; readonly rows: number}
 type QueuedOutput = {readonly data: string; readonly process: IPty}
+type AttachQueue = Queue.Queue<TerminalFrame, Cause.Done>
+type Transcript = {
+	readonly attached: readonly AttachQueue[]
+	readonly cursor: TerminalCursor
+	readonly frames: readonly TerminalFrame[]
+}
+type TerminalFrameBody =
+	| {readonly data: string; readonly type: 'output'}
+	| {readonly size: TerminalSize; readonly type: 'resize'}
+type TerminalMock = {
+	readonly frames?: readonly TerminalFrame[]
+	readonly resize?: (size: TerminalSize) => Effect.Effect<void>
+	readonly status?: TerminalStatus
+	readonly write?: (input: TerminalInput) => Effect.Effect<void, TerminalError>
+}
 
-const terminalScrollback = 5_000
-const {Terminal: HeadlessTerminal} = headless
+const terminalScrollbackLines = 5_000
+const terminalDataQueueCapacity = 128
+const terminalDataQueueLowWater = 32
 
-function makeSnapshotState(size: TerminalSize) {
-	return Effect.acquireRelease(
-		Effect.sync(() => {
-			const terminal = new HeadlessTerminal({
-				allowProposedApi: true,
-				cols: size.cols,
-				rows: size.rows,
-				scrollback: terminalScrollback
-			})
-			const serialize = new SerializeAddon()
-			terminal.loadAddon(new Unicode11Addon())
-			terminal.unicode.activeVersion = '11'
-			terminal.loadAddon(serialize)
+function nextCursor(cursor: TerminalCursor): TerminalCursor {
+	return {epoch: cursor.epoch, sequence: cursor.sequence + 1}
+}
 
-			return {serialize, terminal}
-		}),
-		state =>
-			Effect.sync(() => {
-				state.serialize.dispose()
-				state.terminal.dispose()
-			})
-	)
+function newlineCount(value: string) {
+	let count = 0
+	for (let index = 0; index < value.length; index += 1) {
+		if (value.charCodeAt(index) === 10) count += 1
+	}
+	return count
+}
+
+function retainTranscript(frames: readonly TerminalFrame[]) {
+	let lines = 0
+	let index = frames.length
+
+	while (index > 0 && lines < terminalScrollbackLines) {
+		index -= 1
+		const frame = frames[index]
+		if (frame?.type === 'output') lines += newlineCount(frame.data)
+		if (frame?.type === 'reset') break
+	}
+
+	return Array.drop(frames, index)
+}
+
+function framesAfterCursor(frames: readonly TerminalFrame[], cursor?: TerminalCursor) {
+	if (cursor === undefined) return frames
+
+	const firstFrame = frames[0]
+	if (firstFrame === undefined) return frames
+	if (firstFrame.cursor.epoch !== cursor.epoch || firstFrame.cursor.sequence > cursor.sequence + 1) return frames
+
+	return Array.dropWhile(frames, frame => frame.cursor.epoch < cursor.epoch || frame.cursor.sequence <= cursor.sequence)
+}
+
+function terminalInputString(input: TerminalInput) {
+	return input.type === 'text' ? input.data : new TextDecoder().decode(input.data)
+}
+
+function pauseProcess(process: IPty) {
+	if ('pause' in process && typeof process.pause === 'function') process.pause()
+}
+
+function resumeProcess(process: IPty) {
+	if ('resume' in process && typeof process.resume === 'function') process.resume()
 }
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
-		const dataQueue = yield* Queue.bounded<QueuedOutput>(128)
+		const dataQueue = yield* Queue.bounded<QueuedOutput>(terminalDataQueueCapacity)
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
 		const replayProcessRef = yield* Ref.make<IPty | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
-		const snapshotRef = yield* ScopedRef.fromAcquire(makeSnapshotState({cols: 120, rows: 32}))
 		const oscRef = yield* Ref.make('')
-		const attachRef = yield* Ref.make<Queue.Enqueue<TerminalAttachUpdate, Cause.Done> | undefined>(void 0)
+		const transcriptRef = yield* Ref.make<Transcript>({attached: [], cursor: {epoch: 0, sequence: 0}, frames: []})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const processCommand = config.command?.command ?? shell
 		const processArgs = config.command?.args ?? []
 		const processEnv = config.command?.options.env ?? {}
+		const processCwd = config.command?.options.cwd ?? config.cwd
 		const autostart = config.command === undefined
-		const statusRef = yield* SubscriptionRef.make<TerminalStatus>({state: autostart ? 'starting' : 'idle', title: ''})
+		const status = yield* SubscriptionRef.make<TerminalStatus>({state: autostart ? 'starting' : 'idle', title: ''})
 
-		const publishStatus = Effect.fnUntraced(function* (status: TerminalStatus) {
-			const previous = yield* SubscriptionRef.getAndUpdateSome(statusRef, current =>
-				current.state === status.state && current.title === status.title ? Option.none() : Option.some(status)
+		const publishFrame = Effect.fnUntraced(function* (frame: TerminalFrameBody) {
+			const next = yield* Ref.modify(transcriptRef, current => {
+				const cursor = nextCursor(current.cursor)
+				const output: TerminalFrame =
+					frame.type === 'output'
+						? {cursor, data: frame.data, type: 'output'}
+						: {cursor, size: frame.size, type: 'resize'}
+
+				return [
+					{attached: current.attached, frame: output},
+					{...current, cursor, frames: retainTranscript(Array.append(current.frames, output))}
+				] as const
+			})
+			const dropped = yield* Effect.sync(() => next.attached.filter(queue => !Queue.offerUnsafe(queue, next.frame)))
+			if (Array.isReadonlyArrayNonEmpty(dropped)) {
+				yield* Ref.update(transcriptRef, current => ({
+					...current,
+					attached: Array.filter(current.attached, queue => !dropped.includes(queue))
+				}))
+				yield* Effect.forEach(dropped, Queue.shutdown, {discard: true})
+			}
+		})
+
+		const resetTranscript = Effect.fnUntraced(function* () {
+			const next = yield* Ref.modify(transcriptRef, current => {
+				const cursor = {epoch: current.cursor.epoch + 1, sequence: 0}
+				const frame = {cursor, type: 'reset' as const}
+
+				return [
+					{attached: current.attached, frame},
+					{...current, cursor, frames: [frame]}
+				] as const
+			})
+			const dropped = yield* Effect.sync(() => next.attached.filter(queue => !Queue.offerUnsafe(queue, next.frame)))
+			if (Array.isReadonlyArrayNonEmpty(dropped)) {
+				yield* Ref.update(transcriptRef, current => ({
+					...current,
+					attached: Array.filter(current.attached, queue => !dropped.includes(queue))
+				}))
+				yield* Effect.forEach(dropped, Queue.shutdown, {discard: true})
+			}
+		})
+
+		const publishStatus = Effect.fnUntraced(function* (nextStatus: TerminalStatus) {
+			yield* SubscriptionRef.getAndUpdateSome(status, current =>
+				current.state === nextStatus.state && current.title === nextStatus.title
+					? Option.none()
+					: Option.some(nextStatus)
 			)
-			if (previous.state === status.state && previous.title === status.title) return
-
-			const attach = yield* Ref.get(attachRef)
-			if (attach) yield* Queue.offer(attach, {status, type: 'status' as const})
 		})
 
 		function setStatus(state: TerminalStatus['state']) {
-			return SubscriptionRef.get(statusRef).pipe(Effect.flatMap(current => publishStatus({...current, state})))
+			return SubscriptionRef.get(status).pipe(Effect.flatMap(current => publishStatus({...current, state})))
 		}
 
 		function setTitle(title: string) {
-			return SubscriptionRef.get(statusRef).pipe(
+			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current => {
 					if (!terminalStatusActive(current.state)) return Effect.void
 					return publishStatus({...current, ...terminalTitleStatus(title)})
@@ -106,12 +182,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		}
 
 		function setProgress(state: TerminalStatus['state']) {
-			return SubscriptionRef.get(statusRef).pipe(
+			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current =>
 					terminalStatusActive(current.state) ? publishStatus({...current, state}) : Effect.void
 				)
 			)
 		}
+
+		const waitForDataQueueDrain = Effect.fnUntraced(function* () {
+			while ((yield* Queue.size(dataQueue)) > terminalDataQueueLowWater) {
+				yield* Effect.sleep('16 millis')
+			}
+		})
 
 		const stopProcess = Effect.fnUntraced(function* (state?: TerminalStatus['state']) {
 			const handle = yield* Ref.get(processRef)
@@ -134,11 +216,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const spawnProcess = Effect.fnUntraced(function* () {
 			yield* stopProcess()
 			yield* Ref.set(replayProcessRef, undefined)
-			yield* ScopedRef.set(snapshotRef, makeSnapshotState(yield* Ref.get(sizeRef)))
 			yield* Ref.set(oscRef, '')
+			yield* resetTranscript()
 			yield* publishStatus({state: 'starting', title: ''})
-			const attach = yield* Ref.get(attachRef)
-			if (attach) yield* Queue.offer(attach, {data: terminalReset, type: 'data' as const})
 
 			const size = yield* Ref.get(sizeRef)
 			const subprocess = yield* Effect.try({
@@ -146,22 +226,36 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				try: () =>
 					nodePty.spawn(processCommand, [...processArgs], {
 						cols: size.cols,
-						cwd: config.cwd,
+						cwd: processCwd,
 						env: {...process.env, ...processEnv, TERM: 'xterm-256color'},
 						name: 'xterm-256color',
 						rows: size.rows
 					})
 			})
+			const pendingBackpressure: QueuedOutput[] = []
+			let backpressureDraining = false
+			const drainBackpressure = Effect.fnUntraced(function* () {
+				while (pendingBackpressure.length > 0) {
+					const next = pendingBackpressure.shift()
+					if (next !== undefined) yield* Queue.offer(dataQueue, next)
+				}
+				yield* waitForDataQueueDrain()
+			})
 			const data = subprocess.onData(chunk => {
 				const output = {data: chunk, process: subprocess}
 				if (Queue.offerUnsafe(dataQueue, output)) return
 
-				if ('pause' in subprocess && typeof subprocess.pause === 'function') subprocess.pause()
+				pendingBackpressure.push(output)
+				if (backpressureDraining) return
+
+				backpressureDraining = true
+				pauseProcess(subprocess)
 				Effect.runFork(
-					Queue.offer(dataQueue, output).pipe(
-						Effect.andThen(
+					drainBackpressure().pipe(
+						Effect.ensuring(
 							Effect.sync(() => {
-								if ('resume' in subprocess && typeof subprocess.resume === 'function') subprocess.resume()
+								backpressureDraining = false
+								resumeProcess(subprocess)
 							})
 						)
 					)
@@ -194,7 +288,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* Ref.set(replayProcessRef, subprocess)
 			yield* setStatus('running')
 
-			return yield* SubscriptionRef.get(statusRef)
+			return yield* SubscriptionRef.get(status)
 		})
 
 		const resizeProcess = Effect.fnUntraced(function* (nextSize: TerminalSize) {
@@ -202,10 +296,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
 			yield* Ref.set(sizeRef, nextSize)
-			const snapshot = yield* ScopedRef.get(snapshotRef)
-			yield* Effect.sync(() => {
-				snapshot.terminal.resize(nextSize.cols, nextSize.rows)
-			})
+			yield* publishFrame({size: nextSize, type: 'resize'})
 			const process = yield* Ref.get(processRef)
 			if (!process) return
 
@@ -228,11 +319,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							const replayProcess = yield* Ref.get(replayProcessRef)
 							if (replayProcess !== output.process) return
 
-							const snapshot = yield* ScopedRef.get(snapshotRef)
 							for (const chunk of terminalChunks(output.data)) {
-								yield* Effect.callback<true>(resume => {
-									snapshot.terminal.write(chunk, () => resume(Effect.succeed(true)))
-								})
 								const updates = yield* Ref.modify(oscRef, carry => {
 									const parsed = terminalOscUpdates(chunk, carry)
 									return [parsed.updates, parsed.carry] as const
@@ -240,8 +327,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 								for (const update of updates) {
 									yield* update.type === 'title' ? setTitle(update.title) : setProgress(update.state)
 								}
-								const attach = yield* Ref.get(attachRef)
-								if (attach) yield* Queue.offer(attach, {data: chunk, type: 'data' as const})
+								yield* publishFrame({data: chunk, type: 'output'})
 							}
 						}),
 					{discard: true}
@@ -260,15 +346,18 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		)
 
 		yield* Effect.addFinalizer(() =>
-			Effect.all(
-				[
-					stopProcess(),
-					Queue.shutdown(dataQueue),
-					Queue.shutdown(resizeQueue),
-					Ref.get(attachRef).pipe(Effect.flatMap(queue => (queue ? Queue.end(queue) : Effect.void)))
-				],
-				{concurrency: 'unbounded', discard: true}
-			)
+			Effect.gen(function* () {
+				const attached = yield* Ref.get(transcriptRef).pipe(Effect.map(transcript => transcript.attached))
+				yield* Effect.all(
+					[
+						stopProcess(),
+						Queue.shutdown(dataQueue),
+						Queue.shutdown(resizeQueue),
+						...Array.map(attached, Queue.shutdown)
+					],
+					{concurrency: 'unbounded', discard: true}
+				)
+			})
 		)
 		if (autostart) {
 			yield* pipe(
@@ -278,63 +367,63 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		const attachQueue = Effect.gen(function* () {
-			const previous = yield* Ref.get(attachRef)
-			const queue = yield* Queue.bounded<TerminalAttachUpdate, Cause.Done>(128)
-			yield* Queue.offer(queue, {status: yield* SubscriptionRef.get(statusRef), type: 'status' as const})
-			const snapshot = yield* ScopedRef.get(snapshotRef)
-			yield* Queue.offer(queue, {data: snapshot.serialize.serialize(), type: 'snapshot' as const})
-			yield* Ref.set(attachRef, queue)
-			if (previous) yield* Queue.end(previous)
-			yield* Effect.addFinalizer(() =>
-				Ref.update(attachRef, current => (current === queue ? undefined : current)).pipe(
-					Effect.andThen(Queue.end(queue))
-				)
-			)
-
-			return queue
-		})
-
-		const statusQueue = Effect.gen(function* () {
-			const queue = yield* Queue.sliding<TerminalStatus, Cause.Done>(1)
-			yield* Effect.addFinalizer(() => Queue.end(queue))
-			yield* Queue.offer(queue, yield* SubscriptionRef.get(statusRef))
-			yield* pipe(
-				SubscriptionRef.changes(statusRef),
-				Stream.drop(1),
-				Stream.groupedWithin(32, Duration.millis(250)),
-				Stream.runForEach(items =>
-					pipe(
-						Array.last(Array.fromIterable(items)),
-						Option.match({onNone: () => Effect.void, onSome: status => Queue.offer(queue, status)})
-					)
-				),
-				Effect.forkScoped
-			)
-
-			return queue
-		})
-
 		return {
-			attachQueue,
-			resize: Effect.fnUntraced(function* (size: TerminalSize) {
+			attach: (cursor?: TerminalCursor) =>
+				Stream.unwrap(
+					Effect.gen(function* () {
+						yield* Effect.annotateCurrentSpan({
+							cursorEpoch: cursor?.epoch ?? -1,
+							cursorSequence: cursor?.sequence ?? -1,
+							cwd: config.cwd
+						})
+						const queue = yield* Queue.bounded<TerminalFrame, Cause.Done>(1024)
+						const replay = yield* Ref.modify(transcriptRef, current => [
+							framesAfterCursor(current.frames, cursor),
+							{...current, attached: Array.append(current.attached, queue)}
+						])
+						yield* Effect.annotateCurrentSpan({replayFrameCount: Array.length(replay)})
+
+						return pipe(
+							Stream.fromIterable(replay),
+							Stream.concat(
+								Stream.fromQueue(queue).pipe(
+									Stream.ensuring(
+										pipe(
+											Ref.update(transcriptRef, current => ({
+												...current,
+												attached: Array.filter(current.attached, currentQueue => currentQueue !== queue)
+											})),
+											Effect.andThen(Queue.shutdown(queue))
+										)
+									)
+								)
+							)
+						)
+					}).pipe(Effect.withSpan('Terminal.attach'))
+				),
+			resize: Effect.fn('Terminal.resize')(function* (size: TerminalSize) {
+				yield* Effect.annotateCurrentSpan({cols: size.cols, cwd: config.cwd, rows: size.rows})
 				yield* Queue.offer(resizeQueue, size)
 			}),
-			restart: Effect.fnUntraced(function* () {
+			restart: Effect.fn('Terminal.restart')(function* () {
+				yield* Effect.annotateCurrentSpan({command: processCommand, cwd: config.cwd, processCwd})
 				return yield* pipe(
 					spawnProcess(),
 					Semaphore.withPermit(lifecycleLock),
-					Effect.catch(() => pipe(setStatus('failed'), Effect.andThen(SubscriptionRef.get(statusRef))))
+					Effect.catch(() => pipe(setStatus('failed'), Effect.andThen(SubscriptionRef.get(status))))
 				)
 			}),
-			statusQueue,
-			stop: Effect.fnUntraced(function* () {
+			status,
+			stop: Effect.fn('Terminal.stop')(function* () {
+				yield* Effect.annotateCurrentSpan({cwd: config.cwd})
 				yield* pipe(stopProcess('stopped'), Semaphore.withPermit(lifecycleLock))
-				return yield* SubscriptionRef.get(statusRef)
+				return yield* SubscriptionRef.get(status)
 			}),
-			write: Effect.fnUntraced(function* (data: string) {
+			write: Effect.fn('Terminal.write')(function* (input: TerminalInput) {
+				const data = terminalInputString(input)
 				if (data === '') return
 
+				yield* Effect.annotateCurrentSpan({byteLength: data.length, cwd: config.cwd, inputType: input.type})
 				const process = yield* Ref.get(processRef)
 				if (!process) return
 
@@ -349,4 +438,33 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 	})
 }) {
 	public static layer = flow(this.make, Layer.effect(this))
+	public static layerMock(input: TerminalMock = {}) {
+		return Layer.effect(
+			this,
+			Effect.gen(function* () {
+				const status = yield* SubscriptionRef.make<TerminalStatus>(input.status ?? {state: 'idle', title: ''})
+
+				return {
+					attach: (cursor?: TerminalCursor) => Stream.fromIterable(framesAfterCursor(input.frames ?? [], cursor)),
+					resize: Effect.fn('Terminal.mock.resize')(function* (size: TerminalSize) {
+						if (input.resize !== undefined) yield* input.resize(size)
+					}),
+					restart: Effect.fn('Terminal.mock.restart')(function* () {
+						const next = {state: 'running' as const, title: ''}
+						yield* SubscriptionRef.set(status, next)
+						return next
+					}),
+					status,
+					stop: Effect.fn('Terminal.mock.stop')(function* () {
+						const next = {state: 'stopped' as const, title: ''}
+						yield* SubscriptionRef.set(status, next)
+						return next
+					}),
+					write: Effect.fn('Terminal.mock.write')(function* (data: TerminalInput) {
+						if (input.write !== undefined) yield* input.write(data)
+					})
+				}
+			})
+		)
+	}
 }

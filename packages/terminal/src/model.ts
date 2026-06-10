@@ -3,7 +3,6 @@ import {Array, pipe} from 'effect'
 import type {TerminalStatus} from './schema.ts'
 
 export const terminalChunkBytes = 64 * 1024
-export const terminalReset = '\u001bc'
 
 const terminalOscCarryBytes = 4096
 

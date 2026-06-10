@@ -7,7 +7,7 @@ import {useHotkey} from '@tanstack/react-hotkeys'
 import {CircleCheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
-import {GithubLight} from '../ui/svgs/githubLight.tsx'
+import {GithubLight} from '../svgs/githubLight.tsx'
 
 import {Markdown} from './markdown.tsx'
 

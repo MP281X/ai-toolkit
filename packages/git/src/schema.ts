@@ -37,6 +37,12 @@ export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 	subject: Schema.String
 }) {}
 
+export class GitPullRequest extends Schema.Class<GitPullRequest>('GitPullRequest')({
+	body: Schema.optional(Schema.String),
+	title: Schema.optional(Schema.String),
+	url: Schema.String
+}) {}
+
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
 	branchCommits: Schema.Array(GitCommit),
 	dirty: Schema.Boolean,
@@ -56,53 +62,16 @@ export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewC
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
 	resolved: Schema.Boolean,
-	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
+	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
+	source: Schema.optional(Schema.Literals(['local', 'github'])),
+	threadId: Schema.optional(Schema.String),
+	url: Schema.optional(Schema.String)
 }) {}
 
 export class GitReviewState extends Schema.Class<GitReviewState>('GitReviewState')({
 	comments: Schema.Array(GitReviewComment),
 	marks: Schema.Array(GitReviewMark)
 }) {}
-
-export class GitHubReviewThread extends Schema.Class<GitHubReviewThread>('GitHubReviewThread')({
-	body: Schema.String,
-	filePath: Schema.String,
-	id: Schema.String,
-	lineNumber: Schema.Number,
-	resolved: Schema.Boolean,
-	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
-	url: Schema.optional(Schema.String)
-}) {}
-
-export const GitHubRepositoryResponse = Schema.Struct({
-	name: Schema.String,
-	owner: Schema.Struct({login: Schema.String})
-})
-
-const GitHubReviewThreadCommentResponse = Schema.Struct({
-	body: Schema.String,
-	line: Schema.optional(Schema.NullOr(Schema.Number)),
-	originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
-	path: Schema.String,
-	url: Schema.optional(Schema.String)
-})
-
-const GitHubReviewThreadResponse = Schema.Struct({
-	comments: Schema.Struct({nodes: Schema.Array(GitHubReviewThreadCommentResponse)}),
-	diffSide: Schema.optional(Schema.String),
-	id: Schema.String,
-	isResolved: Schema.Boolean
-})
-
-const GitHubPullRequestResponse = Schema.Struct({
-	reviewThreads: Schema.optional(Schema.Struct({nodes: Schema.Array(GitHubReviewThreadResponse)}))
-})
-
-const GitHubReviewRepositoryResponse = Schema.Struct({pullRequest: Schema.optional(GitHubPullRequestResponse)})
-
-export const GitHubReviewThreadsResponse = Schema.Struct({
-	data: Schema.optional(Schema.Struct({repository: Schema.optional(GitHubReviewRepositoryResponse)}))
-})
 
 export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({
 	gitDirectory: Schema.String,
@@ -119,6 +88,13 @@ export class GitBranchesSnapshot extends Schema.Class<GitBranchesSnapshot>('GitB
 	branches: Schema.Array(GitBranch),
 	defaultBranch: Schema.String
 }) {}
+
+export type GitWorktreeSource = typeof GitWorktreeSource.Type
+export const GitWorktreeSource = Schema.Union([
+	Schema.Struct({_tag: Schema.Literal('local')}),
+	Schema.Struct({_tag: Schema.Literal('remote'), remote: Schema.String}),
+	Schema.Struct({_tag: Schema.Literal('new')})
+])
 
 export class GitWorktreeStatus extends Schema.Class<GitWorktreeStatus>('GitWorktreeStatus')({
 	ahead: Schema.Number,
@@ -143,8 +119,10 @@ export function gitReviewCommentKey(input: {
 	readonly filePath: string
 	readonly lineNumber: number
 	readonly side?: 'additions' | 'deletions'
+	readonly source?: 'github' | 'local'
+	readonly threadId?: string
 }) {
-	return `${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
+	return `${input.source ?? 'local'}:${input.threadId ?? ''}:${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
 }
 
 export function gitReviewMarkKey(input: {readonly filePath: string; readonly fingerprint: string}) {
@@ -174,7 +152,7 @@ export function gitReviewStateSaveComment(state: GitReviewState, comment: GitRev
 	return new GitReviewState({
 		comments: Array.append(
 			Array.filter(state.comments, currentComment => gitReviewCommentKey(currentComment) !== key),
-			new GitReviewComment({...comment, resolved: false})
+			new GitReviewComment({...comment, resolved: false, source: 'local', threadId: undefined, url: undefined})
 		),
 		marks: state.marks
 	})
@@ -184,7 +162,7 @@ export function gitReviewStateResolveComment(
 	state: GitReviewState,
 	input: {readonly filePath: string; readonly lineNumber: number; readonly side?: 'additions' | 'deletions'}
 ) {
-	const key = gitReviewCommentKey(input)
+	const key = gitReviewCommentKey({...input, source: 'local'})
 
 	return new GitReviewState({
 		comments: Array.map(state.comments, comment =>

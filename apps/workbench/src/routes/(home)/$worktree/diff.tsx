@@ -1,6 +1,6 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, HashMap, Match, Option, Predicate, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -15,26 +15,27 @@ import {
 	CircleCheckIcon,
 	CopyIcon,
 	ExternalLinkIcon,
+	FilePenLineIcon,
 	FileIcon,
 	FolderIcon,
 	GitPullRequestArrowIcon,
-	Loader2Icon,
 	MinusIcon,
-	UploadIcon
+	SparklesIcon
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
 import {Button} from '@deslop/components/ui/button'
-import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput} from '@deslop/components/ui/input-group'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
-import {cn} from '@deslop/components/utils'
+import {Spinner} from '@deslop/components/ui/spinner'
+import {Textarea} from '@deslop/components/ui/textarea'
+import {cn, formatError} from '@deslop/components/utils'
 import {
 	GitReviewState,
 	type GitCommit,
 	type GitDiff,
-	type GitHubReviewThread,
 	type GitReviewComment,
 	type GitReviewMark,
 	type GitReviewTarget,
@@ -93,16 +94,7 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const githubThreadsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.flatMap(client => client('review.githubThreads', {cwd}))
-		)
-	)
-)
-
-export type QueuedComment = typeof GitReviewComment.Type
+type QueuedComment = typeof GitReviewComment.Type
 
 type DisplayComment = QueuedComment & {
 	readonly resolved: boolean
@@ -119,30 +111,58 @@ const reviewStateValueAtom = Atom.family((cwd: string) =>
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => Effect.succeed({committing: false, pushing: false})))
+	Atom.optimistic(
+		Atom.make(() =>
+			Effect.succeed({generatingMessage: false, generatingPr: false, publishing: false, updatingPr: false})
+		)
+	)
 )
 
-const commitReviewActionAtom = Atom.family((cwd: string) =>
+const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<string>()(
-			Effect.fn('DiffPage.commitReview')(function* (message) {
+		fn: RpcClient.runtime.fn<null>()(
+			Effect.fn('DiffPage.generatePublishMessage')(function* () {
 				const client = yield* RpcClient
-				return yield* client('review.commit', {cwd, message})
+				return yield* client('publish.message.generate', {cwd})
 			})
 		),
-		reducer: state => ({...state, committing: true})
+		reducer: state => ({...state, generatingMessage: true})
 	})
 )
 
-const pushReviewActionAtom = Atom.family((cwd: string) =>
+const approvePublishActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<undefined>()(
-			Effect.fn('DiffPage.pushReview')(function* () {
+		fn: RpcClient.runtime.fn<string>()(
+			Effect.fn('DiffPage.approvePublish')(function* (message) {
 				const client = yield* RpcClient
-				return yield* client('review.push', {cwd})
+				return yield* client('publish.approve', {cwd, message})
 			})
 		),
-		reducer: state => ({...state, pushing: true})
+		reducer: state => ({...state, publishing: true})
+	})
+)
+
+const generatePullRequestActionAtom = Atom.family((cwd: string) =>
+	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
+		fn: RpcClient.runtime.fn<null>()(
+			Effect.fn('DiffPage.generatePullRequest')(function* () {
+				const client = yield* RpcClient
+				return yield* client('publish.pr.generate', {cwd})
+			})
+		),
+		reducer: state => ({...state, generatingPr: true})
+	})
+)
+
+const updatePullRequestActionAtom = Atom.family((cwd: string) =>
+	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
+		fn: RpcClient.runtime.fn<{readonly body: string; readonly title: string}>()(
+			Effect.fn('DiffPage.updatePullRequest')(function* (draft) {
+				const client = yield* RpcClient
+				return yield* client('publish.pr.update', {body: draft.body, cwd, title: draft.title})
+			})
+		),
+		reducer: state => ({...state, updatingPr: true})
 	})
 )
 
@@ -158,18 +178,12 @@ const resolveCommentActionAtom = Atom.family((cwd: string) =>
 			Effect.fn('DiffPage.resolveComment')(function* (resolveInput) {
 				const client = yield* RpcClient
 
-				if (resolveInput.comment.source === 'github') {
-					if (Predicate.isNotUndefined(resolveInput.comment.threadId)) {
-						yield* client('review.githubThreads.resolve', {cwd, threadId: resolveInput.comment.threadId})
-					}
-					return
-				}
-
 				yield* client('review.comments.resolve', {
 					cwd,
 					filePath: resolveInput.comment.filePath,
 					lineNumber: resolveInput.comment.lineNumber,
-					side: resolveInput.comment.side
+					side: resolveInput.comment.side,
+					threadId: resolveInput.comment.threadId
 				})
 			})
 		),
@@ -188,23 +202,13 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 
 				yield* pipe(
 					comments,
-					Array.flatMap(resolveInput =>
-						resolveInput.comment.source === 'github' && Predicate.isNotUndefined(resolveInput.comment.threadId)
-							? [resolveInput.comment.threadId]
-							: Array.empty<string>()
-					),
-					Array.dedupe,
-					Effect.forEach(threadId => client('review.githubThreads.resolve', {cwd, threadId}))
-				)
-				yield* pipe(
-					comments,
-					Array.filter(resolveInput => resolveInput.comment.source === 'local'),
 					Effect.forEach(resolveInput =>
 						client('review.comments.resolve', {
 							cwd,
 							filePath: resolveInput.comment.filePath,
 							lineNumber: resolveInput.comment.lineNumber,
-							side: resolveInput.comment.side
+							side: resolveInput.comment.side,
+							threadId: resolveInput.comment.threadId
 						})
 					)
 				)
@@ -218,19 +222,19 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 )
 
 function groupCommentsByFile<Comment extends {readonly filePath: string}>(comments: readonly Comment[]) {
-	const groups = new Map<string, Comment[]>()
-
-	for (const comment of comments) {
-		const group = groups.get(comment.filePath)
-		if (group === undefined) {
-			groups.set(comment.filePath, [comment])
-		} else {
-			group.push(comment)
-		}
-	}
-
 	return pipe(
-		Array.fromIterable(groups),
+		comments,
+		Array.reduce(HashMap.empty<string, readonly Comment[]>(), (groups, comment) =>
+			HashMap.modifyAt(groups, comment.filePath, current =>
+				Option.some(
+					Array.append(
+						Option.getOrElse(current, () => Array.empty<Comment>()),
+						comment
+					)
+				)
+			)
+		),
+		groups => Array.fromIterable(groups),
 		Array.map(group => ({comments: group[1], filePath: group[0]}))
 	)
 }
@@ -255,14 +259,14 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
-	const githubThreadsResult = useAtomValue(githubThreadsAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const comments = reviewStateValue.comments
-	const githubThreadsLoaded = githubThreadsResult._tag === 'Success'
-	const githubThreads = githubThreadsLoaded ? githubThreadsResult.value : Array.empty<GitHubReviewThread>()
 	const shortcutsOpenState = useState(false)
 	const selectedScopeState = useState<GitReviewTarget>({_tag: 'changes'})
 	const allCommits = Array.appendAll(suggestedMetadata.value.localCommits, suggestedMetadata.value.branchCommits)
+	const hasPublishSummary =
+		!Array.isReadonlyArrayEmpty(suggestedMetadata.value.localCommits) ||
+		!Array.isReadonlyArrayEmpty(suggestedMetadata.value.branchCommits)
 	const selectedCommit = pipe(
 		allCommits,
 		Array.findFirst(commit => commit.hash === search.commit),
@@ -286,27 +290,19 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			: undefined) ?? reviewDiffsValue[0]
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
-	const refreshGithubThreads = useAtomRefresh(githubThreadsAtom(input.cwd))
+	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
 	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
 	const resolveComments = useAtomSet(resolveCommentsActionAtom(input.cwd), {mode: 'promise'})
 	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
 	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
 	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
-	const effectiveComments: readonly DisplayComment[] = Array.appendAll(
-		Array.map(comments, comment => ({
-			...comment,
-			resolved: comment.resolved === true,
-			resolving: commentResolutionState.resolvingKeys.has(gitReviewCommentKey(comment)),
-			source: 'local' as const
-		})),
-		Array.map(githubThreads, comment => ({
-			...comment,
-			resolving: commentResolutionState.resolvingKeys.has(gitReviewCommentKey(comment)),
-			source: 'github' as const,
-			threadId: comment.id
-		}))
-	)
+	const effectiveComments: readonly DisplayComment[] = Array.map(comments, comment => ({
+		...comment,
+		resolved: comment.resolved === true,
+		resolving: commentResolutionState.resolvingKeys.has(gitReviewCommentKey(comment)),
+		source: comment.source ?? 'local'
+	}))
 	const unresolvedComments = Array.filter(effectiveComments, comment => !comment.resolved)
 	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({
 		comment,
@@ -358,7 +354,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	function refreshReview() {
 		refreshSuggestedMetadata()
 		refreshDiffs()
-		refreshGithubThreads()
+		refreshReviewState()
 	}
 
 	async function markFileReviewed(marks: readonly GitReviewMark[]) {
@@ -388,7 +384,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	async function resolveReviewComment(comment: DisplayComment) {
 		try {
 			await resolveComment({comment, key: gitReviewCommentKey(comment)})
-			if (comment.source === 'github') refreshGithubThreads()
+			if (comment.source === 'github') refreshReviewState()
 		} catch {
 			toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
 		}
@@ -397,7 +393,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	async function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
 		try {
 			await resolveComments(commentsToResolve)
-			refreshGithubThreads()
+			refreshReviewState()
 		} catch {
 			toast.error('Failed to resolve comment.')
 		}
@@ -428,6 +424,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						<CommitActionForm
 							cwd={input.cwd}
 							dirty={suggestedMetadata.value.dirty}
+							hasPublishSummary={hasPublishSummary}
 							prUrl={suggestedMetadata.value.prUrl}
 							refreshReview={refreshReview}
 							unpushedCommits={suggestedMetadata.value.unpushedCommits}
@@ -513,35 +510,31 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 								</div>
 							)}
 						</div>
-						{(!githubThreadsLoaded || !Array.isReadonlyArrayEmpty(unresolvedComments)) && (
+						{!Array.isReadonlyArrayEmpty(unresolvedComments) && (
 							<footer className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t px-2">
 								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
-									{githubThreadsLoaded ? (
-										Array.map(commentsByFile, group => (
-											<Button
-												key={group.filePath}
-												type="button"
-												variant="outline"
-												size="xs"
-												aria-label={`Open ${group.filePath}`}
-												title={group.filePath}
-												onClick={() => {
-													openFile(group.filePath)
-												}}
-											>
-												<FileIcon filePath={group.filePath} />
-												<span className="max-w-32 truncate">
-													{pipe(
-														String.split('/')(group.filePath),
-														Array.last,
-														Option.getOrElse(() => group.filePath)
-													)}
-												</span>
-											</Button>
-										))
-									) : (
-										<Loader2Icon className="text-muted-foreground size-4 animate-spin" />
-									)}
+									{Array.map(commentsByFile, group => (
+										<Button
+											key={group.filePath}
+											type="button"
+											variant="outline"
+											size="xs"
+											aria-label={`Open ${group.filePath}`}
+											title={group.filePath}
+											onClick={() => {
+												openFile(group.filePath)
+											}}
+										>
+											<FileIcon filePath={group.filePath} />
+											<span className="max-w-32 truncate">
+												{pipe(
+													String.split('/')(group.filePath),
+													Array.last,
+													Option.getOrElse(() => group.filePath)
+												)}
+											</span>
+										</Button>
+									))}
 								</div>
 								<div className="flex h-8 shrink-0 items-center gap-1">
 									<Button
@@ -570,11 +563,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											void resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
-										{commentResolutionState.resolvingAll ? (
-											<Loader2Icon className="animate-spin" />
-										) : (
-											<CircleCheckIcon />
-										)}
+										{commentResolutionState.resolvingAll ? <Spinner /> : <CircleCheckIcon />}
 									</Button>
 								</div>
 							</footer>
@@ -589,95 +578,197 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 function CommitActionForm(input: {
 	readonly cwd: string
 	readonly dirty: boolean
+	readonly hasPublishSummary: boolean
 	readonly prUrl?: string
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 }) {
 	const commitMessageState = useState('')
+	const prDialogOpenState = useState(false)
+	const prTitleState = useState('')
+	const prBodyState = useState('')
 	const actionStateResult = useAtomValue(reviewActionsStateAtom(input.cwd))
 	const actionState =
-		actionStateResult._tag === 'Success' ? actionStateResult.value : {committing: false, pushing: false}
-	const commit = useAtomSet(commitReviewActionAtom(input.cwd), {mode: 'promise'})
-	const push = useAtomSet(pushReviewActionAtom(input.cwd), {mode: 'promise'})
+		actionStateResult._tag === 'Success'
+			? actionStateResult.value
+			: {generatingMessage: false, generatingPr: false, publishing: false, updatingPr: false}
+	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
+	const generatePullRequest = useAtomSet(generatePullRequestActionAtom(input.cwd), {mode: 'promise'})
+	const approvePublish = useAtomSet(approvePublishActionAtom(input.cwd), {mode: 'promise'})
+	const updatePullRequest = useAtomSet(updatePullRequestActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const missingMessage = String.isEmpty(trimmedCommitMessage)
-	const commitDisabled = actionState.committing || !input.dirty || missingMessage
-	const pushDisabled = actionState.pushing || !input.unpushedCommits
+	const trimmedPrTitle = pipe(prTitleState[0], String.trim)
+	const trimmedPrBody = pipe(prBodyState[0], String.trim)
+	const missingMessage = input.dirty && String.isEmpty(trimmedCommitMessage)
+	const publishDisabled = actionState.publishing || (!input.dirty && !input.unpushedCommits) || missingMessage
+	const generateDisabled = actionState.generatingMessage || actionState.publishing || !input.dirty
+	const generatePrDisabled =
+		actionState.generatingPr || actionState.updatingPr || actionState.publishing || !input.hasPublishSummary
+	const updatePrDisabled =
+		actionState.generatingPr ||
+		actionState.updatingPr ||
+		Predicate.isUndefined(input.prUrl) ||
+		String.isEmpty(trimmedPrTitle) ||
+		String.isEmpty(trimmedPrBody)
 
-	async function submitCommit() {
-		if (commitDisabled) return
+	async function submitPublish() {
+		if (publishDisabled) return
 
-		await commit(trimmedCommitMessage)
-		commitMessageState[1]('')
-		input.refreshReview()
+		try {
+			await approvePublish(trimmedCommitMessage)
+			commitMessageState[1]('')
+			input.refreshReview()
+		} catch (error) {
+			toast.error(formatError(error))
+		}
 	}
 
-	async function submitPush() {
-		if (pushDisabled) return
+	async function generateMessage() {
+		if (generateDisabled) return
 
-		await push(undefined)
-		input.refreshReview()
+		try {
+			commitMessageState[1](await generatePublishMessage(null))
+		} catch (error) {
+			toast.error(formatError(error))
+		}
+	}
+
+	async function generatePrDraft() {
+		if (generatePrDisabled) return
+
+		try {
+			const draft = await generatePullRequest(null)
+			prTitleState[1](draft.title)
+			prBodyState[1](draft.body)
+			prDialogOpenState[1](true)
+		} catch (error) {
+			toast.error(formatError(error))
+		}
+	}
+
+	async function submitPrUpdate() {
+		if (updatePrDisabled) return
+
+		try {
+			await updatePullRequest({body: trimmedPrBody, title: trimmedPrTitle})
+			prDialogOpenState[1](false)
+			input.refreshReview()
+		} catch (error) {
+			toast.error(formatError(error))
+		}
 	}
 
 	return (
-		<form
-			className="flex items-center gap-1 border-b p-2"
-			onSubmit={event => {
-				event.preventDefault()
-				void submitCommit()
-			}}
-		>
-			<InputGroup className="min-w-0 flex-1">
-				<InputGroupInput
-					autoComplete="off"
-					value={commitMessageState[0]}
-					placeholder="commit message"
-					onChange={event => {
-						commitMessageState[1](event.currentTarget.value)
-					}}
-				/>
-				<InputGroupAddon align="inline-end">
-					<InputGroupButton
-						type="submit"
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Commit"
-						disabled={commitDisabled}
-						title="Commit"
+		<>
+			<Dialog open={prDialogOpenState[0]} onOpenChange={prDialogOpenState[1]}>
+				<DialogContent className="sm:max-w-2xl">
+					<DialogHeader>
+						<DialogTitle>Pull Request</DialogTitle>
+					</DialogHeader>
+					<form
+						className="grid gap-3"
+						onSubmit={event => {
+							event.preventDefault()
+							void submitPrUpdate()
+						}}
 					>
-						{actionState.committing ? <Loader2Icon className="animate-spin" /> : <GitPullRequestArrowIcon />}
-					</InputGroupButton>
-				</InputGroupAddon>
-			</InputGroup>
-			<div className="inline-flex shrink-0 items-center gap-1">
-				<Button
-					type="button"
-					variant="outline"
-					size="icon"
-					aria-label="Push"
-					title="Push"
-					disabled={pushDisabled}
-					onClick={() => {
-						void submitPush()
-					}}
-				>
-					{actionState.pushing ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					size="icon"
-					aria-label="Open PR"
-					title="Open PR"
-					disabled={Predicate.isUndefined(input.prUrl)}
-					onClick={() => {
-						if (Predicate.isNotUndefined(input.prUrl)) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-					}}
-				>
-					<ExternalLinkIcon />
-				</Button>
-			</div>
-		</form>
+						<InputGroup>
+							<InputGroupInput
+								autoComplete="off"
+								value={prTitleState[0]}
+								placeholder="Title"
+								onChange={event => {
+									prTitleState[1](event.currentTarget.value)
+								}}
+							/>
+						</InputGroup>
+						<Textarea
+							className="min-h-56 resize-none"
+							value={prBodyState[0]}
+							placeholder="Body"
+							onChange={event => {
+								prBodyState[1](event.currentTarget.value)
+							}}
+						/>
+						<DialogFooter>
+							<Button type="submit" disabled={updatePrDisabled}>
+								{actionState.updatingPr ? <Spinner /> : <FilePenLineIcon />}
+								Update
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
+			<form
+				className="flex items-center gap-1 border-b p-2"
+				onSubmit={event => {
+					event.preventDefault()
+					void submitPublish()
+				}}
+			>
+				<InputGroup className="min-w-0 flex-1">
+					<InputGroupInput
+						autoComplete="off"
+						readOnly
+						value={commitMessageState[0]}
+						placeholder={input.dirty ? 'Generate commit message' : 'No commit message needed'}
+					/>
+					<InputGroupAddon align="inline-end">
+						<InputGroupButton
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							aria-label="Generate commit message"
+							disabled={generateDisabled}
+							title="Generate commit message"
+							onClick={() => {
+								void generateMessage()
+							}}
+						>
+							{actionState.generatingMessage ? <Spinner /> : <SparklesIcon />}
+						</InputGroupButton>
+						<InputGroupButton
+							type="submit"
+							variant="ghost"
+							size="icon-xs"
+							aria-label="Approve publish"
+							disabled={publishDisabled}
+							title="Approve publish"
+						>
+							{actionState.publishing ? <Spinner /> : <GitPullRequestArrowIcon />}
+						</InputGroupButton>
+					</InputGroupAddon>
+				</InputGroup>
+				<div className="inline-flex shrink-0 items-center gap-1">
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						aria-label="Generate PR draft"
+						title="Generate PR draft"
+						disabled={generatePrDisabled}
+						onClick={() => {
+							void generatePrDraft()
+						}}
+					>
+						{actionState.generatingPr ? <Spinner /> : <GitPullRequestArrowIcon />}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						aria-label="Open PR"
+						title="Open PR"
+						disabled={Predicate.isUndefined(input.prUrl)}
+						onClick={() => {
+							if (Predicate.isNotUndefined(input.prUrl)) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
+						}}
+					>
+						<ExternalLinkIcon />
+					</Button>
+				</div>
+			</form>
+		</>
 	)
 }
 
@@ -814,12 +905,12 @@ function DiffList(input: {
 }) {
 	const collapsedFoldersState = useState<ReadonlySet<string>>(new Set())
 	const fileTree = buildFileTree(input.diffs)
-	const marksByDiff = new Map<string, readonly GitReviewMark[]>()
-
-	for (const diff of input.diffs) {
-		marksByDiff.set(diff.filePath, gitReviewMarksForDiff(diff))
-	}
-
+	const marksByDiff = pipe(
+		input.diffs,
+		Array.reduce(HashMap.empty<string, readonly GitReviewMark[]>(), (marks, diff) =>
+			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
+		)
+	)
 	const reviewedKeys = new Set(Array.map(input.marks, gitReviewMarkKey))
 
 	function toggleFolder(path: string) {
@@ -858,7 +949,11 @@ function DiffList(input: {
 			)
 		}
 
-		const marks = marksByDiff.get(node.diff.filePath) ?? Array.empty()
+		const marks = pipe(
+			marksByDiff,
+			HashMap.get(node.diff.filePath),
+			Option.getOrElse(() => Array.empty<GitReviewMark>())
+		)
 		const state = gitReviewStateForMarks(marks, reviewedKeys)
 
 		return (

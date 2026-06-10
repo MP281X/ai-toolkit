@@ -19,28 +19,31 @@
 		"dev:client": "vp dev",
 		"dev:server": "node --inspect=127.0.0.1:0 --watch ./src/main.server.ts",
 
-    "build": "rm -rf dist && vp build && vp pack",
+		"build": "rm -rf dist && vp build && vp pack",
 
 		"preview": "vp run build && PORT=7010 node ./dist/server.js"
-	},
-
-	"dependencies": {
-		"@lydell/node-pty": "1.2.0-beta.12"
 	},
 
 	"devDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
 
+		"@lydell/node-pty": "1.2.0-beta.12",
+
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
+		"@deslop/ai": "workspace:*",
 		"@deslop/git": "workspace:*",
 		"@deslop/portless": "workspace:*",
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
+
+		"effect": "^4.0.0-beta",
+		"@effect/platform-node": "^4.0.0-beta",
+		"@effect/opentelemetry": "^4.0.0-beta",
 
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",

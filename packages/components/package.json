@@ -37,10 +37,10 @@
 
 		"@xterm/xterm": "latest",
 		"@xterm/addon-fit": "latest",
-    "@xterm/addon-webgl": "latest",
-    "@xterm/addon-unicode11": "latest",
-    "@xterm/addon-web-links": "latest",
-    "@xterm/addon-clipboard": "latest",
+		"@xterm/addon-webgl": "latest",
+		"@xterm/addon-unicode11": "latest",
+		"@xterm/addon-web-links": "latest",
+		"@xterm/addon-clipboard": "latest",
 
 		"clsx": "latest",
 		"tailwind-merge": "latest",

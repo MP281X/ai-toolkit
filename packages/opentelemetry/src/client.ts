@@ -12,10 +12,12 @@ export function OtelLayer(serviceName: string) {
 			Option.match({
 				onNone: () => Layer.empty,
 				onSome: url =>
-					WebSdk.layer(() => ({
-						resource: {serviceName},
-						spanProcessor: new SimpleSpanProcessor(new OTLPTraceExporter({url}))
-					}))
+					WebSdk.layer(
+						Effect.sync(() => ({
+							resource: {serviceName},
+							spanProcessor: [new SimpleSpanProcessor(new OTLPTraceExporter({url}))]
+						}))
+					)
 			})
 		)
 	)

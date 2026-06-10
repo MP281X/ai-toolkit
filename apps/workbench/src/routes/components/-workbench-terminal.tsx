@@ -1,55 +1,104 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 
-import {Effect, Fiber, Queue, pipe} from 'effect'
-
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useRef} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {terminalAttachQueueAtom, terminalSessionStatus, type TerminalSessionInput} from '#lib/state.ts'
+import {
+	terminalFramePullAtom,
+	terminalSessionKey,
+	terminalStatusAtom,
+	updateTerminalSessionCursorByKey,
+	type TerminalSessionInput
+} from '#lib/state.ts'
 import {Terminal, type TerminalHandle} from '@deslop/components/render/terminal'
+import type {TerminalFrame} from '@deslop/terminal/schema'
 
-export function WorkbenchTerminal(input: {readonly className?: string; readonly session: TerminalSessionInput}) {
+function terminalFrameKey(frame: TerminalFrame) {
+	return `${frame.cursor.epoch}:${frame.cursor.sequence}`
+}
+
+export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
-	const updates = useAtomSuspense(terminalAttachQueueAtom(input.session))
+	const pullFrames = useAtomSet(terminalFramePullAtom(input.session))
+	const status = useAtomSuspense(terminalStatusAtom(input.session))
 	const terminalRef = useRef<TerminalHandle>(null)
-	const [status, setStatus] = useState(() => terminalSessionStatus(input.session))
+	const activeRef = useRef(true)
+	const processedFrameRef = useRef<string | null>(null)
+	const pendingFramesRef = useRef(new Set<string>())
+	const sessionKey = terminalSessionKey(input.session)
 
 	useEffect(() => {
-		setStatus(terminalSessionStatus(input.session))
-		const fiber = Effect.runFork(
-			pipe(
-				Queue.take(updates.value),
-				Effect.flatMap(update =>
-					Effect.sync(() => {
-						if (update.type === 'status') {
-							setStatus(update.status)
-							return
-						}
-						if (update.type === 'snapshot') terminalRef.current?.reset()
-						terminalRef.current?.write(update.data)
-					})
-				),
-				Effect.forever
-			)
-		)
+		const pendingFrames = pendingFramesRef.current
+		activeRef.current = true
+		processedFrameRef.current = null
+		pendingFrames.clear()
 
 		return () => {
-			Effect.runSync(Fiber.interrupt(fiber))
+			activeRef.current = false
+			pendingFrames.clear()
 		}
-	}, [input.session, updates.value])
+	}, [sessionKey])
+
+	useAtomSubscribe(
+		terminalFramePullAtom(input.session),
+		result => {
+			if (result._tag !== 'Success' || result.waiting) return
+
+			function processFrames(frames: readonly TerminalFrame[], index: number): void {
+				if (!activeRef.current) return
+				const frame = frames[index]
+				if (frame === undefined) {
+					pullFrames(void 0)
+					return
+				}
+
+				const frameKey = terminalFrameKey(frame)
+				if (processedFrameRef.current === frameKey || pendingFramesRef.current.has(frameKey)) {
+					processFrames(frames, index + 1)
+					return
+				}
+
+				pendingFramesRef.current.add(frameKey)
+
+				function completeFrame(completedFrame: TerminalFrame) {
+					pendingFramesRef.current.delete(frameKey)
+					processedFrameRef.current = frameKey
+					updateTerminalSessionCursorByKey(sessionKey, completedFrame.cursor)
+					processFrames(frames, index + 1)
+				}
+
+				if (frame.type === 'reset') {
+					terminalRef.current?.reset()
+					completeFrame(frame)
+					return
+				}
+				if (frame.type === 'resize' || !terminalRef.current) {
+					completeFrame(frame)
+					return
+				}
+
+				terminalRef.current.write(frame.data, () => {
+					completeFrame(frame)
+				})
+			}
+
+			processFrames(result.value.items, 0)
+		},
+		{immediate: true}
+	)
 
 	return (
 		<Terminal
 			ref={terminalRef}
-			className={input.className}
+			className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 			onData={data => {
-				write({payload: {...input.session, data}})
+				write({payload: {...input.session, data: {data, type: 'text'}}})
 			}}
 			onResize={size => {
 				resize({payload: {...input.session, cols: size.cols, rows: size.rows}})
 			}}
-			state={status.state}
+			state={status.value.state}
 		/>
 	)
 }

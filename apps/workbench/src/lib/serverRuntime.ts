@@ -7,17 +7,17 @@ import {KeyValueStore} from 'effect/unstable/persistence'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
-import {GitCommand, GitWorkspace} from '@deslop/git/service'
+import {AgentCommand} from '@deslop/ai/service'
+import {GitWorkspace} from '@deslop/git/service'
 import {OtelLayer} from '@deslop/opentelemetry/server'
-import {Portless} from '@deslop/portless/http'
 
 export const LiveLayers = pipe(
 	Layer.empty,
 	// Rpc handlers
 	Layer.provideMerge(RpcHandlers),
 	// Application layers
-	Layer.provideMerge(Portless.layer),
-	Layer.provideMerge(pipe(GitWorkspace.layer, Layer.provide(GitCommand.layer))),
+	Layer.provideMerge(AgentCommand.layer),
+	Layer.provideMerge(GitWorkspace.layer),
 	Layer.provideMerge(
 		Layer.unwrap(
 			pipe(

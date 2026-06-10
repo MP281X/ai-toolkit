@@ -1,9 +1,9 @@
-import {Array, Data, Effect, Hash, Option, Order, Result, Stream, String, pipe} from 'effect'
+import {Array, Data, Effect, Hash, Option, Order, Stream, String, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {TerminalStatus} from '@deslop/terminal/schema'
+import type {TerminalCursor, TerminalStatus} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
@@ -15,13 +15,47 @@ export type TerminalSessionInput = {
 
 class TerminalSessionAtomKey extends Data.Class<TerminalSessionInput> {}
 
+const terminalSessionCursorLimit = 512
+const terminalSessionCursors = new Map<string, TerminalCursor>()
+
+function terminalSessionEnv(env: TerminalSessionInput['env']) {
+	if (env === undefined) return
+
+	return Object.fromEntries(
+		pipe(
+			Object.entries(env),
+			Array.sortWith(entry => entry[0], Order.String)
+		)
+	)
+}
+
 function terminalSessionInput(input: TerminalSessionInput): TerminalSessionInput {
+	const env = terminalSessionEnv(input.env)
+
 	return {
 		...(input.args === undefined ? {} : {args: [...input.args]}),
 		...(input.command === undefined ? {} : {command: input.command}),
 		cwd: input.cwd,
-		...(input.env === undefined ? {} : {env: {...input.env}}),
+		...(env === undefined ? {} : {env}),
 		...(input.sessionId === undefined ? {} : {sessionId: input.sessionId})
+	}
+}
+
+export function terminalSessionKey(input: TerminalSessionInput) {
+	return JSON.stringify(terminalSessionInput(input))
+}
+
+function terminalSessionCursor(input: TerminalSessionInput) {
+	return terminalSessionCursors.get(terminalSessionKey(input))
+}
+
+export function updateTerminalSessionCursorByKey(key: string, cursor: TerminalCursor) {
+	terminalSessionCursors.delete(key)
+	terminalSessionCursors.set(key, cursor)
+	while (terminalSessionCursors.size > terminalSessionCursorLimit) {
+		const oldestKey = terminalSessionCursors.keys().next().value
+		if (oldestKey === undefined) return
+		terminalSessionCursors.delete(oldestKey)
 	}
 }
 
@@ -29,7 +63,7 @@ export function worktreeRouteId(root: string) {
 	return Math.abs(Hash.string(root)).toString(36)
 }
 
-export function terminalSessionStatus(input: TerminalSessionInput): TerminalStatus {
+function terminalSessionStatus(input: TerminalSessionInput): TerminalStatus {
 	return {state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle', title: ''}
 }
 
@@ -37,13 +71,31 @@ const terminalAttachQueueAtomFamily = Atom.family((input: TerminalSessionAtomKey
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.flatMap(client => client('terminal.attach', terminalSessionInput(input), {asQueue: true}))
+			Effect.flatMap(client =>
+				client(
+					'terminal.attach',
+					{...terminalSessionInput(input), cursor: terminalSessionCursor(input)},
+					{asQueue: true}
+				)
+			)
 		)
 	)
 )
 
-export function terminalAttachQueueAtom(input: TerminalSessionInput) {
-	return terminalAttachQueueAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
+const terminalFramePullAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
+	Atom.pull(
+		get =>
+			pipe(
+				get.result(terminalAttachQueueAtomFamily(input), {suspendOnWaiting: true}),
+				Effect.map(Stream.fromQueue),
+				Stream.unwrap
+			),
+		{disableAccumulation: true}
+	)
+)
+
+export function terminalFramePullAtom(input: TerminalSessionInput) {
+	return terminalFramePullAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
 }
 
 const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
@@ -79,7 +131,7 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 			Effect.map(scripts =>
 				pipe(
 					scripts,
-					Array.filterMap(script => (script.origin === undefined ? Result.failVoid : Result.succeed(script.origin))),
+					Array.map(run => run.origin.origin),
 					Array.dedupe,
 					Array.sortWith(origin => origin, Order.String)
 				)
@@ -94,7 +146,8 @@ export const projectsAtom = Atom.keepAlive(
 			RpcClient,
 			Effect.map(client => client('projects.watch', void 0)),
 			Stream.unwrap
-		)
+		),
+		{initialValue: []}
 	)
 )
 
@@ -132,5 +185,12 @@ export const agentsAtom = Atom.family((cwd: string) =>
 			Effect.map(client => client('agents.watch', {cwd})),
 			Stream.unwrap
 		)
+	)
+)
+
+export const agentProfilesAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		Effect.flatMap(RpcClient, client => client('agents.profiles', void 0)),
+		{initialValue: []}
 	)
 )

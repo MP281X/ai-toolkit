@@ -2,7 +2,7 @@ import {useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Predicate, Schema, pipe} from 'effect'
 
-import {createFileRoute, Navigate} from '@tanstack/react-router'
+import {createFileRoute} from '@tanstack/react-router'
 
 import {activeHomeAtom, portlessOriginsAtom} from '#lib/state.ts'
 import {Browser} from '@deslop/components/render/browser'
@@ -17,7 +17,7 @@ function PortlessPage() {
 	const search = Route.useSearch()
 	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
 	const origins = useAtomSuspense(portlessOriginsAtom(activeHome.value.activeWorktree?.root ?? ''))
-	if (!activeHome.value.activeWorktree) return <Navigate to="/" replace />
+	if (!activeHome.value.activeWorktree) return
 	const origin =
 		Predicate.isNotUndefined(search.origin) && pipe(origins.value, Array.contains(search.origin))
 			? search.origin
