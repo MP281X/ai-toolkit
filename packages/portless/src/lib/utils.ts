@@ -106,78 +106,87 @@ export const discover = Effect.fnUntraced(function* (
 	const output = yield* execString(
 		ChildProcess.make('git', ['ls-files', '-co', '--exclude-standard', '--', 'package.json', '**/package.json'], {cwd})
 	)
+	const packagePaths = pipe(
+		String.split('\n')(output),
+		Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
+	)
+	const packageManifests = yield* pipe(
+		packagePaths,
+		Effect.forEach(
+			packagePath =>
+				pipe(
+					fs.readFileString(path.join(cwd, packagePath)),
+					Effect.flatMap(source =>
+						Effect.try({
+							catch: error => error,
+							try: () => pipe(JSON.parse(source), Schema.decodeUnknownOption(PackageJson))
+						})
+					),
+					Effect.catch(() => Effect.succeed(Option.none())),
+					Effect.map(packageJson =>
+						Option.match(packageJson, {onNone: () => [], onSome: value => [{packageJson: value, packagePath}]})
+					)
+				),
+			{concurrency: 16}
+		),
+		Effect.map(Array.flatten)
+	)
 
 	return yield* pipe(
-		pipe(
-			String.split('\n')(output),
-			Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
-		),
-		Effect.forEach(packagePath =>
-			pipe(
-				fs.readFileString(path.join(cwd, packagePath)),
-				Effect.flatMap(source =>
-					Effect.try({
-						catch: error => error,
-						try: () => pipe(JSON.parse(source), Schema.decodeUnknownOption(PackageJson))
+		packageManifests,
+		Effect.forEach(inputManifest => {
+			const packagePath = inputManifest.packagePath
+			const packageDirectory = packagePath === 'package.json' ? cwd : path.join(cwd, path.dirname(packagePath))
+			const folder = hostSegment(path.basename(packageDirectory))
+			const worktree = worktreeHostSegment(cwd, path)
+			const scriptEntries = pipe(
+				Object.entries(inputManifest.packageJson.scripts ?? {}),
+				Array.filter(entry => entry[0] === 'dev' || String.startsWith('dev:')(entry[0]))
+			)
+			const packageOrigin = input.origin([folder, worktree, 'localhost'].join('.'))
+
+			return pipe(
+				scriptEntries,
+				Effect.forEach(entry => {
+					const name = entry[0]
+					const scriptCommand = entry[1]
+
+					return Effect.map(input.port(`${packagePath}:${name}`), port => {
+						const service = /^dev:(.+)$/u.exec(name)?.[1] ?? 'dev'
+						const serviceSegment = hostSegment(service)
+						const host = [serviceSegment, folder, worktree, 'localhost'].join('.')
+						const origin = input.origin(host)
+
+						return {
+							host,
+							port,
+							script: {
+								baseOrigin: packageOrigin,
+								command: scriptCommand,
+								commandCwd: packageDirectory,
+								cwd,
+								env: {
+									HOST: '127.0.0.1',
+									PORT: port.toString(),
+									PORTLESS_BASE_ORIGIN: packageOrigin,
+									PORTLESS_ORIGIN: origin,
+									PORTLESS_URL: origin,
+									VITE_PORTLESS_BASE_ORIGIN: packageOrigin,
+									VITE_PORTLESS_ORIGIN: origin,
+									VITE_PORTLESS_URL: origin
+								},
+								name,
+								origin,
+								packageFolder: folder,
+								packagePath,
+								service,
+								sessionId: `${packagePath}:${name}`
+							}
+						}
 					})
-				),
-				Effect.catch(() => Effect.succeed(Option.none())),
-				Effect.flatMap(packageJson => {
-					if (Option.isNone(packageJson)) return Effect.succeed([])
-
-					const packageDirectory = packagePath === 'package.json' ? cwd : path.join(cwd, path.dirname(packagePath))
-					const folder = hostSegment(path.basename(packageDirectory))
-					const worktree = worktreeHostSegment(cwd, path)
-					const scriptEntries = pipe(
-						Object.entries(packageJson.value.scripts ?? {}),
-						Array.filter(entry => entry[0] === 'dev' || String.startsWith('dev:')(entry[0]))
-					)
-					const packageOrigin = input.origin([folder, worktree, 'localhost'].join('.'))
-
-					return pipe(
-						scriptEntries,
-						Effect.forEach(entry => {
-							const name = entry[0]
-							const scriptCommand = entry[1]
-
-							return Effect.map(input.port(`${packagePath}:${name}`), port => {
-								const service = /^dev:(.+)$/u.exec(name)?.[1] ?? 'dev'
-								const serviceSegment = hostSegment(service)
-								const host = [serviceSegment, folder, worktree, 'localhost'].join('.')
-								const origin = input.origin(host)
-
-								return {
-									host,
-									port,
-									script: {
-										baseOrigin: packageOrigin,
-										command: scriptCommand,
-										commandCwd: packageDirectory,
-										cwd,
-										env: {
-											HOST: '127.0.0.1',
-											PORT: port.toString(),
-											PORTLESS_BASE_ORIGIN: packageOrigin,
-											PORTLESS_ORIGIN: origin,
-											PORTLESS_URL: origin,
-											VITE_PORTLESS_BASE_ORIGIN: packageOrigin,
-											VITE_PORTLESS_ORIGIN: origin,
-											VITE_PORTLESS_URL: origin
-										},
-										name,
-										origin,
-										packageFolder: folder,
-										packagePath,
-										service,
-										sessionId: `${packagePath}:${name}`
-									}
-								}
-							})
-						})
-					)
 				})
 			)
-		),
+		}),
 		Effect.map(routes =>
 			Array.flatten(routes).sort((left, right) =>
 				`${left.script.packagePath}:${left.script.name}`.localeCompare(

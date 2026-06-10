@@ -256,12 +256,32 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const terminalSession = Effect.fnUntraced(function* (input: TerminalPayload) {
 			if (input.sessionId === undefined || input.command !== undefined) return input
 
-			const script = pipe(
-				yield* Ref.get(portlessScripts),
-				HashMap.get(portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})),
-				Option.getOrUndefined
+			const scriptKey = portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
+			const script = yield* pipe(
+				Ref.get(portlessScripts),
+				Effect.map(HashMap.get(scriptKey)),
+				Effect.flatMap(
+					Option.match({
+						onNone: () =>
+							pipe(
+								RcMap.get(portlessWorktrees, input.cwd),
+								Effect.withSpan('Workbench.Portless.prepareTerminalSession'),
+								Effect.andThen(Ref.get(portlessScripts)),
+								Effect.map(HashMap.get(scriptKey))
+							),
+						onSome: prepared => Effect.succeed(Option.some(prepared))
+					})
+				),
+				Effect.flatMap(
+					Option.match({
+						onNone: () =>
+							Effect.fail(
+								new TerminalError({message: `failed to resolve portless script ${input.sessionId} in ${input.cwd}`})
+							),
+						onSome: Effect.succeed
+					})
+				)
 			)
-			if (script === undefined) return input
 
 			return {
 				command: ChildProcess.make(script.preparedCommand.command, script.preparedCommand.args, {
@@ -585,16 +605,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'terminal.attach': payload =>
 				Stream.unwrap(
 					pipe(
-						getTerminal(
-							TerminalPayload.make({
-								args: payload.args,
-								command: payload.command,
-								cwd: payload.cwd,
-								env: payload.env,
-								sessionId: payload.sessionId
-							})
-						),
-						Effect.map(sessionTerminal => sessionTerminal.attach(payload.cursor))
+						getTerminal(TerminalPayload.make(payload)),
+						Effect.map(sessionTerminal => sessionTerminal.attach())
 					)
 				),
 			'terminal.resize': payload =>

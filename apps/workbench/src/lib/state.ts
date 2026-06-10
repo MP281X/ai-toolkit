@@ -3,7 +3,7 @@ import {Array, Data, Effect, Hash, Option, Order, Stream, String, pipe} from 'ef
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {TerminalCursor, TerminalStatus} from '@deslop/terminal/schema'
+import type {TerminalStatus} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
 	readonly args?: readonly string[]
@@ -14,9 +14,6 @@ export type TerminalSessionInput = {
 }
 
 class TerminalSessionAtomKey extends Data.Class<TerminalSessionInput> {}
-
-const terminalSessionCursorLimit = 512
-const terminalSessionCursors = new Map<string, TerminalCursor>()
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {
 	if (env === undefined) return
@@ -45,20 +42,6 @@ export function terminalSessionKey(input: TerminalSessionInput) {
 	return JSON.stringify(terminalSessionInput(input))
 }
 
-function terminalSessionCursor(input: TerminalSessionInput) {
-	return terminalSessionCursors.get(terminalSessionKey(input))
-}
-
-export function updateTerminalSessionCursorByKey(key: string, cursor: TerminalCursor) {
-	terminalSessionCursors.delete(key)
-	terminalSessionCursors.set(key, cursor)
-	while (terminalSessionCursors.size > terminalSessionCursorLimit) {
-		const oldestKey = terminalSessionCursors.keys().next().value
-		if (oldestKey === undefined) return
-		terminalSessionCursors.delete(oldestKey)
-	}
-}
-
 export function worktreeRouteId(root: string) {
 	return Math.abs(Hash.string(root)).toString(36)
 }
@@ -71,13 +54,7 @@ const terminalAttachQueueAtomFamily = Atom.family((input: TerminalSessionAtomKey
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.flatMap(client =>
-				client(
-					'terminal.attach',
-					{...terminalSessionInput(input), cursor: terminalSessionCursor(input)},
-					{asQueue: true}
-				)
-			)
+			Effect.flatMap(client => client('terminal.attach', terminalSessionInput(input), {asQueue: true}))
 		)
 	)
 )

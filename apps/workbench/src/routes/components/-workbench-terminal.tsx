@@ -3,13 +3,7 @@ import {useAtomSet, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 import {useEffect, useRef} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {
-	terminalFramePullAtom,
-	terminalSessionKey,
-	terminalStatusAtom,
-	updateTerminalSessionCursorByKey,
-	type TerminalSessionInput
-} from '#lib/state.ts'
+import {terminalFramePullAtom, terminalSessionKey, terminalStatusAtom, type TerminalSessionInput} from '#lib/state.ts'
 import {Terminal, type TerminalHandle} from '@deslop/components/render/terminal'
 import type {TerminalFrame} from '@deslop/terminal/schema'
 
@@ -20,7 +14,8 @@ function terminalFrameKey(frame: TerminalFrame) {
 export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
-	const pullFrames = useAtomSet(terminalFramePullAtom(input.session))
+	const framePull = terminalFramePullAtom(input.session)
+	const pullFrames = useAtomSet(framePull)
 	const status = useAtomSuspense(terminalStatusAtom(input.session))
 	const terminalRef = useRef<TerminalHandle>(null)
 	const activeRef = useRef(true)
@@ -41,7 +36,7 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 	}, [sessionKey])
 
 	useAtomSubscribe(
-		terminalFramePullAtom(input.session),
+		framePull,
 		result => {
 			if (result._tag !== 'Success' || result.waiting) return
 
@@ -61,25 +56,24 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 
 				pendingFramesRef.current.add(frameKey)
 
-				function completeFrame(completedFrame: TerminalFrame) {
+				function completeFrame() {
 					pendingFramesRef.current.delete(frameKey)
 					processedFrameRef.current = frameKey
-					updateTerminalSessionCursorByKey(sessionKey, completedFrame.cursor)
 					processFrames(frames, index + 1)
 				}
 
 				if (frame.type === 'reset') {
 					terminalRef.current?.reset()
-					completeFrame(frame)
+					completeFrame()
 					return
 				}
 				if (frame.type === 'resize' || !terminalRef.current) {
-					completeFrame(frame)
+					completeFrame()
 					return
 				}
 
 				terminalRef.current.write(frame.data, () => {
-					completeFrame(frame)
+					completeFrame()
 				})
 			}
 

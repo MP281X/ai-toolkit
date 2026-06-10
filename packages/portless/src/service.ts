@@ -1,7 +1,7 @@
 import {createServer} from 'node:net'
 
 import type {FileSystem, Path} from 'effect'
-import {Array, Context, Effect, Layer, Option, Predicate, String, pipe} from 'effect'
+import {Array, Context, Effect, Layer, Option, Predicate, Semaphore, String, pipe} from 'effect'
 
 import type {PlatformError} from 'effect/PlatformError'
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
@@ -238,6 +238,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 		const routeCwds = new Map<string, string>()
 		const routeSessionKeys = new Map<string, string>()
 		const sessionRoutes = new Map<string, string>()
+		const portLock = yield* Semaphore.make(1)
 		const discoveryContext = yield* Effect.context<
 			ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 		>()
@@ -311,18 +312,23 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			cwdRoutes.set(cwd, hosts)
 		}
 		const port = Effect.fnUntraced(function* (key: string) {
-			const existing = ports.get(key)
-			if (existing !== undefined) return existing
+			return yield* pipe(
+				Effect.gen(function* () {
+					const existing = ports.get(key)
+					if (existing !== undefined) return existing
 
-			const reserved = new Set(ports.values())
-			for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
-				if (browserBlockedPorts.has(candidatePort) || reserved.has(candidatePort)) continue
-				if (yield* portAvailable(candidatePort)) {
-					ports.set(key, candidatePort)
-					return candidatePort
-				}
-			}
-			throw new Error('no portless app ports available')
+					const reserved = new Set(ports.values())
+					for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
+						if (browserBlockedPorts.has(candidatePort) || reserved.has(candidatePort)) continue
+						if (yield* portAvailable(candidatePort)) {
+							ports.set(key, candidatePort)
+							return candidatePort
+						}
+					}
+					throw new Error('no portless app ports available')
+				}),
+				Semaphore.withPermit(portLock)
+			)
 		})
 		const scripts = Effect.fn('Portless.scripts')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})

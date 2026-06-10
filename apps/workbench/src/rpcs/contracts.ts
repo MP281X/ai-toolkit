@@ -23,7 +23,7 @@ import {
 	GitWorktreeSource
 } from '@deslop/git/schema'
 import {PortlessRun} from '@deslop/portless/schema'
-import {TerminalCursor, TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
+import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
 
 const CwdPayloadFields = {cwd: Schema.String}
 const CwdPayload = Schema.Struct(CwdPayloadFields)
@@ -134,10 +134,5 @@ export class RpcContracts extends RpcGroup.make(
 		success: TerminalStatus
 	}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
-	Rpc.make('terminal.attach', {
-		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, cursor: Schema.optional(TerminalCursor)}),
-		stream: true,
-		success: TerminalFrame
-	})
+	Rpc.make('terminal.attach', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalFrame})
 ) {}
