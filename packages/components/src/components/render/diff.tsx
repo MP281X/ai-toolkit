@@ -4,13 +4,14 @@ import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
-import {CircleCheckIcon, CopyIcon, Loader2Icon, MessageSquareTextIcon} from 'lucide-react'
+import {CircleCheckIcon, CopyIcon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
 import {GithubLight} from '../svgs/githubLight.tsx'
 
 import {Markdown} from './markdown.tsx'
 
+import {Spinner} from '#components/ui/spinner.tsx'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
 const DIFF_CSS = `
@@ -289,11 +290,7 @@ function CommentAnnotation(props: {
 							props.onResolveComment?.(props.comment)
 						}}
 					>
-						{props.comment.resolving === true ? (
-							<Loader2Icon className="size-3 animate-spin" />
-						) : (
-							<CircleCheckIcon className="size-3" />
-						)}
+						{props.comment.resolving === true ? <Spinner className="size-3" /> : <CircleCheckIcon className="size-3" />}
 					</button>
 				)}
 			</div>

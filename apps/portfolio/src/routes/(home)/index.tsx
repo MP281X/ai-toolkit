@@ -10,6 +10,7 @@ import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
 import {PortfolioState} from '#rpcs/contracts.ts'
+import {Loading} from '@deslop/components/fallbacks'
 import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@deslop/components/icons'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {cn} from '@deslop/components/utils'
@@ -871,7 +872,7 @@ function PortfolioRoute() {
 			<EducationSection sectionRefs={sectionRefs} />
 			<ContactSection sectionRefs={sectionRefs} />
 
-			<Suspense fallback={null}>
+			<Suspense fallback={<Loading />}>
 				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
 			</Suspense>
 

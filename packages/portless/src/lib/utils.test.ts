@@ -86,6 +86,7 @@ describe('@deslop/portless discovery', () => {
 			])
 			expect(second.map(route => route.script.sessionId)).toEqual(first.map(route => route.script.sessionId))
 			const dev = first.find(route => route.script.taskId === '@deslop/client#dev')
+			const api = first.find(route => route.script.taskId === '@deslop/client#dev:api')
 			const missing = first.find(route => route.script.taskId === '@deslop/missing#dev')
 			expect(dev?.script.env['PORTLESS_URL']).toBe(dev?.script.origin)
 			expect(dev?.script.env['VITE_PORTLESS_URL']).toBe(dev?.script.origin)
@@ -108,6 +109,7 @@ describe('@deslop/portless discovery', () => {
 				command(missing?.script ?? {cwd: root, taskId: '@deslop/missing#dev'}, missing?.port ?? 4100).args
 			).toEqual(['run', '@deslop/missing#dev'])
 			expect(dev?.host).toMatch(/^dev\.deslop-client\.deslop-portless-[a-z0-9-]+-[a-f0-9]{8}\.localhost$/u)
+			expect(api?.host).toMatch(/^api\.deslop-client\.deslop-portless-[a-z0-9-]+-[a-f0-9]{8}\.localhost$/u)
 		})
 	})
 

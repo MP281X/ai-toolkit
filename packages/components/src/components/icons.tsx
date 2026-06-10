@@ -1,6 +1,6 @@
 import {Function, Match, pipe} from 'effect'
 
-import {Braces, CirclePauseIcon, CircleIcon, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
+import {Braces, CirclePauseIcon, CircleIcon, File, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
 import {BashDark} from './svgs/bashDark.tsx'
 import {ClaudeDark} from './svgs/claudeDark.tsx'
@@ -12,6 +12,7 @@ import {OpencodeDark} from './svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './svgs/openrouterDark.tsx'
 import {PiDark} from './svgs/pi.tsx'
 import {ReactDark} from './svgs/reactDark.tsx'
+import {Spinner} from './ui/spinner.tsx'
 
 import {resolveLanguage} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
@@ -39,7 +40,7 @@ export function ProcessStateIcon(props: {
 }) {
 	return pipe(
 		Match.value(props.state),
-		Match.when('starting', () => <Loader2Icon className={cn('text-primary size-3 animate-spin', props.className)} />),
+		Match.when('starting', () => <Spinner className={cn('text-primary size-3', props.className)} />),
 		Match.when('running', () => <CircleIcon className={cn('fill-primary text-primary size-2.5', props.className)} />),
 		Match.when('waiting', () => <CirclePauseIcon className={cn('size-3 text-amber-500', props.className)} />),
 		Match.when(Match.is('failed', 'stopped'), () => (
@@ -59,7 +60,7 @@ export function StatusIcon(props: {
 	return pipe(
 		Match.value(props.state),
 		Match.when('idle', Function.constUndefined),
-		Match.when('running', () => <Loader2Icon className={cn('size-3 animate-spin text-blue-500', props.className)} />),
+		Match.when('running', () => <Spinner className={cn('size-3 text-blue-500', props.className)} />),
 		Match.when('error', () => <OctagonXIcon className={cn('text-destructive size-3', props.className)} />),
 		Match.orElse(() => <TriangleAlertIcon className={cn('size-3 text-amber-500', props.className)} />)
 	)

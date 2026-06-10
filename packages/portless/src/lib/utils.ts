@@ -66,6 +66,10 @@ function hostSegment(value: string) {
 	return String.isEmpty(segment) ? 'app' : segment
 }
 
+function scriptHostSegment(value: string) {
+	return hostSegment(value.startsWith('dev:') ? value.slice(4) : value)
+}
+
 function worktreeHostSegment(cwd: string, path: Path.Path) {
 	return `${hostSegment(path.basename(cwd))}-${Math.abs(Hash.string(cwd)).toString(16).padStart(8, '0').slice(0, 8)}`
 }
@@ -203,7 +207,7 @@ export const discover = Effect.fnUntraced(function* (
 			const packageName = script?.packageName ?? parts.packageName
 			const scriptName = script?.scriptName ?? parts.scriptName
 			const packageSegment = hostSegment(packageName ?? taskId)
-			const scriptSegment = hostSegment(scriptName ?? taskId)
+			const scriptSegment = scriptHostSegment(scriptName ?? taskId)
 			const worktree = worktreeHostSegment(cwd, path)
 			const packageOrigin = input.origin([packageSegment, worktree, 'localhost'].join('.'))
 

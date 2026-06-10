@@ -18,6 +18,7 @@ import {
 	worktreeRouteId
 } from '#lib/state.ts'
 import type {AgentSession, ScriptRun} from '#rpcs/contracts.ts'
+import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
 	BotIcon,
@@ -931,7 +932,7 @@ function WorktreeManager(input: {
 												{worktree.branch ?? pathLabel(worktree.root)}
 											</TreeExplorerRow>
 											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-												<Suspense fallback={null}>
+												<Suspense fallback={<Loading />}>
 													<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
 												</Suspense>
 												<li className="w-full min-w-0">
@@ -945,14 +946,14 @@ function WorktreeManager(input: {
 														terminal
 													</TreeExplorerRow>
 												</li>
-												<Suspense fallback={null}>
+												<Suspense fallback={<Loading />}>
 													<WorktreePortless
 														cwd={worktree.root}
 														selectPortless={input.selectPortless}
 														selectRun={input.selectRun}
 													/>
 												</Suspense>
-												<Suspense fallback={null}>
+												<Suspense fallback={<Loading />}>
 													<WorktreeScripts cwd={worktree.root} selectRun={input.selectRun} />
 												</Suspense>
 											</ul>
