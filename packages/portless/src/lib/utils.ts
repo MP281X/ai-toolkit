@@ -1,8 +1,62 @@
-import {Array, Effect, FileSystem, Hash, Option, Path, Schema, String, pipe} from 'effect'
+import {Array, Effect, FileSystem, Hash, Option, Order, Path, Schema, String, pipe} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-const PackageJson = Schema.Struct({scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))})
+type PackageJson = {
+	readonly deslop: {readonly portless: readonly string[]}
+	readonly name?: string
+	readonly scripts: Readonly<Record<string, string>>
+}
+
+type PackageManifest = {readonly packageJson: PackageJson; readonly packagePath: string}
+
+type PackageScript = {
+	readonly command: string
+	readonly packageName: string
+	readonly scriptName: string
+	readonly taskId: string
+}
+
+const JsonRecord = Schema.Record(Schema.String, Schema.Unknown)
+const ScriptRecord = Schema.Record(Schema.String, Schema.String)
+const JsonArray = Schema.Array(Schema.Unknown)
+
+function emptyJsonRecord(): Readonly<Record<string, unknown>> {
+	return {}
+}
+
+function emptyScriptRecord(): Readonly<Record<string, string>> {
+	return {}
+}
+
+function emptyStringArray(): readonly string[] {
+	return []
+}
+
+function packageJson(source: string): PackageJson {
+	const value = JSON.parse(source) as unknown
+	const record: Readonly<Record<string, unknown>> = pipe(
+		value,
+		Schema.decodeUnknownOption(JsonRecord),
+		Option.getOrElse(emptyJsonRecord)
+	)
+	const deslop: Readonly<Record<string, unknown>> = pipe(
+		record['deslop'],
+		Schema.decodeUnknownOption(JsonRecord),
+		Option.getOrElse(emptyJsonRecord)
+	)
+	const portless = pipe(
+		deslop['portless'],
+		Schema.decodeUnknownOption(JsonArray),
+		Option.map(values => values.filter((item): item is string => typeof item === 'string')),
+		Option.getOrElse(emptyStringArray)
+	)
+	const scripts = pipe(record['scripts'], Schema.decodeUnknownOption(ScriptRecord), Option.getOrElse(emptyScriptRecord))
+	const nameValue = record['name']
+	const name = typeof nameValue === 'string' && String.isNonEmpty(nameValue) ? nameValue : undefined
+
+	return {deslop: {portless}, name, scripts}
+}
 
 function hostSegment(value: string) {
 	const segment = value
@@ -69,31 +123,43 @@ function frameworkFlagConfig(source: string) {
 	}
 }
 
-function hasFlag(flag: string) {
-	return (word: string) => word === flag || String.startsWith(`${flag}=`)(word)
-}
-
-function commandFlags(source: string, port: number) {
+function commandFlags(source: string | undefined, port: number) {
+	if (source === undefined) return []
 	const framework = frameworkFlagConfig(source)
 	if (framework === undefined) return []
 
-	const words = pipe(String.split(/\s+/u)(source), Array.filter(String.isNonEmpty))
-
-	return [
-		...(Array.some(words, hasFlag('--port'))
-			? []
-			: ['--port', port.toString(), ...(framework.strictPort ? ['--strictPort'] : [])]),
-		...(Array.some(words, hasFlag('--host')) ? [] : ['--host', framework.host])
-	]
+	return ['--port', port.toString(), ...(framework.strictPort ? ['--strictPort'] : []), '--host', framework.host]
 }
 
 export function command(
-	script: {readonly command: string; readonly commandCwd?: string; readonly cwd?: string; readonly name: string},
+	script: {readonly command?: string; readonly cwd: string; readonly taskId: string},
 	port: number
 ) {
-	return ChildProcess.make('vp', ['run', script.name, ...commandFlags(script.command, port)], {
-		cwd: script.commandCwd ?? script.cwd
-	})
+	return ChildProcess.make('vp', ['run', script.taskId, ...commandFlags(script.command, port)], {cwd: script.cwd})
+}
+
+function taskIdParts(taskId: string) {
+	const index = taskId.indexOf('#')
+	if (index <= 0) return {packageName: undefined, scriptName: undefined}
+	const packageName = taskId.slice(0, index)
+	const scriptName = taskId.slice(index + 1)
+	return {
+		packageName: String.isNonEmpty(packageName) ? packageName : undefined,
+		scriptName: String.isNonEmpty(scriptName) ? scriptName : undefined
+	}
+}
+
+function packageScripts(manifests: readonly PackageManifest[]) {
+	const scripts = new Map<string, PackageScript>()
+	for (const manifest of manifests) {
+		const packageName = manifest.packageJson.name
+		if (packageName === undefined) continue
+		for (const [scriptName, scriptCommand] of Object.entries(manifest.packageJson.scripts)) {
+			const taskId = `${packageName}#${scriptName}`
+			scripts.set(taskId, {command: scriptCommand, packageName, scriptName, taskId})
+		}
+	}
+	return scripts
 }
 
 export const discover = Effect.fnUntraced(function* (
@@ -110,88 +176,72 @@ export const discover = Effect.fnUntraced(function* (
 		String.split('\n')(output),
 		Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
 	)
-	const packageManifests = yield* pipe(
+	const packageManifests: readonly PackageManifest[] = yield* pipe(
 		packagePaths,
 		Effect.forEach(
 			packagePath =>
 				pipe(
 					fs.readFileString(path.join(cwd, packagePath)),
-					Effect.flatMap(source =>
-						Effect.try({
-							catch: error => error,
-							try: () => pipe(JSON.parse(source), Schema.decodeUnknownOption(PackageJson))
-						})
-					),
-					Effect.catch(() => Effect.succeed(Option.none())),
-					Effect.map(packageJson =>
-						Option.match(packageJson, {onNone: () => [], onSome: value => [{packageJson: value, packagePath}]})
-					)
+					Effect.flatMap(source => Effect.try({catch: error => error, try: () => packageJson(source)})),
+					Effect.map(manifest => Option.some(manifest)),
+					Effect.catch(() => Effect.succeed(Option.none<PackageJson>())),
+					Effect.map(Option.match({onNone: () => [], onSome: manifest => [{packageJson: manifest, packagePath}]}))
 				),
 			{concurrency: 16}
 		),
 		Effect.map(Array.flatten)
 	)
+	const configuredTaskIds =
+		packageManifests.find(manifest => manifest.packagePath === 'package.json')?.packageJson.deslop.portless ?? []
+	const scripts = packageScripts(packageManifests)
 
 	return yield* pipe(
-		packageManifests,
-		Effect.forEach(inputManifest => {
-			const packagePath = inputManifest.packagePath
-			const packageDirectory = packagePath === 'package.json' ? cwd : path.join(cwd, path.dirname(packagePath))
-			const folder = hostSegment(path.basename(packageDirectory))
+		configuredTaskIds,
+		Effect.forEach(taskId => {
+			const script = scripts.get(taskId)
+			const parts = taskIdParts(taskId)
+			const packageName = script?.packageName ?? parts.packageName
+			const scriptName = script?.scriptName ?? parts.scriptName
+			const packageSegment = hostSegment(packageName ?? taskId)
+			const scriptSegment = hostSegment(scriptName ?? taskId)
 			const worktree = worktreeHostSegment(cwd, path)
-			const scriptEntries = pipe(
-				Object.entries(inputManifest.packageJson.scripts ?? {}),
-				Array.filter(entry => entry[0] === 'dev' || String.startsWith('dev:')(entry[0]))
-			)
-			const packageOrigin = input.origin([folder, worktree, 'localhost'].join('.'))
+			const packageOrigin = input.origin([packageSegment, worktree, 'localhost'].join('.'))
 
-			return pipe(
-				scriptEntries,
-				Effect.forEach(entry => {
-					const name = entry[0]
-					const scriptCommand = entry[1]
+			return Effect.map(input.port(taskId), port => {
+				const host = [scriptSegment, packageSegment, worktree, 'localhost'].join('.')
+				const origin = input.origin(host)
 
-					return Effect.map(input.port(`${packagePath}:${name}`), port => {
-						const service = /^dev:(.+)$/u.exec(name)?.[1] ?? 'dev'
-						const serviceSegment = hostSegment(service)
-						const host = [serviceSegment, folder, worktree, 'localhost'].join('.')
-						const origin = input.origin(host)
-
-						return {
-							host,
-							port,
-							script: {
-								baseOrigin: packageOrigin,
-								command: scriptCommand,
-								commandCwd: packageDirectory,
-								cwd,
-								env: {
-									HOST: '127.0.0.1',
-									PORT: port.toString(),
-									PORTLESS_BASE_ORIGIN: packageOrigin,
-									PORTLESS_ORIGIN: origin,
-									PORTLESS_URL: origin,
-									VITE_PORTLESS_BASE_ORIGIN: packageOrigin,
-									VITE_PORTLESS_ORIGIN: origin,
-									VITE_PORTLESS_URL: origin
-								},
-								name,
-								origin,
-								packageFolder: folder,
-								packagePath,
-								service,
-								sessionId: `${packagePath}:${name}`
-							}
-						}
-					})
-				})
-			)
+				return {
+					host,
+					port,
+					script: {
+						baseOrigin: packageOrigin,
+						...(script?.command === undefined ? {} : {command: script.command}),
+						cwd,
+						env: {
+							HOST: '127.0.0.1',
+							PORT: port.toString(),
+							PORTLESS_BASE_ORIGIN: packageOrigin,
+							PORTLESS_ORIGIN: origin,
+							PORTLESS_URL: origin,
+							VITE_PORTLESS_BASE_ORIGIN: packageOrigin,
+							VITE_PORTLESS_ORIGIN: origin,
+							VITE_PORTLESS_URL: origin
+						},
+						origin,
+						...(packageName === undefined ? {} : {packageName}),
+						portless: true,
+						...(scriptName === undefined ? {} : {scriptName}),
+						sessionId: taskId,
+						taskId
+					}
+				}
+			})
 		}),
 		Effect.map(routes =>
-			Array.flatten(routes).sort((left, right) =>
-				`${left.script.packagePath}:${left.script.name}`.localeCompare(
-					`${right.script.packagePath}:${right.script.name}`
-				)
+			pipe(
+				routes,
+				Array.sortWith(route => route.script.taskId, Order.String)
 			)
 		)
 	)

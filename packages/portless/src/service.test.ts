@@ -28,13 +28,20 @@ function initRepo(root: string, scripts: Readonly<Record<string, string>>) {
 	git(root, ['init', '--initial-branch=main'])
 	git(root, ['config', 'user.email', 'test@example.com'])
 	git(root, ['config', 'user.name', 'Test User'])
-	writeFileSync(join(root, 'package.json'), JSON.stringify({scripts}, undefined, 2))
+	writePackage(root, scripts)
 	git(root, ['add', 'package.json'])
 	git(root, ['commit', '-m', 'initial'])
 }
 
 function writePackage(root: string, scripts: Readonly<Record<string, string>>) {
-	writeFileSync(join(root, 'package.json'), JSON.stringify({scripts}, undefined, 2))
+	writeFileSync(
+		join(root, 'package.json'),
+		JSON.stringify(
+			{deslop: {portless: Object.keys(scripts).map(script => `@deslop/app#${script}`)}, name: '@deslop/app', scripts},
+			undefined,
+			2
+		)
+	)
 }
 
 function withTempRoot<T>(test: (root: string) => Promise<T> | T) {
@@ -268,23 +275,23 @@ function mockRun(): PortlessPreparedRun {
 				host: 'dev.app.worktree.localhost',
 				origin: 'http://dev.app.worktree.localhost:4100',
 				port: 4100,
-				sessionId: 'package.json:dev'
+				sessionId: '@deslop/app#dev',
+				taskId: '@deslop/app#dev'
 			}),
 			script: new PortlessScript({
 				command: 'vp dev',
-				commandCwd: '/tmp/worktree/app',
 				cwd: '/tmp/worktree',
 				env: {PORTLESS_URL: 'http://dev.app.worktree.localhost:4100'},
-				name: 'dev',
 				origin: 'http://dev.app.worktree.localhost:4100',
-				packageFolder: 'app',
-				packagePath: 'package.json',
+				packageName: '@deslop/app',
 				portless: true,
-				sessionId: 'package.json:dev'
+				scriptName: 'dev',
+				sessionId: '@deslop/app#dev',
+				taskId: '@deslop/app#dev'
 			}),
 			status: {state: 'prepared'}
 		}),
-		{preparedCommand: ChildProcess.make('vp', ['run', 'dev'], {cwd: '/tmp/worktree/app'})}
+		{preparedCommand: ChildProcess.make('vp', ['run', '@deslop/app#dev'], {cwd: '/tmp/worktree'})}
 	)
 }
 
@@ -327,9 +334,9 @@ describe('@deslop/portless service', () => {
 
 		expect(result.map(run => run.origin.origin)).toEqual(['http://dev.app.worktree.localhost:4100'])
 		expect(result[0]?.preparedCommand.command).toBe('vp')
-		expect(result[0]?.preparedCommand.options.cwd).toBe('/tmp/worktree/app')
+		expect(result[0]?.preparedCommand.options.cwd).toBe('/tmp/worktree')
 		expect(result[0]?.script.cwd).toBe('/tmp/worktree')
-		expect(removed).toEqual(['/tmp/worktree:package.json:dev'])
+		expect(removed).toEqual(['/tmp/worktree:@deslop/app#dev'])
 		expect(cleared).toEqual(['/tmp/worktree'])
 	})
 
@@ -415,12 +422,12 @@ describe('@deslop/portless service', () => {
 						yield* pipe(Layer.launch(TestServer), Effect.provide(context), Effect.forkScoped)
 						const portless = Context.get(context, Portless)
 						const first = yield* portless.scripts(root)
-						const stale = first.find(run => run.script.name === 'dev')
+						const stale = first.find(run => run.script.taskId === '@deslop/app#dev')
 						if (stale === undefined) throw new Error('expected stale preview run')
 
 						writePackage(root, {'dev:api': 'node server.js'})
 						const next = yield* portless.scripts(root)
-						const api = next.find(run => run.script.name === 'dev:api')
+						const api = next.find(run => run.script.taskId === '@deslop/app#dev:api')
 						if (api === undefined) throw new Error('expected api preview run')
 
 						const origin = `http://127.0.0.1:${proxyPort}`
@@ -437,8 +444,8 @@ describe('@deslop/portless service', () => {
 
 						writePackage(root, {'dev:api': 'node server.js', 'dev:web': 'vp dev --filter web'})
 						const third = yield* portless.scripts(root)
-						const stableApi = third.find(run => run.script.name === 'dev:api')
-						const web = third.find(run => run.script.name === 'dev:web')
+						const stableApi = third.find(run => run.script.taskId === '@deslop/app#dev:api')
+						const web = third.find(run => run.script.taskId === '@deslop/app#dev:web')
 						if (stableApi === undefined || web === undefined) throw new Error('expected api and web preview runs')
 
 						expect(stableApi.origin.port).toBe(api.origin.port)

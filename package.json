@@ -6,6 +6,14 @@
 	"engines": {"node": ">=24"},
 	"packageManager": "pnpm@11.5.0",
 	"workspaces": ["apps/*", "packages/*"],
+	"deslop": {
+		"portless": [
+			"@deslop/portfolio#dev:client",
+			"@deslop/portfolio#dev:server",
+			"@deslop/workbench#dev:client",
+			"@deslop/workbench#dev:server"
+		]
+	},
 
 	"scripts": {
 		"build": "vp run -r build",

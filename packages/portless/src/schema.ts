@@ -9,17 +9,15 @@ export const PortlessStatus = Schema.Struct({
 
 export class PortlessScript extends Schema.Class<PortlessScript>('PortlessScript')({
 	baseOrigin: Schema.optional(Schema.String),
-	command: Schema.String,
-	commandCwd: Schema.String,
+	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	env: Schema.Record(Schema.String, Schema.String),
-	name: Schema.String,
 	origin: Schema.optional(Schema.String),
-	packageFolder: Schema.String,
-	packagePath: Schema.String,
+	packageName: Schema.optional(Schema.String),
 	portless: Schema.Boolean,
-	service: Schema.optional(Schema.String),
-	sessionId: Schema.String
+	scriptName: Schema.optional(Schema.String),
+	sessionId: Schema.String,
+	taskId: Schema.String
 }) {}
 
 export class PortlessOrigin extends Schema.Class<PortlessOrigin>('PortlessOrigin')({
@@ -27,8 +25,8 @@ export class PortlessOrigin extends Schema.Class<PortlessOrigin>('PortlessOrigin
 	host: Schema.String,
 	origin: Schema.String,
 	port: Schema.Number,
-	service: Schema.optional(Schema.String),
-	sessionId: Schema.String
+	sessionId: Schema.String,
+	taskId: Schema.String
 }) {}
 
 export class PortlessRun extends Schema.Class<PortlessRun>('PortlessRun')({

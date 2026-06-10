@@ -51,6 +51,14 @@ export const AgentSession = Schema.Struct({
 })
 export type AgentSession = typeof AgentSession.Type
 
+export const ScriptRun = Schema.Struct({
+	command: Schema.String,
+	scriptName: Schema.String,
+	sessionId: Schema.String,
+	taskId: Schema.String
+})
+export type ScriptRun = typeof ScriptRun.Type
+
 export const PublishPullRequestDraft = Schema.Struct({body: Schema.String, title: Schema.String})
 export type PublishPullRequestDraft = typeof PublishPullRequestDraft.Type
 
@@ -118,6 +126,7 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
 	Rpc.make('projects.cleanup', {error: GitError, payload: CwdPayload}),
 	Rpc.make('runs.portless', {error: TerminalError, payload: CwdPayload, success: Schema.Array(PortlessRun)}),
+	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
 	Rpc.make('terminal.write', {
 		error: TerminalError,
 		payload: Schema.Struct({...TerminalPayloadFields, data: TerminalInput})

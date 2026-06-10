@@ -345,10 +345,10 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 									host: route.host,
 									origin: route.script.origin,
 									port: route.port,
-									service: route.script.service,
-									sessionId: route.script.sessionId
+									sessionId: route.script.sessionId,
+									taskId: route.script.taskId
 								}),
-								script: new PortlessScript({...route.script, portless: true}),
+								script: new PortlessScript(route.script),
 								status: {state: 'prepared'}
 							}),
 							{preparedCommand: command(route.script, route.port)}

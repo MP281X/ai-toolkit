@@ -27,28 +27,27 @@ const branchSnapshot = new GitBranchesSnapshot({branches: [{name: 'main', type: 
 
 function runFor(
 	runCwd: string,
-	preparedCommand = ChildProcess.make('vp', ['run', 'dev'], {cwd: `${runCwd}/app`}),
-	sessionId = 'app'
+	preparedCommand = ChildProcess.make('vp', ['run', '@deslop/app#dev'], {cwd: runCwd}),
+	sessionId = '@deslop/app#dev'
 ) {
 	return {
 		origin: new PortlessOrigin({
 			host: 'app.test.localhost',
 			origin: 'http://app.test.localhost',
 			port: 5173,
-			sessionId
+			sessionId,
+			taskId: sessionId
 		}),
 		preparedCommand,
 		script: new PortlessScript({
 			command: 'vp dev',
-			commandCwd: `${runCwd}/app`,
 			cwd: runCwd,
 			env: {PORTLESS_URL: 'http://app.test.localhost'},
-			name: 'dev',
-			packageFolder: 'app',
-			packagePath: 'package.json',
+			packageName: '@deslop/app',
 			portless: true,
-			service: 'dev',
-			sessionId
+			scriptName: 'dev',
+			sessionId,
+			taskId: sessionId
 		}),
 		status: {state: 'prepared' as const}
 	}

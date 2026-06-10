@@ -101,6 +101,17 @@ export const portlessRunsAtom = Atom.family((cwd: string) =>
 	)
 )
 
+export const scriptRunsAtom = Atom.family((cwd: string) =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			Effect.flatMap(RpcClient, client =>
+				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
+			),
+			{initialValue: []}
+		)
+	)
+)
+
 export const portlessOriginsAtom = Atom.family((cwd: string) =>
 	Atom.make(get =>
 		pipe(

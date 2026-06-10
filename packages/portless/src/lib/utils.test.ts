@@ -35,17 +35,34 @@ function initRepo(root: string) {
 	mkdirSync(join(root, 'apps', 'client'), {recursive: true})
 	git(root, ['init', '--initial-branch=main'])
 	writeFileSync(
-		join(root, 'apps', 'client', 'package.json'),
-		JSON.stringify({scripts: {dev: 'vp dev', 'dev:api': 'node server.js'}}, undefined, 2)
+		join(root, 'package.json'),
+		JSON.stringify(
+			{
+				deslop: {
+					portless: ['@deslop/client#dev', '@deslop/client#dev:api', '@deslop/client#build', '@deslop/missing#dev']
+				},
+				name: '@deslop/root'
+			},
+			undefined,
+			2
+		)
 	)
-	git(root, ['add', 'apps/client/package.json'])
+	writeFileSync(
+		join(root, 'apps', 'client', 'package.json'),
+		JSON.stringify(
+			{name: '@deslop/client', scripts: {build: 'vite build', dev: 'vp dev', 'dev:api': 'node server.js'}},
+			undefined,
+			2
+		)
+	)
+	git(root, ['add', 'package.json', 'apps/client/package.json'])
 	git(root, ['config', 'user.email', 'test@example.com'])
 	git(root, ['config', 'user.name', 'Test User'])
 	git(root, ['commit', '-m', 'initial'])
 }
 
 describe('@deslop/portless discovery', () => {
-	it('discovers stable script ids and canonical URL env', async () => {
+	it('discovers configured task ids and canonical URL env', async () => {
 		await withTempRoot(async root => {
 			initRepo(root)
 			const nextPort = await Effect.runPromise(Ref.make(4100))
@@ -62,18 +79,35 @@ describe('@deslop/portless discovery', () => {
 			const second = await run()
 
 			expect(first.map(route => route.script.sessionId)).toEqual([
-				'apps/client/package.json:dev',
-				'apps/client/package.json:dev:api'
+				'@deslop/client#build',
+				'@deslop/client#dev',
+				'@deslop/client#dev:api',
+				'@deslop/missing#dev'
 			])
 			expect(second.map(route => route.script.sessionId)).toEqual(first.map(route => route.script.sessionId))
-			expect(first[0]?.script.env['PORTLESS_URL']).toBe(first[0]?.script.origin)
-			expect(first[0]?.script.env['VITE_PORTLESS_URL']).toBe(first[0]?.script.origin)
-			expect(first[0]?.script.cwd).toBe(root)
-			expect(first[0]?.script.commandCwd).toBe(join(root, 'apps', 'client'))
-			expect(command(first[0]?.script ?? {command: 'vp dev', name: 'dev'}, 4100).options.cwd).toBe(
-				join(root, 'apps', 'client')
+			const dev = first.find(route => route.script.taskId === '@deslop/client#dev')
+			const missing = first.find(route => route.script.taskId === '@deslop/missing#dev')
+			expect(dev?.script.env['PORTLESS_URL']).toBe(dev?.script.origin)
+			expect(dev?.script.env['VITE_PORTLESS_URL']).toBe(dev?.script.origin)
+			expect(dev?.script.cwd).toBe(root)
+			expect(command(dev?.script ?? {cwd: root, taskId: '@deslop/client#dev'}, dev?.port ?? 4100).options.cwd).toBe(
+				root
 			)
-			expect(first[0]?.host).toMatch(/^dev\.client\.deslop-portless-[a-z0-9-]+-[a-f0-9]{8}\.localhost$/u)
+			const devPort = `${dev?.port ?? 4100}`
+			expect(command(dev?.script ?? {cwd: root, taskId: '@deslop/client#dev'}, dev?.port ?? 4100).args).toEqual([
+				'run',
+				'@deslop/client#dev',
+				'--port',
+				devPort,
+				'--strictPort',
+				'--host',
+				'127.0.0.1'
+			])
+			expect(missing?.script.command).toBeUndefined()
+			expect(
+				command(missing?.script ?? {cwd: root, taskId: '@deslop/missing#dev'}, missing?.port ?? 4100).args
+			).toEqual(['run', '@deslop/missing#dev'])
+			expect(dev?.host).toMatch(/^dev\.deslop-client\.deslop-portless-[a-z0-9-]+-[a-f0-9]{8}\.localhost$/u)
 		})
 	})
 
@@ -100,51 +134,51 @@ describe('@deslop/portless discovery', () => {
 			const second = await run(secondRoot)
 
 			expect(first[0]?.host).not.toBe(second[0]?.host)
-			expect(first[0]?.host).toMatch(/^dev\.client\.feature-[a-f0-9]{8}\.localhost$/u)
-			expect(second[0]?.host).toMatch(/^dev\.client\.feature-[a-f0-9]{8}\.localhost$/u)
+			expect(first.find(route => route.script.taskId === '@deslop/client#dev')?.host).toMatch(
+				/^dev\.deslop-client\.feature-[a-f0-9]{8}\.localhost$/u
+			)
+			expect(second.find(route => route.script.taskId === '@deslop/client#dev')?.host).toMatch(
+				/^dev\.deslop-client\.feature-[a-f0-9]{8}\.localhost$/u
+			)
 		})
 	})
 
 	it('prepares known dev servers with explicit host and strict port flags', () => {
-		const prepared = command({command: 'vp dev', name: 'dev'}, 4123)
+		const prepared = command({command: 'vp dev', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123)
 
 		expect(prepared.command).toBe('vp')
-		expect(prepared.args).toEqual(['run', 'dev', '--port', '4123', '--strictPort', '--host', '127.0.0.1'])
+		expect(prepared.args).toEqual(['run', '@deslop/app#dev', '--port', '4123', '--strictPort', '--host', '127.0.0.1'])
+		expect(prepared.options.cwd).toBe('/tmp/worktree')
 	})
 
 	it('prepares Vite-family dev servers with strict ports', () => {
-		expect(command({command: 'vite dev', name: 'dev'}, 4123).args).toEqual([
+		expect(command({command: 'vite dev', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123).args).toEqual([
 			'run',
-			'dev',
+			'@deslop/app#dev',
 			'--port',
 			'4123',
 			'--strictPort',
 			'--host',
 			'127.0.0.1'
 		])
-		expect(command({command: 'pnpm exec react-router dev', name: 'dev'}, 4124).args).toEqual([
-			'run',
-			'dev',
-			'--port',
-			'4124',
-			'--strictPort',
-			'--host',
-			'127.0.0.1'
-		])
+		expect(
+			command({command: 'pnpm exec react-router dev', cwd: '/tmp/worktree', taskId: '@deslop/app#dev:client'}, 4124)
+				.args
+		).toEqual(['run', '@deslop/app#dev:client', '--port', '4124', '--strictPort', '--host', '127.0.0.1'])
 	})
 
 	it('prepares known non-strict dev servers without strict port flags', () => {
-		expect(command({command: 'astro dev', name: 'dev'}, 4123).args).toEqual([
+		expect(command({command: 'astro dev', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123).args).toEqual([
 			'run',
-			'dev',
+			'@deslop/app#dev',
 			'--port',
 			'4123',
 			'--host',
 			'127.0.0.1'
 		])
-		expect(command({command: 'expo start', name: 'dev'}, 4124).args).toEqual([
+		expect(command({command: 'expo start', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4124).args).toEqual([
 			'run',
-			'dev',
+			'@deslop/app#dev',
 			'--port',
 			'4124',
 			'--host',
@@ -152,9 +186,18 @@ describe('@deslop/portless discovery', () => {
 		])
 	})
 
-	it('does not inject flags for frameworks that read PORT or scripts that already set flags', () => {
-		expect(command({command: 'next dev', name: 'dev'}, 4123).args).toEqual(['run', 'dev'])
-		expect(command({command: 'vite dev --port 3000 --host 0.0.0.0', name: 'dev'}, 4123).args).toEqual(['run', 'dev'])
-		expect(command({command: 'vite dev --port=3000 --host=0.0.0.0', name: 'dev'}, 4123).args).toEqual(['run', 'dev'])
+	it('does not inject flags for unknown frameworks and appends flags to existing script flags', () => {
+		expect(command({command: 'next dev', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123).args).toEqual([
+			'run',
+			'@deslop/app#dev'
+		])
+		expect(
+			command({command: 'vite dev --port 3000 --host 0.0.0.0', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123)
+				.args
+		).toEqual(['run', '@deslop/app#dev', '--port', '4123', '--strictPort', '--host', '127.0.0.1'])
+		expect(
+			command({command: 'vite dev --port=3000 --host=0.0.0.0', cwd: '/tmp/worktree', taskId: '@deslop/app#dev'}, 4123)
+				.args
+		).toEqual(['run', '@deslop/app#dev', '--port', '4123', '--strictPort', '--host', '127.0.0.1'])
 	})
 })

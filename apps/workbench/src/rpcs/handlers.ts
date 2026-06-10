@@ -21,6 +21,7 @@ import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
 import {PublishPullRequestDraft, RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
+import {discoverPackageScripts, packageScriptCommand, scriptRuns, type PackageScript} from '#rpcs/scripts.ts'
 import {AiError, type AgentCommandProfile} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
 import {GitError} from '@deslop/git/schema'
@@ -35,6 +36,8 @@ type TerminalSessionInput = {
 	readonly cwd: string
 	readonly sessionId?: string
 }
+
+type PackagePreparedRun = PackageScript & {readonly cwd: string; readonly preparedCommand: ChildProcess.StandardCommand}
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
@@ -69,6 +72,29 @@ function removePortlessScript(
 	const key = portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
 	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
 	return {current: HashMap.remove(current, key), script}
+}
+
+function replacePackageScripts(
+	current: HashMap.HashMap<string, PackagePreparedRun>,
+	cwd: string,
+	scripts: readonly PackageScript[]
+) {
+	return pipe(
+		scripts,
+		Array.reduce(
+			HashMap.filter(current, script => script.cwd !== cwd),
+			(next, script) =>
+				HashMap.set(next, portlessScriptKey({cwd, sessionId: script.sessionId}), {
+					...script,
+					cwd,
+					preparedCommand: packageScriptCommand(cwd, script)
+				})
+		)
+	)
+}
+
+function removePackageScripts(current: HashMap.HashMap<string, PackagePreparedRun>, cwd: string) {
+	return HashMap.filter(current, script => script.cwd !== cwd)
 }
 
 function makeAgentSession(input: {
@@ -234,6 +260,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const agentCommand = yield* AgentCommand
 		const portless = yield* Portless
 		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessPreparedRun>())
+		const packageScripts = yield* Ref.make(HashMap.empty<string, PackagePreparedRun>())
 		const portlessStatusWatchers = yield* Ref.make(new Set<string>())
 
 		const portlessWorktrees = yield* RcMap.make({
@@ -252,45 +279,53 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			})
 		})
+		const scriptWorktrees = yield* RcMap.make({
+			idleTimeToLive: Duration.infinity,
+			lookup: Effect.fnUntraced(function* (cwd: string) {
+				const scripts = yield* pipe(
+					discoverPackageScripts(cwd),
+					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover package scripts in ${cwd}`}))
+				)
+
+				yield* Ref.update(packageScripts, current => replacePackageScripts(current, cwd, scripts))
+
+				return scriptRuns(scripts)
+			})
+		})
 
 		const terminalSession = Effect.fnUntraced(function* (input: TerminalPayload) {
 			if (input.sessionId === undefined || input.command !== undefined) return input
 
 			const scriptKey = portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
-			const script = yield* pipe(
-				Ref.get(portlessScripts),
-				Effect.map(HashMap.get(scriptKey)),
-				Effect.flatMap(
-					Option.match({
-						onNone: () =>
-							pipe(
-								RcMap.get(portlessWorktrees, input.cwd),
-								Effect.withSpan('Workbench.Portless.prepareTerminalSession'),
-								Effect.andThen(Ref.get(portlessScripts)),
-								Effect.map(HashMap.get(scriptKey))
-							),
-						onSome: prepared => Effect.succeed(Option.some(prepared))
-					})
-				),
-				Effect.flatMap(
-					Option.match({
-						onNone: () =>
-							Effect.fail(
-								new TerminalError({message: `failed to resolve portless script ${input.sessionId} in ${input.cwd}`})
-							),
-						onSome: Effect.succeed
-					})
+			let portlessScript = pipe(yield* Ref.get(portlessScripts), HashMap.get(scriptKey), Option.getOrUndefined)
+			if (portlessScript === undefined) {
+				yield* pipe(
+					RcMap.get(portlessWorktrees, input.cwd),
+					Effect.withSpan('Workbench.Portless.prepareTerminalSession')
 				)
-			)
-
-			return {
-				command: ChildProcess.make(script.preparedCommand.command, script.preparedCommand.args, {
-					...script.preparedCommand.options,
-					env: script.script.env
-				}),
-				cwd: script.script.cwd,
-				sessionId: script.script.sessionId
+				portlessScript = pipe(yield* Ref.get(portlessScripts), HashMap.get(scriptKey), Option.getOrUndefined)
 			}
+			if (portlessScript !== undefined) {
+				return {
+					command: ChildProcess.make(portlessScript.preparedCommand.command, portlessScript.preparedCommand.args, {
+						...portlessScript.preparedCommand.options,
+						env: portlessScript.script.env
+					}),
+					cwd: portlessScript.script.cwd,
+					sessionId: portlessScript.script.sessionId
+				}
+			}
+
+			let packageScript = pipe(yield* Ref.get(packageScripts), HashMap.get(scriptKey), Option.getOrUndefined)
+			if (packageScript === undefined) {
+				yield* pipe(RcMap.get(scriptWorktrees, input.cwd), Effect.withSpan('Workbench.Scripts.prepareTerminalSession'))
+				packageScript = pipe(yield* Ref.get(packageScripts), HashMap.get(scriptKey), Option.getOrUndefined)
+			}
+			if (packageScript !== undefined) {
+				return {command: packageScript.preparedCommand, cwd: packageScript.cwd, sessionId: packageScript.sessionId}
+			}
+
+			return yield* new TerminalError({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
 			return yield* pipe(
@@ -306,6 +341,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 			const script = removed.script
 			yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
+			yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
+			yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
 		})
 		const watchPortlessRoute = Effect.fnUntraced(function* (
 			input: TerminalPayload,
@@ -338,6 +375,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 								Effect.andThen(
 									Ref.update(portlessScripts, current => removePortlessScript(current, script.script).current)
 								),
+								Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
+								Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
 								Effect.andThen(
 									Ref.update(portlessStatusWatchers, current => {
 										const next = new Set(current)
@@ -471,6 +510,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					portless.clear(payload.cwd),
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
+					Effect.andThen(RcMap.invalidate(scriptWorktrees, payload.cwd)),
+					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
 			'projects.watch': () => SubscriptionRef.changes(git.projects),
@@ -602,6 +643,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
+			'runs.scripts': payload => RcMap.get(scriptWorktrees, payload.cwd),
 			'terminal.attach': payload =>
 				Stream.unwrap(
 					pipe(
