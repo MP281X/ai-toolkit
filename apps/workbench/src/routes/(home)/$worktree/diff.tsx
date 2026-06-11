@@ -584,8 +584,14 @@ function CommitActionForm(input: {
 	let commitMessagePlaceholder = 'No changes'
 	if (input.loading) commitMessagePlaceholder = 'Loading'
 	else if (input.dirty) commitMessagePlaceholder = 'Generate commit message'
-	let commitMessageContent = commitMessagePlaceholder
-	if (String.isNonEmpty(trimmedCommitMessage)) commitMessageContent = trimmedCommitMessage
+	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
+	const messageSubject = String.trim(messageLines[0])
+	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
+	let subjectContent = commitMessagePlaceholder
+	if (String.isNonEmpty(messageSubject)) subjectContent = messageSubject
+	if (actionState.generatingMessage) subjectContent = 'Generating commit message'
+	const subjectMuted = String.isEmpty(messageSubject) || actionState.generatingMessage
+	const showBody = String.isNonEmpty(messageBody) && !actionState.generatingMessage
 
 	async function submitPublish() {
 		if (publishDisabled) return
@@ -609,6 +615,68 @@ function CommitActionForm(input: {
 		}
 	}
 
+	const commitActions = (
+		<div className="flex shrink-0 items-center gap-1">
+			{input.unpushedCommits && (
+				<span
+					className="text-muted-foreground px-0.5 text-xs"
+					title={
+						input.unpushedCount > 0
+							? `${input.unpushedCount} ${input.unpushedCount === 1 ? 'commit' : 'commits'} to push`
+							: 'Unpushed commits'
+					}
+				>
+					↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
+				</span>
+			)}
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-xs"
+				className="size-4"
+				aria-label="Generate commit message"
+				title="Generate commit message"
+				disabled={generateDisabled}
+				onClick={() => {
+					void generateMessage()
+				}}
+			>
+				{actionState.generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
+			</Button>
+			<Button
+				type="submit"
+				variant="ghost"
+				size="icon-xs"
+				className="size-4"
+				aria-label="Publish"
+				title="Commit, push, and open a draft PR"
+				disabled={publishDisabled}
+			>
+				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
+			</Button>
+			{input.loading ? (
+				<span className="text-muted-foreground flex size-4 items-center justify-center">
+					<Spinner className="size-2.5 border opacity-60" />
+				</span>
+			) : (
+				String.isNonEmpty(input.prUrl ?? '') && (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						className="size-4"
+						aria-label="Open pull request"
+						title="Open pull request"
+						onClick={() => {
+							window.open(input.prUrl, '_blank', 'noopener,noreferrer')
+						}}
+					>
+						<ExternalLinkIcon />
+					</Button>
+				)
+			)}
+		</div>
+	)
 	return (
 		<form
 			className="border-b p-2"
@@ -617,77 +685,23 @@ function CommitActionForm(input: {
 				void submitPublish()
 			}}
 		>
-			<div className="border-input min-w-0 border px-2 py-2 font-mono text-xs leading-4 select-text">
-				<div className="max-h-36 min-w-0 overflow-y-auto">
-					<div className="float-right ml-2 flex items-center gap-1">
-						{input.unpushedCommits && (
-							<span
-								className="text-muted-foreground px-0.5 text-xs"
-								title={
-									input.unpushedCount > 0
-										? `${input.unpushedCount} ${input.unpushedCount === 1 ? 'commit' : 'commits'} to push`
-										: 'Unpushed commits'
-								}
-							>
-								↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
-							</span>
-						)}
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="size-4"
-							aria-label="Generate commit message"
-							title="Generate commit message"
-							disabled={generateDisabled}
-							onClick={() => {
-								void generateMessage()
-							}}
-						>
-							{actionState.generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
-						</Button>
-						<Button
-							type="submit"
-							variant="ghost"
-							size="icon-xs"
-							className="size-4"
-							aria-label="Publish"
-							title="Commit, push, and open a draft PR"
-							disabled={publishDisabled}
-						>
-							{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
-						</Button>
-						{input.loading ? (
-							<span className="text-muted-foreground flex size-4 items-center justify-center">
-								<Spinner className="size-2.5 border opacity-60" />
-							</span>
-						) : (
-							String.isNonEmpty(input.prUrl ?? '') && (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="size-4"
-									aria-label="Open pull request"
-									title="Open pull request"
-									onClick={() => {
-										window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-									}}
-								>
-									<ExternalLinkIcon />
-								</Button>
-							)
-						)}
-					</div>
+			<div className="border-input min-w-0 border font-mono text-xs leading-4 select-text">
+				<div className="flex min-w-0 items-stretch">
 					<span
-						className={cn(
-							'whitespace-pre-wrap',
-							(String.isEmpty(trimmedCommitMessage) || actionState.generatingMessage) && 'text-muted-foreground'
-						)}
+						title={subjectContent}
+						className={cn('min-w-0 flex-1 truncate px-2 py-1.5', subjectMuted && 'text-muted-foreground')}
 					>
-						{actionState.generatingMessage ? 'Generating commit message' : commitMessageContent}
+						{subjectContent}
 					</span>
+					<div className="border-input flex shrink-0 items-center border-l px-1.5">{commitActions}</div>
 				</div>
+				{showBody && (
+					<div className="bg-muted/30 text-muted-foreground border-t px-2 py-1.5">
+						<div className="max-h-32 overflow-y-auto">
+							<span className="whitespace-pre-wrap">{messageBody}</span>
+						</div>
+					</div>
+				)}
 			</div>
 		</form>
 	)
