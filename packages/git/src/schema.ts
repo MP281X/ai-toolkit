@@ -37,11 +37,7 @@ export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 	subject: Schema.String
 }) {}
 
-export class GitPullRequest extends Schema.Class<GitPullRequest>('GitPullRequest')({
-	body: Schema.optional(Schema.String),
-	title: Schema.optional(Schema.String),
-	url: Schema.String
-}) {}
+export class GitPullRequest extends Schema.Class<GitPullRequest>('GitPullRequest')({url: Schema.String}) {}
 
 export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
 	branchCommits: Schema.Array(GitCommit),

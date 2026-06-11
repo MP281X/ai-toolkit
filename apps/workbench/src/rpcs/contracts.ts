@@ -59,9 +59,6 @@ export const ScriptRun = Schema.Struct({
 })
 export type ScriptRun = typeof ScriptRun.Type
 
-export const PublishPullRequestDraft = Schema.Struct({body: Schema.String, title: Schema.String})
-export type PublishPullRequestDraft = typeof PublishPullRequestDraft.Type
-
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
@@ -112,12 +109,6 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.optional(GitPullRequest)
 	}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
-	Rpc.make('publish.pr.update', {
-		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, body: Schema.String, title: Schema.String}),
-		success: Schema.optional(GitPullRequest)
-	}),
-	Rpc.make('publish.pr.generate', {error: PublishDraftError, payload: CwdPayload, success: PublishPullRequestDraft}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
 		payload: Schema.Struct({...CwdPayloadFields, branch: Schema.String, source: GitWorktreeSource}),

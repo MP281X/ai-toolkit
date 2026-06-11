@@ -225,7 +225,7 @@ function WorktreeScripts(input: {
 	const expandedState = useState(false)
 	const sortedRuns = sortScriptRuns(scripts.value)
 
-	if (scripts.value.length === 0) return null
+	if (sortedRuns.length === 0) return null
 
 	return (
 		<li className="w-full min-w-0">
@@ -241,7 +241,9 @@ function WorktreeScripts(input: {
 			{expandedState[0] && (
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{sortedRuns.map(run => (
-						<ScriptRunRow key={run.sessionId} cwd={input.cwd} run={run} selectRun={input.selectRun} />
+						<Suspense key={run.sessionId} fallback={<Loading />}>
+							<ScriptRunRow cwd={input.cwd} run={run} selectRun={input.selectRun} />
+						</Suspense>
 					))}
 				</ul>
 			)}
@@ -259,10 +261,11 @@ function ScriptRunRow(input: {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
+
 	const active = terminalStatusActive(status.value.state) && status.value.state !== 'idle'
 	let actionIcon = <PlayIcon className="size-3" />
 	if (active) actionIcon = <Square className="size-3" />
-	if (actionState[0]) actionIcon = <Spinner className="size-3" />
+	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
 
 	async function toggleRun() {
 		if (actionState[0]) return
@@ -317,9 +320,10 @@ function WorktreePortless(input: {
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const runs = useAtomSuspense(portlessRunsAtom(input.cwd))
+
 	const sortedRuns = sortPortlessRuns(runs.value)
 
-	if (runs.value.length === 0) return null
+	if (sortedRuns.length === 0) return null
 
 	return (
 		<PortlessGroup
@@ -342,9 +346,10 @@ function PortlessGroup(input: {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
+
 	let actionIcon = <PlayIcon className="size-3" />
 	if (active.value) actionIcon = <Square className="size-3" />
-	if (actionState[0]) actionIcon = <Spinner className="size-3" />
+	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
 
 	async function toggleRuns() {
 		if (actionState[0]) return
@@ -393,12 +398,9 @@ function PortlessGroup(input: {
 			{expandedState[0] && (
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{input.runs.map(run => (
-						<PortlessRunRow
-							key={run.script.sessionId}
-							run={run}
-							selectPortless={input.selectPortless}
-							selectRun={input.selectRun}
-						/>
+						<Suspense key={run.script.sessionId} fallback={<Loading />}>
+							<PortlessRunRow run={run} selectPortless={input.selectPortless} selectRun={input.selectRun} />
+						</Suspense>
 					))}
 				</ul>
 			)}
@@ -467,7 +469,7 @@ function AgentSessionRow(input: {
 						}}
 						title={`Stop ${input.session.label}`}
 					>
-						{input.stopping ? <Spinner className="size-3" /> : <Square className="size-3" />}
+						{input.stopping ? <Spinner className="size-2.5 border opacity-60" /> : <Square className="size-3" />}
 					</Button>
 				}
 				icon={<ProcessStateIcon state={input.session.state.state} />}
@@ -552,7 +554,7 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 										title={`Start ${profile.label}`}
 									>
 										{startingProfilesState[0].has(profile.id) ? (
-											<Spinner className="size-3" />
+											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											<PlayIcon className="size-3" />
 										)}
@@ -701,7 +703,7 @@ function WorktreeManager(input: {
 					type="button"
 					variant="ghost"
 					size="sm"
-					className="text-muted-foreground hover:text-foreground flex h-full min-w-0 items-center px-3 text-left"
+					className="text-muted-foreground hover:text-foreground flex h-full w-full min-w-0 justify-start px-3 text-left"
 					onClick={() => {
 						if (input.activeWorktree) void navigator.clipboard.writeText(input.activeWorktree.root)
 					}}
@@ -722,7 +724,11 @@ function WorktreeManager(input: {
 						}}
 						title="Delete worktree"
 					>
-						{deletingWorktreeState[0] ? <Spinner className="size-3" /> : <Trash className="size-3" />}
+						{deletingWorktreeState[0] ? (
+							<Spinner className="size-2.5 border opacity-60" />
+						) : (
+							<Trash className="size-3" />
+						)}
 					</Button>
 				)}
 			</div>
@@ -757,7 +763,11 @@ function WorktreeManager(input: {
 								actionsOpenState[1](false)
 							}}
 						>
-							{deletingWorktreeState[0] ? <Spinner className="size-3" /> : <Trash className="size-3" />}
+							{deletingWorktreeState[0] ? (
+								<Spinner className="size-2.5 border opacity-60" />
+							) : (
+								<Trash className="size-3" />
+							)}
 							Delete
 						</Button>
 					</DialogFooter>
@@ -810,7 +820,11 @@ function WorktreeManager(input: {
 											void createFastWorktree()
 										}}
 									>
-										{creatingBranchState[0] === newBranch ? <Spinner /> : <GitBranchPlus />}
+										{creatingBranchState[0] === newBranch ? (
+											<Spinner className="size-2.5 border opacity-60" />
+										) : (
+											<GitBranchPlus />
+										)}
 										<span className="min-w-0 truncate">Create {newBranch}</span>
 										<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
 									</CommandItem>
@@ -818,7 +832,7 @@ function WorktreeManager(input: {
 								{Array.map(availableBranches, candidate => {
 									const icon =
 										creatingBranchState[0] === candidate.name ? (
-											<Spinner />
+											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											Match.value(candidate.type).pipe(
 												Match.when('local', () => <GitBranch />),
@@ -887,7 +901,7 @@ function WorktreeManager(input: {
 											title="Cleanup project"
 										>
 											{AsyncResult.isWaiting(cleanupResult) ? (
-												<Spinner className="size-3" />
+												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />
 											)}

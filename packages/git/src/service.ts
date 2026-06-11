@@ -95,11 +95,62 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 			).pipe(Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}}))
 		})
 
+		const stringWithInput = Effect.fn('GitCommand.stringWithInput')(function* (
+			cwd: string,
+			args: readonly string[],
+			input: string
+		) {
+			yield* Effect.annotateCurrentSpan({command: args[0] ?? 'git', cwd})
+			return yield* Effect.scoped(
+				Effect.gen(function* () {
+					const handle = yield* pipe(
+						spawner.spawn(
+							ChildProcess.make('git', args, {
+								cwd,
+								stderr: 'pipe',
+								stdin: Stream.make(Buffer.from(input, 'utf8')),
+								stdout: 'pipe'
+							})
+						),
+						Effect.mapError(cause => new GitError({cause}))
+					)
+					const output = yield* Effect.all(
+						{
+							stderr: pipe(
+								Stream.decodeText(handle.stderr),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							),
+							stdout: pipe(
+								Stream.decodeText(handle.stdout),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							)
+						},
+						{concurrency: 'unbounded'}
+					)
+					const exitCode = yield* pipe(
+						handle.exitCode,
+						Effect.mapError(cause => new GitError({cause}))
+					)
+
+					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+						return yield* new GitError({
+							cause: new Error(output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`)
+						})
+					}
+
+					return output.stdout
+				})
+			).pipe(Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}}))
+		})
+
 		return {
 			lines: Effect.fn('GitCommand.lines')(function* (cwd: string, args: readonly string[]) {
 				return pipe(yield* string(cwd, args), String.split(/\r?\n/u), Array.filter(String.isNonEmpty))
 			}),
-			string
+			string,
+			stringWithInput
 		}
 	})
 }) {
@@ -117,11 +168,34 @@ const repositoryProbeGlobs = [
 	'!**/target/**'
 ]
 
-const GitHubPullRequestViewResponse = Schema.Struct({
-	body: Schema.optional(Schema.String),
-	title: Schema.optional(Schema.String),
-	url: Schema.optional(Schema.String)
-})
+const reviewExclusionPathspecs = [
+	':(exclude)pnpm-lock.yaml',
+	':(exclude)*.gen.ts',
+	':(exclude)**/*.gen.ts',
+	':(exclude)components/ui/**',
+	':(exclude)**/components/ui/**',
+	':(exclude)components/svgs/**',
+	':(exclude)**/components/svgs/**',
+	':(exclude)plans/*.md',
+	':(exclude)**/plans/*.md'
+]
+
+function isReviewExcludedPath(filePath: string) {
+	const parts = String.split('/')(filePath)
+	const basename = parts.at(-1) ?? filePath
+
+	if (filePath === 'pnpm-lock.yaml') return true
+	if (String.endsWith('.gen.ts')(basename)) return true
+	for (let index = 0; index < parts.length - 1; index += 1) {
+		const current = parts[index]
+		const next = parts[index + 1]
+		if (current === 'components' && (next === 'ui' || next === 'svgs')) return true
+		if (current === 'plans' && index === parts.length - 2 && String.endsWith('.md')(basename)) return true
+	}
+	return false
+}
+
+const GitHubPullRequestViewResponse = Schema.Struct({url: Schema.optional(Schema.String)})
 
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
 
@@ -339,10 +413,6 @@ type GitReviewMock = {
 type GitPublishMock = {
 	readonly approve?: (input: {readonly message: string}) => Effect.Effect<GitPullRequest | undefined, GitError>
 	readonly current?: GitPullRequest
-	readonly update?: (input: {
-		readonly body: string
-		readonly title: string
-	}) => Effect.Effect<GitPullRequest | undefined, GitError>
 }
 
 export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/service/GitWorkspace', {
@@ -954,10 +1024,16 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'--ignore-cr-at-eol',
 				'--patch',
 				'--find-renames',
-				'--no-ext-diff'
+				'--no-ext-diff',
+				'--',
+				'.',
+				...reviewExclusionPathspecs
 			])
 
-			const diffs = diffsFromPatch(patch, input.segments)
+			const diffs = pipe(
+				diffsFromPatch(patch, input.segments),
+				Array.filter(diff => !isReviewExcludedPath(diff.filePath))
+			)
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
 			return diffs
 		})
@@ -973,8 +1049,9 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'--find-renames',
 				'--no-ext-diff'
 			]
+			const pathspec = ['--', '.', ...reviewExclusionPathspecs]
 			const patch = yield* pipe(
-				git.string(config.cwd, ['diff-tree', ...args, hash]),
+				git.string(config.cwd, ['diff-tree', ...args, hash, ...pathspec]),
 				Effect.flatMap(output => {
 					if (/^diff --git /mu.test(output)) return Effect.succeed(output)
 
@@ -985,18 +1062,22 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 							const parent = parents[1]
 							if (parent === undefined) return Effect.succeed(output)
 
-							return git.string(config.cwd, ['diff-tree', ...args, parent, hash])
+							return git.string(config.cwd, ['diff-tree', ...args, parent, hash, ...pathspec])
 						})
 					)
 				})
 			)
-			const diffs = diffsFromPatch(patch, Array.empty())
+			const diffs = pipe(
+				diffsFromPatch(patch, Array.empty()),
+				Array.filter(diff => !isReviewExcludedPath(diff.filePath))
+			)
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
 			return diffs
 		})
 
 		const untrackedDiffs = pipe(
 			git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
+			Effect.map(Array.filter(filePath => !isReviewExcludedPath(filePath))),
 			Effect.flatMap(files =>
 				Effect.forEach(
 					files,
@@ -1392,7 +1473,13 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const current = yield* SubscriptionRef.get(state)
 			const github = yield* githubComments()
 
-			return new GitReviewState({comments: Array.appendAll(current.comments, github), marks: current.marks})
+			return new GitReviewState({
+				comments: pipe(
+					Array.appendAll(current.comments, github),
+					Array.filter(comment => !isReviewExcludedPath(comment.filePath))
+				),
+				marks: Array.filter(current.marks, mark => !isReviewExcludedPath(mark.filePath))
+			})
 		})
 
 		const worktreeChanges = pipe(
@@ -1650,7 +1737,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 			)
 		})
 		const currentPullRequest = pipe(
-			ghString(['pr', 'view', '--json', 'url,title,body']),
+			ghString(['pr', 'view', '--json', 'url']),
 			Effect.flatMap(
 				flow(
 					Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubPullRequestViewResponse)),
@@ -1659,7 +1746,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 			),
 			Effect.flatMap(pr =>
 				String.isNonEmpty(pr.url ?? '')
-					? Effect.succeed(Option.some(new GitPullRequest({body: pr.body, title: pr.title, url: pr.url ?? ''})))
+					? Effect.succeed(Option.some(new GitPullRequest({url: pr.url ?? ''})))
 					: Effect.succeed(Option.none<GitPullRequest>())
 			),
 			Effect.catchTag('GitError', () => Effect.succeed(Option.none<GitPullRequest>()))
@@ -1727,7 +1814,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 
 			yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid, Effect.withSpan('GitPublish.stageAll'))
 			yield* pipe(
-				git.string(config.cwd, ['commit', '-m', message]),
+				git.stringWithInput(config.cwd, ['commit', '-F', '-'], message),
 				Effect.asVoid,
 				Effect.withSpan('GitPublish.createCommit')
 			)
@@ -1770,17 +1857,6 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 				}
 				yield* push()
 				return Option.getOrUndefined(yield* upsertDraftPullRequest())
-			}),
-			current: Effect.fn('GitPublish.current')(function* () {
-				return Option.getOrUndefined(yield* currentPullRequest)
-			}),
-			update: Effect.fn('GitPublish.update')(function* (input: {readonly body: string; readonly title: string}) {
-				yield* pipe(
-					ghString(['pr', 'edit', '--title', input.title, '--body', input.body]),
-					Effect.asVoid,
-					Effect.withSpan('GitPublish.updatePr', {attributes: {cwd: config.cwd}})
-				)
-				return Option.getOrUndefined(yield* currentPullRequest)
 			})
 		}
 	})
@@ -1796,20 +1872,6 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 					approve: Effect.fn('GitPublish.mock.approve')(function* (payload: {readonly message: string}) {
 						if (input.approve !== undefined) return yield* input.approve(payload)
 						return yield* Ref.get(current)
-					}),
-					current: Effect.fn('GitPublish.mock.current')(function* () {
-						return yield* Ref.get(current)
-					}),
-					update: Effect.fn('GitPublish.mock.update')(function* (payload: {
-						readonly body: string
-						readonly title: string
-					}) {
-						if (input.update !== undefined) return yield* input.update(payload)
-						const existing = yield* Ref.get(current)
-						if (existing === undefined) return
-						const next = new GitPullRequest({...existing, body: payload.body, title: payload.title})
-						yield* Ref.set(current, next)
-						return next
 					})
 				}
 			})

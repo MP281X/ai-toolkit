@@ -20,7 +20,7 @@ import {
 import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
-import {PublishPullRequestDraft, RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
+import {RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
 import {discoverPackageScripts, packageScriptCommand, scriptRuns, type PackageScript} from '#rpcs/scripts.ts'
 import {AiError, type AgentCommandProfile} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
@@ -176,7 +176,7 @@ const PublishAgentSessions = RcMap.make({
 				cwd,
 				systemPrompt: Prompt.makeMessage('system', {
 					content:
-						'You write git commit messages for code review workflows. Return exactly one concise commit subject line. Do not use markdown, bullets, quotes, or explanations.'
+						'You write minimal, useful git commit messages. Return only commit message text. Do not use markdown fences, quotes, or explanations.'
 				}),
 				tools: 'none'
 			}),
@@ -189,65 +189,42 @@ const PublishAgentSessions = RcMap.make({
 
 function draftCommitPrompt(input: {
 	readonly diffs: readonly {readonly filePath: string; readonly patch: string; readonly status: string}[]
+	readonly recentSubjects: readonly string[]
 }) {
 	const patches = pipe(
 		input.diffs,
-		Array.map(diff => `${diff.status} ${diff.filePath}\n${diff.patch.slice(0, 12_000)}`),
+		Array.map(diff => `${diff.status} ${diff.filePath}\n${diff.patch}`),
 		Array.join('\n\n')
 	)
+	const styleExamples = Array.isReadonlyArrayEmpty(input.recentSubjects)
+		? ''
+		: `\n\nRecent commit subjects from this repository, match their style and vocabulary:\n${pipe(
+				input.recentSubjects,
+				Array.map(subject => `- ${subject}`),
+				Array.join('\n')
+			)}`
 
-	return `Write a git commit subject for these current worktree changes.
-
-Rules:
-- Return one line only.
-- Use imperative mood.
-- Be specific about the main user-visible or code-level change.
-- Do not include a trailing period.
-
-Diffs:
-${patches.slice(0, 40_000)}`
-}
-
-function draftPullRequestPrompt(input: {
-	readonly branchCommits: readonly {readonly shortHash: string; readonly subject: string}[]
-	readonly diffs: readonly {readonly filePath: string; readonly patch: string; readonly status: string}[]
-	readonly existing?: {readonly body?: string; readonly title?: string; readonly url: string}
-	readonly localCommits: readonly {readonly shortHash: string; readonly subject: string}[]
-}) {
-	const commits = pipe(
-		Array.appendAll(input.branchCommits, input.localCommits),
-		Array.map(commit => `- ${commit.shortHash} ${commit.subject}`),
-		Array.join('\n')
-	)
-	const patches = pipe(
-		input.diffs,
-		Array.map(diff => `${diff.status} ${diff.filePath}\n${diff.patch.slice(0, 8_000)}`),
-		Array.join('\n\n')
-	)
-	const existing =
-		input.existing === undefined
-			? 'No existing PR metadata.'
-			: `Existing title: ${input.existing.title ?? ''}\nExisting body:\n${input.existing.body ?? ''}`
-
-	return `Draft GitHub pull request metadata for this worktree.
-
-Return only JSON matching this shape:
-{"title":"short PR title","body":"markdown PR body"}
+	return `Write a git commit message for these current worktree changes.
 
 Rules:
-- Title must be concise and specific.
-- Body must be markdown.
-- Body must include a short Summary section and a Testing section.
-- Do not invent tests; if tests are not evident, say "Not run".
-- Prefer concrete changed behavior over file-by-file narration.
-
-${existing}
-
-Commits:
-${String.isEmpty(commits) ? 'No commits yet.' : commits}
+- Return exactly a commit message, with no markdown or commentary.
+- First line: <type>: <imperative summary>
+- The subject states the objective or end result of the whole diff, not a single file or a step.
+- The summary after the type prefix must be <= 50 characters.
+- Types are limited to feat, fix, refactor, perf, chore, docs, test, ci, style.
+- Body: blank line, then "- " bullets with only the most important points of the change.
+- Before writing the body, rank every candidate point by how much a reader needs it; keep the highest-value points and drop the rest, at most 5 bullets.
+- A point earns a bullet when it changes behavior, an API, or a workflow a reader relies on; refactors, cleanups, and mechanical edits do not.
+- Order bullets from most to least important.
+- A bullet is a short, plain statement of the resulting behavior or change, readable at a glance by a technical reader.
+- Bullets state what changed or what the new behavior is, never how it was implemented.
+- Merge related edits into one point.
+- A single small change gets a subject only, with no body.
+- Use imperative mood and no trailing period in the subject or bullets.
+- Prefer concrete nouns from the changed code over vague verbs like support, improve, update, or draft.${styleExamples}
 
 Diffs:
-${patches.slice(0, 40_000)}`
+${patches}`
 }
 
 export const RpcHandlers = RpcContracts.toLayer(
@@ -528,11 +505,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (Array.isReadonlyArrayEmpty(diffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
+						const metadata = yield* review.metadata()
+						const recentSubjects = pipe(
+							Array.appendAll(metadata.localCommits, metadata.branchCommits),
+							Array.take(10),
+							Array.map(commit => commit.subject)
+						)
 						const agent = yield* RcMap.get(publishAgents, payload.cwd)
 						const text = yield* pipe(
 							agent.prompt({
 								messages: [
-									Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: draftCommitPrompt({diffs})})]})
+									Prompt.makeMessage('user', {
+										content: [Prompt.makePart('text', {text: draftCommitPrompt({diffs, recentSubjects})})]
+									})
 								],
 								model: 'gpt-5.5',
 								provider: 'openai-codex',
@@ -548,56 +533,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (String.isEmpty(text)) return yield* new AiError({message: 'Generated commit message was empty.'})
 						return text
 					})
-				),
-			'publish.pr.generate': payload =>
-				Effect.scoped(
-					Effect.gen(function* () {
-						const review = yield* RcMap.get(gitReviews, payload.cwd)
-						const publish = yield* RcMap.get(gitPublishes, payload.cwd)
-						const metadata = yield* review.metadata()
-						const diffs = yield* review.reviewDiffs({_tag: 'branch'})
-						if (Array.isReadonlyArrayEmpty(diffs) && Array.isReadonlyArrayEmpty(metadata.branchCommits)) {
-							return yield* new GitError({message: 'No branch changes to summarize.'})
-						}
-						const existing = yield* publish.current()
-						const agent = yield* RcMap.get(publishAgents, payload.cwd)
-						const text = yield* pipe(
-							agent.prompt({
-								messages: [
-									Prompt.makeMessage('user', {
-										content: [
-											Prompt.makePart('text', {
-												text: draftPullRequestPrompt({
-													branchCommits: metadata.branchCommits,
-													diffs,
-													existing,
-													localCommits: metadata.localCommits
-												})
-											})
-										]
-									})
-								],
-								model: 'gpt-5.5',
-								provider: 'openai-codex',
-								thinkingLevel: 'low'
-							}),
-							Stream.runFold(
-								() => '',
-								(message: string, part) => (part.type === 'text-delta' ? `${message}${part.delta}` : message)
-							),
-							Effect.map(message => String.trim(message))
-						)
-
-						return yield* pipe(
-							Schema.decodeUnknownEffect(Schema.fromJsonString(PublishPullRequestDraft))(text),
-							Effect.mapError(cause => new AiError({cause, message: 'Generated PR draft was not valid JSON.'}))
-						)
-					})
-				),
-			'publish.pr.update': payload =>
-				pipe(
-					RcMap.get(gitPublishes, payload.cwd),
-					Effect.flatMap(publish => publish.update({body: payload.body, title: payload.title}))
 				),
 			'review.comments.resolve': payload =>
 				pipe(

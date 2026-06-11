@@ -495,26 +495,18 @@ describe('@deslop/git service', () => {
 	})
 
 	it('provides a black-box GitPublish mock layer', async () => {
-		const pullRequest = new GitPullRequest({body: 'Old body', title: 'Old title', url: 'https://github.test/pr'})
+		const pullRequest = new GitPullRequest({url: 'https://github.test/pr'})
 
 		const result = await Effect.runPromise(
 			Effect.gen(function* () {
 				const service = yield* GitPublish
-				const before = yield* service.current()
 				const approved = yield* service.approve({message: 'publish work'})
-				const updated = yield* service.update({body: 'New body', title: 'New title'})
-				const after = yield* service.current()
 
-				return {after, approved, before, updated}
+				return {approved}
 			}).pipe(Effect.provide(GitPublish.layerMock({current: pullRequest})))
 		)
 
-		expect(result.before).toEqual(pullRequest)
 		expect(result.approved).toEqual(pullRequest)
-		expect(result.updated).toEqual(
-			new GitPullRequest({body: 'New body', title: 'New title', url: 'https://github.test/pr'})
-		)
-		expect(result.after).toEqual(result.updated)
 	})
 
 	it('discovers repositories while excluding dot directories and node_modules', async () => {
@@ -708,6 +700,94 @@ describe('@deslop/git service', () => {
 			expect(branchDiffs.map(diff => diff.filePath)).toEqual(['branch.txt', 'local.txt', 'worktree.txt'])
 			expect(localDiffs[1]?.segments[0]?.fingerprint).toBe(localDiffs[1]?.patch)
 			expect(branchDiffs[0]?.segments[0]?.fingerprint).toBe(branchDiffs[0]?.patch)
+		})
+	})
+
+	it('omits excluded paths from changes, local, branch, and commit review diffs', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'branch.txt'), 'branch\n')
+			writeFileSync(join(fixture.repo, 'pnpm-lock.yaml'), 'lock\n')
+			mkdirSync(join(fixture.repo, 'src', 'components', 'ui'), {recursive: true})
+			writeFileSync(join(fixture.repo, 'src', 'components', 'ui', 'button.tsx'), 'button\n')
+			git(fixture.repo, ['add', '.'])
+			git(fixture.repo, ['commit', '-m', 'branch change'])
+			const commit = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+
+			writeFileSync(join(fixture.repo, 'local.txt'), 'local\n')
+			mkdirSync(join(fixture.repo, 'packages', 'components', 'svgs'), {recursive: true})
+			writeFileSync(join(fixture.repo, 'packages', 'components', 'svgs', 'logo.tsx'), 'svg\n')
+			git(fixture.repo, ['add', '.'])
+			git(fixture.repo, ['commit', '-m', 'local change'])
+
+			writeFileSync(join(fixture.repo, 'worktree.txt'), 'worktree\n')
+			writeFileSync(join(fixture.repo, 'schema.gen.ts'), 'generated\n')
+			mkdirSync(join(fixture.repo, '.agents', 'plans'), {recursive: true})
+			writeFileSync(join(fixture.repo, '.agents', 'plans', 'draft.md'), 'plan\n')
+
+			const changesDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
+			)
+			const localDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'local'}))
+			)
+			const branchDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'branch'}))
+			)
+			const commitDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: commit}))
+			)
+
+			expect(changesDiffs.map(diff => diff.filePath)).toEqual(['worktree.txt'])
+			expect(localDiffs.map(diff => diff.filePath)).toEqual(['local.txt', 'worktree.txt'])
+			expect(branchDiffs.map(diff => diff.filePath)).toEqual(['branch.txt', 'local.txt', 'worktree.txt'])
+			expect(commitDiffs.map(diff => diff.filePath)).toEqual(['branch.txt'])
+		})
+	})
+
+	it('omits excluded review comments and marks from review state', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(root)
+			const state = await runReview(
+				repo,
+				Effect.flatMap(GitReview, service =>
+					Effect.gen(function* () {
+						yield* service.saveComment(
+							new GitReviewComment({
+								body: 'visible',
+								filePath: 'src/file.ts',
+								lineNumber: 1,
+								resolved: false,
+								side: 'additions'
+							})
+						)
+						yield* service.saveComment(
+							new GitReviewComment({
+								body: 'hidden',
+								filePath: 'src/components/ui/button.tsx',
+								lineNumber: 1,
+								resolved: false,
+								side: 'additions'
+							})
+						)
+						yield* service.mark([
+							new GitReviewMark({filePath: 'src/file.ts', fingerprint: 'visible', segmentId: 'visible'}),
+							new GitReviewMark({filePath: '.agents/plans/draft.md', fingerprint: 'hidden', segmentId: 'hidden'})
+						])
+
+						return yield* service.reviewState()
+					})
+				)
+			)
+
+			expect(state.comments.map(comment => comment.body)).toEqual(['visible'])
+			expect(state.marks.map(mark => mark.filePath)).toEqual(['src/file.ts'])
 		})
 	})
 
@@ -1286,6 +1366,31 @@ describe('@deslop/git service', () => {
 			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
 			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(head)
 			expect(readFileSync(gh.log, 'utf8')).toContain('pr create --draft --fill')
+		})
+	})
+
+	it('approve preserves multiline commit messages for dirty work', async () => {
+		await withTempRoot(async root => {
+			const gh = fakeGh(root)
+			const originalPath = process.env['PATH']
+			const fixture = initRemoteRepo(root)
+			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
+
+			try {
+				await runPublish(
+					fixture.repo,
+					Effect.flatMap(GitPublish, service =>
+						service.approve({message: 'feat: add feature\n\nExplain scope and rationale.'})
+					)
+				)
+			} finally {
+				process.env['PATH'] = originalPath
+			}
+
+			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('feat: add feature')
+			expect(git(fixture.repo, ['log', '-1', '--format=%b']).trim()).toBe('Explain scope and rationale.')
 		})
 	})
 

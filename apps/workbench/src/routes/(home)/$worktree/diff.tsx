@@ -1,10 +1,10 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, HashMap, Match, Option, Predicate, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, HashMap, Match, Option, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
+import {AsyncResult, Atom} from 'effect/unstable/reactivity'
 import {startTransition, useEffect, useState, type MouseEvent} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -15,22 +15,19 @@ import {
 	CircleCheckIcon,
 	CopyIcon,
 	ExternalLinkIcon,
-	FilePenLineIcon,
 	FileIcon,
 	FolderIcon,
-	GitPullRequestArrowIcon,
 	MinusIcon,
-	SparklesIcon
+	SparklesIcon,
+	UploadIcon
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
 import {Button} from '@deslop/components/ui/button'
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
-import {InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput} from '@deslop/components/ui/input-group'
+import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
-import {Textarea} from '@deslop/components/ui/textarea'
 import {cn, formatError} from '@deslop/components/utils'
 import {
 	GitReviewState,
@@ -111,11 +108,7 @@ const reviewStateValueAtom = Atom.family((cwd: string) =>
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(
-		Atom.make(() =>
-			Effect.succeed({generatingMessage: false, generatingPr: false, publishing: false, updatingPr: false})
-		)
-	)
+	Atom.optimistic(Atom.make(() => ({generatingMessage: false, publishing: false})))
 )
 
 const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
@@ -139,30 +132,6 @@ const approvePublishActionAtom = Atom.family((cwd: string) =>
 			})
 		),
 		reducer: state => ({...state, publishing: true})
-	})
-)
-
-const generatePullRequestActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<null>()(
-			Effect.fn('DiffPage.generatePullRequest')(function* () {
-				const client = yield* RpcClient
-				return yield* client('publish.pr.generate', {cwd})
-			})
-		),
-		reducer: state => ({...state, generatingPr: true})
-	})
-)
-
-const updatePullRequestActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<{readonly body: string; readonly title: string}>()(
-			Effect.fn('DiffPage.updatePullRequest')(function* (draft) {
-				const client = yield* RpcClient
-				return yield* client('publish.pr.update', {body: draft.body, cwd, title: draft.title})
-			})
-		),
-		reducer: state => ({...state, updatingPr: true})
 	})
 )
 
@@ -258,15 +227,17 @@ function DiffPage() {
 function ReviewViewPanel(input: {readonly cwd: string}) {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
-	const suggestedMetadata = useAtomSuspense(suggestedMetadataAtom(input.cwd))
+	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const comments = reviewStateValue.comments
 	const shortcutsOpenState = useState(false)
 	const selectedScopeState = useState<GitReviewTarget>({_tag: 'changes'})
-	const allCommits = Array.appendAll(suggestedMetadata.value.localCommits, suggestedMetadata.value.branchCommits)
-	const hasPublishSummary =
-		!Array.isReadonlyArrayEmpty(suggestedMetadata.value.localCommits) ||
-		!Array.isReadonlyArrayEmpty(suggestedMetadata.value.branchCommits)
+	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
+
+	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
+	const localCommits = suggestedMetadataLoaded ? suggestedMetadata.value.localCommits : Array.empty<GitCommit>()
+	const branchCommits = suggestedMetadataLoaded ? suggestedMetadata.value.branchCommits : Array.empty<GitCommit>()
+	const allCommits = Array.appendAll(localCommits, branchCommits)
 	const selectedCommit = pipe(
 		allCommits,
 		Array.findFirst(commit => commit.hash === search.commit),
@@ -280,6 +251,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
 	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
+	const hasReviewableChanges = reviewDiffsLoaded && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
 	const selectedEntry =
 		(String.isNonEmpty(selectedFilePathState[0])
 			? pipe(
@@ -423,11 +395,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					<div className="flex h-full flex-col border-r">
 						<CommitActionForm
 							cwd={input.cwd}
-							dirty={suggestedMetadata.value.dirty}
-							hasPublishSummary={hasPublishSummary}
-							prUrl={suggestedMetadata.value.prUrl}
+							dirty={suggestedMetadataLoaded && suggestedMetadata.value.dirty}
+							hasReviewableChanges={hasReviewableChanges}
+							loading={!suggestedMetadataLoaded}
+							prUrl={suggestedMetadataLoaded ? suggestedMetadata.value.prUrl : undefined}
 							refreshReview={refreshReview}
-							unpushedCommits={suggestedMetadata.value.unpushedCommits}
+							unpushedCommits={suggestedMetadataLoaded && suggestedMetadata.value.unpushedCommits}
+							unpushedCount={Array.length(localCommits)}
 						/>
 						<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
 							<ResizablePanel defaultSize="55%" minSize="15%">
@@ -456,8 +430,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							<ResizablePanel defaultSize="45%" minSize="15%">
 								<div className="h-full min-h-0">
 									<CommitList
-										branchCommits={suggestedMetadata.value.branchCommits}
-										localCommits={suggestedMetadata.value.localCommits}
+										branchCommits={branchCommits}
+										loading={!suggestedMetadataLoaded}
+										localCommits={localCommits}
 										selected={reviewTarget}
 										selectCommit={commit => {
 											selectTarget({_tag: 'commit', hash: commit.hash})
@@ -563,7 +538,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											void resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
-										{commentResolutionState.resolvingAll ? <Spinner /> : <CircleCheckIcon />}
+										{commentResolutionState.resolvingAll ? (
+											<Spinner className="size-2.5 border opacity-60" />
+										) : (
+											<CircleCheckIcon />
+										)}
 									</Button>
 								</div>
 							</footer>
@@ -578,38 +557,35 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 function CommitActionForm(input: {
 	readonly cwd: string
 	readonly dirty: boolean
-	readonly hasPublishSummary: boolean
+	readonly hasReviewableChanges: boolean
+	readonly loading: boolean
 	readonly prUrl?: string
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
+	readonly unpushedCount: number
 }) {
 	const commitMessageState = useState('')
-	const prDialogOpenState = useState(false)
-	const prTitleState = useState('')
-	const prBodyState = useState('')
-	const actionStateResult = useAtomValue(reviewActionsStateAtom(input.cwd))
-	const actionState =
-		actionStateResult._tag === 'Success'
-			? actionStateResult.value
-			: {generatingMessage: false, generatingPr: false, publishing: false, updatingPr: false}
+	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
 	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
-	const generatePullRequest = useAtomSet(generatePullRequestActionAtom(input.cwd), {mode: 'promise'})
 	const approvePublish = useAtomSet(approvePublishActionAtom(input.cwd), {mode: 'promise'})
-	const updatePullRequest = useAtomSet(updatePullRequestActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const trimmedPrTitle = pipe(prTitleState[0], String.trim)
-	const trimmedPrBody = pipe(prBodyState[0], String.trim)
 	const missingMessage = input.dirty && String.isEmpty(trimmedCommitMessage)
-	const publishDisabled = actionState.publishing || (!input.dirty && !input.unpushedCommits) || missingMessage
-	const generateDisabled = actionState.generatingMessage || actionState.publishing || !input.dirty
-	const generatePrDisabled =
-		actionState.generatingPr || actionState.updatingPr || actionState.publishing || !input.hasPublishSummary
-	const updatePrDisabled =
-		actionState.generatingPr ||
-		actionState.updatingPr ||
-		Predicate.isUndefined(input.prUrl) ||
-		String.isEmpty(trimmedPrTitle) ||
-		String.isEmpty(trimmedPrBody)
+	const publishDisabled =
+		input.loading ||
+		actionState.publishing ||
+		(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
+		missingMessage
+	const generateDisabled =
+		input.loading ||
+		actionState.generatingMessage ||
+		actionState.publishing ||
+		!input.dirty ||
+		!input.hasReviewableChanges
+	let commitMessagePlaceholder = 'No changes'
+	if (input.loading) commitMessagePlaceholder = 'Loading'
+	else if (input.dirty) commitMessagePlaceholder = 'Generate commit message'
+	let commitMessageContent = commitMessagePlaceholder
+	if (String.isNonEmpty(trimmedCommitMessage)) commitMessageContent = trimmedCommitMessage
 
 	async function submitPublish() {
 		if (publishDisabled) return
@@ -633,149 +609,93 @@ function CommitActionForm(input: {
 		}
 	}
 
-	async function generatePrDraft() {
-		if (generatePrDisabled) return
-
-		try {
-			const draft = await generatePullRequest(null)
-			prTitleState[1](draft.title)
-			prBodyState[1](draft.body)
-			prDialogOpenState[1](true)
-		} catch (error) {
-			toast.error(formatError(error))
-		}
-	}
-
-	async function submitPrUpdate() {
-		if (updatePrDisabled) return
-
-		try {
-			await updatePullRequest({body: trimmedPrBody, title: trimmedPrTitle})
-			prDialogOpenState[1](false)
-			input.refreshReview()
-		} catch (error) {
-			toast.error(formatError(error))
-		}
-	}
-
 	return (
-		<>
-			<Dialog open={prDialogOpenState[0]} onOpenChange={prDialogOpenState[1]}>
-				<DialogContent className="sm:max-w-2xl">
-					<DialogHeader>
-						<DialogTitle>Pull Request</DialogTitle>
-					</DialogHeader>
-					<form
-						className="grid gap-3"
-						onSubmit={event => {
-							event.preventDefault()
-							void submitPrUpdate()
-						}}
-					>
-						<InputGroup>
-							<InputGroupInput
-								autoComplete="off"
-								value={prTitleState[0]}
-								placeholder="Title"
-								onChange={event => {
-									prTitleState[1](event.currentTarget.value)
-								}}
-							/>
-						</InputGroup>
-						<Textarea
-							className="min-h-56 resize-none"
-							value={prBodyState[0]}
-							placeholder="Body"
-							onChange={event => {
-								prBodyState[1](event.currentTarget.value)
-							}}
-						/>
-						<DialogFooter>
-							<Button type="submit" disabled={updatePrDisabled}>
-								{actionState.updatingPr ? <Spinner /> : <FilePenLineIcon />}
-								Update
-							</Button>
-						</DialogFooter>
-					</form>
-				</DialogContent>
-			</Dialog>
-			<form
-				className="flex items-center gap-1 border-b p-2"
-				onSubmit={event => {
-					event.preventDefault()
-					void submitPublish()
-				}}
-			>
-				<InputGroup className="min-w-0 flex-1">
-					<InputGroupInput
-						autoComplete="off"
-						value={commitMessageState[0]}
-						placeholder={input.dirty ? 'Generate commit message' : 'No commit message needed'}
-						onChange={event => {
-							commitMessageState[1](event.currentTarget.value)
-						}}
-					/>
-					<InputGroupAddon align="inline-end">
-						<InputGroupButton
+		<form
+			className="border-b p-2"
+			onSubmit={event => {
+				event.preventDefault()
+				void submitPublish()
+			}}
+		>
+			<div className="border-input min-w-0 border px-2 py-2 font-mono text-xs leading-4 select-text">
+				<div className="max-h-36 min-w-0 overflow-y-auto">
+					<div className="float-right ml-2 flex items-center gap-1">
+						{input.unpushedCommits && (
+							<span
+								className="text-muted-foreground px-0.5 text-xs"
+								title={
+									input.unpushedCount > 0
+										? `${input.unpushedCount} ${input.unpushedCount === 1 ? 'commit' : 'commits'} to push`
+										: 'Unpushed commits'
+								}
+							>
+								↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
+							</span>
+						)}
+						<Button
 							type="button"
 							variant="ghost"
 							size="icon-xs"
+							className="size-4"
 							aria-label="Generate commit message"
-							disabled={generateDisabled}
 							title="Generate commit message"
+							disabled={generateDisabled}
 							onClick={() => {
 								void generateMessage()
 							}}
 						>
-							{actionState.generatingMessage ? <Spinner /> : <SparklesIcon />}
-						</InputGroupButton>
-						<InputGroupButton
+							{actionState.generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
+						</Button>
+						<Button
 							type="submit"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="Approve publish"
+							className="size-4"
+							aria-label="Publish"
+							title="Commit, push, and open a draft PR"
 							disabled={publishDisabled}
-							title="Approve publish"
 						>
-							{actionState.publishing ? <Spinner /> : <GitPullRequestArrowIcon />}
-						</InputGroupButton>
-					</InputGroupAddon>
-				</InputGroup>
-				<div className="inline-flex shrink-0 items-center gap-1">
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						aria-label="Generate PR draft"
-						title="Generate PR draft"
-						disabled={generatePrDisabled}
-						onClick={() => {
-							void generatePrDraft()
-						}}
+							{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
+						</Button>
+						{input.loading ? (
+							<span className="text-muted-foreground flex size-4 items-center justify-center">
+								<Spinner className="size-2.5 border opacity-60" />
+							</span>
+						) : (
+							String.isNonEmpty(input.prUrl ?? '') && (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-4"
+									aria-label="Open pull request"
+									title="Open pull request"
+									onClick={() => {
+										window.open(input.prUrl, '_blank', 'noopener,noreferrer')
+									}}
+								>
+									<ExternalLinkIcon />
+								</Button>
+							)
+						)}
+					</div>
+					<span
+						className={cn(
+							'whitespace-pre-wrap',
+							(String.isEmpty(trimmedCommitMessage) || actionState.generatingMessage) && 'text-muted-foreground'
+						)}
 					>
-						{actionState.generatingPr ? <Spinner /> : <GitPullRequestArrowIcon />}
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						aria-label="Open PR"
-						title="Open PR"
-						disabled={Predicate.isUndefined(input.prUrl)}
-						onClick={() => {
-							if (Predicate.isNotUndefined(input.prUrl)) window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-						}}
-					>
-						<ExternalLinkIcon />
-					</Button>
+						{actionState.generatingMessage ? 'Generating commit message' : commitMessageContent}
+					</span>
 				</div>
-			</form>
-		</>
+			</div>
+		</form>
 	)
 }
 
 function CommitList(input: {
 	readonly branchCommits: readonly GitCommit[]
+	readonly loading: boolean
 	readonly localCommits: readonly GitCommit[]
 	readonly selected: GitReviewTarget
 	readonly selectCommit: (commit: GitCommit) => void
@@ -783,6 +703,14 @@ function CommitList(input: {
 }) {
 	const showLocal = !Array.isReadonlyArrayEmpty(input.localCommits)
 	const showBranch = !Array.isReadonlyArrayEmpty(input.branchCommits)
+
+	if (input.loading) {
+		return (
+			<div className="flex h-full min-h-0 items-center justify-center">
+				<Spinner className="text-muted-foreground size-4 border opacity-60" />
+			</div>
+		)
+	}
 
 	function renderScope(target: Exclude<GitReviewTarget, {_tag: 'commit'}>, label: string, detail: string) {
 		const selected = input.selected._tag === target._tag

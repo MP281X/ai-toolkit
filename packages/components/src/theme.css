@@ -151,6 +151,11 @@
 		font-size: 14px;
 		letter-spacing: 0;
 		line-height: 1.25;
+		overscroll-behavior: none;
+	}
+
+	body {
+		overscroll-behavior: none;
 	}
 
 	::selection {
