@@ -11,6 +11,7 @@ import {RpcHandlers} from '#rpcs/handlers.ts'
 import {AgentCommand} from '@deslop/ai/service'
 import {GitWorkspace} from '@deslop/git/service'
 import {OtelLayer} from '@deslop/opentelemetry/server'
+import {Usage} from '@deslop/usage/service'
 
 export const LiveLayers = pipe(
 	Layer.empty,
@@ -19,6 +20,7 @@ export const LiveLayers = pipe(
 	// Application layers
 	Layer.provideMerge(AgentCommand.layer),
 	Layer.provideMerge(GitWorkspace.layer),
+	Layer.provideMerge(Usage.layer),
 	Layer.provideMerge(
 		Layer.unwrap(
 			pipe(

@@ -38,6 +38,7 @@
 		"@deslop/git": "workspace:*",
 		"@deslop/portless": "workspace:*",
 		"@deslop/terminal": "workspace:*",
+		"@deslop/usage": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 

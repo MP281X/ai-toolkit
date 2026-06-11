@@ -10,6 +10,7 @@ import {
 	Option,
 	RcMap,
 	Ref,
+	Schedule,
 	Schema,
 	Stream,
 	String,
@@ -30,6 +31,7 @@ import {type PortlessPreparedRun, PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
+import {Usage} from '@deslop/usage/service'
 
 type TerminalSessionInput = {
 	readonly command?: ChildProcess.StandardCommand
@@ -236,6 +238,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const publishAgents = yield* PublishAgentSessions
 		const agentCommand = yield* AgentCommand
 		const portless = yield* Portless
+		const usage = yield* Usage
 		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessPreparedRun>())
 		const packageScripts = yield* Ref.make(HashMap.empty<string, PackagePreparedRun>())
 		const portlessStatusWatchers = yield* Ref.make(new Set<string>())
@@ -630,6 +633,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
+				),
+			'usage.watch': payload =>
+				pipe(
+					Stream.fromEffect(payload.provider === 'claude' ? usage.claude : usage.codex),
+					Stream.repeat(Schedule.spaced('30 seconds'))
 				)
 		})
 	})

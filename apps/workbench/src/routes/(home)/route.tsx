@@ -17,6 +17,7 @@ import {
 	terminalStatusAtom,
 	worktreeRouteId
 } from '#lib/state.ts'
+import {UsageStrip} from '#routes/components/-usage-strip.tsx'
 import type {AgentSession, ScriptRun} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
@@ -979,6 +980,8 @@ function WorktreeManager(input: {
 					})}
 				</TreeExplorerSection>
 			</TreeExplorer>
+
+			<UsageStrip />
 		</div>
 	)
 }

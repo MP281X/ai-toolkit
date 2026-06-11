@@ -42,6 +42,16 @@ export function formatNumber(number: number) {
 	return new Intl.NumberFormat(undefined, {maximumFractionDigits: 1, notation: 'compact'}).format(number)
 }
 
+export function formatTimeUntil(date: DateTime.DateTime) {
+	const millis = DateTime.toEpochMillis(date) - DateTime.toEpochMillis(DateTime.nowUnsafe())
+	if (millis <= 0) return 'now'
+	const minutes = Math.round(millis / 60_000)
+	if (minutes < 60) return `${minutes}m`
+	const hours = Math.round(minutes / 60)
+	if (hours < 24) return `${hours}h`
+	return `${Math.round(hours / 24)}d`
+}
+
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,

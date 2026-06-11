@@ -182,3 +182,15 @@ export const agentProfilesAtom = Atom.keepAlive(
 		{initialValue: []}
 	)
 )
+
+export const usageAtom = Atom.family((provider: 'claude' | 'codex') =>
+	Atom.keepAlive(
+		RpcClient.runtime.atom(
+			pipe(
+				RpcClient,
+				Effect.map(client => client('usage.watch', {provider})),
+				Stream.unwrap
+			)
+		)
+	)
+)

@@ -2,6 +2,7 @@ import {NodeServices} from '@effect/platform-node'
 
 import {Effect, Layer, pipe} from 'effect'
 
+import {FetchHttpClient} from 'effect/unstable/http'
 import {ChildProcess} from 'effect/unstable/process'
 import {RpcTest} from 'effect/unstable/rpc'
 import {describe, expect, it} from 'vite-plus/test'
@@ -15,6 +16,7 @@ import {GitBranchesSnapshot, GitProject, GitRepository, GitWorktree} from '@desl
 import {GitWorkspace} from '@deslop/git/service'
 import {PortlessOrigin, PortlessScript} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
+import {Usage} from '@deslop/usage/service'
 
 const cwd = '/tmp/deslop-workbench-test'
 
@@ -101,6 +103,8 @@ function testLayer(
 				profiles: [profile]
 			})
 		),
+		Layer.provide(Usage.layer),
+		Layer.provide(FetchHttpClient.layer),
 		Layer.provide(NodeServices.layer)
 	)
 }
