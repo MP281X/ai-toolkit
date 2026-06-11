@@ -11,17 +11,24 @@ function terminalFrameKey(frame: TerminalFrame) {
 	return `${frame.cursor.epoch}:${frame.cursor.sequence}`
 }
 
+let nextAttachId = 0
+
 export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
-	const framePull = terminalFramePullAtom(input.session)
+	const sessionKey = terminalSessionKey(input.session)
+	const attachRef = useRef<{readonly id: number; readonly sessionKey: string} | null>(null)
+	if (attachRef.current?.sessionKey !== sessionKey) {
+		nextAttachId += 1
+		attachRef.current = {id: nextAttachId, sessionKey}
+	}
+	const framePull = terminalFramePullAtom(input.session, attachRef.current.id)
 	const pullFrames = useAtomSet(framePull)
 	const status = useAtomSuspense(terminalStatusAtom(input.session))
 	const terminalRef = useRef<TerminalHandle>(null)
 	const activeRef = useRef(true)
 	const processedFrameRef = useRef<string | null>(null)
 	const pendingFramesRef = useRef(new Set<string>())
-	const sessionKey = terminalSessionKey(input.session)
 
 	useEffect(() => {
 		const pendingFrames = pendingFramesRef.current

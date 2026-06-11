@@ -47,7 +47,8 @@ type TerminalMock = {
 	readonly write?: (input: TerminalInput) => Effect.Effect<void, TerminalError>
 }
 
-const terminalScrollbackLines = 5_000
+const terminalScrollbackLines = 20_000
+const terminalScrollbackCharacters = 16 * 1024 * 1024
 const terminalDataQueueCapacity = 128
 const terminalDataQueueLowWater = 32
 
@@ -65,16 +66,29 @@ function newlineCount(value: string) {
 
 function retainTranscript(frames: readonly TerminalFrame[]) {
 	let lines = 0
+	let characters = 0
 	let index = frames.length
+	let truncated: TerminalFrame | undefined
 
-	while (index > 0 && lines < terminalScrollbackLines) {
-		index -= 1
-		const frame = frames[index]
-		if (frame?.type === 'output') lines += newlineCount(frame.data)
+	while (index > 0 && lines < terminalScrollbackLines && characters < terminalScrollbackCharacters) {
+		const frameIndex = index - 1
+		const frame = frames[frameIndex]
+		if (frame?.type === 'output') {
+			const remaining = terminalScrollbackCharacters - characters
+			if (frame.data.length > remaining) {
+				truncated = {...frame, data: frame.data.slice(frame.data.length - remaining)}
+				index = frameIndex + 1
+				break
+			}
+			characters += frame.data.length
+			lines += newlineCount(frame.data)
+		}
+		index = frameIndex
 		if (frame?.type === 'reset') break
 	}
 
-	return Array.drop(frames, index)
+	const retained = Array.drop(frames, index)
+	return truncated === undefined ? retained : [truncated, ...retained]
 }
 
 function framesAfterCursor(frames: readonly TerminalFrame[], cursor?: TerminalCursor) {

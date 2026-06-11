@@ -14,6 +14,7 @@ export type TerminalSessionInput = {
 }
 
 class TerminalSessionAtomKey extends Data.Class<TerminalSessionInput> {}
+class TerminalAttachAtomKey extends Data.Class<{readonly attachId: number; readonly session: TerminalSessionInput}> {}
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {
 	if (env === undefined) return
@@ -50,16 +51,16 @@ function terminalSessionStatus(input: TerminalSessionInput): TerminalStatus {
 	return {state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle', title: ''}
 }
 
-const terminalAttachQueueAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
+const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.flatMap(client => client('terminal.attach', terminalSessionInput(input), {asQueue: true}))
+			Effect.flatMap(client => client('terminal.attach', terminalSessionInput(input.session), {asQueue: true}))
 		)
 	)
 )
 
-const terminalFramePullAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
+const terminalFramePullAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
 	Atom.pull(
 		get =>
 			pipe(
@@ -71,8 +72,8 @@ const terminalFramePullAtomFamily = Atom.family((input: TerminalSessionAtomKey) 
 	)
 )
 
-export function terminalFramePullAtom(input: TerminalSessionInput) {
-	return terminalFramePullAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
+export function terminalFramePullAtom(input: TerminalSessionInput, attachId: number) {
+	return terminalFramePullAtomFamily(new TerminalAttachAtomKey({attachId, session: terminalSessionInput(input)}))
 }
 
 const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>

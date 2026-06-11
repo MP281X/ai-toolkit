@@ -143,7 +143,7 @@ describe('@deslop/terminal service', () => {
 		expect(output.length).toBeGreaterThan(5_000)
 	})
 
-	it('restores at least 5,000 recent terminal lines when a cursor is too old', async () => {
+	it('restores at least 20,000 recent terminal lines when a cursor is too old', async () => {
 		const frames = await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -151,7 +151,7 @@ describe('@deslop/terminal service', () => {
 						Terminal.layer({
 							command: ChildProcess.make(process.execPath, [
 								'-e',
-								"process.stdout.write(Array.from({length: 5100}, (_, index) => `line-${index.toString().padStart(4, '0')}\\n`).join(''))"
+								"process.stdout.write(Array.from({length: 20100}, (_, index) => `line-${index.toString().padStart(5, '0')}\\n`).join(''))"
 							]),
 							cwd: process.cwd()
 						}),
@@ -160,14 +160,14 @@ describe('@deslop/terminal service', () => {
 					const terminal = Context.get(context, Terminal)
 					yield* terminal.restart()
 					const liveFrames = yield* framesUntil(terminal, currentFrames =>
-						collectOutput(currentFrames).includes('line-5099')
+						collectOutput(currentFrames).includes('line-20099')
 					)
 					const expiredCursor = liveFrames[0]?.cursor
 					expect(expiredCursor).toBeDefined()
 
 					return yield* pipe(
 						terminal.attach(expiredCursor),
-						Stream.takeUntil(frame => frame.type === 'output' && frame.data.includes('line-5099')),
+						Stream.takeUntil(frame => frame.type === 'output' && frame.data.includes('line-20099')),
 						Stream.runCollect
 					)
 				})
@@ -175,9 +175,9 @@ describe('@deslop/terminal service', () => {
 		)
 		const output = collectOutput(frames)
 
-		expect(output).toContain('line-0100')
-		expect(output).toContain('line-5099')
-		expect(output.split('\n').filter(line => line !== '').length).toBeGreaterThanOrEqual(5_000)
+		expect(output).toContain('line-00100')
+		expect(output).toContain('line-20099')
+		expect(output.split('\n').filter(line => line !== '').length).toBeGreaterThanOrEqual(20_000)
 	}, 10_000)
 
 	it('resumes replay after the acknowledged cursor', async () => {
