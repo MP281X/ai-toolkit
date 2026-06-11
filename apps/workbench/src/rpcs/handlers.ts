@@ -494,7 +494,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
-			'projects.watch': () => SubscriptionRef.changes(git.projects),
+			'projects.watch': () =>
+				Stream.unwrap(
+					pipe(
+						SubscriptionRef.get(git.projects),
+						Effect.map(current =>
+							Stream.concat(Stream.make(current), Stream.drop(1)(SubscriptionRef.changes(git.projects)))
+						)
+					)
+				),
 			'publish.approve': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),

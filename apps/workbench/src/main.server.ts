@@ -34,7 +34,7 @@ function localHostname(host: string | undefined) {
 
 function localRequest(request: IncomingMessage) {
 	const hostname = localHostname(request.headers.host)
-	return hostname === undefined || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+	return hostname === undefined || hostname === 'localhost'
 }
 
 function serverResponse(value: unknown): value is ServerResponse {

@@ -171,6 +171,9 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 
 				yield* pipe(
 					comments,
+					Array.dedupeWith(
+						(left, right) => left.comment.threadId !== undefined && left.comment.threadId === right.comment.threadId
+					),
 					Effect.forEach(resolveInput =>
 						client('review.comments.resolve', {
 							cwd,
