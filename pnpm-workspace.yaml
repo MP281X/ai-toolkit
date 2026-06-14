@@ -1,7 +1,6 @@
 packages:
   - apps/*
   - packages/*
-  - .opencode
 
 allowBuilds:
   msw: true

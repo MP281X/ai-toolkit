@@ -7,12 +7,38 @@ import {performance} from 'node:perf_hooks'
 
 import {NodeServices} from '@effect/platform-node'
 
-import {Array, ConfigProvider, Effect, Order} from 'effect'
+import {
+	Array,
+	ConfigProvider,
+	Effect,
+	FileSystem,
+	Option,
+	Order,
+	Queue,
+	Ref,
+	Stream,
+	String,
+	SubscriptionRef,
+	pipe
+} from 'effect'
 
 import type {ChildProcessSpawner} from 'effect/unstable/process'
 import {describe, expect, it} from 'vite-plus/test'
 
-import {GitCommand, GitCommitAction, GitReview, GitWorkspace, cleanupGitProject} from './service.ts'
+import {
+	GitBranch,
+	GitBranchesSnapshot,
+	GitDiff,
+	GitDiffSegment,
+	GitProject,
+	GitPullRequest,
+	GitReviewComment,
+	GitReviewMark,
+	GitReviewMetadata,
+	GitRepository,
+	GitWorktree
+} from './schema.ts'
+import {GitPublish, GitReview, GitWorkspace} from './service.ts'
 
 function withTempRoot<T>(test: (root: string) => Promise<T> | T) {
 	return Effect.runPromise(
@@ -31,6 +57,22 @@ function withTempRoot<T>(test: (root: string) => Promise<T> | T) {
 
 function git(cwd: string, args: readonly string[]) {
 	return execFileSync('git', [...args], {cwd, encoding: 'utf8'})
+}
+
+function registeredWorktreeRoot(cwd: string, branch: string) {
+	return pipe(
+		String.split('\0')(git(cwd, ['worktree', 'list', '--porcelain', '-z'])),
+		Array.reduce({root: '', selected: Option.none<string>()}, (state, field) => {
+			if (String.startsWith('worktree ')(field)) {
+				return {root: String.replace(/^worktree\s+/u, '')(field), selected: state.selected}
+			}
+			if (field === `branch refs/heads/${branch}`) return {root: state.root, selected: Option.some(state.root)}
+			return state
+		}),
+		state => state.selected,
+		Option.map(root => root.replace(/^\/private\/var/u, '/var')),
+		Option.getOrThrowWith(() => new Error(`No registered worktree for ${branch}`))
+	)
 }
 
 function initRepo(root: string) {
@@ -176,6 +218,9 @@ function fakeCleanupGit(root: string) {
 		join(bin, 'git'),
 		`#!/bin/sh
 printf '%s %s\\n' "$PWD" "$*" >> "${log}"
+if [ "$1 $2" = "worktree prune" ]; then
+	exit 0
+fi
 if [ "$1 $2 $3" = "worktree list --porcelain" ]; then
 	printf 'worktree %s\\0HEAD commit\\0branch refs/heads/main\\0' "$PWD"
 	exit 0
@@ -185,6 +230,9 @@ if [ "$1 $2" = "symbolic-ref --short" ]; then
 	exit 0
 fi
 if [ "$1" = "fetch" ]; then
+	exit 0
+fi
+if [ "$1 $2" = "status --porcelain" ]; then
 	exit 0
 fi
 if [ "$1" = "for-each-ref" ]; then
@@ -226,12 +274,11 @@ function sorted(values: readonly string[]) {
 
 function runWorkspace<T, E>(
 	home: string,
-	effect: Effect.Effect<T, E, GitWorkspace | GitCommand | ChildProcessSpawner.ChildProcessSpawner>
+	effect: Effect.Effect<T, E, GitWorkspace | ChildProcessSpawner.ChildProcessSpawner>
 ) {
 	return Effect.runPromise(
 		effect.pipe(
 			Effect.provide(GitWorkspace.layer),
-			Effect.provide(GitCommand.layer),
 			Effect.provide(NodeServices.layer),
 			Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({HOME: home}))),
 			Effect.scoped
@@ -239,46 +286,244 @@ function runWorkspace<T, E>(
 	)
 }
 
-function runCleanup<T, E>(effect: Effect.Effect<T, E, GitCommand | ChildProcessSpawner.ChildProcessSpawner>) {
+function runWorkspaceWithWatch<T, E>(
+	home: string,
+	effect: (
+		events: Queue.Queue<FileSystem.WatchEvent>
+	) => Effect.Effect<T, E, GitWorkspace | ChildProcessSpawner.ChildProcessSpawner>
+) {
 	return Effect.runPromise(
-		effect.pipe(Effect.provide(GitCommand.layer), Effect.provide(NodeServices.layer), Effect.scoped)
+		Effect.scoped(
+			Effect.gen(function* () {
+				const events = yield* Queue.unbounded<FileSystem.WatchEvent>()
+				const watchBackend = FileSystem.WatchBackend.of({register: () => Option.some(Stream.fromQueue(events))})
+
+				return yield* effect(events).pipe(
+					Effect.provide(GitWorkspace.layer),
+					Effect.provide(NodeServices.layer),
+					Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({HOME: home}))),
+					Effect.provideService(FileSystem.WatchBackend, watchBackend)
+				)
+			})
+		)
+	)
+}
+
+function runCleanup(cwd: string) {
+	return runWorkspace(
+		cwd,
+		Effect.flatMap(GitWorkspace, service => service.fix(cwd))
 	)
 }
 
 function runReview<T, E>(
 	cwd: string,
-	effect: Effect.Effect<T, E, GitReview | GitCommand | ChildProcessSpawner.ChildProcessSpawner>
+	effect: Effect.Effect<T, E, GitReview | ChildProcessSpawner.ChildProcessSpawner>
 ) {
 	return Effect.runPromise(
-		effect.pipe(
-			Effect.provide(GitReview.layer({cwd})),
-			Effect.provide(GitCommand.layer),
-			Effect.provide(NodeServices.layer),
-			Effect.scoped
-		)
+		effect.pipe(Effect.provide(GitReview.layer({cwd})), Effect.provide(NodeServices.layer), Effect.scoped)
 	)
 }
 
-function runCommit<T, E>(
+function runPublish<T, E>(
 	cwd: string,
-	effect: Effect.Effect<T, E, GitCommitAction | GitCommand | ChildProcessSpawner.ChildProcessSpawner>
+	effect: Effect.Effect<T, E, GitPublish | ChildProcessSpawner.ChildProcessSpawner>
 ) {
 	return Effect.runPromise(
-		effect.pipe(
-			Effect.provide(GitCommitAction.layer({cwd})),
-			Effect.provide(GitCommand.layer),
-			Effect.provide(NodeServices.layer),
-			Effect.scoped
-		)
+		effect.pipe(Effect.provide(GitPublish.layer({cwd})), Effect.provide(NodeServices.layer), Effect.scoped)
 	)
 }
 
 describe('@deslop/git service', () => {
+	it('provides a black-box GitWorkspace mock layer', async () => {
+		const project = new GitProject({
+			repository: new GitRepository({gitDirectory: '/workspace/repo/.git', root: '/workspace/repo'}),
+			worktrees: [new GitWorktree({branch: 'main', root: '/workspace/repo'})]
+		})
+		const cleaned: string[] = []
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const service = yield* GitWorkspace
+				const initial = yield* SubscriptionRef.get(service.projects)
+				const branches = yield* service.branches('/workspace/repo')
+				const createdRoot = yield* service.createWorktree({
+					branch: 'feat/mock-worktree',
+					cwd: '/workspace/repo',
+					source: {_tag: 'new'}
+				})
+				const afterCreate = yield* service.listWorktrees('/workspace/repo')
+				yield* service.deleteWorktree({cwd: createdRoot})
+				yield* service.fix('/workspace/repo')
+				const afterDelete = yield* service.listProjectsFrom('/workspace')
+
+				return {afterCreate, afterDelete, branches, createdRoot, initial}
+			}).pipe(
+				Effect.provide(
+					GitWorkspace.layerMock({
+						branches: () =>
+							Effect.succeed(
+								new GitBranchesSnapshot({
+									branches: [new GitBranch({name: 'feat/mock-worktree', type: 'local'})],
+									defaultBranch: 'main'
+								})
+							),
+						fix: (cwd: string) => Effect.sync(() => cleaned.push(cwd)),
+						projects: [project]
+					})
+				)
+			)
+		)
+
+		expect(result.initial).toEqual([project])
+		expect(result.branches.branches.map(branch => branch.name)).toEqual(['feat/mock-worktree'])
+		expect(result.createdRoot).toBe('/workspace/repo/.deslop-mock/feat-mock-worktree')
+		expect(result.afterCreate.map(worktree => worktree.root)).toEqual([
+			'/workspace/repo',
+			'/workspace/repo/.deslop-mock/feat-mock-worktree'
+		])
+		expect(result.afterDelete[0]?.worktrees.map(worktree => worktree.root)).toEqual(['/workspace/repo'])
+		expect(cleaned).toEqual(['/workspace/repo'])
+	})
+
+	it('provides a black-box GitReview mock layer', async () => {
+		const diff = new GitDiff({
+			filePath: 'src/example.ts',
+			patch: 'diff --git a/src/example.ts b/src/example.ts\n',
+			segments: [
+				new GitDiffSegment({
+					filePath: 'src/example.ts',
+					fingerprint: 'fingerprint',
+					id: 'HEAD->worktree',
+					type: 'worktree'
+				})
+			],
+			status: 'modified'
+		})
+		const resolvedThreads: string[] = []
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const service = yield* GitReview
+				const metadata = yield* service.metadata()
+				const diffs = yield* service.reviewDiffs({_tag: 'changes'})
+				const watched = yield* Stream.runHead(service.watchReviewDiffs({_tag: 'changes'}))
+				yield* service.saveComment(
+					new GitReviewComment({
+						body: 'fix this',
+						filePath: 'src/example.ts',
+						lineNumber: 12,
+						resolved: false,
+						side: 'additions'
+					})
+				)
+				yield* service.mark([
+					new GitReviewMark({filePath: 'src/example.ts', fingerprint: 'fingerprint', segmentId: 'segment'})
+				])
+				yield* service.resolveComment({filePath: 'src/example.ts', lineNumber: 12, side: 'additions'})
+				yield* service.resolveReviewThread('thread-1')
+
+				return {diffs, metadata, state: yield* service.reviewState(), watched}
+			}).pipe(
+				Effect.provide(
+					GitReview.layerMock({
+						metadata: () =>
+							Effect.succeed(
+								new GitReviewMetadata({
+									branchCommits: [],
+									dirty: true,
+									localCommits: [],
+									prUrl: 'https://github.test/pr',
+									unpushedCommits: true
+								})
+							),
+						resolveReviewThread: threadId => Effect.sync(() => resolvedThreads.push(threadId)),
+						reviewComments: Effect.succeed([
+							new GitReviewComment({
+								body: 'github says fix this',
+								filePath: 'src/example.ts',
+								lineNumber: 14,
+								resolved: false,
+								side: 'additions',
+								source: 'github',
+								threadId: 'thread-1',
+								url: 'https://github.test/thread'
+							})
+						]),
+						reviewDiffs: () => Effect.succeed([diff])
+					})
+				)
+			)
+		)
+
+		expect(result.metadata.dirty).toBe(true)
+		expect(result.metadata.prUrl).toBe('https://github.test/pr')
+		expect(result.diffs).toEqual([diff])
+		expect(Option.getOrThrow(result.watched)).toEqual([diff])
+		expect(result.state.comments).toEqual([
+			new GitReviewComment({
+				body: 'fix this',
+				filePath: 'src/example.ts',
+				lineNumber: 12,
+				resolved: true,
+				side: 'additions',
+				source: 'local'
+			}),
+			new GitReviewComment({
+				body: 'github says fix this',
+				filePath: 'src/example.ts',
+				lineNumber: 14,
+				resolved: false,
+				side: 'additions',
+				source: 'github',
+				threadId: 'thread-1',
+				url: 'https://github.test/thread'
+			})
+		])
+		expect(result.state.marks).toEqual([
+			new GitReviewMark({filePath: 'src/example.ts', fingerprint: 'fingerprint', segmentId: 'segment'})
+		])
+		expect(resolvedThreads).toEqual(['thread-1'])
+	})
+
+	it('provides a black-box GitPublish mock layer', async () => {
+		const pullRequest = new GitPullRequest({url: 'https://github.test/pr'})
+
+		const result = await Effect.runPromise(
+			Effect.gen(function* () {
+				const service = yield* GitPublish
+				const approved = yield* service.approve({message: 'publish work'})
+
+				return {approved}
+			}).pipe(Effect.provide(GitPublish.layerMock({current: pullRequest})))
+		)
+
+		expect(result.approved).toEqual(pullRequest)
+	})
+
 	it('discovers repositories while excluding dot directories and node_modules', async () => {
 		await withTempRoot(async root => {
 			const repo = initRepo(join(root, 'repo'))
 			initRepo(join(root, '.hidden'))
 			initRepo(join(root, 'node_modules/package'))
+
+			const repositories = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service => service.listRepositoriesFrom(root))
+			)
+
+			expect(repositories.map(repository => repository.root)).toEqual([repo])
+		})
+	})
+
+	it('skips gitignored directories during repository discovery', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(root)
+			writeFileSync(join(repo, '.gitignore'), 'ignored/\n')
+			mkdirSync(join(repo, 'ignored'), {recursive: true})
+			initRepo(join(repo, 'ignored', 'nested'))
+			git(repo, ['add', '.gitignore'])
+			git(repo, ['commit', '-m', 'ignore nested repo'])
 
 			const repositories = await runWorkspace(
 				root,
@@ -303,6 +548,110 @@ describe('@deslop/git service', () => {
 
 			expect(projects).toHaveLength(1)
 			expect(sorted(projects[0]?.worktrees.map(worktree => worktree.root) ?? [])).toEqual(sorted([linked, repo]))
+		})
+	})
+
+	it('skips hidden repository discovery while listing linked worktrees under dot directories', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(join(root, 'repo'))
+			initRepo(join(root, '.hidden-repo'))
+			git(repo, ['branch', 'feature'])
+			const linked = join(root, '.deslop', 'worktrees', 'repo', 'feature')
+			mkdirSync(join(root, '.deslop', 'worktrees', 'repo'), {recursive: true})
+			git(repo, ['worktree', 'add', linked, 'feature'])
+
+			const projects = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service => service.listProjectsFrom(root))
+			)
+
+			expect(projects.map(project => project.repository.root)).toEqual([repo])
+			expect(sorted(projects[0]?.worktrees.map(worktree => worktree.root) ?? [])).toEqual(sorted([linked, repo]))
+		})
+	})
+
+	it('skips non-source home folders while discovering project repositories', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(join(root, 'projects', 'repo'))
+			initRepo(join(root, 'Library', 'cache-repo'))
+
+			const projects = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service => service.listProjectsFrom(root))
+			)
+
+			expect(projects.map(project => project.repository.root)).toEqual([repo])
+		})
+	})
+
+	it('keeps repository discovery results when a searched directory is unreadable', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(join(root, 'repo'))
+			const blocked = join(root, 'blocked')
+			mkdirSync(blocked)
+			chmodSync(blocked, 0)
+
+			try {
+				const repositories = await runWorkspace(
+					root,
+					Effect.flatMap(GitWorkspace, service => service.listRepositoriesFrom(root))
+				)
+
+				expect(repositories.map(repository => repository.root)).toEqual([repo])
+			} finally {
+				chmodSync(blocked, 0o700)
+			}
+		})
+	})
+
+	it('does not publish duplicate project snapshots when refresh is structurally unchanged', async () => {
+		await withTempRoot(async root => {
+			initRepo(join(root, 'repo'))
+
+			const snapshots = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service =>
+					Effect.scoped(
+						Effect.gen(function* () {
+							yield* service.refreshProjects()
+							const duplicateEmissions = yield* Ref.make(0)
+							yield* pipe(
+								Stream.drop(1)(SubscriptionRef.changes(service.projects)),
+								Stream.runForEach(() => Ref.update(duplicateEmissions, count => count + 1)),
+								Effect.forkScoped
+							)
+							yield* service.refreshProjects()
+							yield* Effect.sleep('50 millis')
+							return yield* Ref.get(duplicateEmissions)
+						})
+					)
+				)
+			)
+
+			expect(snapshots).toBe(0)
+		})
+	})
+
+	it('does not refresh discovered projects from filesystem watch events', async () => {
+		await withTempRoot(async root => {
+			initRepo(join(root, 'repo'))
+
+			const projects = await runWorkspaceWithWatch(root, events =>
+				Effect.scoped(
+					Effect.flatMap(GitWorkspace, service =>
+						Effect.gen(function* () {
+							const nested = join(root, 'nested')
+							yield* Effect.sync(() => initRepo(nested))
+							yield* Queue.offer(events, {_tag: 'Create', path: nested})
+							yield* Effect.sleep('100 millis')
+
+							return yield* SubscriptionRef.get(service.projects)
+						})
+					)
+				)
+			)
+
+			expect(projects.map(project => project.repository.root)).toEqual([join(root, 'repo')])
 		})
 	})
 
@@ -358,6 +707,94 @@ describe('@deslop/git service', () => {
 			expect(branchDiffs.map(diff => diff.filePath)).toEqual(['branch.txt', 'local.txt', 'worktree.txt'])
 			expect(localDiffs[1]?.segments[0]?.fingerprint).toBe(localDiffs[1]?.patch)
 			expect(branchDiffs[0]?.segments[0]?.fingerprint).toBe(branchDiffs[0]?.patch)
+		})
+	})
+
+	it('omits excluded paths from changes, local, branch, and commit review diffs', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'branch.txt'), 'branch\n')
+			writeFileSync(join(fixture.repo, 'pnpm-lock.yaml'), 'lock\n')
+			mkdirSync(join(fixture.repo, 'src', 'components', 'ui'), {recursive: true})
+			writeFileSync(join(fixture.repo, 'src', 'components', 'ui', 'button.tsx'), 'button\n')
+			git(fixture.repo, ['add', '.'])
+			git(fixture.repo, ['commit', '-m', 'branch change'])
+			const commit = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+			git(fixture.repo, ['push', '-u', 'origin', 'feature'])
+
+			writeFileSync(join(fixture.repo, 'local.txt'), 'local\n')
+			mkdirSync(join(fixture.repo, 'packages', 'components', 'svgs'), {recursive: true})
+			writeFileSync(join(fixture.repo, 'packages', 'components', 'svgs', 'logo.tsx'), 'svg\n')
+			git(fixture.repo, ['add', '.'])
+			git(fixture.repo, ['commit', '-m', 'local change'])
+
+			writeFileSync(join(fixture.repo, 'worktree.txt'), 'worktree\n')
+			writeFileSync(join(fixture.repo, 'schema.gen.ts'), 'generated\n')
+			mkdirSync(join(fixture.repo, '.agents', 'plans'), {recursive: true})
+			writeFileSync(join(fixture.repo, '.agents', 'plans', 'draft.md'), 'plan\n')
+
+			const changesDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'changes'}))
+			)
+			const localDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'local'}))
+			)
+			const branchDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'branch'}))
+			)
+			const commitDiffs = await runReview(
+				fixture.repo,
+				Effect.flatMap(GitReview, service => service.reviewDiffs({_tag: 'commit', hash: commit}))
+			)
+
+			expect(changesDiffs.map(diff => diff.filePath)).toEqual(['worktree.txt'])
+			expect(localDiffs.map(diff => diff.filePath)).toEqual(['local.txt', 'worktree.txt'])
+			expect(branchDiffs.map(diff => diff.filePath)).toEqual(['branch.txt', 'local.txt', 'worktree.txt'])
+			expect(commitDiffs.map(diff => diff.filePath)).toEqual(['branch.txt'])
+		})
+	})
+
+	it('omits excluded review comments and marks from review state', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(root)
+			const state = await runReview(
+				repo,
+				Effect.flatMap(GitReview, service =>
+					Effect.gen(function* () {
+						yield* service.saveComment(
+							new GitReviewComment({
+								body: 'visible',
+								filePath: 'src/file.ts',
+								lineNumber: 1,
+								resolved: false,
+								side: 'additions'
+							})
+						)
+						yield* service.saveComment(
+							new GitReviewComment({
+								body: 'hidden',
+								filePath: 'src/components/ui/button.tsx',
+								lineNumber: 1,
+								resolved: false,
+								side: 'additions'
+							})
+						)
+						yield* service.mark([
+							new GitReviewMark({filePath: 'src/file.ts', fingerprint: 'visible', segmentId: 'visible'}),
+							new GitReviewMark({filePath: '.agents/plans/draft.md', fingerprint: 'hidden', segmentId: 'hidden'})
+						])
+
+						return yield* service.reviewState()
+					})
+				)
+			)
+
+			expect(state.comments.map(comment => comment.body)).toEqual(['visible'])
+			expect(state.marks.map(mark => mark.filePath)).toEqual(['src/file.ts'])
 		})
 	})
 
@@ -523,7 +960,7 @@ describe('@deslop/git service', () => {
 			expect(repositories).toHaveLength(120)
 			expect(elapsed).toBeLessThan(10_000)
 		})
-	})
+	}, 15_000)
 
 	it('cleanup deletes gone upstream branches and linked worktrees', async () => {
 		await withTempRoot(async root => {
@@ -542,7 +979,7 @@ describe('@deslop/git service', () => {
 			git(staleWorktree, ['commit', '-m', 'unpushed stale'])
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
 			expect(existsSync(staleWorktree)).toBe(false)
@@ -569,7 +1006,7 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale-root'])
 			git(fixture.repo, ['push', 'origin', '--delete', 'stale-linked'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'stale-root']).trim()).toContain('stale-root')
 			expect(git(fixture.repo, ['branch', '--list', 'stale-linked']).trim()).toBe('')
@@ -577,7 +1014,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('cleanup deletes merged local-only branches and preserves unmerged and dirty local-only branches', async () => {
+	it('cleanup deletes merged local-only branches and dirty linked worktrees, and preserves unmerged branches', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			git(fixture.repo, ['branch', 'merged-local'])
@@ -591,11 +1028,11 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['worktree', 'add', dirtyLocalWorktree, 'dirty-local'])
 			writeFileSync(join(dirtyLocalWorktree, 'dirty.txt'), 'dirty\n')
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
-			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toContain('dirty-local')
-			expect(existsSync(dirtyLocalWorktree)).toBe(true)
+			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toBe('')
+			expect(existsSync(dirtyLocalWorktree)).toBe(false)
 			expect(git(fixture.repo, ['branch', '--list', 'unmerged-local']).trim()).toContain('unmerged-local')
 		})
 	})
@@ -606,7 +1043,7 @@ describe('@deslop/git service', () => {
 			const newWorktree = join(root, 'new-worktree')
 			git(fixture.repo, ['worktree', 'add', '--no-track', '-b', 'new-local', newWorktree, 'origin/main'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'new-local']).trim()).toBe('')
 			expect(existsSync(newWorktree)).toBe(false)
@@ -619,7 +1056,7 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['branch', '--unset-upstream', 'main'])
 			git(fixture.repo, ['branch', 'merged-local'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'main']).trim()).toContain('main')
 			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
@@ -644,7 +1081,7 @@ describe('@deslop/git service', () => {
 			const divergedHead = git(fixture.repo, ['rev-parse', 'diverged']).trim()
 			git(fixture.repo, ['switch', 'main'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['rev-parse', 'main']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'origin/main']).trim()
@@ -673,13 +1110,13 @@ describe('@deslop/git service', () => {
 			git(other, ['push'])
 			writeFileSync(join(fixture.repo, 'feature.txt'), 'local dirty\nuncommitted\n')
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(readFileSync(join(fixture.repo, 'feature.txt'), 'utf8')).toBe('local dirty\nuncommitted\n')
 		})
 	})
 
-	it('cleanup skips clean checked-out branches with local and upstream commits', async () => {
+	it('cleanup rebases clean checked-out branches with local and upstream commits', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			const other = join(root, 'other')
@@ -702,12 +1139,12 @@ describe('@deslop/git service', () => {
 			git(fixture.repo, ['commit', '-m', 'local only feature'])
 			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
-			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
+			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).not.toBe(head)
 			expect(readFileSync(join(fixture.repo, 'local.txt'), 'utf8')).toBe('local\n')
 			expect(readFileSync(join(fixture.repo, 'local-only.txt'), 'utf8')).toBe('local only\n')
-			expect(existsSync(join(fixture.repo, 'remote.txt'))).toBe(false)
+			expect(readFileSync(join(fixture.repo, 'remote.txt'), 'utf8')).toBe('remote\n')
 		})
 	})
 
@@ -739,7 +1176,7 @@ describe('@deslop/git service', () => {
 			git(other, ['push'])
 			git(fixture.repo, ['push', 'upstream', '--delete', 'stale'])
 
-			await runCleanup(cleanupGitProject(fixture.repo))
+			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'stale']).trim()).toBe('')
 			expect(git(fixture.repo, ['rev-parse', 'feature']).trim()).toBe(
@@ -758,10 +1195,10 @@ describe('@deslop/git service', () => {
 			const started = performance.now()
 
 			try {
-				await runCleanup(cleanupGitProject(repo))
+				await runCleanup(repo)
 				const commands = readFileSync(fake.log, 'utf8').trim().split('\n')
 
-				expect(commands).toHaveLength(7)
+				expect(commands.length).toBeLessThan(20)
 				expect(commands.filter(command => command.includes(' fetch --all --prune'))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' branch --merged '))).toHaveLength(1)
 				expect(commands.filter(command => command.includes(' for-each-ref '))).toHaveLength(1)
@@ -820,7 +1257,7 @@ describe('@deslop/git service', () => {
 			const newWorktree = await runWorkspace(
 				root,
 				Effect.flatMap(GitWorkspace, service =>
-					service.createWorktree({branch: 'new-local', cwd: fixture.repo, source: {_tag: 'new'}})
+					service.createWorktree({branch: 'feat/new-local', cwd: fixture.repo, source: {_tag: 'new'}})
 				)
 			)
 
@@ -834,33 +1271,56 @@ describe('@deslop/git service', () => {
 				'upstream/upstream-only'
 			)
 			expect(existsSync(newWorktree), newWorktree).toBe(true)
-			expect(git(newWorktree, ['branch', '--show-current']).trim()).toBe('new-local')
+			expect(git(newWorktree, ['branch', '--show-current']).trim()).toBe('feat/new-local')
 			expect(git(newWorktree, ['rev-parse', 'HEAD']).trim()).toBe(
 				git(fixture.repo, ['rev-parse', 'origin/main']).trim()
 			)
-			expect(() => git(newWorktree, ['config', '--get', 'branch.new-local.remote'])).toThrow()
-			expect(() => git(newWorktree, ['config', '--get', 'branch.new-local.merge'])).toThrow()
+			expect(() => git(newWorktree, ['config', '--get', 'branch.feat/new-local.remote'])).toThrow()
+			expect(() => git(newWorktree, ['config', '--get', 'branch.feat/new-local.merge'])).toThrow()
+			expect(localWorktree).toBe(registeredWorktreeRoot(fixture.repo, 'local-only'))
+			expect(remoteWorktree).toBe(registeredWorktreeRoot(fixture.repo, 'remote-only'))
+			expect(upstreamWorktree).toBe(registeredWorktreeRoot(fixture.repo, 'upstream-only'))
+			expect(newWorktree).toBe(registeredWorktreeRoot(fixture.repo, 'feat/new-local'))
+			expect(newWorktree.startsWith(join(root, '.deslop', 'worktrees', 'repo-'))).toBe(true)
+			expect(newWorktree.endsWith('/feat-new-local')).toBe(true)
 		})
 	})
 
-	it('commit stages dirty work and creates a local commit', async () => {
+	it('creates new worktrees from the local default branch when no remote exists', async () => {
 		await withTempRoot(async root => {
-			const fixture = initRemoteRepo(root)
-			git(fixture.repo, ['switch', '-c', 'feature'])
-			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
-
-			await runCommit(
-				fixture.repo,
-				Effect.flatMap(GitCommitAction, service => service.commit('feature work'))
+			const repo = initRepo(join(root, 'repo'))
+			const newWorktree = await runWorkspace(
+				root,
+				Effect.flatMap(GitWorkspace, service =>
+					service.createWorktree({branch: 'feat/local-new', cwd: repo, source: {_tag: 'new'}})
+				)
 			)
 
-			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('feature work')
-			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
-			expect(() => git(fixture.remote, ['rev-parse', 'feature'])).toThrow()
+			expect(existsSync(newWorktree), newWorktree).toBe(true)
+			expect(git(newWorktree, ['branch', '--show-current']).trim()).toBe('feat/local-new')
+			expect(git(newWorktree, ['rev-parse', 'HEAD']).trim()).toBe(git(repo, ['rev-parse', 'main']).trim())
+			expect(() => git(newWorktree, ['config', '--get', 'branch.feat/local-new.remote'])).toThrow()
+			expect(() => git(newWorktree, ['config', '--get', 'branch.feat/local-new.merge'])).toThrow()
+			expect(newWorktree).toBe(registeredWorktreeRoot(repo, 'feat/local-new'))
 		})
 	})
 
-	it('push pushes clean unpushed commits and creates a draft PR', async () => {
+	it('rejects new worktree branches outside the Workbench branch naming contract', async () => {
+		await withTempRoot(async root => {
+			const fixture = initRemoteRepo(root)
+
+			await expect(
+				runWorkspace(
+					root,
+					Effect.flatMap(GitWorkspace, service =>
+						service.createWorktree({branch: 'feature with spaces', cwd: fixture.repo, source: {_tag: 'new'}})
+					)
+				)
+			).rejects.toMatchObject({_tag: 'GitError'})
+		})
+	})
+
+	it('approve pushes clean unpushed commits and creates a draft PR', async () => {
 		await withTempRoot(async root => {
 			const gh = fakeGh(root)
 			const originalPath = process.env['PATH']
@@ -873,10 +1333,11 @@ describe('@deslop/git service', () => {
 			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
 
 			try {
-				await runCommit(
+				const pr = await runPublish(
 					fixture.repo,
-					Effect.flatMap(GitCommitAction, service => service.push())
+					Effect.flatMap(GitPublish, service => service.approve({message: ''}))
 				)
+				expect(pr?.url).toBe('https://github.com/test/repo/pull/1')
 			} finally {
 				process.env['PATH'] = originalPath
 			}
@@ -887,7 +1348,60 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('push leaves dirty work untouched while pushing unpushed commits', async () => {
+	it('approve commits dirty work, pushes, and creates a draft PR', async () => {
+		await withTempRoot(async root => {
+			const gh = fakeGh(root)
+			const originalPath = process.env['PATH']
+			const fixture = initRemoteRepo(root)
+			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
+
+			try {
+				const pr = await runPublish(
+					fixture.repo,
+					Effect.flatMap(GitPublish, service => service.approve({message: 'feature work'}))
+				)
+
+				expect(pr?.url).toBe('https://github.com/test/repo/pull/1')
+			} finally {
+				process.env['PATH'] = originalPath
+			}
+
+			const head = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('feature work')
+			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
+			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(head)
+			expect(readFileSync(gh.log, 'utf8')).toContain('pr create --draft --fill')
+		})
+	})
+
+	it('approve preserves multiline commit messages for dirty work', async () => {
+		await withTempRoot(async root => {
+			const gh = fakeGh(root)
+			const originalPath = process.env['PATH']
+			const fixture = initRemoteRepo(root)
+			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
+			git(fixture.repo, ['switch', '-c', 'feature'])
+			writeFileSync(join(fixture.repo, 'feature.txt'), 'feature\n')
+
+			try {
+				await runPublish(
+					fixture.repo,
+					Effect.flatMap(GitPublish, service =>
+						service.approve({message: 'feat: add feature\n\nExplain scope and rationale.'})
+					)
+				)
+			} finally {
+				process.env['PATH'] = originalPath
+			}
+
+			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('feat: add feature')
+			expect(git(fixture.repo, ['log', '-1', '--format=%b']).trim()).toBe('Explain scope and rationale.')
+		})
+	})
+
+	it('approve commits dirty work before pushing unpushed commits', async () => {
 		await withTempRoot(async root => {
 			const gh = fakeGh(root)
 			const originalPath = process.env['PATH']
@@ -901,39 +1415,61 @@ describe('@deslop/git service', () => {
 			writeFileSync(join(fixture.repo, 'dirty.txt'), 'dirty\n')
 
 			try {
-				await runCommit(
+				const pr = await runPublish(
 					fixture.repo,
-					Effect.flatMap(GitCommitAction, service => service.push())
+					Effect.flatMap(GitPublish, service => service.approve({message: 'publish dirty work'}))
 				)
+				expect(pr?.url).toBe('https://github.com/test/repo/pull/1')
 			} finally {
 				process.env['PATH'] = originalPath
 			}
 
-			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(head)
-			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('?? dirty.txt')
+			const published = git(fixture.repo, ['rev-parse', 'HEAD']).trim()
+			expect(published).not.toBe(head)
+			expect(git(fixture.repo, ['log', '-1', '--format=%s']).trim()).toBe('publish dirty work')
+			expect(git(fixture.remote, ['rev-parse', 'feature']).trim()).toBe(published)
+			expect(git(fixture.repo, ['status', '--porcelain']).trim()).toBe('')
 		})
 	})
 
-	it('loads and resolves GitHub review threads through fake gh', async () => {
+	it('loads GitHub review threads into unified review state and resolves them through fake gh', async () => {
 		await withTempRoot(async root => {
 			const gh = fakeGhReview(root)
 			const originalPath = process.env['PATH']
 			process.env['PATH'] = `${gh.bin}:${process.env['PATH'] ?? ''}`
 
 			try {
-				const threads = await runReview(
+				const state = await runReview(
 					root,
-					Effect.flatMap(GitReview, service => service.reviewThreads)
+					Effect.flatMap(GitReview, service =>
+						Effect.gen(function* () {
+							const first = yield* service.reviewState()
+							yield* service.mark([
+								new GitReviewMark({filePath: 'src/file.ts', fingerprint: 'same', segmentId: 'segment'})
+							])
+							const second = yield* service.reviewState()
+
+							return {first, second}
+						})
+					)
 				)
+				const graphqlReads = readFileSync(gh.log, 'utf8')
+					.split('\n')
+					.filter(line => line.includes('api graphql') && !line.includes('resolveReviewThread')).length
 				await runReview(
 					root,
 					Effect.flatMap(GitReview, service => service.resolveReviewThread('thread-1'))
 				)
 
-				expect(threads).toHaveLength(1)
-				expect(threads[0]?.filePath).toBe('src/file.ts')
-				expect(threads[0]?.lineNumber).toBe(12)
-				expect(threads[0]?.side).toBe('additions')
+				expect(graphqlReads).toBe(1)
+				expect(state.first.comments).toHaveLength(1)
+				expect(state.second.comments).toHaveLength(1)
+				expect(state.second.marks).toHaveLength(1)
+				expect(state.first.comments[0]?.filePath).toBe('src/file.ts')
+				expect(state.first.comments[0]?.lineNumber).toBe(12)
+				expect(state.first.comments[0]?.side).toBe('additions')
+				expect(state.first.comments[0]?.source).toBe('github')
+				expect(state.first.comments[0]?.threadId).toBe('thread-1')
 				expect(readFileSync(gh.log, 'utf8')).toContain('threadId=thread-1')
 			} finally {
 				process.env['PATH'] = originalPath

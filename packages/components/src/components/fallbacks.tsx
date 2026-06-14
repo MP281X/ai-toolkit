@@ -2,6 +2,7 @@ import {InfoIcon, OctagonAlert} from 'lucide-react'
 
 import {Alert, AlertDescription, AlertTitle} from '#components/ui/alert.tsx'
 import {Button} from '#components/ui/button.tsx'
+import {Spinner} from '#components/ui/spinner.tsx'
 import {formatError} from '#lib/utils.ts'
 
 export function NotFound() {
@@ -19,7 +20,7 @@ export function NotFound() {
 export function Loading() {
 	return (
 		<div className="flex flex-1 items-center justify-center">
-			<div className="animation-duration-[2.5s] border-muted-foreground/50 size-8 animate-spin border-2" />
+			<Spinner className="text-muted-foreground size-4 border opacity-60" />
 		</div>
 	)
 }

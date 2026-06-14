@@ -14,20 +14,27 @@ import {cn} from '#lib/utils.ts'
 type TerminalStatusState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 
 function cssColor(element: HTMLElement, value: string) {
+	const probe = element.ownerDocument.createElement('span')
+	probe.style.color = value
+	probe.style.display = 'none'
+	element.append(probe)
+	const resolved = getComputedStyle(probe).color
+	probe.remove()
+
 	const canvas = element.ownerDocument.createElement('canvas')
 	canvas.width = 1
 	canvas.height = 1
 	const context = canvas.getContext('2d')
-	if (!context) return value
+	if (!context) return resolved || value
 
-	context.fillStyle = value
+	context.fillStyle = resolved || value
 	context.fillRect(0, 0, 1, 1)
 	const [red, green, blue, alpha = 255] = context.getImageData(0, 0, 1, 1).data
 
 	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
 }
 
-export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string) => void}
+export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string, done?: () => void) => void}
 
 export const Terminal = forwardRef<
 	TerminalHandle,
@@ -51,11 +58,14 @@ export const Terminal = forwardRef<
 			reset() {
 				terminalRef.current?.reset()
 			},
-			write(data: string) {
+			write(data: string, done?: () => void) {
 				const terminal = terminalRef.current
-				if (!terminal || data === '') return
+				if (!terminal || data === '') {
+					done?.()
+					return
+				}
 
-				terminal.write(data)
+				terminal.write(data, done)
 			}
 		}),
 		[]
@@ -104,7 +114,7 @@ export const Terminal = forwardRef<
 			letterSpacing: 0,
 			lineHeight: 1,
 			scrollSensitivity: 2,
-			scrollback: 5_000,
+			scrollback: 20_000,
 			smoothScrollDuration: 0,
 			theme: {background, selectionBackground, selectionInactiveBackground: selectionBackground}
 		})

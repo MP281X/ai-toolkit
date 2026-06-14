@@ -38,5 +38,10 @@
 	},
 
 	"exclude": ["${configDir}/**/node_modules", "${configDir}/**/dist", "${configDir}/**/.output"],
-	"include": ["${configDir}/src/**/*", "${configDir}/codegen/**/*", "${configDir}/*.config.*"]
+	"include": [
+		"${configDir}/src/**/*",
+		"${configDir}/*.config.*",
+		"${configDir}/codegen/**/*",
+		"${configDir}/scripts/**/*"
+	]
 }

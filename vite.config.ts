@@ -54,7 +54,7 @@ export default defineConfig({
 			suspicious: 'off'
 		},
 		env: {browser: true, builtin: true, node: true},
-		ignorePatterns: ['**/*.gen.ts', '**/components/ui/**', '**/generated/**'],
+		ignorePatterns: ['**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**', '**/generated/**'],
 		jsPlugins: [{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'}],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
@@ -193,5 +193,5 @@ export default defineConfig({
 		},
 		settings: {react: {version: '19.0'}}
 	},
-	test: {environment: 'node', include: ['packages/*/src/**/*.test.ts'], pool: 'forks'}
+	test: {environment: 'node', include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], pool: 'forks'}
 })

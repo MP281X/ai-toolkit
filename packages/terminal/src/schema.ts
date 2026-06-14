@@ -15,13 +15,17 @@ export function terminalStatusActive(state: TerminalStatus['state']) {
 	return state === 'idle' || state === 'starting' || state === 'running' || state === 'waiting'
 }
 
-export type TerminalAttachUpdate =
-	| {readonly data: string; readonly type: 'snapshot'}
-	| {readonly data: string; readonly type: 'data'}
-	| {readonly status: TerminalStatus; readonly type: 'status'}
+export type TerminalSize = typeof TerminalSize.Type
+export const TerminalSize = Schema.Struct({cols: Schema.Number, rows: Schema.Number})
 
-export const TerminalAttachUpdate = Schema.Union([
-	Schema.Struct({data: Schema.String, type: Schema.Literal('snapshot')}),
-	Schema.Struct({data: Schema.String, type: Schema.Literal('data')}),
-	Schema.Struct({status: TerminalStatus, type: Schema.Literal('status')})
+export type TerminalInput = typeof TerminalInput.Type
+export const TerminalInput = Schema.Union([
+	Schema.Struct({data: Schema.String, type: Schema.Literal('text')}),
+	Schema.Struct({data: Schema.Uint8ArrayFromBase64, type: Schema.Literal('bytes')})
+])
+
+export type TerminalFrame = typeof TerminalFrame.Type
+export const TerminalFrame = Schema.Union([
+	Schema.Struct({sequence: Schema.Number, type: Schema.Literal('reset')}),
+	Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('output')})
 ])
