@@ -14,3 +14,8 @@ export class UsageProvider extends Schema.Class<UsageProvider>('UsageProvider')(
 	fiveHour: UsageWindow,
 	weekly: UsageWindow
 }) {}
+
+export class SystemUsage extends Schema.Class<SystemUsage>('SystemUsage')({
+	cpuUtilization: Schema.Number,
+	memoryUtilization: Schema.Number
+}) {}

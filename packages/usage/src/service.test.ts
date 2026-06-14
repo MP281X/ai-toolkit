@@ -96,6 +96,18 @@ describe('@deslop/usage service', () => {
 		expect(codexRequest?.headers['authorization']).toBe('Bearer codex-token')
 	})
 
+	it('reports system utilization percentages', async () => {
+		const result = await usageWith(
+			request => jsonResponse(request, {}),
+			usage => usage.system
+		)
+
+		expect(result.cpuUtilization).toBeGreaterThanOrEqual(0)
+		expect(result.cpuUtilization).toBeLessThanOrEqual(100)
+		expect(result.memoryUtilization).toBeGreaterThanOrEqual(0)
+		expect(result.memoryUtilization).toBeLessThanOrEqual(100)
+	})
+
 	it('fails with a sign-in error on 401 without breaking the other provider', async () => {
 		const result = await usageWith(
 			request =>

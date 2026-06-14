@@ -1,4 +1,4 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import type {TerminalStatus} from './schema.ts'
 
@@ -9,10 +9,20 @@ const terminalOscCarryBytes = 4096
 export function terminalChunks(data: string, chunkSize = terminalChunkBytes) {
 	if (data === '') return Array.empty<string>()
 
-	return pipe(
-		Array.range(0, Math.floor((data.length - 1) / chunkSize)),
-		Array.map(index => data.slice(index * chunkSize, (index + 1) * chunkSize))
-	)
+	const chunks: string[] = []
+	let start = 0
+	while (start < data.length) {
+		let end = Math.min(start + chunkSize, data.length)
+		if (end < data.length) {
+			const previous = data.charCodeAt(end - 1)
+			const next = data.charCodeAt(end)
+			if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end -= 1
+		}
+		if (end === start) end = Math.min(start + chunkSize, data.length)
+		chunks.push(data.slice(start, end))
+		start = end
+	}
+	return chunks
 }
 
 export function terminalTitleStatus(title: string): TerminalStatus {

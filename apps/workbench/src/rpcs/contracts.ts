@@ -24,7 +24,7 @@ import {
 } from '@deslop/git/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
-import {UsageError, UsageProvider} from '@deslop/usage/schema'
+import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
 
 const CwdPayloadFields = {cwd: Schema.String}
 const CwdPayload = Schema.Struct(CwdPayloadFields)
@@ -135,11 +135,21 @@ export class RpcContracts extends RpcGroup.make(
 		success: TerminalStatus
 	}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
-	Rpc.make('terminal.attach', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalFrame}),
+	Rpc.make('terminal.attach', {
+		error: TerminalError,
+		payload: Schema.Struct({
+			...TerminalPayloadFields,
+			cols: Schema.optional(Schema.Number),
+			rows: Schema.optional(Schema.Number)
+		}),
+		stream: true,
+		success: TerminalFrame
+	}),
 	Rpc.make('usage.watch', {
 		error: UsageError,
 		payload: Schema.Struct({provider: Schema.Literals(['claude', 'codex'])}),
 		stream: true,
 		success: UsageProvider
-	})
+	}),
+	Rpc.make('usage.system.watch', {error: UsageError, stream: true, success: SystemUsage})
 ) {}

@@ -24,12 +24,8 @@ export const TerminalInput = Schema.Union([
 	Schema.Struct({data: Schema.Uint8ArrayFromBase64, type: Schema.Literal('bytes')})
 ])
 
-export type TerminalCursor = typeof TerminalCursor.Type
-export const TerminalCursor = Schema.Struct({epoch: Schema.Number, sequence: Schema.Number})
-
 export type TerminalFrame = typeof TerminalFrame.Type
 export const TerminalFrame = Schema.Union([
-	Schema.Struct({cursor: TerminalCursor, type: Schema.Literal('reset')}),
-	Schema.Struct({cursor: TerminalCursor, data: Schema.String, type: Schema.Literal('output')}),
-	Schema.Struct({cursor: TerminalCursor, size: TerminalSize, type: Schema.Literal('resize')})
+	Schema.Struct({sequence: Schema.Number, type: Schema.Literal('reset')}),
+	Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('output')})
 ])

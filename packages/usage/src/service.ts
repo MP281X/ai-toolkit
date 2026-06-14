@@ -1,11 +1,11 @@
-import {homedir} from 'node:os'
+import {cpus, freemem, homedir, totalmem} from 'node:os'
 
 import {Config, Context, Effect, FileSystem, Layer, Schema, Stream, pipe} from 'effect'
 
 import {HttpClient} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import {UsageError, UsageProvider, UsageWindow} from './schema.ts'
+import {SystemUsage, UsageError, UsageProvider, UsageWindow} from './schema.ts'
 
 const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
@@ -34,6 +34,16 @@ function codexWindow(window: typeof CodexUsageWindow.Type) {
 		resetsAt: typeof window.reset_at === 'number' ? new Date(window.reset_at * 1000).toISOString() : undefined,
 		utilization: window.used_percent
 	})
+}
+
+function cpuTimes() {
+	return cpus().reduce(
+		(total, cpu) => ({
+			idle: total.idle + cpu.times.idle,
+			total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
+		}),
+		{idle: 0, total: 0}
+	)
 }
 
 function usageError(error: unknown) {
@@ -103,6 +113,21 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.catch(() => new UsageError({message: 'not signed in'}))
 		)
 
+		const system = pipe(
+			Effect.gen(function* () {
+				const before = cpuTimes()
+				yield* Effect.sleep('250 millis')
+				const after = cpuTimes()
+				const total = after.total - before.total
+				const idle = after.idle - before.idle
+				return new SystemUsage({
+					cpuUtilization: total <= 0 ? 0 : ((total - idle) / total) * 100,
+					memoryUtilization: ((totalmem() - freemem()) / totalmem()) * 100
+				})
+			}),
+			Effect.withSpan('Usage.system')
+		)
+
 		const claude = pipe(
 			Effect.all({token: claudeToken, version: claudeVersion}, {concurrency: 2}),
 			Effect.flatMap(({token, version}) =>
@@ -161,7 +186,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.withSpan('Usage.codex')
 		)
 
-		return {claude, codex}
+		return {claude, codex, system}
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)

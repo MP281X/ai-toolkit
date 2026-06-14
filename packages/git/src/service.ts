@@ -167,6 +167,8 @@ const repositoryProbeGlobs = [
 	'!**/build/**',
 	'!**/target/**'
 ]
+const repositoryProbePermissionError =
+	/: (?:Permission denied|Operation not permitted|Access is denied\.?) \(os error (?:1|5|13)\)$/u
 
 const reviewExclusionPathspecs = [
 	':(exclude)pnpm-lock.yaml',
@@ -284,6 +286,11 @@ function sameProjectSnapshot(left: readonly GitProject[], right: readonly GitPro
 			)
 		})
 	})
+}
+
+function repositoryProbeOnlyPermissionErrors(stderr: string) {
+	const lines = pipe(stderr, String.split(/\r?\n/u), Array.filter(String.isNonEmpty))
+	return !Array.isReadonlyArrayEmpty(lines) && Array.every(lines, line => repositoryProbePermissionError.test(line))
 }
 
 function segmentsByFile(segments: readonly GitDiffSegment[]) {
@@ -559,11 +566,12 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				untracked: status.untracked
 			})
 		})
-		const commandString = Effect.fnUntraced(function* (command: string, args: readonly string[]) {
+		const repositoryProbeOutput = Effect.fnUntraced(function* (searchRoots: readonly string[]) {
+			const args = ['--hidden', '--files', ...Array.flatMap(repositoryProbeGlobs, glob => ['-g', glob]), ...searchRoots]
 			return yield* Effect.scoped(
 				Effect.gen(function* () {
 					const handle = yield* pipe(
-						spawner.spawn(ChildProcess.make(command, args, {stderr: 'pipe', stdout: 'pipe'})),
+						spawner.spawn(ChildProcess.make('rg', args, {stderr: 'pipe', stdout: 'pipe'})),
 						Effect.mapError(cause => new GitError({cause}))
 					)
 					const output = yield* Effect.all(
@@ -586,14 +594,16 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 						Effect.mapError(cause => new GitError({cause}))
 					)
 
-					if (exitCode === ChildProcessSpawner.ExitCode(0) || exitCode === ChildProcessSpawner.ExitCode(1)) {
+					if (
+						exitCode === ChildProcessSpawner.ExitCode(0) ||
+						exitCode === ChildProcessSpawner.ExitCode(1) ||
+						(exitCode === ChildProcessSpawner.ExitCode(2) && repositoryProbeOnlyPermissionErrors(output.stderr))
+					) {
 						return output.stdout
 					}
 
 					return yield* new GitError({
-						cause: new Error(
-							output.stderr || output.stdout || `${command} ${Array.join(' ')(args)} exited with ${exitCode}`
-						)
+						cause: new Error(output.stderr || output.stdout || `rg ${Array.join(' ')(args)} exited with ${exitCode}`)
 					})
 				})
 			)
@@ -635,12 +645,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			const searchRoots = yield* repositorySearchRoots(root)
 			if (Array.isReadonlyArrayEmpty(searchRoots)) return Array.getSomes([directRoot])
 
-			const output = yield* commandString('rg', [
-				'--hidden',
-				'--files',
-				...Array.flatMap(repositoryProbeGlobs, glob => ['-g', glob]),
-				...searchRoots
-			])
+			const output = yield* repositoryProbeOutput(searchRoots)
 
 			return pipe(
 				output,

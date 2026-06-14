@@ -1,26 +1,35 @@
 import {mkdirSync, mkdtempSync, rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {dirname, join} from 'node:path'
+import {fileURLToPath} from 'node:url'
 
-import {Context, Effect, Fiber, Layer, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array as Arr, Context, Effect, Fiber, Layer, Stream, SubscriptionRef, pipe} from 'effect'
 
+import HeadlessModule from '@xterm/headless'
 import {ChildProcess} from 'effect/unstable/process'
 import {describe, expect, it} from 'vite-plus/test'
 
-import type {TerminalFrame} from './schema.ts'
+import {terminalChunks} from './model.ts'
+import type {TerminalFrame, TerminalSize} from './schema.ts'
 import {Terminal} from './service.ts'
 
 type TerminalService = typeof Terminal.Service
+
+const fixturePath = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/tui-torture.ts')
 
 function collectOutput(frames: readonly TerminalFrame[]) {
 	return frames.flatMap(frame => (frame.type === 'output' ? [frame.data] : [])).join('')
 }
 
-function framesUntil(terminal: TerminalService, predicate: (frames: readonly TerminalFrame[]) => boolean) {
+function framesUntil(
+	terminal: TerminalService,
+	predicate: (frames: readonly TerminalFrame[]) => boolean,
+	size?: TerminalSize
+) {
 	const seenFrames: TerminalFrame[] = []
 
 	return pipe(
-		terminal.attach(),
+		terminal.attach(size),
 		Stream.takeUntilEffect(frame =>
 			Effect.sync(() => {
 				seenFrames.push(frame)
@@ -31,14 +40,88 @@ function framesUntil(terminal: TerminalService, predicate: (frames: readonly Ter
 	)
 }
 
+function outputUntil(
+	terminal: TerminalService,
+	predicate: (state: {readonly tail: string; readonly total: number}) => boolean
+) {
+	const chunks: string[] = []
+	let tail = ''
+	let total = 0
+
+	return pipe(
+		terminal.attach(),
+		Stream.takeUntilEffect(frame =>
+			Effect.sync(() => {
+				if (frame.type === 'output') {
+					chunks.push(frame.data)
+					total += frame.data.length
+					tail = `${tail}${frame.data}`.slice(-128)
+				}
+				return predicate({tail, total})
+			})
+		),
+		Stream.runDrain,
+		Effect.map(() => ({chunks, total}))
+	)
+}
+
+const defaultRenderSize: TerminalSize = {cols: 80, rows: 24}
+
+async function renderFrames(frames: readonly TerminalFrame[], size: TerminalSize = defaultRenderSize) {
+	const terminal = new HeadlessModule.Terminal({...size, allowProposedApi: true, scrollback: 20_000})
+	for (const frame of frames) {
+		if (frame.type === 'reset') {
+			terminal.reset()
+			continue
+		}
+		await new Promise<void>(resolve => {
+			terminal.write(frame.data, resolve)
+		})
+	}
+	const buffer = terminal.buffer.active
+	const lines = pipe(
+		Arr.range(0, buffer.length - 1),
+		Arr.map(index => buffer.getLine(index)?.translateToString(true) ?? '')
+	)
+	const screen = {bufferType: buffer.type, cursorX: buffer.cursorX, cursorY: buffer.cursorY, text: lines.join('\n')}
+	terminal.dispose()
+	return screen
+}
+
+function midStreamEquivalence(delay: `${number} millis`) {
+	return Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const context = yield* Layer.buildWithScope(
+					Terminal.layer({command: ChildProcess.make(process.execPath, [fixturePath]), cwd: process.cwd()}),
+					yield* Effect.scope
+				)
+				const terminal = Context.get(context, Terminal)
+				const first = yield* pipe(
+					framesUntil(terminal, frames => collectOutput(frames).includes('phase:done'), {cols: 60, rows: 12}),
+					Effect.forkScoped
+				)
+				yield* terminal.restart()
+				yield* Effect.sleep(delay)
+				const mid = yield* framesUntil(terminal, frames => collectOutput(frames).includes('phase:done'), {
+					cols: 60,
+					rows: 12
+				})
+
+				return {first: yield* Fiber.join(first), mid}
+			})
+		)
+	)
+}
+
 describe('@deslop/terminal service', () => {
-	it('supports black-box terminal mocks with cursor replay and command callbacks', async () => {
+	it('supports black-box terminal mocks with command callbacks', async () => {
 		const writes: string[] = []
 		const resizes: string[] = []
 		const result = await Effect.runPromise(
 			Effect.gen(function* () {
 				const terminal = yield* Terminal
-				const replay = yield* pipe(terminal.attach({epoch: 1, sequence: 1}), Stream.runCollect)
+				const replay = yield* pipe(terminal.attach({cols: 80, rows: 24}), Stream.runCollect)
 				yield* terminal.write({data: 'input', type: 'text'})
 				yield* terminal.resize({cols: 80, rows: 24})
 				const stopped = yield* terminal.stop()
@@ -48,9 +131,9 @@ describe('@deslop/terminal service', () => {
 				Effect.provide(
 					Terminal.layerMock({
 						frames: [
-							{cursor: {epoch: 1, sequence: 0}, type: 'reset'},
-							{cursor: {epoch: 1, sequence: 1}, data: 'first', type: 'output'},
-							{cursor: {epoch: 1, sequence: 2}, data: 'second', type: 'output'}
+							{sequence: 0, type: 'reset'},
+							{data: 'first', sequence: 1, type: 'output'},
+							{data: 'second', sequence: 2, type: 'output'}
 						],
 						resize: size => Effect.sync(() => resizes.push(`${size.cols}x${size.rows}`)),
 						write: input => Effect.sync(() => writes.push(input.type === 'text' ? input.data : 'bytes'))
@@ -59,7 +142,7 @@ describe('@deslop/terminal service', () => {
 			)
 		)
 
-		expect(result.output).toBe('second')
+		expect(result.output).toBe('firstsecond')
 		expect(writes).toEqual(['input'])
 		expect(resizes).toEqual(['80x24'])
 		expect(result.stopped).toEqual({state: 'stopped', title: ''})
@@ -114,36 +197,17 @@ describe('@deslop/terminal service', () => {
 		}
 	})
 
-	it('preserves a burst of PTY output through raw transcript replay', async () => {
-		const transcript = await Effect.runPromise(
-			Effect.scoped(
-				Effect.gen(function* () {
-					const context = yield* Layer.buildWithScope(
-						Terminal.layer({
-							command: ChildProcess.make('sh', [
-								'-lc',
-								'printf start; i=0; while [ "$i" -lt 5000 ]; do printf x; i=$((i + 1)); done; printf end'
-							]),
-							cwd: process.cwd()
-						}),
-						yield* Effect.scope
-					)
-					const terminal = Context.get(context, Terminal)
-					yield* terminal.restart()
+	for (const delay of ['20 millis', '80 millis', '160 millis', '260 millis'] as const) {
+		it(`makes a ${delay} snapshot client equivalent to a client attached from the start`, async () => {
+			const result = await midStreamEquivalence(delay)
 
-					return yield* framesUntil(terminal, currentFrames => collectOutput(currentFrames).includes('end'))
-				})
+			await expect(renderFrames(result.mid, {cols: 60, rows: 12})).resolves.toEqual(
+				await renderFrames(result.first, {cols: 60, rows: 12})
 			)
-		)
-		const output = collectOutput(transcript)
+		})
+	}
 
-		expect(transcript[0]?.type).toBe('reset')
-		expect(output).toContain('start')
-		expect(output).toContain('end')
-		expect(output.length).toBeGreaterThan(5_000)
-	})
-
-	it('restores at least 20,000 recent terminal lines when a cursor is too old', async () => {
+	it('keeps numbered snapshot and live output contiguous without gaps or duplicates', async () => {
 		const frames = await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -151,7 +215,7 @@ describe('@deslop/terminal service', () => {
 						Terminal.layer({
 							command: ChildProcess.make(process.execPath, [
 								'-e',
-								"process.stdout.write(Array.from({length: 20100}, (_, index) => `line-${index.toString().padStart(5, '0')}\\n`).join(''))"
+								"let i=0; const tick=()=>{ if (i >= 80) return; process.stdout.write(`number-${String(i).padStart(3, '0')}\\r\\n`); i++; setTimeout(tick, 4) }; tick()"
 							]),
 							cwd: process.cwd()
 						}),
@@ -159,60 +223,23 @@ describe('@deslop/terminal service', () => {
 					)
 					const terminal = Context.get(context, Terminal)
 					yield* terminal.restart()
-					const liveFrames = yield* framesUntil(terminal, currentFrames =>
-						collectOutput(currentFrames).includes('line-20099')
-					)
-					const expiredCursor = liveFrames[0]?.cursor
-					expect(expiredCursor).toBeDefined()
-
-					return yield* pipe(
-						terminal.attach(expiredCursor),
-						Stream.takeUntil(frame => frame.type === 'output' && frame.data.includes('line-20099')),
-						Stream.runCollect
-					)
+					yield* Effect.sleep('120 millis')
+					return yield* framesUntil(terminal, currentFrames => collectOutput(currentFrames).includes('number-079'))
 				})
 			)
 		)
-		const output = collectOutput(frames)
+		const numbers = [...collectOutput(frames).matchAll(/number-(\d+)/g)].map(match => Number(match[1]))
 
-		expect(output).toContain('line-00100')
-		expect(output).toContain('line-20099')
-		expect(output.split('\n').filter(line => line !== '').length).toBeGreaterThanOrEqual(20_000)
-	}, 10_000)
-
-	it('resumes replay after the acknowledged cursor', async () => {
-		const replay = await Effect.runPromise(
-			Effect.scoped(
-				Effect.gen(function* () {
-					const context = yield* Layer.buildWithScope(
-						Terminal.layer({
-							command: ChildProcess.make('sh', ['-lc', 'printf first; sleep 0.1; printf second']),
-							cwd: process.cwd()
-						}),
-						yield* Effect.scope
-					)
-					const terminal = Context.get(context, Terminal)
-					yield* terminal.restart()
-					const firstFrames = yield* framesUntil(terminal, frames => collectOutput(frames).includes('first'))
-					const cursor = firstFrames[firstFrames.length - 1]?.cursor
-					expect(cursor).toBeDefined()
-
-					return yield* pipe(
-						terminal.attach(cursor),
-						Stream.takeUntil(frame => frame.type === 'output' && frame.data.includes('second')),
-						Stream.runCollect
-					)
-				})
+		expect(numbers).toEqual(
+			pipe(
+				Arr.range(0, 79),
+				Arr.map(index => index)
 			)
 		)
-		const output = collectOutput(replay)
-
-		expect(output).not.toContain('first')
-		expect(output).toContain('second')
 	})
 
-	it('advances the transcript epoch on restart', async () => {
-		const epochs = await Effect.runPromise(
+	it('keeps sequences increasing across restart reset frames', async () => {
+		const sequences = await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
 					const context = yield* Layer.buildWithScope(
@@ -223,21 +250,94 @@ describe('@deslop/terminal service', () => {
 					yield* terminal.restart()
 					const first = yield* framesUntil(terminal, frames => collectOutput(frames).includes('ready'))
 					yield* terminal.restart()
-					const second = yield* framesUntil(terminal, frames => {
-						const reset = frames.find(frame => frame.type === 'reset')
+					const second = yield* framesUntil(terminal, frames => collectOutput(frames).includes('ready'))
 
-						return reset !== undefined && reset.cursor.epoch > (first[0]?.cursor.epoch ?? 0)
-					})
-
-					return [first[0]?.cursor.epoch, second[0]?.cursor.epoch]
+					return [...first, ...second].map(frame => frame.sequence)
 				})
 			)
 		)
 
-		expect(epochs[1]).toBeGreaterThan(epochs[0] ?? -1)
+		expect(sequences).toEqual([...sequences].toSorted((left, right) => left - right))
+		expect(new Set(sequences).size).toBe(sequences.length)
 	})
 
-	it('delivers live attach data without dropping chunks under burst output', async () => {
+	it('takes snapshots at the provided attach size', async () => {
+		const frames = await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const context = yield* Layer.buildWithScope(
+						Terminal.layer({command: ChildProcess.make('sh', ['-lc', 'printf abcdef']), cwd: process.cwd()}),
+						yield* Effect.scope
+					)
+					const terminal = Context.get(context, Terminal)
+					yield* pipe(terminal.attach({cols: 3, rows: 3}), Stream.take(1), Stream.runCollect)
+					yield* terminal.restart()
+					yield* framesUntil(terminal, currentFrames => collectOutput(currentFrames).includes('abcdef'))
+
+					return yield* pipe(terminal.attach({cols: 3, rows: 3}), Stream.take(2), Stream.runCollect)
+				})
+			)
+		)
+
+		const screen = await renderFrames(frames, {cols: 3, rows: 3})
+
+		expect(screen.text).toContain('abc\ndef')
+	})
+
+	it('keeps repaint-storm snapshots bounded by screen scrollback instead of raw byte history', async () => {
+		const frames = await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const context = yield* Layer.buildWithScope(
+						Terminal.layer({
+							command: ChildProcess.make(process.execPath, [
+								'-e',
+								"for (let i=0; i<5000; i++) process.stdout.write(`\\x1b[2K\\x1b[1Grepaint-${i}`); process.stdout.write('\\r\\ndone')"
+							]),
+							cwd: process.cwd()
+						}),
+						yield* Effect.scope
+					)
+					const terminal = Context.get(context, Terminal)
+					yield* terminal.restart()
+					yield* framesUntil(terminal, currentFrames => collectOutput(currentFrames).includes('done'))
+
+					return yield* pipe(terminal.attach({cols: 80, rows: 24}), Stream.take(2), Stream.runCollect)
+				})
+			)
+		)
+
+		expect(collectOutput(frames).length).toBeLessThan(10_000)
+		expect(collectOutput(frames)).toContain('done')
+	})
+
+	it('preserves screen state for randomized chunk boundaries over escape-dense wide text', async () => {
+		const data = [
+			'chunk-fuzz:start\r\n',
+			...pipe(
+				Arr.range(0, 120),
+				Arr.map(index => `\u001b[2K\u001b[1Grow-${index}-🙂-┌─┐\r\n`)
+			),
+			'\u001b[?1049halt-🙂\r\n\u001b[?1049l',
+			'chunk-fuzz:end\r\n'
+		].join('')
+		const expected = await renderFrames([{data, sequence: 1, type: 'output'}])
+		let seed = 17
+
+		for (let round = 0; round < 25; round += 1) {
+			seed = (seed * 1103515245 + 12345) % 2147483648
+			const size = (seed % (64 * 1024)) + 1
+			const frames = terminalChunks(data, size).map((chunk, index) => ({
+				data: chunk,
+				sequence: index + 1,
+				type: 'output' as const
+			}))
+
+			expect(await renderFrames(frames)).toEqual(expected)
+		}
+	})
+
+	it('delivers burst output to an active client when another client is dropped as slow', async () => {
 		const output = await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -245,28 +345,65 @@ describe('@deslop/terminal service', () => {
 						Terminal.layer({
 							command: ChildProcess.make(process.execPath, [
 								'-e',
-								"process.stdout.write(`start${'x'.repeat(2_000_000)}end`)"
+								"let i=0; const tick=()=>{ if (i >= 1400) { process.stdout.write('end'); return } process.stdout.write(`chunk-${i}\\r\\n`); i++; setImmediate(tick) }; tick()"
 							]),
 							cwd: process.cwd()
 						}),
 						yield* Effect.scope
 					)
 					const terminal = Context.get(context, Terminal)
-					const fiber = yield* pipe(
+					yield* pipe(
 						terminal.attach(),
-						Stream.takeUntil(frame => frame.type === 'output' && frame.data.includes('end')),
-						Stream.runCollect,
+						Stream.runForEach(() => Effect.never),
 						Effect.forkScoped
 					)
 					yield* terminal.restart()
+					yield* Effect.sleep('50 millis')
 
-					return collectOutput(yield* Fiber.join(fiber))
+					return collectOutput(
+						yield* framesUntil(terminal, currentFrames => collectOutput(currentFrames).includes('end'))
+					)
 				})
 			)
 		)
 
-		expect(output).toContain('start')
 		expect(output).toContain('end')
-		expect(output.length).toBeGreaterThan(2_000_000)
 	})
+
+	it('delivers a 50MB burst with an attached client and a slow dropped client', async () => {
+		const output = await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const context = yield* Layer.buildWithScope(
+						Terminal.layer({
+							command: ChildProcess.make(process.execPath, [
+								'-e',
+								"process.stdout.write('start'); const chunk = 'x'.repeat(1024 * 1024); for (let i = 0; i < 50; i++) process.stdout.write(chunk); process.stdout.write('end')"
+							]),
+							cwd: process.cwd()
+						}),
+						yield* Effect.scope
+					)
+					const terminal = Context.get(context, Terminal)
+					yield* pipe(
+						terminal.attach(),
+						Stream.runForEach(() => Effect.never),
+						Effect.forkScoped
+					)
+					const active = yield* pipe(
+						outputUntil(terminal, state => state.tail.includes('end')),
+						Effect.forkScoped
+					)
+					yield* terminal.restart()
+
+					return yield* Fiber.join(active)
+				})
+			)
+		)
+		const text = output.chunks.join('')
+
+		expect(text.startsWith('start')).toBe(true)
+		expect(text.endsWith('end')).toBe(true)
+		expect(output.total).toBeGreaterThan(50 * 1024 * 1024)
+	}, 60_000)
 })

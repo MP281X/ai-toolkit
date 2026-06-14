@@ -592,6 +592,26 @@ describe('@deslop/git service', () => {
 		})
 	})
 
+	it('keeps repository discovery results when a searched directory is unreadable', async () => {
+		await withTempRoot(async root => {
+			const repo = initRepo(join(root, 'repo'))
+			const blocked = join(root, 'blocked')
+			mkdirSync(blocked)
+			chmodSync(blocked, 0)
+
+			try {
+				const repositories = await runWorkspace(
+					root,
+					Effect.flatMap(GitWorkspace, service => service.listRepositoriesFrom(root))
+				)
+
+				expect(repositories.map(repository => repository.root)).toEqual([repo])
+			} finally {
+				chmodSync(blocked, 0o700)
+			}
+		})
+	})
+
 	it('does not publish duplicate project snapshots when refresh is structurally unchanged', async () => {
 		await withTempRoot(async root => {
 			initRepo(join(root, 'repo'))

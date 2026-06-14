@@ -594,7 +594,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						getTerminal(TerminalPayload.make(payload)),
-						Effect.map(sessionTerminal => sessionTerminal.attach())
+						Effect.map(sessionTerminal =>
+							sessionTerminal.attach(
+								payload.cols === undefined || payload.rows === undefined
+									? undefined
+									: {cols: payload.cols, rows: payload.rows}
+							)
+						)
 					)
 				),
 			'terminal.resize': payload =>
@@ -642,6 +648,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
 				),
+			'usage.system.watch': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds'))),
 			'usage.watch': payload =>
 				pipe(
 					Stream.fromEffect(payload.provider === 'claude' ? usage.claude : usage.codex),
