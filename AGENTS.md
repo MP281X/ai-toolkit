@@ -25,6 +25,8 @@
 - Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
 - Structure only from domain, Effect, React, or external boundary
 - Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
+- Optimize the actual method/workflow to be fast enough on demand; do not hide slow paths with preloading, broad caching, speculative warming, or background refresh unless explicitly requested
+- Treat caching/preloading as correctness-owned state with invalidation cost, not as a substitute for making the underlying operation efficient and observable
 - Inline simple types, props, helpers, expressions, and derived values
 - Repeated local code stays visible when extraction only hides
 - Delete/replace incidental complexity

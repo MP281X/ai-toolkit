@@ -44,6 +44,7 @@ type TerminalMock = {
 const terminalScrollbackLines = 20_000
 const terminalDataQueueCapacity = 128
 const terminalDataQueueLowWater = 32
+const terminalBackpressureCapacity = 1024
 
 function terminalInputString(input: TerminalInput) {
 	return input.type === 'text' ? input.data : new TextDecoder().decode(input.data)
@@ -89,8 +90,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const processArgs = config.command?.args ?? []
 		const processEnv = config.command?.options.env ?? {}
 		const processCwd = config.command?.options.cwd ?? config.cwd
-		const autostart = config.command === undefined
-		const status = yield* SubscriptionRef.make<TerminalStatus>({state: autostart ? 'starting' : 'idle', title: ''})
+		const restartOnExit = config.command === undefined
+		const status = yield* SubscriptionRef.make<TerminalStatus>({state: 'idle', title: ''})
 
 		const nextSequence = Effect.fnUntraced(function* () {
 			return yield* Ref.modify(sequenceRef, current => [current, current + 1] as const)
@@ -231,6 +232,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const output = {data: chunk, process: subprocess}
 				if (Queue.offerUnsafe(dataQueue, output)) return
 
+				if (pendingBackpressure.length >= terminalBackpressureCapacity) {
+					Effect.runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
+					return
+				}
+
 				pendingBackpressure.push(output)
 				if (backpressureDraining) return
 
@@ -256,7 +262,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							if (current !== handle) return
 
 							yield* Ref.update(processRef, value => (value === handle ? undefined : value))
-							if (autostart) {
+							if (restartOnExit) {
 								yield* pipe(
 									Effect.sleep('1 second'),
 									Effect.andThen(spawnProcess()),
@@ -275,6 +281,20 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* setStatus('running')
 
 			return yield* SubscriptionRef.get(status)
+		})
+
+		const startDefaultProcess = Effect.fnUntraced(function* () {
+			if (config.command !== undefined) return
+			if (yield* Ref.get(processRef)) return
+
+			yield* pipe(
+				Effect.gen(function* () {
+					if (yield* Ref.get(processRef)) return
+					yield* spawnProcess()
+				}),
+				Semaphore.withPermit(lifecycleLock),
+				Effect.catch(() => setStatus('failed'))
+			)
 		})
 
 		yield* pipe(
@@ -323,23 +343,16 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				yield* Effect.sync(() => screen.dispose())
 			})
 		)
-		if (autostart) {
-			yield* pipe(
-				spawnProcess(),
-				Semaphore.withPermit(lifecycleLock),
-				Effect.catch(() => setStatus('failed'))
-			)
-		}
-
 		return {
 			attach: (size?: TerminalSize) =>
 				Stream.unwrap(
 					Effect.gen(function* () {
 						yield* Effect.annotateCurrentSpan({cols: size?.cols ?? -1, cwd: config.cwd, rows: size?.rows ?? -1})
 						const queue = yield* Queue.bounded<TerminalFrame, Cause.Done>(1024)
+						if (size !== undefined) yield* pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
+						yield* startDefaultProcess()
 						const snapshot = yield* pipe(
 							Effect.gen(function* () {
-								if (size !== undefined) yield* resizeLocked(size)
 								const reset: TerminalFrame = {sequence: yield* nextSequence(), type: 'reset'}
 								const frames: TerminalFrame[] = [reset]
 								for (const data of terminalChunks(serialize.serialize({scrollback: terminalScrollbackLines}))) {

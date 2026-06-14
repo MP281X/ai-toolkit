@@ -51,7 +51,8 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.flatMap(client => client('review.metadata', {cwd}))
+			Effect.map(client => client('review.metadata', {cwd})),
+			Stream.unwrap
 		)
 	)
 )
@@ -85,7 +86,7 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('review.state.watch', {cwd})),
+			Effect.map(client => client('review.state', {cwd})),
 			Stream.unwrap
 		)
 	)
@@ -263,7 +264,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					Option.getOrUndefined
 				)
 			: undefined) ?? reviewDiffsValue[0]
-	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
 	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
@@ -327,7 +327,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	function refreshReview() {
-		refreshSuggestedMetadata()
 		refreshDiffs()
 		refreshReviewState()
 	}
@@ -405,6 +404,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							refreshReview={refreshReview}
 							unpushedCommits={suggestedMetadataLoaded && suggestedMetadata.value.unpushedCommits}
 							unpushedCount={Array.length(localCommits)}
+							upstream={suggestedMetadataLoaded ? suggestedMetadata.value.upstream : undefined}
 						/>
 						<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
 							<ResizablePanel defaultSize="55%" minSize="15%">
@@ -566,6 +566,7 @@ function CommitActionForm(input: {
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 	readonly unpushedCount: number
+	readonly upstream?: {readonly ahead: number; readonly behind: number}
 }) {
 	const commitMessageState = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
@@ -630,6 +631,14 @@ function CommitActionForm(input: {
 					}
 				>
 					↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
+				</span>
+			)}
+			{input.upstream !== undefined && (input.upstream.ahead > 0 || input.upstream.behind > 0) && (
+				<span
+					className="text-muted-foreground px-0.5 text-xs"
+					title={`${input.upstream.ahead} ahead, ${input.upstream.behind} behind upstream`}
+				>
+					↑{input.upstream.ahead} ↓{input.upstream.behind}
 				</span>
 			)}
 			<Button

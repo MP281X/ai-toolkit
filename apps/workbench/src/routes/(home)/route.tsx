@@ -1,24 +1,16 @@
-import {useAtom, useAtomRefresh, useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
-import {AsyncResult, Atom} from 'effect/unstable/reactivity'
+import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {
-	activeHomeAtom,
-	agentProfilesAtom,
-	agentsAtom,
-	portlessRunsAtom,
-	projectsAtom,
-	scriptRunsAtom,
-	terminalStatusAtom,
-	worktreeRouteId
-} from '#lib/state.ts'
+import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
 import {UsageStrip} from '#routes/components/-usage-strip.tsx'
-import type {AgentSession, ScriptRun} from '#rpcs/contracts.ts'
+import type {AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import type {AgentCommandProfile} from '@deslop/ai/schema'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
@@ -60,7 +52,7 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/comp
 import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
 import {formatError} from '@deslop/components/utils'
-import type {GitBranch as GitBranchSchema, GitProject} from '@deslop/git/schema'
+import type {GitBranch as GitBranchSchema} from '@deslop/git/schema'
 import {GitBranchesSnapshot} from '@deslop/git/schema'
 import type {PortlessRun} from '@deslop/portless/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
@@ -98,7 +90,7 @@ function HomeLayout() {
 			activeWorktreeId: String.split('/')(state.location.pathname)[1]
 		})
 	})
-	const activeHome = useAtomSuspense(activeHomeAtom(homeRouteState.activeWorktreeId))
+	const activeHome = useAtomSuspense(activeSidebarAtom(homeRouteState.activeWorktreeId))
 
 	return (
 		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
@@ -108,6 +100,7 @@ function HomeLayout() {
 						activeProject={activeHome.value.activeProject}
 						activeWorktree={activeHome.value.activeWorktree}
 						activeView={homeRouteState.activeView}
+						agentProfiles={activeHome.value.agentProfiles}
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
 							startTransition(() => {
@@ -205,26 +198,14 @@ function sortPortlessRuns(runs: readonly PortlessRun[]) {
 	return [...runs].toSorted((left, right) => left.script.taskId.localeCompare(right.script.taskId))
 }
 
-const portlessActiveAtom = Atom.family((runs: readonly PortlessRun[]) =>
-	Atom.make(get =>
-		pipe(
-			pipe(
-				runs,
-				Array.map(run => get.result(terminalStatusAtom(portlessSession(run))))
-			),
-			Effect.all,
-			Effect.map(Array.some(status => terminalStatusActive(status.state) && status.state !== 'idle'))
-		)
-	)
-)
-
 function WorktreeScripts(input: {
 	readonly cwd: string
+	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
+	readonly scripts: readonly ScriptRun[]
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const scripts = useAtomSuspense(scriptRunsAtom(input.cwd))
 	const expandedState = useState(false)
-	const sortedRuns = sortScriptRuns(scripts.value)
+	const sortedRuns = sortScriptRuns(input.scripts)
 
 	if (sortedRuns.length === 0) return null
 
@@ -243,7 +224,12 @@ function WorktreeScripts(input: {
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{sortedRuns.map(run => (
 						<Suspense key={run.sessionId} fallback={<Loading />}>
-							<ScriptRunRow cwd={input.cwd} run={run} selectRun={input.selectRun} />
+							<ScriptRunRow
+								cwd={input.cwd}
+								run={run}
+								status={input.runStatuses[run.sessionId] ?? {state: 'idle', title: ''}}
+								selectRun={input.selectRun}
+							/>
 						</Suspense>
 					))}
 				</ul>
@@ -255,15 +241,15 @@ function WorktreeScripts(input: {
 function ScriptRunRow(input: {
 	readonly cwd: string
 	readonly run: ScriptRun
+	readonly status: AgentSession['state']
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const session = scriptSession(input.cwd, input.run)
-	const status = useAtomSuspense(terminalStatusAtom(session))
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
 
-	const active = terminalStatusActive(status.value.state) && status.value.state !== 'idle'
+	const active = terminalStatusActive(input.status.state) && input.status.state !== 'idle'
 	let actionIcon = <PlayIcon className="size-3" />
 	if (active) actionIcon = <Square className="size-3" />
 	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
@@ -302,11 +288,11 @@ function ScriptRunRow(input: {
 						</Button>
 					</span>
 				}
-				icon={<ProcessStateIcon state={status.value.state} />}
+				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
 				title={input.run.command}
 				onClick={() => {
-					input.selectRun(input.cwd, input.run.sessionId, status.value.state === 'idle')
+					input.selectRun(input.cwd, input.run.sessionId, input.status.state === 'idle')
 				}}
 			>
 				{input.run.taskId}
@@ -317,12 +303,12 @@ function ScriptRunRow(input: {
 
 function WorktreePortless(input: {
 	readonly cwd: string
+	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
+	readonly runs: readonly PortlessRun[]
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const runs = useAtomSuspense(portlessRunsAtom(input.cwd))
-
-	const sortedRuns = sortPortlessRuns(runs.value)
+	const sortedRuns = sortPortlessRuns(input.runs)
 
 	if (sortedRuns.length === 0) return null
 
@@ -330,6 +316,7 @@ function WorktreePortless(input: {
 		<PortlessGroup
 			cwd={input.cwd}
 			runs={sortedRuns}
+			runStatuses={input.runStatuses}
 			selectPortless={input.selectPortless}
 			selectRun={input.selectRun}
 		/>
@@ -338,18 +325,24 @@ function WorktreePortless(input: {
 
 function PortlessGroup(input: {
 	readonly cwd: string
+	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
 	readonly runs: readonly PortlessRun[]
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const expandedState = useState(true)
-	const active = useAtomSuspense(portlessActiveAtom(input.runs))
+	const active = Array.some(
+		input.runs,
+		run =>
+			terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
+			input.runStatuses[run.script.sessionId]?.state !== 'idle'
+	)
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
 
 	let actionIcon = <PlayIcon className="size-3" />
-	if (active.value) actionIcon = <Square className="size-3" />
+	if (active) actionIcon = <Square className="size-3" />
 	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
 
 	async function toggleRuns() {
@@ -359,7 +352,7 @@ function PortlessGroup(input: {
 		try {
 			for (const run of input.runs) {
 				const session = portlessSession(run)
-				if (active.value) await stop({payload: session})
+				if (active) await stop({payload: session})
 				else await restart({payload: session})
 			}
 		} catch (error) {
@@ -383,7 +376,7 @@ function PortlessGroup(input: {
 							event.stopPropagation()
 							void toggleRuns()
 						}}
-						title={active.value ? 'Stop deslop' : 'Start deslop'}
+						title={active ? 'Stop deslop' : 'Start deslop'}
 					>
 						{actionIcon}
 					</Button>
@@ -400,7 +393,12 @@ function PortlessGroup(input: {
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 					{input.runs.map(run => (
 						<Suspense key={run.script.sessionId} fallback={<Loading />}>
-							<PortlessRunRow run={run} selectPortless={input.selectPortless} selectRun={input.selectRun} />
+							<PortlessRunRow
+								run={run}
+								status={input.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}}
+								selectPortless={input.selectPortless}
+								selectRun={input.selectRun}
+							/>
 						</Suspense>
 					))}
 				</ul>
@@ -411,12 +409,10 @@ function PortlessGroup(input: {
 
 function PortlessRunRow(input: {
 	readonly run: PortlessRun
+	readonly status: AgentSession['state']
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const session = portlessSession(input.run)
-	const status = useAtomSuspense(terminalStatusAtom(session))
-
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -435,11 +431,11 @@ function PortlessRunRow(input: {
 						<GlobeIcon className="size-3" />
 					</Button>
 				}
-				icon={<ProcessStateIcon state={status.value.state} />}
+				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
 				title={input.run.script.command ?? input.run.script.taskId}
 				onClick={() => {
-					input.selectRun(input.run.script.cwd, input.run.script.sessionId, status.value.state === 'idle')
+					input.selectRun(input.run.script.cwd, input.run.script.sessionId, input.status.state === 'idle')
 				}}
 			>
 				{input.run.script.taskId}
@@ -484,15 +480,18 @@ function AgentSessionRow(input: {
 	)
 }
 
-function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd: string, agentId: string) => void}) {
+function WorktreeAgents(input: {
+	readonly cwd: string
+	readonly profiles: readonly AgentCommandProfile[]
+	readonly sessions: readonly AgentSession[]
+	readonly selectAgent: (cwd: string, agentId: string) => void
+}) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
-	const profiles = useAtomSuspense(agentProfilesAtom)
-	const sessions = useAtomSuspense(agentsAtom(input.cwd))
 	const startingProfilesState = useState<ReadonlySet<string>>(new Set())
 	const stoppingSessionsState = useState<ReadonlySet<string>>(new Set())
 
-	async function startAgent(profile: (typeof profiles.value)[number]) {
+	async function startAgent(profile: (typeof input.profiles)[number]) {
 		if (startingProfilesState[0].has(profile.id)) return
 
 		startingProfilesState[1](current => new Set([...current, profile.id]))
@@ -533,9 +532,9 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 				agents
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-				{profiles.value.map(profile => {
+				{input.profiles.map(profile => {
 					const profileSessions = pipe(
-						sessions.value,
+						input.sessions,
 						Array.filter(session => session.profileId === profile.id)
 					)
 					return (
@@ -592,18 +591,18 @@ function WorktreeAgents(input: {readonly cwd: string; readonly selectAgent: (cwd
 }
 
 function WorktreeManager(input: {
-	readonly activeProject?: GitProject
-	readonly activeWorktree?: GitProject['worktrees'][number]
+	readonly activeProject?: SidebarProject
+	readonly activeWorktree?: SidebarWorktree
 	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
-	readonly projects: readonly GitProject[]
+	readonly agentProfiles: readonly AgentCommandProfile[]
+	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const refreshProjects = useAtomRefresh(projectsAtom)
-	const [cleanupResult, cleanupProject] = useAtom(RpcClient.mutation('projects.cleanup'))
+	const fixProject = useAtomSet(RpcClient.mutation('projects.fix'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const branchState = useState('')
@@ -612,6 +611,7 @@ function WorktreeManager(input: {
 	const creatingBranchState = useState('')
 	const deletingWorktreeState = useState(false)
 	const deleteDialogOpenState = useState(false)
+	const fixingProjectState = useState('')
 	const createWorktreeProject =
 		pipe(
 			input.projects,
@@ -674,7 +674,6 @@ function WorktreeManager(input: {
 			})
 			actionsOpenState[1](false)
 			branchState[1]('')
-			refreshProjects()
 			input.selectWorktree(worktreeRoot)
 		} catch (error) {
 			toast.error(formatError(error))
@@ -689,7 +688,6 @@ function WorktreeManager(input: {
 		try {
 			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
 			deleteDialogOpenState[1](false)
-			refreshProjects()
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
@@ -894,14 +892,21 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											disabled={AsyncResult.isWaiting(cleanupResult)}
+											disabled={fixingProjectState[0] === project.repository.root}
 											onClick={event => {
 												event.stopPropagation()
-												cleanupProject({payload: {cwd: project.repository.root}})
+												fixingProjectState[1](project.repository.root)
+												void fixProject({payload: {cwd: project.repository.root}})
+													.catch(error => {
+														toast.error(formatError(error))
+													})
+													.finally(() => {
+														fixingProjectState[1]('')
+													})
 											}}
-											title="Cleanup project"
+											title="Fix repo state"
 										>
-											{AsyncResult.isWaiting(cleanupResult) ? (
+											{fixingProjectState[0] === project.repository.root ? (
 												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />
@@ -928,17 +933,7 @@ function WorktreeManager(input: {
 										<li key={worktree.root} className="w-full min-w-0">
 											<TreeExplorerRow
 												key={worktree.root}
-												icon={
-													<WorktreeIcon
-														dirty={
-															worktree.status?.dirtyTracked ??
-															worktree.status?.untracked ??
-															worktree.status?.unpushedCommits ??
-															(worktree.status?.behind ?? 0) > 0
-														}
-														root={worktree.root === project.repository.root}
-													/>
-												}
+												icon={<WorktreeIcon dirty={false} root={worktree.root === project.repository.root} />}
 												selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
 												onClick={() => {
 													input.selectWorktree(worktree.root)
@@ -948,7 +943,12 @@ function WorktreeManager(input: {
 											</TreeExplorerRow>
 											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 												<Suspense fallback={<Loading />}>
-													<WorktreeAgents cwd={worktree.root} selectAgent={input.selectAgent} />
+													<WorktreeAgents
+														cwd={worktree.root}
+														profiles={input.agentProfiles}
+														sessions={worktree.agents}
+														selectAgent={input.selectAgent}
+													/>
 												</Suspense>
 												<li className="w-full min-w-0">
 													<TreeExplorerRow
@@ -964,12 +964,19 @@ function WorktreeManager(input: {
 												<Suspense fallback={<Loading />}>
 													<WorktreePortless
 														cwd={worktree.root}
+														runStatuses={worktree.runStatuses}
+														runs={worktree.portlessRuns}
 														selectPortless={input.selectPortless}
 														selectRun={input.selectRun}
 													/>
 												</Suspense>
 												<Suspense fallback={<Loading />}>
-													<WorktreeScripts cwd={worktree.root} selectRun={input.selectRun} />
+													<WorktreeScripts
+														cwd={worktree.root}
+														runStatuses={worktree.runStatuses}
+														scripts={worktree.scriptRuns}
+														selectRun={input.selectRun}
+													/>
 												</Suspense>
 											</ul>
 										</li>

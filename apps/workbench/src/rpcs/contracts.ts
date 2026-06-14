@@ -60,28 +60,50 @@ export const ScriptRun = Schema.Struct({
 })
 export type ScriptRun = typeof ScriptRun.Type
 
+export const SidebarWorktree = Schema.Struct({
+	agents: Schema.Array(AgentSession),
+	branch: Schema.optional(Schema.String),
+	portlessRuns: Schema.Array(PortlessRun),
+	root: Schema.String,
+	runStatuses: Schema.Record(Schema.String, TerminalStatus),
+	scriptRuns: Schema.Array(ScriptRun)
+})
+export type SidebarWorktree = typeof SidebarWorktree.Type
+
+export const SidebarProject = Schema.Struct({
+	repository: GitProject.fields.repository,
+	worktrees: Schema.Array(SidebarWorktree)
+})
+export type SidebarProject = typeof SidebarProject.Type
+
+export const HomeSidebar = Schema.Struct({
+	agentProfiles: Schema.Array(AgentCommandProfile),
+	projects: Schema.Array(SidebarProject)
+})
+export type HomeSidebar = typeof HomeSidebar.Type
+
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agents.create', {error: TerminalError, payload: AgentCommandRequest, success: AgentSession}),
 	Rpc.make('agents.profiles', {error: AiError, success: Schema.Array(AgentCommandProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
-	Rpc.make('agents.watch', {
-		error: TerminalError,
-		payload: CwdPayload,
+	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
+	Rpc.make('home.sidebar', {
+		error: Schema.Union([GitError, TerminalError, AiError]),
 		stream: true,
-		success: Schema.Array(AgentSession)
+		success: HomeSidebar
 	}),
-	Rpc.make('projects.watch', {error: GitError, stream: true, success: Schema.Array(GitProject)}),
+	Rpc.make('projects', {error: GitError, stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {error: GitError, payload: CwdPayload, success: GitBranchesSnapshot}),
-	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, success: GitReviewMetadata}),
+	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
 	Rpc.make('review.diffs', {
 		error: GitError,
 		payload: Schema.Struct({...CwdPayloadFields, target: GitReviewTarget}),
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),
-	Rpc.make('review.state.watch', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
+	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
 		payload: Schema.Struct({...CwdPayloadFields, marks: Schema.Array(GitReviewMark)})
@@ -116,7 +138,7 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
-	Rpc.make('projects.cleanup', {error: GitError, payload: CwdPayload}),
+	Rpc.make('projects.fix', {error: GitError, payload: CwdPayload}),
 	Rpc.make('runs.portless', {error: TerminalError, payload: CwdPayload, success: Schema.Array(PortlessRun)}),
 	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
 	Rpc.make('terminal.write', {
@@ -128,12 +150,7 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Number, rows: Schema.Number})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
-	Rpc.make('terminal.status.watch', {
-		error: TerminalError,
-		payload: TerminalPayload,
-		stream: true,
-		success: TerminalStatus
-	}),
+	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.attach', {
 		error: TerminalError,
@@ -145,11 +162,11 @@ export class RpcContracts extends RpcGroup.make(
 		stream: true,
 		success: TerminalFrame
 	}),
-	Rpc.make('usage.watch', {
+	Rpc.make('usage', {
 		error: UsageError,
 		payload: Schema.Struct({provider: Schema.Literals(['claude', 'codex'])}),
 		stream: true,
 		success: UsageProvider
 	}),
-	Rpc.make('usage.system.watch', {error: UsageError, stream: true, success: SystemUsage})
+	Rpc.make('usage.system', {error: UsageError, stream: true, success: SystemUsage})
 ) {}

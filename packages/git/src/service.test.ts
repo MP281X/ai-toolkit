@@ -11,7 +11,6 @@ import {
 	Array,
 	ConfigProvider,
 	Effect,
-	Fiber,
 	FileSystem,
 	Option,
 	Order,
@@ -37,8 +36,7 @@ import {
 	GitReviewMark,
 	GitReviewMetadata,
 	GitRepository,
-	GitWorktree,
-	GitWorktreeStatus
+	GitWorktree
 } from './schema.ts'
 import {GitPublish, GitReview, GitWorkspace} from './service.ts'
 
@@ -220,6 +218,9 @@ function fakeCleanupGit(root: string) {
 		join(bin, 'git'),
 		`#!/bin/sh
 printf '%s %s\\n' "$PWD" "$*" >> "${log}"
+if [ "$1 $2" = "worktree prune" ]; then
+	exit 0
+fi
 if [ "$1 $2 $3" = "worktree list --porcelain" ]; then
 	printf 'worktree %s\\0HEAD commit\\0branch refs/heads/main\\0' "$PWD"
 	exit 0
@@ -229,6 +230,9 @@ if [ "$1 $2" = "symbolic-ref --short" ]; then
 	exit 0
 fi
 if [ "$1" = "fetch" ]; then
+	exit 0
+fi
+if [ "$1 $2" = "status --porcelain" ]; then
 	exit 0
 fi
 if [ "$1" = "for-each-ref" ]; then
@@ -308,7 +312,7 @@ function runWorkspaceWithWatch<T, E>(
 function runCleanup(cwd: string) {
 	return runWorkspace(
 		cwd,
-		Effect.flatMap(GitWorkspace, service => service.cleanup(cwd))
+		Effect.flatMap(GitWorkspace, service => service.fix(cwd))
 	)
 }
 
@@ -334,19 +338,7 @@ describe('@deslop/git service', () => {
 	it('provides a black-box GitWorkspace mock layer', async () => {
 		const project = new GitProject({
 			repository: new GitRepository({gitDirectory: '/workspace/repo/.git', root: '/workspace/repo'}),
-			worktrees: [
-				new GitWorktree({
-					branch: 'main',
-					root: '/workspace/repo',
-					status: new GitWorktreeStatus({
-						ahead: 0,
-						behind: 0,
-						dirtyTracked: false,
-						unpushedCommits: false,
-						untracked: false
-					})
-				})
-			]
+			worktrees: [new GitWorktree({branch: 'main', root: '/workspace/repo'})]
 		})
 		const cleaned: string[] = []
 
@@ -362,7 +354,7 @@ describe('@deslop/git service', () => {
 				})
 				const afterCreate = yield* service.listWorktrees('/workspace/repo')
 				yield* service.deleteWorktree({cwd: createdRoot})
-				yield* service.cleanup('/workspace/repo')
+				yield* service.fix('/workspace/repo')
 				const afterDelete = yield* service.listProjectsFrom('/workspace')
 
 				return {afterCreate, afterDelete, branches, createdRoot, initial}
@@ -376,7 +368,7 @@ describe('@deslop/git service', () => {
 									defaultBranch: 'main'
 								})
 							),
-						cleanup: cwd => Effect.sync(() => cleaned.push(cwd)),
+						fix: (cwd: string) => Effect.sync(() => cleaned.push(cwd)),
 						projects: [project]
 					})
 				)
@@ -640,7 +632,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('refreshes discovered projects from filesystem watch events', async () => {
+	it('does not refresh discovered projects from filesystem watch events', async () => {
 		await withTempRoot(async root => {
 			initRepo(join(root, 'repo'))
 
@@ -648,23 +640,18 @@ describe('@deslop/git service', () => {
 				Effect.scoped(
 					Effect.flatMap(GitWorkspace, service =>
 						Effect.gen(function* () {
-							const fiber = yield* pipe(
-								Stream.drop(1)(SubscriptionRef.changes(service.projects)),
-								Stream.runHead,
-								Effect.forkScoped
-							)
-
 							const nested = join(root, 'nested')
 							yield* Effect.sync(() => initRepo(nested))
 							yield* Queue.offer(events, {_tag: 'Create', path: nested})
+							yield* Effect.sleep('100 millis')
 
-							return Option.getOrThrow(yield* Fiber.join(fiber))
+							return yield* SubscriptionRef.get(service.projects)
 						})
 					)
 				)
 			)
 
-			expect(projects.map(project => project.repository.root)).toEqual([join(root, 'nested'), join(root, 'repo')])
+			expect(projects.map(project => project.repository.root)).toEqual([join(root, 'repo')])
 		})
 	})
 
@@ -1027,7 +1014,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('cleanup deletes merged local-only branches and preserves unmerged and dirty local-only branches', async () => {
+	it('cleanup deletes merged local-only branches and dirty linked worktrees, and preserves unmerged branches', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			git(fixture.repo, ['branch', 'merged-local'])
@@ -1044,8 +1031,8 @@ describe('@deslop/git service', () => {
 			await runCleanup(fixture.repo)
 
 			expect(git(fixture.repo, ['branch', '--list', 'merged-local']).trim()).toBe('')
-			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toContain('dirty-local')
-			expect(existsSync(dirtyLocalWorktree)).toBe(true)
+			expect(git(fixture.repo, ['branch', '--list', 'dirty-local']).trim()).toBe('')
+			expect(existsSync(dirtyLocalWorktree)).toBe(false)
 			expect(git(fixture.repo, ['branch', '--list', 'unmerged-local']).trim()).toContain('unmerged-local')
 		})
 	})
@@ -1129,7 +1116,7 @@ describe('@deslop/git service', () => {
 		})
 	})
 
-	it('cleanup skips clean checked-out branches with local and upstream commits', async () => {
+	it('cleanup rebases clean checked-out branches with local and upstream commits', async () => {
 		await withTempRoot(async root => {
 			const fixture = initRemoteRepo(root)
 			const other = join(root, 'other')
@@ -1154,10 +1141,10 @@ describe('@deslop/git service', () => {
 
 			await runCleanup(fixture.repo)
 
-			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).toBe(head)
+			expect(git(fixture.repo, ['rev-parse', 'HEAD']).trim()).not.toBe(head)
 			expect(readFileSync(join(fixture.repo, 'local.txt'), 'utf8')).toBe('local\n')
 			expect(readFileSync(join(fixture.repo, 'local-only.txt'), 'utf8')).toBe('local only\n')
-			expect(existsSync(join(fixture.repo, 'remote.txt'))).toBe(false)
+			expect(readFileSync(join(fixture.repo, 'remote.txt'), 'utf8')).toBe('remote\n')
 		})
 	})
 

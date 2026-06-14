@@ -1,9 +1,9 @@
-import {mkdirSync, mkdtempSync, rmSync} from 'node:fs'
+import {chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {Array as Arr, Context, Effect, Fiber, Layer, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array as Arr, ConfigProvider, Context, Effect, Fiber, Layer, Stream, SubscriptionRef, pipe} from 'effect'
 
 import HeadlessModule from '@xterm/headless'
 import {ChildProcess} from 'effect/unstable/process'
@@ -192,6 +192,34 @@ describe('@deslop/terminal service', () => {
 			)
 
 			expect(collectOutput(frames)).toContain(commandCwd)
+		} finally {
+			rmSync(root, {force: true, recursive: true})
+		}
+	})
+
+	it('starts the default shell from the first attach', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'deslop-terminal-'))
+		const shell = join(root, 'shell')
+		writeFileSync(shell, '#!/bin/sh\nprintf default-shell-ready\n', {mode: 0o755})
+		chmodSync(shell, 0o755)
+
+		try {
+			const frames = await Effect.runPromise(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const context = yield* Layer.buildWithScope(Terminal.layer({cwd: root}), yield* Effect.scope)
+						const terminal = Context.get(context, Terminal)
+
+						return yield* framesUntil(
+							terminal,
+							currentFrames => collectOutput(currentFrames).includes('default-shell-ready'),
+							{cols: 80, rows: 24}
+						)
+					})
+				).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({SHELL: shell}))))
+			)
+
+			expect(collectOutput(frames)).toContain('default-shell-ready')
 		} finally {
 			rmSync(root, {force: true, recursive: true})
 		}

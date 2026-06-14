@@ -1,6 +1,6 @@
 import {NodeServices} from '@effect/platform-node'
 
-import {Effect, Layer, pipe} from 'effect'
+import {Effect, Layer, Stream, pipe} from 'effect'
 
 import {FetchHttpClient} from 'effect/unstable/http'
 import {ChildProcess} from 'effect/unstable/process'
@@ -71,13 +71,13 @@ function testLayer(
 		Layer.provide(
 			GitWorkspace.layerMock({
 				branches: () => Effect.succeed(branchSnapshot),
-				cleanup: cleanupCwd =>
-					Effect.sync(() => {
-						input.cleanups?.push(cleanupCwd)
-					}),
 				deleteWorktree: payload =>
 					Effect.sync(() => {
 						input.deleted?.push(payload.cwd)
+					}),
+				fix: (cleanupCwd: string) =>
+					Effect.sync(() => {
+						input.cleanups?.push(cleanupCwd)
 					}),
 				projects: [project]
 			})
@@ -158,18 +158,49 @@ describe('@deslop/workbench RPC handlers', () => {
 		expect(deleted).toEqual([cwd])
 	})
 
-	it('routes project cleanup through GitWorkspace', async () => {
+	it('routes project fix through GitWorkspace', async () => {
 		const cleanups: string[] = []
 
 		await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
 					const client = yield* makeClient({cleanups})
-					yield* client['projects.cleanup']({cwd})
+					yield* client['projects.fix']({cwd})
 				})
 			)
 		)
 
 		expect(cleanups).toEqual([cwd])
+	})
+
+	it('observes unknown terminal status without resolving or creating the terminal session', async () => {
+		const scriptLookups: string[] = []
+		const result = await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const client = yield* pipe(
+						RpcTest.makeClient(RpcContracts),
+						Effect.provide(
+							testLayer({
+								scripts: scriptsCwd =>
+									Effect.sync(() => {
+										scriptLookups.push(scriptsCwd)
+										return [runFor(scriptsCwd)]
+									})
+							})
+						)
+					)
+
+					return yield* pipe(
+						client['terminal.status']({cwd, sessionId: '@deslop/app#dev'}),
+						Stream.take(1),
+						Stream.runCollect
+					)
+				})
+			)
+		)
+
+		expect([...result]).toEqual([{state: 'idle', title: ''}])
+		expect(scriptLookups).toEqual([])
 	})
 })

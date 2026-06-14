@@ -3,6 +3,7 @@ import {Array, Data, Effect, Hash, Option, Order, Stream, String, pipe} from 'ef
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
+import type {HomeSidebar} from '#rpcs/contracts.ts'
 import type {TerminalStatus} from '@deslop/terminal/schema'
 
 export type TerminalSessionInput = {
@@ -51,8 +52,8 @@ export function worktreeRouteId(root: string) {
 	return Math.abs(Hash.string(root)).toString(36)
 }
 
-function terminalSessionStatus(input: TerminalSessionInput): TerminalStatus {
-	return {state: input.command === undefined && input.sessionId === undefined ? 'starting' : 'idle', title: ''}
+function terminalSessionStatus(): TerminalStatus {
+	return {state: 'idle', title: ''}
 }
 
 const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
@@ -90,10 +91,10 @@ const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('terminal.status.watch', terminalSessionInput(input))),
+			Effect.map(client => client('terminal.status', terminalSessionInput(input))),
 			Stream.unwrap
 		),
-		{initialValue: terminalSessionStatus(input)}
+		{initialValue: terminalSessionStatus()}
 	)
 )
 
@@ -143,7 +144,17 @@ export const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('projects.watch', void 0)),
+			Effect.map(client => client('projects', void 0)),
+			Stream.unwrap
+		)
+	)
+)
+
+export const homeSidebarAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('home.sidebar', void 0)),
 			Stream.unwrap
 		)
 	)
@@ -176,11 +187,39 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 	)
 )
 
+export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
+	Atom.keepAlive(
+		Atom.make(get =>
+			pipe(
+				get.result(homeSidebarAtom),
+				Effect.map((sidebar: HomeSidebar) => {
+					const activeProject = Array.findFirst(sidebar.projects, project =>
+						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+					)
+					const activeWorktree = pipe(
+						activeProject,
+						Option.flatMap(project =>
+							Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+						)
+					)
+
+					return {
+						activeProject: Option.getOrUndefined(activeProject),
+						activeWorktree: Option.getOrUndefined(activeWorktree),
+						agentProfiles: sidebar.agentProfiles,
+						projects: sidebar.projects
+					}
+				})
+			)
+		)
+	)
+)
+
 export const agentsAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('agents.watch', {cwd})),
+			Effect.map(client => client('agents', {cwd})),
 			Stream.unwrap
 		)
 	)
@@ -198,7 +237,7 @@ export const usageAtom = Atom.family((provider: 'claude' | 'codex') =>
 		RpcClient.runtime.atom(
 			pipe(
 				RpcClient,
-				Effect.map(client => client('usage.watch', {provider})),
+				Effect.map(client => client('usage', {provider})),
 				Stream.unwrap
 			)
 		)
@@ -209,7 +248,7 @@ export const systemUsageAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('usage.system.watch', void 0)),
+			Effect.map(client => client('usage.system', void 0)),
 			Stream.unwrap
 		)
 	)

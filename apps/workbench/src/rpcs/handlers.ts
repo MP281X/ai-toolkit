@@ -51,6 +51,14 @@ function portlessScriptKey(input: {readonly cwd: string; readonly sessionId: str
 	return `${input.cwd}:${input.sessionId}`
 }
 
+function terminalStatusKey(input: TerminalPayload) {
+	return input.sessionId === undefined ? input.cwd : portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
+}
+
+function sameTerminalSession(left: TerminalSessionInput, right: TerminalSessionInput) {
+	return left.cwd === right.cwd && left.sessionId === right.sessionId && left.command === right.command
+}
+
 function replacePortlessScripts(
 	current: HashMap.HashMap<string, PortlessPreparedRun>,
 	cwd: string,
@@ -152,7 +160,7 @@ const TerminalSessions = RcMap.make({
 })
 
 const GitReviewSessions = RcMap.make({
-	idleTimeToLive: Duration.infinity,
+	idleTimeToLive: Duration.minutes(10),
 	lookup: Effect.fnUntraced(function* (cwd: string) {
 		const context = yield* Layer.buildWithScope(GitReview.layer({cwd}), yield* Effect.scope)
 
@@ -242,6 +250,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessPreparedRun>())
 		const packageScripts = yield* Ref.make(HashMap.empty<string, PackagePreparedRun>())
 		const portlessStatusWatchers = yield* Ref.make(new Set<string>())
+		const runStatuses = yield* SubscriptionRef.make(HashMap.empty<string, AgentSession['state']>())
+		const resolvedTerminals = yield* Ref.make(HashMap.empty<string, TerminalSessionInput>())
 
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
@@ -308,11 +318,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return yield* new TerminalError({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
-			return yield* pipe(
-				terminalSession(input),
-				Effect.map(terminalSessionInput),
-				Effect.flatMap(session => RcMap.get(terminals, session))
-			)
+			const session = yield* pipe(terminalSession(input), Effect.map(terminalSessionInput))
+			yield* Ref.update(resolvedTerminals, current => HashMap.set(current, terminalStatusKey(input), session))
+			return yield* RcMap.get(terminals, session)
 		})
 		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
@@ -345,30 +353,98 @@ export const RpcHandlers = RpcContracts.toLayer(
 			if (watching) return
 
 			yield* pipe(
-				Stream.make(yield* SubscriptionRef.get(sessionTerminal.status)),
-				Stream.concat(Stream.drop(1)(SubscriptionRef.changes(sessionTerminal.status))),
+				SubscriptionRef.changes(sessionTerminal.status),
 				Stream.takeUntil(state => terminalStatusDone(state)),
 				Stream.runForEach(state =>
-					terminalStatusDone(state)
-						? pipe(
-								portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId}),
-								Effect.andThen(
-									Ref.update(portlessScripts, current => removePortlessScript(current, script.script).current)
-								),
-								Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
-								Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
-								Effect.andThen(
-									Ref.update(portlessStatusWatchers, current => {
-										const next = new Set(current)
-										next.delete(watcherKey)
-										return next
-									})
-								)
-							)
-						: Effect.void
+					pipe(
+						SubscriptionRef.update(runStatuses, current =>
+							HashMap.set(current, portlessScriptKey(script.script), state)
+						),
+						Effect.andThen(
+							terminalStatusDone(state)
+								? pipe(
+										portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+										Effect.andThen(
+											Ref.update(portlessScripts, current => removePortlessScript(current, script.script).current)
+										),
+										Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
+										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
+										Effect.andThen(
+											Ref.update(portlessStatusWatchers, current => {
+												const next = new Set(current)
+												next.delete(watcherKey)
+												return next
+											})
+										)
+									)
+								: Effect.void
+						)
+					)
 				),
 				Effect.forkDetach
 			)
+		})
+
+		const currentAgentSessions = Effect.fnUntraced(function* (cwd: string) {
+			return pipe(
+				Array.fromIterable(HashMap.values(yield* SubscriptionRef.get(agents))),
+				Array.filter(session => session.cwd === cwd)
+			)
+		})
+
+		const sidebarSnapshot = Effect.fnUntraced(function* () {
+			const profiles = yield* agentCommand.profiles
+			const statuses = yield* SubscriptionRef.get(runStatuses)
+			const sidebarProjects = yield* pipe(
+				SubscriptionRef.get(git.projects),
+				Effect.flatMap(snapshot =>
+					Effect.forEach(
+						snapshot,
+						project =>
+							Effect.gen(function* () {
+								const worktrees = yield* Effect.forEach(
+									project.worktrees,
+									worktree =>
+										Effect.gen(function* () {
+											const portlessRuns = yield* pipe(
+												RcMap.get(portlessWorktrees, worktree.root),
+												Effect.orElseSucceed(() => [])
+											)
+											const packageRuns = yield* pipe(
+												RcMap.get(scriptWorktrees, worktree.root),
+												Effect.orElseSucceed(() => [])
+											)
+											return {
+												agents: yield* currentAgentSessions(worktree.root),
+												branch: worktree.branch,
+												portlessRuns,
+												root: worktree.root,
+												runStatuses: Object.fromEntries(
+													[
+														...packageRuns.map(run => run.sessionId),
+														...portlessRuns.map(run => run.script.sessionId)
+													].map(sessionId => [
+														sessionId,
+														pipe(
+															statuses,
+															HashMap.get(portlessScriptKey({cwd: worktree.root, sessionId})),
+															Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+														)
+													])
+												),
+												scriptRuns: packageRuns
+											}
+										}),
+									{concurrency: 8}
+								)
+								return {repository: project.repository, worktrees}
+							}),
+						{concurrency: 8}
+					)
+				)
+			)
+
+			return {agentProfiles: profiles, projects: sidebarProjects}
 		})
 
 		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
@@ -391,9 +467,30 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Effect.ignore
 			)
 			yield* pipe(RcMap.invalidate(terminals, input), Effect.ignore)
+			yield* Ref.update(resolvedTerminals, current =>
+				HashMap.remove(current, portlessScriptKey({cwd: payload.cwd, sessionId: payload.uuid}))
+			)
 		})
 
 		return RpcContracts.of({
+			agents: payload =>
+				Stream.unwrap(
+					pipe(
+						SubscriptionRef.get(agents),
+						Effect.map(current =>
+							pipe(
+								Stream.make(current),
+								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
+								Stream.map(sessions =>
+									pipe(
+										Array.fromIterable(HashMap.values(sessions)),
+										Array.filter(session => session.cwd === payload.cwd)
+									)
+								)
+							)
+						)
+					)
+				),
 			'agents.create': payload =>
 				Effect.gen(function* () {
 					const preparedCommand = yield* pipe(
@@ -428,14 +525,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 							sessionId: agentSession.uuid
 						})
 					).pipe(Effect.map(terminalSessionInput))
+					yield* Ref.update(resolvedTerminals, sessions =>
+						HashMap.set(sessions, portlessScriptKey({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
+					)
 					const sessionTerminal = yield* RcMap.get(terminals, input)
 					yield* sessionTerminal.restart()
 					const key = AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid})
 					yield* pipe(
 						Effect.scoped(
 							pipe(
-								Stream.make(yield* SubscriptionRef.get(sessionTerminal.status)),
-								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(sessionTerminal.status))),
+								SubscriptionRef.changes(sessionTerminal.status),
 								Stream.takeUntil(state => terminalStatusDone(state)),
 								Stream.runForEach(state =>
 									pipe(
@@ -450,7 +549,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 											terminalStatusDone(state)
 												? pipe(
 														SubscriptionRef.update(agents, sessions => HashMap.remove(sessions, key)),
-														Effect.andThen(pipe(RcMap.invalidate(terminals, input), Effect.ignore))
+														Effect.andThen(pipe(RcMap.invalidate(terminals, input), Effect.ignore)),
+														Effect.andThen(
+															Ref.update(resolvedTerminals, sessions =>
+																HashMap.remove(
+																	sessions,
+																	portlessScriptKey({cwd: agentSession.cwd, sessionId: agentSession.uuid})
+																)
+															)
+														)
 													)
 												: Effect.void
 										)
@@ -465,26 +572,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 				}),
 			'agents.profiles': () => agentCommand.profiles,
 			'agents.remove': payload => removeAgent(AgentSessionKey.make(payload)),
-			'agents.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(agents),
-						Effect.map(current =>
-							pipe(
-								Stream.make(current),
-								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
-								Stream.map(sessions =>
-									pipe(
-										Array.fromIterable(HashMap.values(sessions)),
-										Array.filter(session => session.cwd === payload.cwd)
-									)
-								)
-							)
-						)
-					)
+			'home.sidebar': () =>
+				pipe(
+					Stream.merge(SubscriptionRef.changes(git.projects), SubscriptionRef.changes(agents)),
+					Stream.merge(SubscriptionRef.changes(runStatuses)),
+					Stream.mapEffect(() => sidebarSnapshot()),
+					Stream.changes
 				),
+			projects: () => SubscriptionRef.changes(git.projects),
 			'projects.branches': payload => git.branches(payload.cwd),
-			'projects.cleanup': payload => git.cleanup(payload.cwd),
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload =>
 				pipe(
@@ -494,15 +590,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
-			'projects.watch': () =>
-				Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(git.projects),
-						Effect.map(current =>
-							Stream.concat(Stream.make(current), Stream.drop(1)(SubscriptionRef.changes(git.projects)))
-						)
-					)
-				),
+			'projects.fix': payload => git.fix(payload.cwd),
 			'publish.approve': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),
@@ -567,9 +655,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				),
 			'review.metadata': payload =>
-				pipe(
-					RcMap.get(gitReviews, payload.cwd),
-					Effect.flatMap(review => review.metadata())
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitReviews, payload.cwd),
+						Effect.map(review => review.watchReviewMetadata())
+					)
+				),
+			'review.state': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitReviews, payload.cwd),
+						Effect.map(review => review.watchReviewState())
+					)
 				),
 			'review.state.mark': payload =>
 				pipe(
@@ -580,13 +677,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					RcMap.get(gitReviews, payload.cwd),
 					Effect.flatMap(review => review.unmark(payload.marks))
-				),
-			'review.state.watch': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewState())
-					)
 				),
 			'runs.portless': payload => RcMap.get(portlessWorktrees, payload.cwd),
 			'runs.scripts': payload => RcMap.get(scriptWorktrees, payload.cwd),
@@ -613,25 +703,54 @@ export const RpcHandlers = RpcContracts.toLayer(
 					const input = TerminalPayload.make(payload)
 					const sessionTerminal = yield* getTerminal(input)
 					const status = yield* sessionTerminal.restart()
+					if (input.sessionId !== undefined) {
+						yield* SubscriptionRef.update(runStatuses, current =>
+							HashMap.set(current, portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId ?? ''}), status)
+						)
+					}
 					yield* watchPortlessRoute(input, sessionTerminal)
 					return status
 				}),
-			'terminal.status.watch': payload =>
+			'terminal.status': payload =>
 				Stream.unwrap(
-					pipe(
-						getTerminal(TerminalPayload.make(payload)),
-						Effect.flatMap(sessionTerminal =>
-							pipe(
-								SubscriptionRef.get(sessionTerminal.status),
-								Effect.map(state =>
+					Effect.gen(function* () {
+						const input = TerminalPayload.make(payload)
+						const statusKey = terminalStatusKey(input)
+						const session = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
+						const activeSession =
+							session === undefined
+								? false
+								: Array.some(Array.fromIterable(yield* RcMap.keys(terminals)), current =>
+										sameTerminalSession(current, session)
+									)
+						if (!activeSession || session === undefined) {
+							const idle = pipe(
+								yield* SubscriptionRef.get(runStatuses),
+								HashMap.get(statusKey),
+								Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+							)
+							return pipe(
+								Stream.make(idle),
+								Stream.concat(
 									pipe(
-										Stream.make(state),
-										Stream.concat(Stream.drop(1)(SubscriptionRef.changes(sessionTerminal.status)))
+										SubscriptionRef.changes(runStatuses),
+										Stream.map(statuses =>
+											pipe(
+												statuses,
+												HashMap.get(statusKey),
+												Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+											)
+										),
+										Stream.changes
 									)
 								)
 							)
-						)
-					)
+						}
+
+						const sessionTerminal = yield* RcMap.get(terminals, session)
+						const state = yield* SubscriptionRef.get(sessionTerminal.status)
+						return pipe(Stream.make(state), Stream.concat(SubscriptionRef.changes(sessionTerminal.status)))
+					})
 				),
 			'terminal.stop': payload =>
 				Effect.gen(function* () {
@@ -640,6 +759,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 						getTerminal(input),
 						Effect.flatMap(sessionTerminal => sessionTerminal.stop())
 					)
+					if (input.sessionId !== undefined) {
+						yield* SubscriptionRef.update(runStatuses, current =>
+							HashMap.set(current, portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId ?? ''}), status)
+						)
+					}
 					yield* releasePortlessRoute(input)
 					return status
 				}),
@@ -648,12 +772,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
 				),
-			'usage.system.watch': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds'))),
-			'usage.watch': payload =>
+			usage: payload =>
 				pipe(
 					Stream.fromEffect(payload.provider === 'claude' ? usage.claude : usage.codex),
 					Stream.repeat(Schedule.spaced('30 seconds'))
-				)
+				),
+			'usage.system': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds')))
 		})
 	})
 )

@@ -44,7 +44,8 @@ export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitRevie
 	dirty: Schema.Boolean,
 	localCommits: Schema.Array(GitCommit),
 	prUrl: Schema.optional(Schema.String),
-	unpushedCommits: Schema.Boolean
+	unpushedCommits: Schema.Boolean,
+	upstream: Schema.optional(Schema.Struct({ahead: Schema.Number, behind: Schema.Number}))
 }) {}
 
 export class GitReviewMark extends Schema.Class<GitReviewMark>('GitReviewMark')({
@@ -92,18 +93,9 @@ export const GitWorktreeSource = Schema.Union([
 	Schema.Struct({_tag: Schema.Literal('new')})
 ])
 
-export class GitWorktreeStatus extends Schema.Class<GitWorktreeStatus>('GitWorktreeStatus')({
-	ahead: Schema.Number,
-	behind: Schema.Number,
-	dirtyTracked: Schema.Boolean,
-	unpushedCommits: Schema.Boolean,
-	untracked: Schema.Boolean
-}) {}
-
 export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
 	branch: Schema.optional(Schema.String),
-	root: Schema.String,
-	status: Schema.optional(GitWorktreeStatus)
+	root: Schema.String
 }) {}
 
 export class GitProject extends Schema.Class<GitProject>('GitProject')({
