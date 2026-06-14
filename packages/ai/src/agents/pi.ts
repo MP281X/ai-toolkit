@@ -1,4 +1,18 @@
-import {DateTime, Effect, Encoding, Predicate, Queue, Ref, Semaphore, Stream, SubscriptionRef, pipe} from 'effect'
+import {
+	Array,
+	DateTime,
+	Effect,
+	Encoding,
+	Option,
+	Predicate,
+	Queue,
+	Ref,
+	Semaphore,
+	Stream,
+	String,
+	SubscriptionRef,
+	pipe
+} from 'effect'
 
 import {getModel} from '@earendil-works/pi-ai'
 import type {AssistantMessage, ImageContent, Message, TextContent, ToolResultMessage} from '@earendil-works/pi-ai'
@@ -7,13 +21,8 @@ import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} 
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import type {AgentLayerConfig, AgentPrompt, AiError, AgentStatus} from '../schema.ts'
-import {AiError as AiErrorSchema} from '../schema.ts'
-
-const emptyUsage = new Response.Usage({
-	inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
-	outputTokens: {reasoning: undefined, text: undefined, total: undefined}
-})
+import {AiError} from '../schema.ts'
+import type {AgentLayerConfig, AgentPrompt, AgentStatus} from '../schema.ts'
 
 function usageFromAssistant(message: {
 	readonly usage: {
@@ -41,23 +50,19 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 	return reason
 }
 
-type AgentPart = Response.StreamPart<Toolkit.Any['tools']>
-
-const agentEventQueueCapacity = 1_024
-
 function imageDataFromFilePart(part: Prompt.FilePart) {
 	if (part.data instanceof URL) return
 	if (typeof part.data !== 'string') return Encoding.encodeBase64(part.data)
 
 	const dataUrlPrefix = `data:${part.mediaType};base64,`
-	return part.data.startsWith(dataUrlPrefix) ? part.data.slice(dataUrlPrefix.length) : part.data
+	return String.startsWith(dataUrlPrefix)(part.data) ? String.slice(dataUrlPrefix.length)(part.data) : part.data
 }
 
-function imageFromFilePart(part: Prompt.FilePart): ImageContent | undefined {
-	if (!part.mediaType.startsWith('image/')) return undefined
+function imageFromFilePart(part: Prompt.FilePart) {
+	if (!String.startsWith('image/')(part.mediaType)) return
 	const data = imageDataFromFilePart(part)
-	if (data === undefined) return undefined
-	return {data, mimeType: part.mediaType, type: 'image'}
+	if (data === undefined) return
+	return {data, mimeType: part.mediaType, type: 'image' as const}
 }
 
 function textFromResult(result: unknown) {
@@ -66,69 +71,75 @@ function textFromResult(result: unknown) {
 	return JSON.stringify(result, undefined, 2)
 }
 
-function toolArgumentsFromParams(params: unknown): Record<string, unknown> | undefined {
+function toolArgumentsFromParams(params: unknown) {
 	if (!Predicate.isObject(params)) return
 	return Object.fromEntries(Object.entries(params))
 }
 
 const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.Part[]) {
-	const content: (TextContent | ImageContent)[] = []
-	for (const part of parts) {
-		if (part.type === 'text') content.push({text: part.text, type: 'text'})
-		if (part.type === 'file') {
-			const image = imageFromFilePart(part)
-			if (image === undefined) {
-				return yield* new AiErrorSchema({
-					message:
-						part.data instanceof URL
-							? 'Pi agent does not support URL file prompt parts'
-							: `Pi agent does not support ${part.mediaType} file prompt parts`
-				})
-			}
-			content.push(image)
-		}
-	}
-	return content
+	return yield* Effect.map(
+		Effect.forEach(parts, part =>
+			Effect.gen(function* () {
+				if (part.type === 'text') return [{text: part.text, type: 'text' as const}]
+				if (part.type === 'file') {
+					const image = imageFromFilePart(part)
+					if (image === undefined) {
+						return yield* new AiError({
+							message:
+								part.data instanceof URL
+									? 'Pi agent does not support URL file prompt parts'
+									: `Pi agent does not support ${part.mediaType} file prompt parts`
+						})
+					}
+					return [image]
+				}
+				return Array.empty<TextContent | ImageContent>()
+			})
+		),
+		Array.flatten
+	)
 })
 
 const piAssistantContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.AssistantMessagePart[]) {
-	const content: AssistantMessage['content'] = []
-	for (const part of parts) {
-		if (part.type === 'text') content.push({text: part.text, type: 'text'})
-		if (part.type === 'reasoning') content.push({thinking: part.text, type: 'thinking'})
-		if (part.type === 'tool-call') {
-			const args = toolArgumentsFromParams(part.params)
-			if (args === undefined) {
-				return yield* new AiErrorSchema({
-					message: `Pi agent cannot restore non-object tool call params for ${part.name}`
-				})
+	const content = yield* Effect.forEach(parts, part =>
+		Effect.gen(function* () {
+			if (part.type === 'text') return [{text: part.text, type: 'text' as const}]
+			if (part.type === 'reasoning') return [{thinking: part.text, type: 'thinking' as const}]
+			if (part.type === 'tool-call') {
+				const args = toolArgumentsFromParams(part.params)
+				if (args === undefined) {
+					return yield* new AiError({message: `Pi agent cannot restore non-object tool call params for ${part.name}`})
+				}
+				return [{arguments: args, id: part.id, name: part.name, type: 'toolCall' as const}]
 			}
-			content.push({arguments: args, id: part.id, name: part.name, type: 'toolCall'})
-		}
-		if (part.type === 'file') return
-		if (part.type === 'tool-approval-request') return
-	}
-	return content
+			if (part.type === 'file') return
+			if (part.type === 'tool-approval-request') return
+			return Array.empty<AssistantMessage['content'][number]>()
+		})
+	)
+	if (Array.some(content, Predicate.isUndefined)) return
+
+	return Array.flatten(Array.filter(content, Predicate.isNotUndefined))
 })
 
 const piToolResultsFromPromptParts = Effect.fnUntraced(function* (
 	parts: readonly (Prompt.ToolResultPart | Prompt.ToolApprovalResponsePart)[]
 ) {
-	const messages: ToolResultMessage[] = []
-	for (const part of parts) {
-		if (part.type === 'tool-approval-response') {
-			return yield* new AiErrorSchema({message: 'Pi agent does not support tool approval response prompt parts'})
-		}
-		messages.push({
-			content: [{text: textFromResult(part.result), type: 'text'}],
-			isError: part.isFailure,
-			role: 'toolResult',
-			timestamp: Date.now(),
-			toolCallId: part.id,
-			toolName: part.name
+	return yield* Effect.forEach(parts, part =>
+		Effect.gen(function* () {
+			if (part.type === 'tool-approval-response') {
+				return yield* new AiError({message: 'Pi agent does not support tool approval response prompt parts'})
+			}
+			return {
+				content: [{text: textFromResult(part.result), type: 'text' as const}],
+				isError: part.isFailure,
+				role: 'toolResult' as const,
+				timestamp: Date.now(),
+				toolCallId: part.id,
+				toolName: part.name
+			} satisfies ToolResultMessage
 		})
-	}
-	return messages
+	)
 })
 
 const piMessagesFromPromptHistory = Effect.fnUntraced(function* (
@@ -136,66 +147,77 @@ const piMessagesFromPromptHistory = Effect.fnUntraced(function* (
 	input: AgentPrompt,
 	currentUserMessage: Prompt.UserMessage
 ) {
-	const history: Message[] = []
-	for (const message of messages.slice(0, -1)) {
-		if (message.role === 'system') continue
-		if (message.role === 'user') {
-			history.push({content: yield* piContentFromPromptParts(message.content), role: 'user', timestamp: Date.now()})
-		}
-		if (message.role === 'assistant') {
-			const content = yield* piAssistantContentFromPromptParts(message.content)
-			if (content === undefined) {
-				return yield* new AiErrorSchema({message: 'Pi agent does not support assistant file or approval prompt parts'})
-			}
-			const hasToolCalls = content.some(part => part.type === 'toolCall')
-			history.push({
-				api: 'openai-codex-responses',
-				content,
-				model: input.model,
-				provider: input.provider,
-				role: 'assistant',
-				stopReason: hasToolCalls ? 'toolUse' : 'stop',
-				timestamp: Date.now(),
-				usage: {
-					cacheRead: 0,
-					cacheWrite: 0,
-					cost: {cacheRead: 0, cacheWrite: 0, input: 0, output: 0, total: 0},
-					input: 0,
-					output: 0,
-					totalTokens: 0
+	const history = yield* Effect.map(
+		Effect.forEach(Array.dropRight(messages, 1), message =>
+			Effect.gen(function* () {
+				if (message.role === 'system') return Array.empty<Message>()
+				if (message.role === 'user') {
+					return [
+						{
+							content: yield* piContentFromPromptParts(message.content),
+							role: 'user' as const,
+							timestamp: Date.now()
+						} satisfies Message
+					]
 				}
+				if (message.role === 'assistant') {
+					const content = yield* piAssistantContentFromPromptParts(message.content)
+					if (content === undefined) {
+						return yield* new AiError({message: 'Pi agent does not support assistant file or approval prompt parts'})
+					}
+					const hasToolCalls = Array.some(content, part => part.type === 'toolCall')
+					const toolResults = yield* piToolResultsFromPromptParts(
+						Array.filter(message.content, part => part.type === 'tool-result')
+					)
+					return Array.prepend(toolResults, {
+						api: 'openai-codex-responses',
+						content,
+						model: input.model,
+						provider: input.provider,
+						role: 'assistant' as const,
+						stopReason: hasToolCalls ? 'toolUse' : 'stop',
+						timestamp: Date.now(),
+						usage: {
+							cacheRead: 0,
+							cacheWrite: 0,
+							cost: {cacheRead: 0, cacheWrite: 0, input: 0, output: 0, total: 0},
+							input: 0,
+							output: 0,
+							totalTokens: 0
+						}
+					} satisfies Message)
+				}
+				return yield* piToolResultsFromPromptParts(message.content)
 			})
-			const toolResults = yield* piToolResultsFromPromptParts(
-				message.content.filter(part => part.type === 'tool-result')
-			)
-			history.push(...toolResults)
-		}
-		if (message.role === 'tool') {
-			history.push(...(yield* piToolResultsFromPromptParts(message.content)))
-		}
-	}
+		),
+		Array.flatten
+	)
 
 	return {history, prompt: yield* piContentFromPromptParts(currentUserMessage.content)}
 })
 
-function partFromEvent(event: AgentSessionEvent): AgentPart | undefined {
+function partFromEvent(event: AgentSessionEvent) {
 	if (event.type === 'message_update') {
-		const update = event.assistantMessageEvent
-		if (update.type === 'text_delta' && update.delta !== '') {
-			return Response.makePart('text-delta', {delta: update.delta, id: update.partial.responseId ?? 'text'})
+		if (event.assistantMessageEvent.type === 'text_delta' && event.assistantMessageEvent.delta !== '') {
+			return Response.makePart('text-delta', {
+				delta: event.assistantMessageEvent.delta,
+				id: event.assistantMessageEvent.partial.responseId ?? 'text'
+			})
 		}
-		if (update.type === 'thinking_delta' && update.delta !== '') {
-			return Response.makePart('reasoning-delta', {delta: update.delta, id: update.partial.responseId ?? 'reasoning'})
+		if (event.assistantMessageEvent.type === 'thinking_delta' && event.assistantMessageEvent.delta !== '') {
+			return Response.makePart('reasoning-delta', {
+				delta: event.assistantMessageEvent.delta,
+				id: event.assistantMessageEvent.partial.responseId ?? 'reasoning'
+			})
 		}
-		if (update.type === 'toolcall_end') {
+		if (event.assistantMessageEvent.type === 'toolcall_end') {
 			return Response.makePart('tool-call', {
-				id: update.toolCall.id,
-				name: update.toolCall.name,
-				params: update.toolCall.arguments,
+				id: event.assistantMessageEvent.toolCall.id,
+				name: event.assistantMessageEvent.toolCall.name,
+				params: event.assistantMessageEvent.toolCall.arguments,
 				providerExecuted: false
 			})
 		}
-		return undefined
 	}
 
 	if (event.type === 'tool_execution_end') {
@@ -223,16 +245,19 @@ function partFromEvent(event: AgentSessionEvent): AgentPart | undefined {
 	if (event.type === 'compaction_end' && event.errorMessage !== undefined) {
 		return Response.makePart('error', {error: event.errorMessage})
 	}
-
-	return undefined
 }
 
 function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_end'}>) {
-	const message = event.message
 	return Response.makePart('finish', {
-		reason: message.role === 'assistant' ? finishReason(message.stopReason) : 'stop',
+		reason: event.message.role === 'assistant' ? finishReason(event.message.stopReason) : 'stop',
 		response: undefined,
-		usage: message.role === 'assistant' ? usageFromAssistant(message) : emptyUsage
+		usage:
+			event.message.role === 'assistant'
+				? usageFromAssistant(event.message)
+				: new Response.Usage({
+						inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
+						outputTokens: {reasoning: undefined, text: undefined, total: undefined}
+					})
 	})
 }
 
@@ -247,13 +272,6 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 
 	const session = Effect.fnUntraced(function* (input: AgentPrompt) {
 		const model = getModel(input.provider, input.model)
-		const noTools = config.tools === 'none' ? 'all' : undefined
-		let tools: string[] | undefined
-		if (config.tools === 'all') {
-			tools = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls']
-		} else if (config.tools !== undefined && config.tools !== 'none') {
-			tools = [...config.tools]
-		}
 		const resourceLoader = new DefaultResourceLoader({
 			agentDir: getAgentDir(),
 			appendSystemPromptOverride: () => [],
@@ -261,40 +279,76 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 			systemPromptOverride: () => config.systemPrompt.content
 		})
 		yield* Effect.tryPromise({
-			catch: cause => new AiErrorSchema({cause, message: 'failed to load pi agent resources'}),
+			catch: cause => new AiError({cause, message: 'failed to load pi agent resources'}),
 			try: () => resourceLoader.reload()
 		})
-		const currentUserMessage = input.messages.findLast(message => message.role === 'user')
-		if (currentUserMessage === undefined || input.messages.at(-1) !== currentUserMessage) {
-			return yield* new AiErrorSchema({message: 'Pi agent prompts must end with a user message'})
+		const currentUserMessage = Array.findLast(input.messages, message => message.role === 'user')
+		if (Option.isNone(currentUserMessage) || !Option.contains(Array.last(input.messages), currentUserMessage.value)) {
+			return yield* new AiError({message: 'Pi agent prompts must end with a user message'})
 		}
-		const prompt = yield* piMessagesFromPromptHistory(input.messages, input, currentUserMessage)
+		const prompt = yield* piMessagesFromPromptHistory(input.messages, input, currentUserMessage.value)
 		const sessionManager = SessionManager.inMemory(config.cwd)
 		for (const message of prompt.history) {
 			sessionManager.appendMessage(message)
 		}
 		const result = yield* Effect.tryPromise({
-			catch: cause => new AiErrorSchema({cause, message: 'failed to create pi agent session'}),
-			try: () =>
-				createAgentSession({
+			catch: cause => new AiError({cause, message: 'failed to create pi agent session'}),
+			try: () => {
+				if (config.tools === 'all') {
+					return createAgentSession({
+						cwd: config.cwd,
+						model,
+						resourceLoader,
+						sessionManager,
+						thinkingLevel: input.thinkingLevel ?? 'low',
+						tools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls']
+					})
+				}
+
+				if (config.tools === 'none') {
+					return createAgentSession({
+						cwd: config.cwd,
+						model,
+						noTools: 'all',
+						resourceLoader,
+						sessionManager,
+						thinkingLevel: input.thinkingLevel ?? 'low'
+					})
+				}
+
+				if (config.tools === undefined) {
+					return createAgentSession({
+						cwd: config.cwd,
+						model,
+						resourceLoader,
+						sessionManager,
+						thinkingLevel: input.thinkingLevel ?? 'low'
+					})
+				}
+
+				return createAgentSession({
 					cwd: config.cwd,
 					model,
-					noTools,
 					resourceLoader,
 					sessionManager,
 					thinkingLevel: input.thinkingLevel ?? 'low',
-					tools
+					tools: Array.fromIterable(config.tools)
 				})
+			}
 		})
 
-		yield* Effect.addFinalizer(() => Effect.sync(() => result.session.dispose()))
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => {
+				result.session.dispose()
+			})
+		)
 		return {prompt, session: result.session}
 	})
 
 	return {
 		history: Ref.get(history),
 		prompt: (input: AgentPrompt) =>
-			Stream.callback<AgentPart, AiError>(queue =>
+			Stream.callback<Response.StreamPart<Toolkit.Any['tools']>, AiError>(queue =>
 				pipe(
 					Effect.gen(function* () {
 						yield* Effect.annotateCurrentSpan({
@@ -305,29 +359,23 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 							thinkingLevel: input.thinkingLevel ?? 'default'
 						})
 						const current = yield* session(input)
-						const events = yield* Queue.bounded<AgentSessionEvent>(agentEventQueueCapacity)
+						const events = yield* Queue.bounded<AgentSessionEvent>(1024)
 						const finished = yield* Ref.make(false)
-						const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
+						const finishPart = yield* Ref.make<Response.StreamPart<Toolkit.Any['tools']> | undefined>(void 0)
 						yield* Ref.set(history, input.messages)
 						yield* setStatus('running')
-						let overflowed = false
+						const queueState = {overflowed: false}
 						const unsubscribe = current.session.subscribe(event => {
 							if (Queue.offerUnsafe(events, event)) return
-							if (overflowed) return
+							if (queueState.overflowed) return
 
-							overflowed = true
+							queueState.overflowed = true
 							void current.session.abort()
-							Effect.runFork(
-								pipe(
-									Ref.set(finished, true),
-									Effect.andThen(setStatus('error')),
-									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: 'agent event queue overflow'}))),
-									Effect.andThen(Queue.end(queue))
-								)
-							)
+							Queue.offerUnsafe(queue, Response.makePart('error', {error: 'agent event queue overflow'}))
+							Queue.endUnsafe(queue)
 						})
 						yield* Effect.addFinalizer(() =>
-							pipe(
+							Effect.orDie(
 								Effect.gen(function* () {
 									yield* Effect.sync(unsubscribe)
 									const completed = yield* Ref.get(finished)
@@ -335,59 +383,50 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 
 									yield* setStatus('stopping')
 									yield* Effect.tryPromise({
-										catch: cause => new AiErrorSchema({cause, message: 'failed to abort agent'}),
+										catch: cause => new AiError({cause, message: 'failed to abort agent'}),
 										try: () => current.session.abort()
 									})
 									yield* setStatus('idle')
-								}),
-								Effect.catch(() => setStatus('idle'))
+								})
 							)
 						)
 						yield* Effect.forkScoped(
 							Effect.forever(
-								pipe(
-									Queue.take(events),
-									Effect.flatMap(event =>
-										Effect.gen(function* () {
-											if (event.type === 'auto_retry_start') yield* setStatus('retrying')
-											if (event.type === 'agent_start') yield* setStatus('running')
-											if (event.type === 'turn_end') yield* Ref.set(finishPart, finishPartFromTurnEnd(event))
-											const part = partFromEvent(event)
-											if (part !== undefined) yield* Queue.offer(queue, part)
-											if (event.type === 'agent_end' && !event.willRetry) {
-												const finish = yield* Ref.get(finishPart)
-												if (finish !== undefined) yield* Queue.offer(queue, finish)
-												yield* setStatus('idle')
-												yield* Ref.set(finished, true)
-												yield* Queue.end(queue)
-											}
-										})
-									)
+								Effect.flatMap(Queue.take(events), event =>
+									Effect.gen(function* () {
+										if (event.type === 'auto_retry_start') yield* setStatus('retrying')
+										if (event.type === 'agent_start') yield* setStatus('running')
+										if (event.type === 'turn_end') yield* Ref.set(finishPart, finishPartFromTurnEnd(event))
+										const part = partFromEvent(event)
+										if (part !== undefined) yield* Queue.offer(queue, part)
+										if (event.type === 'agent_end' && !event.willRetry) {
+											const finish = yield* Ref.get(finishPart)
+											if (finish !== undefined) yield* Queue.offer(queue, finish)
+											yield* setStatus('idle')
+											yield* Ref.set(finished, true)
+											yield* Queue.end(queue)
+										}
+									})
 								)
 							)
 						)
 
-						yield* pipe(
-							Effect.tryPromise({
-								catch: cause => new AiErrorSchema({cause, message: 'agent prompt failed'}),
-								try: () => {
-									const text = current.prompt.prompt
-										.filter((part): part is TextContent => part.type === 'text')
-										.map(part => part.text)
-										.join('\n\n')
-									const images = current.prompt.prompt.filter((part): part is ImageContent => part.type === 'image')
-									return current.session.prompt(text, {images})
-								}
-							}),
-							Effect.catch(error =>
-								pipe(
-									Ref.set(finished, true),
-									Effect.andThen(setStatus('error')),
-									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: error.message}))),
-									Effect.andThen(Queue.end(queue))
+						yield* Effect.tryPromise({
+							catch: cause => new AiError({cause, message: 'agent prompt failed'}),
+							try: () => {
+								const text = pipe(
+									current.prompt.prompt,
+									Array.filter((part): part is TextContent => part.type === 'text'),
+									Array.map(part => part.text),
+									Array.join('\n\n')
 								)
-							)
-						)
+								const images = Array.filter(
+									current.prompt.prompt,
+									(part): part is ImageContent => part.type === 'image'
+								)
+								return current.session.prompt(text, {images})
+							}
+						})
 					}),
 					Semaphore.withPermit(promptLock),
 					Effect.withSpan('Agent.prompt')

@@ -1,11 +1,12 @@
-import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
+import {useAtom, useAtomRefresh, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, HashMap, Match, Option, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, HashMap, Match, Option, Record, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {AsyncResult, Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useState, type MouseEvent} from 'react'
+import {startTransition, useEffect, useState} from 'react'
+import type {MouseEvent} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
@@ -26,20 +27,29 @@ import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/compon
 import {Button} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
-import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
 import {cn, formatError} from '@deslop/components/utils'
 import {
+	GitReviewBranchTarget,
+	GitReviewChangesTarget,
+	GitReviewCommitTarget,
+	GitReviewLocalTarget,
 	GitReviewState,
-	type GitCommit,
-	type GitDiff,
-	type GitReviewComment,
-	type GitReviewMark,
-	type GitReviewTarget,
 	gitReviewCommentKey,
 	gitReviewMarkKey,
 	gitReviewMarksForDiff,
-	gitReviewStateForMarks
+	gitReviewStateForMarks,
+	gitReviewTargetIsCommit,
+	gitReviewTargetIsScope,
+	gitReviewTargetKey
+} from '@deslop/git/schema'
+import type {
+	GitCommit,
+	GitDiff,
+	GitReviewComment,
+	GitReviewMark,
+	GitReviewScopeTarget,
+	GitReviewTarget
 } from '@deslop/git/schema'
 
 export const Route = createFileRoute('/(home)/$worktree/diff')({
@@ -57,21 +67,18 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-function targetKey(target: GitReviewTarget) {
-	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
-}
-
-function targetFromKey(tag: string, hash = ''): GitReviewTarget {
-	if (tag === 'commit') return {_tag: 'commit', hash}
-	if (tag === 'local') return {_tag: 'local'}
-	if (tag === 'branch') return {_tag: 'branch'}
-	return {_tag: 'changes'}
+function targetFromKey(tag: string, hash = '') {
+	return Match.value(tag).pipe(
+		Match.when('commit', () => new GitReviewCommitTarget({hash})),
+		Match.when('local', () => new GitReviewLocalTarget({})),
+		Match.when('branch', () => new GitReviewBranchTarget({})),
+		Match.orElse(() => new GitReviewChangesTarget({}))
+	)
 }
 
 const reviewDiffsAtom = Atom.family((key: string) => {
-	const parts = key.split('\u0000')
-	const cwd = parts[0] ?? ''
-	const target = targetFromKey(parts[1] ?? 'changes', parts[2] ?? '')
+	const [cwd, tag, hash = ''] = String.split('\u0000')(key)
+	const target = targetFromKey(tag ?? 'changes', hash)
 
 	return RpcClient.runtime.atom(
 		pipe(
@@ -92,131 +99,33 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	)
 )
 
-type QueuedComment = typeof GitReviewComment.Type
-
-type DisplayComment = QueuedComment & {
-	readonly resolved: boolean
-	readonly resolving?: boolean
-	readonly source: 'github' | 'local'
-	readonly threadId?: string
-	readonly url?: string
-}
-
 const emptyReviewState = new GitReviewState({comments: Array.empty(), marks: Array.empty()})
 
 const reviewStateValueAtom = Atom.family((cwd: string) =>
-	Atom.map(reviewStateAtom(cwd), result => (result._tag === 'Success' ? result.value : emptyReviewState))
-)
-
-const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => ({generatingMessage: false, publishing: false})))
-)
-
-const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<null>()(
-			Effect.fn('DiffPage.generatePublishMessage')(function* () {
-				const client = yield* RpcClient
-				return yield* client('publish.message.generate', {cwd})
-			})
-		),
-		reducer: state => ({...state, generatingMessage: true})
-	})
-)
-
-const approvePublishActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<string>()(
-			Effect.fn('DiffPage.approvePublish')(function* (message) {
-				const client = yield* RpcClient
-				return yield* client('publish.approve', {cwd, message})
-			})
-		),
-		reducer: state => ({...state, publishing: true})
-	})
-)
-
-type ResolveCommentInput = {readonly comment: DisplayComment; readonly key: string}
-
-const commentResolutionStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => ({resolvingAll: false, resolvingKeys: new Set<string>()})))
-)
-
-const resolveCommentActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<ResolveCommentInput>()(
-			Effect.fn('DiffPage.resolveComment')(function* (resolveInput) {
-				const client = yield* RpcClient
-
-				yield* client('review.comments.resolve', {
-					cwd,
-					filePath: resolveInput.comment.filePath,
-					lineNumber: resolveInput.comment.lineNumber,
-					side: resolveInput.comment.side,
-					threadId: resolveInput.comment.threadId
-				})
-			})
-		),
-		reducer: (state, resolveInput) => ({
-			resolvingAll: state.resolvingAll,
-			resolvingKeys: new Set([...state.resolvingKeys, resolveInput.key])
-		})
-	})
-)
-
-const resolveCommentsActionAtom = Atom.family((cwd: string) =>
-	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<readonly ResolveCommentInput[]>()(
-			Effect.fn('DiffPage.resolveComments')(function* (comments) {
-				const client = yield* RpcClient
-
-				yield* pipe(
-					comments,
-					Array.dedupeWith(
-						(left, right) => left.comment.threadId !== undefined && left.comment.threadId === right.comment.threadId
-					),
-					Effect.forEach(resolveInput =>
-						client('review.comments.resolve', {
-							cwd,
-							filePath: resolveInput.comment.filePath,
-							lineNumber: resolveInput.comment.lineNumber,
-							side: resolveInput.comment.side,
-							threadId: resolveInput.comment.threadId
-						})
-					)
-				)
-			})
-		),
-		reducer: (state, comments) => ({
-			resolvingAll: true,
-			resolvingKeys: new Set([...state.resolvingKeys, ...Array.map(comments, comment => comment.key)])
-		})
-	})
+	Atom.map(reviewStateAtom(cwd), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
 )
 
 function groupCommentsByFile<Comment extends {readonly filePath: string}>(comments: readonly Comment[]) {
-	return pipe(
-		comments,
-		Array.reduce(HashMap.empty<string, readonly Comment[]>(), (groups, comment) =>
-			HashMap.modifyAt(groups, comment.filePath, current =>
-				Option.some(
-					Array.append(
-						Option.getOrElse(current, () => Array.empty<Comment>()),
-						comment
-					)
-				)
-			)
-		),
-		groups => Array.fromIterable(groups),
-		Array.map(group => ({comments: group[1], filePath: group[0]}))
-	)
+	return Array.map(Record.toEntries(Array.groupBy(comments, comment => comment.filePath)), group => ({
+		comments: group[1],
+		filePath: group[0]
+	}))
 }
 
-async function copyReviewComments(commentsToCopy: readonly DisplayComment[]) {
+async function copyReviewComments(
+	commentsToCopy: readonly (typeof GitReviewComment.Type & {
+		readonly resolved: boolean
+		readonly resolving?: boolean
+		readonly source: 'github' | 'local'
+		readonly threadId?: string
+		readonly url?: string
+	})[]
+) {
 	try {
 		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
+		return true
 	} catch {
-		toast.error('Failed to copy comments.')
+		return false
 	}
 }
 
@@ -233,10 +142,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
-	const comments = reviewStateValue.comments
 	const shortcutsOpenState = useState(false)
-	const selectedScopeState = useState<GitReviewTarget>({_tag: 'changes'})
-	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
+	const copiedCommentsState = useState<'copied' | 'failed' | 'idle'>('idle')
+	const commentActionErrorState = useState('')
+	const selectedScopeState = useState<GitReviewScopeTarget>(new GitReviewChangesTarget({}))
+	if (AsyncResult.isFailure(suggestedMetadata)) throw new Error(formatError(suggestedMetadata.cause))
 
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
 	const localCommits = suggestedMetadataLoaded ? suggestedMetadata.value.localCommits : Array.empty<GitCommit>()
@@ -247,13 +157,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		Array.findFirst(commit => commit.hash === search.commit),
 		Option.getOrUndefined
 	)
-	const reviewTarget: GitReviewTarget = selectedCommit
-		? {_tag: 'commit', hash: selectedCommit.hash}
-		: selectedScopeState[0]
-	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
+	const reviewTarget = selectedCommit ? new GitReviewCommitTarget({hash: selectedCommit.hash}) : selectedScopeState[0]
+	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${gitReviewTargetKey(reviewTarget)}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
-	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
+	const reviewDiffsLoaded = AsyncResult.isSuccess(reviewDiffsResult)
 	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const hasReviewableChanges = reviewDiffsLoaded && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
 	const selectedEntry =
@@ -266,17 +174,22 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			: undefined) ?? reviewDiffsValue[0]
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
-	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
-	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
-	const resolveComments = useAtomSet(resolveCommentsActionAtom(input.cwd), {mode: 'promise'})
-	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
-	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
-	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
-	const effectiveComments: readonly DisplayComment[] = Array.map(comments, comment => ({
-		...comment,
-		resolved: comment.resolved === true,
-		resolving: commentResolutionState.resolvingKeys.has(gitReviewCommentKey(comment)),
-		source: comment.source ?? 'local'
+	const [, saveComment] = useAtom(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
+	const [, resolveComment] = useAtom(RpcClient.mutation('review.comments.resolve'), {mode: 'promise'})
+	const [, loadFileContent] = useAtom(RpcClient.mutation('review.fileContent'), {mode: 'promise'})
+	const commentResolutionState = useState({resolvingAll: false, resolvingKeys: new Set<string>()})
+	const [, markReviewed] = useAtom(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
+	const [, unmarkReviewed] = useAtom(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
+	const effectiveComments = Array.map(reviewStateValue.comments, comment => ({
+		body: comment.body,
+		filePath: comment.filePath,
+		lineNumber: comment.lineNumber,
+		resolved: comment.resolved,
+		resolving: commentResolutionState[0].resolvingKeys.has(gitReviewCommentKey(comment)),
+		side: comment.side,
+		source: comment.source ?? 'local',
+		threadId: comment.threadId,
+		url: comment.url
 	}))
 	const unresolvedComments = Array.filter(effectiveComments, comment => !comment.resolved)
 	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({
@@ -288,12 +201,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
 	const visibleSegmentKeys = new Set(
-		pipe(
-			reviewDiffsValue,
-			Array.flatMap(diff =>
-				Array.map(diff.segments, segment =>
-					gitReviewMarkKey({filePath: segment.filePath, fingerprint: segment.fingerprint})
-				)
+		Array.flatMap(reviewDiffsValue, diff =>
+			Array.map(diff.segments, segment =>
+				gitReviewMarkKey({filePath: segment.filePath, fingerprint: segment.fingerprint})
 			)
 		)
 	)
@@ -320,9 +230,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function selectTarget(target: GitReviewTarget) {
 		startTransition(() => {
-			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
+			void navigate({search: gitReviewTargetIsCommit(target) ? {commit: target.hash} : {}})
 		})
-		if (target._tag !== 'commit') selectedScopeState[1](target)
+		if (gitReviewTargetIsScope(target)) selectedScopeState[1](target)
 		selectedFilePathState[1]('')
 	}
 
@@ -331,46 +241,134 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		refreshReviewState()
 	}
 
+	async function copyComments(
+		commentsToCopy: readonly (typeof GitReviewComment.Type & {
+			readonly resolved: boolean
+			readonly resolving?: boolean
+			readonly source: 'github' | 'local'
+			readonly threadId?: string
+			readonly url?: string
+		})[]
+	) {
+		copiedCommentsState[1]((await copyReviewComments(commentsToCopy)) ? 'copied' : 'failed')
+		window.setTimeout(() => {
+			copiedCommentsState[1]('idle')
+		}, 1200)
+	}
+
 	async function markFileReviewed(marks: readonly GitReviewMark[]) {
 		try {
 			await markReviewed({payload: {cwd: input.cwd, marks}})
+			commentActionErrorState[1]('')
 		} catch {
-			toast.error('Failed to mark file reviewed.')
+			commentActionErrorState[1]('Failed to mark file reviewed.')
 		}
 	}
 
 	async function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
 		try {
 			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
+			commentActionErrorState[1]('')
 		} catch {
-			toast.error('Failed to unmark file reviewed.')
+			commentActionErrorState[1]('Failed to unmark file reviewed.')
 		}
 	}
 
-	async function saveQueuedComment(comment: QueuedComment) {
+	async function saveQueuedComment(comment: typeof GitReviewComment.Type) {
 		try {
 			await saveComment({payload: {comment, cwd: input.cwd}})
+			commentActionErrorState[1]('')
 		} catch {
-			toast.error('Failed to save comment.')
+			commentActionErrorState[1]('Failed to save comment.')
 		}
 	}
 
-	async function resolveReviewComment(comment: DisplayComment) {
+	async function resolveReviewComment(
+		comment: typeof GitReviewComment.Type & {
+			readonly resolved: boolean
+			readonly resolving?: boolean
+			readonly source: 'github' | 'local'
+			readonly threadId?: string
+			readonly url?: string
+		}
+	) {
+		const key = gitReviewCommentKey(comment)
+		commentResolutionState[1](state => ({
+			resolvingAll: state.resolvingAll,
+			resolvingKeys: new Set([...state.resolvingKeys, key])
+		}))
 		try {
-			await resolveComment({comment, key: gitReviewCommentKey(comment)})
+			await resolveComment({
+				payload: {
+					cwd: input.cwd,
+					filePath: comment.filePath,
+					lineNumber: comment.lineNumber,
+					side: comment.side,
+					threadId: comment.threadId
+				}
+			})
 			if (comment.source === 'github') refreshReviewState()
+			commentActionErrorState[1]('')
 		} catch {
-			toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
+			commentActionErrorState[1](
+				comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.'
+			)
+			commentResolutionState[1](state => {
+				const resolvingKeys = new Set(state.resolvingKeys)
+				resolvingKeys.delete(key)
+				return {resolvingAll: state.resolvingAll, resolvingKeys}
+			})
 		}
+		commentResolutionState[1](state => {
+			const resolvingKeys = new Set(state.resolvingKeys)
+			resolvingKeys.delete(key)
+			return {resolvingAll: state.resolvingAll, resolvingKeys}
+		})
 	}
 
-	async function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
+	async function resolveReviewComments(
+		commentsToResolve: readonly {
+			readonly comment: typeof GitReviewComment.Type & {
+				readonly resolved: boolean
+				readonly resolving?: boolean
+				readonly source: 'github' | 'local'
+				readonly threadId?: string
+				readonly url?: string
+			}
+			readonly key: string
+		}[]
+	) {
+		commentResolutionState[1](state => ({
+			resolvingAll: true,
+			resolvingKeys: new Set([...state.resolvingKeys, ...Array.map(commentsToResolve, comment => comment.key)])
+		}))
 		try {
-			await resolveComments(commentsToResolve)
+			await Promise.all(
+				pipe(
+					commentsToResolve,
+					Array.dedupeWith(
+						(left, right) => left.comment.threadId !== undefined && left.comment.threadId === right.comment.threadId
+					),
+					Array.map(resolveInput =>
+						resolveComment({
+							payload: {
+								cwd: input.cwd,
+								filePath: resolveInput.comment.filePath,
+								lineNumber: resolveInput.comment.lineNumber,
+								side: resolveInput.comment.side,
+								threadId: resolveInput.comment.threadId
+							}
+						})
+					)
+				)
+			)
 			refreshReviewState()
+			commentActionErrorState[1]('')
 		} catch {
-			toast.error('Failed to resolve comment.')
+			commentActionErrorState[1]('Failed to resolve comment.')
+			commentResolutionState[1]({resolvingAll: false, resolvingKeys: new Set()})
 		}
+		commentResolutionState[1]({resolvingAll: false, resolvingKeys: new Set()})
 	}
 
 	useHotkey({key: '?', shift: true}, () => {
@@ -438,7 +436,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										localCommits={localCommits}
 										selected={reviewTarget}
 										selectCommit={commit => {
-											selectTarget({_tag: 'commit', hash: commit.hash})
+											selectTarget(new GitReviewCommitTarget({hash: commit.hash}))
 										}}
 										selectScope={selectTarget}
 									/>
@@ -466,6 +464,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 									<PatchDiff
 										filePath={selectedEntry.filePath}
 										fileContent={selectedEntry.fileContent}
+										loadFileContent={() =>
+											loadFileContent({
+												payload: {cwd: input.cwd, filePath: selectedEntry.filePath, target: reviewTarget}
+											})
+										}
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {
@@ -519,29 +522,35 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										type="button"
 										variant="ghost"
 										size="icon-sm"
-										aria-label="Copy all comments"
-										title="Copy all comments"
+										aria-label={copiedCommentsState[0] === 'failed' ? 'Copy failed' : 'Copy all comments'}
+										title={copiedCommentsState[0] === 'failed' ? 'Copy failed' : 'Copy all comments'}
 										disabled={Array.isReadonlyArrayEmpty(unresolvedComments)}
 										onClick={() => {
-											void copyReviewComments(unresolvedComments)
+											void copyComments(unresolvedComments)
 										}}
 									>
-										<CopyIcon />
+										{copiedCommentsState[0] === 'copied' ? (
+											<CheckIcon className="text-emerald-500" />
+										) : (
+											<CopyIcon className={cn(copiedCommentsState[0] === 'failed' && 'text-destructive')} />
+										)}
 									</Button>
 									<Button
 										type="button"
-										variant="ghost"
+										variant={String.isNonEmpty(commentActionErrorState[0]) ? 'destructive' : 'ghost'}
 										size="icon-sm"
-										aria-label="Resolve all comments"
-										title="Resolve all comments"
+										aria-label={commentActionErrorState[0] || 'Resolve all comments'}
+										title={commentActionErrorState[0] || 'Resolve all comments'}
 										disabled={
-											commentResolutionState.resolvingAll ? true : Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
+											commentResolutionState[0].resolvingAll
+												? true
+												: Array.isReadonlyArrayEmpty(unresolvedCommentInputs)
 										}
 										onClick={() => {
 											void resolveReviewComments(unresolvedCommentInputs)
 										}}
 									>
-										{commentResolutionState.resolvingAll ? (
+										{commentResolutionState[0].resolvingAll ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											<CircleCheckIcon />
@@ -569,54 +578,81 @@ function CommitActionForm(input: {
 	readonly upstream?: {readonly ahead: number; readonly behind: number}
 }) {
 	const commitMessageState = useState('')
-	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
-	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
-	const approvePublish = useAtomSet(approvePublishActionAtom(input.cwd), {mode: 'promise'})
-	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
+	const actionErrorState = useState('')
+	const actionState = useState({generatingMessage: false, publishing: false})
+	const [, generatePublishMessage] = useAtom(RpcClient.mutation('publish.message.generate'), {mode: 'promise'})
+	const [, approvePublish] = useAtom(RpcClient.mutation('publish.approve'), {mode: 'promise'})
+	const trimmedCommitMessage = String.trim(commitMessageState[0])
 	const missingMessage = input.dirty && String.isEmpty(trimmedCommitMessage)
 	const publishDisabled =
 		input.loading ||
-		actionState.publishing ||
+		actionState[0].publishing ||
 		(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
 		missingMessage
 	const generateDisabled =
 		input.loading ||
-		actionState.generatingMessage ||
-		actionState.publishing ||
+		actionState[0].generatingMessage ||
+		actionState[0].publishing ||
 		!input.dirty ||
 		!input.hasReviewableChanges
-	let commitMessagePlaceholder = 'No changes'
-	if (input.loading) commitMessagePlaceholder = 'Loading'
-	else if (input.dirty) commitMessagePlaceholder = 'Generate commit message'
-	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
+	const commitMessagePlaceholder = Match.value(input).pipe(
+		Match.when(
+			value => value.loading,
+			() => 'Loading'
+		),
+		Match.when(
+			value => value.dirty,
+			() => 'Generate commit message'
+		),
+		Match.orElse(() => 'No changes')
+	)
+	const messageLines = String.split(/\r?\n/u)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
 	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
-	let subjectContent = commitMessagePlaceholder
-	if (String.isNonEmpty(messageSubject)) subjectContent = messageSubject
-	if (actionState.generatingMessage) subjectContent = 'Generating commit message'
-	const subjectMuted = String.isEmpty(messageSubject) || actionState.generatingMessage
-	const showBody = String.isNonEmpty(messageBody) && !actionState.generatingMessage
+	const subjectContent = Match.value({
+		commitMessagePlaceholder,
+		generatingMessage: actionState[0].generatingMessage,
+		messageSubject
+	}).pipe(
+		Match.when(
+			value => value.generatingMessage,
+			() => 'Generating commit message'
+		),
+		Match.when(
+			value => String.isNonEmpty(value.messageSubject),
+			value => value.messageSubject
+		),
+		Match.orElse(value => value.commitMessagePlaceholder)
+	)
+	const subjectMuted = String.isEmpty(messageSubject) || actionState[0].generatingMessage
+	const showBody = String.isNonEmpty(messageBody) && !actionState[0].generatingMessage
 
 	async function submitPublish() {
 		if (publishDisabled) return
 
+		actionState[1]({generatingMessage: false, publishing: true})
 		try {
-			await approvePublish(trimmedCommitMessage)
+			await approvePublish({payload: {cwd: input.cwd, message: trimmedCommitMessage}})
 			commitMessageState[1]('')
+			actionErrorState[1]('')
 			input.refreshReview()
 		} catch (error) {
-			toast.error(formatError(error))
+			actionErrorState[1](formatError(error))
 		}
+		actionState[1]({generatingMessage: false, publishing: false})
 	}
 
 	async function generateMessage() {
 		if (generateDisabled) return
 
+		actionState[1]({generatingMessage: true, publishing: false})
 		try {
-			commitMessageState[1](await generatePublishMessage(null))
+			commitMessageState[1](await generatePublishMessage({payload: {cwd: input.cwd}}))
+			actionErrorState[1]('')
 		} catch (error) {
-			toast.error(formatError(error))
+			actionErrorState[1](formatError(error))
 		}
+		actionState[1]({generatingMessage: false, publishing: false})
 	}
 
 	const commitActions = (
@@ -643,28 +679,28 @@ function CommitActionForm(input: {
 			)}
 			<Button
 				type="button"
-				variant="ghost"
+				variant={String.isNonEmpty(actionErrorState[0]) ? 'destructive' : 'ghost'}
 				size="icon-xs"
 				className="size-4"
-				aria-label="Generate commit message"
-				title="Generate commit message"
+				aria-label={actionErrorState[0] || 'Generate commit message'}
+				title={actionErrorState[0] || 'Generate commit message'}
 				disabled={generateDisabled}
 				onClick={() => {
 					void generateMessage()
 				}}
 			>
-				{actionState.generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
+				{actionState[0].generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
 			</Button>
 			<Button
 				type="submit"
-				variant="ghost"
+				variant={String.isNonEmpty(actionErrorState[0]) ? 'destructive' : 'ghost'}
 				size="icon-xs"
 				className="size-4"
-				aria-label="Publish"
-				title="Commit, push, and open a draft PR"
+				aria-label={actionErrorState[0] || 'Publish'}
+				title={actionErrorState[0] || 'Commit, push, and open a draft PR'}
 				disabled={publishDisabled}
 			>
-				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
+				{actionState[0].publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
 			</Button>
 			{input.loading ? (
 				<span className="text-muted-foreground flex size-4 items-center justify-center">
@@ -738,8 +774,8 @@ function CommitList(input: {
 		)
 	}
 
-	function renderScope(target: Exclude<GitReviewTarget, {_tag: 'commit'}>, label: string, detail: string) {
-		const selected = input.selected._tag === target._tag
+	function renderScope(target: GitReviewScopeTarget, label: string, detail: string) {
+		const selected = gitReviewTargetKey(input.selected) === gitReviewTargetKey(target)
 
 		return (
 			<li className="w-full min-w-0">
@@ -762,7 +798,7 @@ function CommitList(input: {
 	}
 
 	function renderCommit(commit: GitCommit) {
-		const selected = input.selected._tag === 'commit' && input.selected.hash === commit.hash
+		const selected = gitReviewTargetIsCommit(input.selected) && input.selected.hash === commit.hash
 
 		return (
 			<li key={commit.hash} className="w-full min-w-0">
@@ -789,61 +825,73 @@ function CommitList(input: {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<ul className="min-h-0 flex-1 overflow-y-auto py-1">
-				{renderScope({_tag: 'changes'}, 'Changes', 'worktree')}
-				{showLocal && renderScope({_tag: 'local'}, 'Local', `${Array.length(input.localCommits)}`)}
+				{renderScope(new GitReviewChangesTarget({}), 'Changes', 'worktree')}
+				{showLocal && renderScope(new GitReviewLocalTarget({}), 'Local', `${Array.length(input.localCommits)}`)}
 				{Array.map(input.localCommits, renderCommit)}
-				{showBranch && renderScope({_tag: 'branch'}, 'Branch', `${Array.length(input.branchCommits)}`)}
+				{showBranch && renderScope(new GitReviewBranchTarget({}), 'Branch', `${Array.length(input.branchCommits)}`)}
 				{Array.map(input.branchCommits, renderCommit)}
 			</ul>
 		</div>
 	)
 }
 
-type FileTreeNode =
-	| {readonly children: FileTreeNode[]; readonly name: string; readonly path: string; readonly type: 'directory'}
-	| {readonly diff: GitDiff; readonly name: string; readonly path: string; readonly type: 'file'}
-
-function buildFileTree(diffs: readonly GitDiff[]) {
-	const root = {children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory' as const}
-
-	for (const diff of diffs) {
-		const parts = diff.filePath.split('/')
-		let directory = root
-
-		for (const part of Array.dropRight(parts, 1)) {
-			const path = directory.path ? `${directory.path}/${part}` : part
-			const current = pipe(
-				directory.children,
-				Array.findFirst(child => child.name === part),
-				Option.getOrUndefined
-			)
-
-			if (current?.type === 'directory') {
-				directory = current
-			} else {
-				const next = {children: Array.empty<FileTreeNode>(), name: part, path, type: 'directory' as const}
-				directory.children.push(next)
-				directory = next
-			}
-		}
-
-		directory.children.push({diff, name: parts.at(-1) ?? diff.filePath, path: diff.filePath, type: 'file'})
-	}
-
-	return pipe(
-		root.children,
-		Array.map(node => (node.type === 'directory' ? collapseSingleChildDirectory(node) : node))
-	)
+interface FileTreeDirectory {
+	readonly children: (FileTreeDirectory | FileTreeFile)[]
+	readonly name: string
+	readonly path: string
+	readonly type: 'directory'
 }
 
-function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly type: 'directory'}>) {
-	const child = directory.children[0]
+interface FileTreeFile {
+	readonly diff: GitDiff
+	readonly name: string
+	readonly path: string
+	readonly type: 'file'
+}
 
-	if (Array.length(directory.children) === 1 && child?.type === 'directory') {
+function buildFileTree(diffs: readonly GitDiff[]) {
+	const tree = {
+		root: {children: Array.empty<FileTreeDirectory | FileTreeFile>(), name: '', path: '', type: 'directory' as const}
+	}
+
+	function directoryChild(directory: FileTreeDirectory, name: string) {
+		const current = pipe(
+			directory.children,
+			Array.findFirst((child): child is FileTreeDirectory => child.name === name && child.type === 'directory'),
+			Option.getOrUndefined
+		)
+		if (current !== undefined) return current
+
+		const path = String.isNonEmpty(directory.path) ? `${directory.path}/${name}` : name
+		directory.children.push({children: Array.empty<FileTreeDirectory | FileTreeFile>(), name, path, type: 'directory'})
+		return pipe(
+			directory.children,
+			Array.findFirst((child): child is FileTreeDirectory => child.name === name && child.type === 'directory'),
+			Option.getOrThrowWith(() => new Error(`Missing directory node: ${path}`))
+		)
+	}
+
+	function insertDiff(directory: FileTreeDirectory, parts: readonly string[], diff: GitDiff) {
+		const part = Option.getOrElse(Array.head(parts), () => diff.filePath)
+		if (Array.length(parts) <= 1) {
+			directory.children.push({diff, name: part, path: diff.filePath, type: 'file'})
+			return
+		}
+
+		insertDiff(directoryChild(directory, part), Array.drop(parts, 1), diff)
+	}
+
+	for (const diff of diffs) insertDiff(tree.root, String.split('/')(diff.filePath), diff)
+
+	return Array.map(tree.root.children, node => (node.type === 'directory' ? collapseSingleChildDirectory(node) : node))
+}
+
+function collapseSingleChildDirectory(directory: FileTreeDirectory) {
+	if (Array.length(directory.children) === 1 && directory.children[0]?.type === 'directory') {
 		return collapseSingleChildDirectory({
-			children: child.children,
-			name: `${directory.name}/${child.name}`,
-			path: child.path,
+			children: directory.children[0].children,
+			name: `${directory.name}/${directory.children[0].name}`,
+			path: directory.children[0].path,
 			type: 'directory'
 		})
 	}
@@ -861,11 +909,10 @@ function DiffList(input: {
 }) {
 	const collapsedFoldersState = useState<ReadonlySet<string>>(new Set())
 	const fileTree = buildFileTree(input.diffs)
-	const marksByDiff = pipe(
+	const marksByDiff = Array.reduce(
 		input.diffs,
-		Array.reduce(HashMap.empty<string, readonly GitReviewMark[]>(), (marks, diff) =>
-			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
-		)
+		HashMap.empty<string, readonly GitReviewMark[]>(),
+		(currentMarks, diff) => HashMap.set(currentMarks, diff.filePath, gitReviewMarksForDiff(diff))
 	)
 	const reviewedKeys = new Set(Array.map(input.marks, gitReviewMarkKey))
 
@@ -881,7 +928,7 @@ function DiffList(input: {
 		})
 	}
 
-	function renderNode(node: FileTreeNode) {
+	function renderNode(node: FileTreeDirectory | FileTreeFile) {
 		if (node.type === 'directory') {
 			const collapsed = collapsedFoldersState[0].has(node.path)
 

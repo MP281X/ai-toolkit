@@ -76,31 +76,25 @@ function findVisitor(visitors: PortfolioState['visitors'], id: string) {
 }
 
 function upsertVisitor(visitors: PortfolioState['visitors'], visitor: PortfolioVisitor) {
-	for (let index = 0; index < visitors.length; index += 1) {
-		if (visitors[index]?.id !== visitor.id) continue
-
-		const nextVisitors = Array.copy(visitors)
-		nextVisitors[index] = visitor
-		return nextVisitors
-	}
-
-	return Array.appendAll(visitors, [visitor])
+	return Option.match(
+		Array.findFirstIndex(visitors, current => current.id === visitor.id),
+		{
+			onNone: () => Array.appendAll(visitors, [visitor]),
+			onSome: index => {
+				const nextVisitors = Array.copy(visitors)
+				nextVisitors[index] = visitor
+				return nextVisitors
+			}
+		}
+	)
 }
 
 function removeVisitor(visitors: PortfolioState['visitors'], id: string) {
-	const nextVisitors = Array.empty<PortfolioVisitor>()
-	let removed = false
-
-	for (const visitor of visitors) {
-		if (visitor.id === id) {
-			removed = true
-			continue
-		}
-
-		nextVisitors[nextVisitors.length] = visitor
+	const nextVisitors = Array.filter(visitors, visitor => visitor.id !== id)
+	return {
+		removed: nextVisitors.length !== visitors.length,
+		visitors: nextVisitors.length === visitors.length ? visitors : nextVisitors
 	}
-
-	return {removed, visitors: removed ? nextVisitors : visitors}
 }
 
 function createVisitorTrailUpdate(state: PortfolioState, visitor: PortfolioVisitor) {

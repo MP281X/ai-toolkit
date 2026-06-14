@@ -6,6 +6,7 @@ import {createFileRoute} from '@tanstack/react-router'
 
 import {activeHomeAtom} from '#lib/state.ts'
 import {WorkbenchTerminal} from '#routes/components/-workbench-terminal.tsx'
+import {TerminalPayload} from '#rpcs/contracts.ts'
 import {Fallback} from '@deslop/components/fallbacks'
 
 export const Route = createFileRoute('/(home)/$worktree/run')({
@@ -33,7 +34,7 @@ function RunPage() {
 		<div className="bg-background h-full min-h-0 min-w-0">
 			<WorkbenchTerminal
 				key={search.sessionId}
-				session={{cwd: activeHome.value.activeWorktree.root, sessionId: search.sessionId}}
+				session={TerminalPayload.make({cwd: activeHome.value.activeWorktree.root, sessionId: search.sessionId})}
 			/>
 		</div>
 	)

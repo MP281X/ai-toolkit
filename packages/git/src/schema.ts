@@ -1,4 +1,4 @@
-import {Array, Schema} from 'effect'
+import {Array, Match, Schema} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
@@ -23,13 +23,52 @@ export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
 	status: GitDiffStatus
 }) {}
 
+export class GitReviewChangesTarget extends Schema.TaggedClass<GitReviewChangesTarget>()('changes', {}) {}
+export class GitReviewLocalTarget extends Schema.TaggedClass<GitReviewLocalTarget>()('local', {}) {}
+export class GitReviewBranchTarget extends Schema.TaggedClass<GitReviewBranchTarget>()('branch', {}) {}
+export class GitReviewCommitTarget extends Schema.TaggedClass<GitReviewCommitTarget>()('commit', {
+	hash: Schema.String
+}) {}
+
+export type GitReviewScopeTarget = GitReviewChangesTarget | GitReviewLocalTarget | GitReviewBranchTarget
 export type GitReviewTarget = typeof GitReviewTarget.Type
 export const GitReviewTarget = Schema.Union([
-	Schema.Struct({_tag: Schema.Literal('changes')}),
-	Schema.Struct({_tag: Schema.Literal('local')}),
-	Schema.Struct({_tag: Schema.Literal('branch')}),
-	Schema.Struct({_tag: Schema.Literal('commit'), hash: Schema.String})
+	GitReviewChangesTarget,
+	GitReviewLocalTarget,
+	GitReviewBranchTarget,
+	GitReviewCommitTarget
 ])
+
+export function gitReviewTargetIsCommit(target: GitReviewTarget): target is GitReviewCommitTarget {
+	return Match.value(target).pipe(
+		Match.tag('commit', () => true),
+		Match.orElse(() => false)
+	)
+}
+
+export function gitReviewTargetIsScope(target: GitReviewTarget): target is GitReviewScopeTarget {
+	return Match.value(target).pipe(
+		Match.tag('commit', () => false),
+		Match.orElse(() => true)
+	)
+}
+
+export function gitReviewTargetKey(target: GitReviewTarget) {
+	return Match.value(target).pipe(
+		Match.tag('commit', value => `commit\u0000${value.hash}`),
+		Match.orElse(() => gitReviewTargetTag(target))
+	)
+}
+
+export function gitReviewTargetTag(target: GitReviewTarget) {
+	return Match.value(target).pipe(
+		Match.tag('changes', () => 'changes' as const),
+		Match.tag('local', () => 'local' as const),
+		Match.tag('branch', () => 'branch' as const),
+		Match.tag('commit', () => 'commit' as const),
+		Match.exhaustive
+	)
+}
 
 export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
 	hash: Schema.String,
@@ -86,12 +125,14 @@ export class GitBranchesSnapshot extends Schema.Class<GitBranchesSnapshot>('GitB
 	defaultBranch: Schema.String
 }) {}
 
+export class GitWorktreeLocalSource extends Schema.TaggedClass<GitWorktreeLocalSource>()('local', {}) {}
+export class GitWorktreeRemoteSource extends Schema.TaggedClass<GitWorktreeRemoteSource>()('remote', {
+	remote: Schema.String
+}) {}
+export class GitWorktreeNewSource extends Schema.TaggedClass<GitWorktreeNewSource>()('new', {}) {}
+
 export type GitWorktreeSource = typeof GitWorktreeSource.Type
-export const GitWorktreeSource = Schema.Union([
-	Schema.Struct({_tag: Schema.Literal('local')}),
-	Schema.Struct({_tag: Schema.Literal('remote'), remote: Schema.String}),
-	Schema.Struct({_tag: Schema.Literal('new')})
-])
+export const GitWorktreeSource = Schema.Union([GitWorktreeLocalSource, GitWorktreeRemoteSource, GitWorktreeNewSource])
 
 export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
 	branch: Schema.optional(Schema.String),
@@ -140,7 +181,16 @@ export function gitReviewStateSaveComment(state: GitReviewState, comment: GitRev
 	return new GitReviewState({
 		comments: Array.append(
 			Array.filter(state.comments, currentComment => gitReviewCommentKey(currentComment) !== key),
-			new GitReviewComment({...comment, resolved: false, source: 'local', threadId: undefined, url: undefined})
+			new GitReviewComment({
+				body: comment.body,
+				filePath: comment.filePath,
+				lineNumber: comment.lineNumber,
+				resolved: false,
+				side: comment.side,
+				source: 'local',
+				threadId: undefined,
+				url: undefined
+			})
 		),
 		marks: state.marks
 	})
@@ -154,7 +204,18 @@ export function gitReviewStateResolveComment(
 
 	return new GitReviewState({
 		comments: Array.map(state.comments, comment =>
-			gitReviewCommentKey(comment) === key ? new GitReviewComment({...comment, resolved: true}) : comment
+			gitReviewCommentKey(comment) === key
+				? new GitReviewComment({
+						body: comment.body,
+						filePath: comment.filePath,
+						lineNumber: comment.lineNumber,
+						resolved: true,
+						side: comment.side,
+						source: comment.source,
+						threadId: comment.threadId,
+						url: comment.url
+					})
+				: comment
 		),
 		marks: state.marks
 	})

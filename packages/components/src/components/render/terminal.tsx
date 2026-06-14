@@ -1,33 +1,34 @@
-import {Match, pipe} from 'effect'
+import {Array, Match, String, pipe} from 'effect'
 
 import {ClipboardAddon} from '@xterm/addon-clipboard'
 import {FitAddon} from '@xterm/addon-fit'
 import {Unicode11Addon} from '@xterm/addon-unicode11'
 import {WebLinksAddon} from '@xterm/addon-web-links'
 import {WebglAddon} from '@xterm/addon-webgl'
-import {Terminal as XTerm} from '@xterm/xterm'
+import * as XTerm from '@xterm/xterm'
 import {forwardRef, useEffect, useImperativeHandle, useRef} from 'react'
 
 import {Fallback} from '#components/fallbacks.tsx'
 import {cn} from '#lib/utils.ts'
-
-type TerminalStatusState = 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 
 function cssColor(element: HTMLElement, value: string) {
 	const probe = element.ownerDocument.createElement('span')
 	probe.style.color = value
 	probe.style.display = 'none'
 	element.append(probe)
-	const resolved = getComputedStyle(probe).color
-	probe.remove()
+	const color = getComputedStyle(probe).color || value
 
 	const canvas = element.ownerDocument.createElement('canvas')
 	canvas.width = 1
 	canvas.height = 1
 	const context = canvas.getContext('2d')
-	if (!context) return resolved || value
+	if (!context) {
+		probe.remove()
+		return color
+	}
 
-	context.fillStyle = resolved || value
+	context.fillStyle = color
+	probe.remove()
 	context.fillRect(0, 0, 1, 1)
 	const [red, green, blue, alpha = 255] = context.getImageData(0, 0, 1, 1).data
 
@@ -41,17 +42,18 @@ export const Terminal = forwardRef<
 	{
 		readonly className?: string
 		readonly onData: (data: string) => void
+		readonly onReady?: () => void
 		readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
-		readonly state?: TerminalStatusState
+		readonly state?: 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
 	}
 >(function Terminal(input, ref) {
 	const elementRef = useRef<HTMLDivElement>(null)
-	const terminalRef = useRef<XTerm>(null)
-	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
+	const terminalRef = useRef<XTerm.Terminal>(null)
+	const callbacksRef = useRef({onData: input.onData, onReady: input.onReady, onResize: input.onResize})
 	const inputBufferRef = useRef('')
 	const inputFlushRef = useRef<ReturnType<typeof setTimeout>>(null)
 
-	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
+	callbacksRef.current = {onData: input.onData, onReady: input.onReady, onResize: input.onResize}
 	useImperativeHandle(
 		ref,
 		() => ({
@@ -59,35 +61,32 @@ export const Terminal = forwardRef<
 				terminalRef.current?.reset()
 			},
 			write(data: string, done?: () => void) {
-				const terminal = terminalRef.current
-				if (!terminal || data === '') {
+				if (terminalRef.current === null || data === '') {
 					done?.()
 					return
 				}
 
-				terminal.write(data, done)
+				terminalRef.current.write(data, done)
 			}
 		}),
 		[]
 	)
 
 	useEffect(() => {
-		const element = elementRef.current
-		if (!element) return
+		if (elementRef.current === null) return
 
-		const container = element
-		const timeouts: ReturnType<typeof setTimeout>[] = []
-		let animationFrame: number | undefined
-		let disposed = false
-		let lastSize: {readonly cols: number; readonly rows: number} | undefined
+		return initializeTerminal(elementRef.current)
+	}, [])
+
+	function initializeTerminal(container: HTMLDivElement) {
+		const lifecycle = {animationFrame: 0, disposed: false, lastSize: {cols: 0, rows: 0}}
 
 		function flushInput() {
 			inputFlushRef.current = null
-			const data = inputBufferRef.current
-			if (data === '') return
+			if (inputBufferRef.current === '') return
 
+			callbacksRef.current.onData(inputBufferRef.current)
 			inputBufferRef.current = ''
-			callbacksRef.current.onData(data)
 		}
 
 		function pushInput(data: string) {
@@ -97,13 +96,13 @@ export const Terminal = forwardRef<
 			inputFlushRef.current = setTimeout(flushInput, 4)
 		}
 
-		const style = getComputedStyle(element)
-		const rootStyle = getComputedStyle(element.ownerDocument.documentElement)
+		const style = getComputedStyle(container)
+		const rootStyle = getComputedStyle(container.ownerDocument.documentElement)
 		const fontSize = Number.parseFloat(style.fontSize)
 		const fontWeight = Number.parseInt(style.fontWeight, 10)
-		const background = cssColor(element, rootStyle.getPropertyValue('--background').trim())
-		const selectionBackground = cssColor(element, 'oklch(0.8214 0.1337 49.9802 / 30%)')
-		const terminal = new XTerm({
+		const background = cssColor(container, String.trim(rootStyle.getPropertyValue('--background')))
+		const selectionBackground = cssColor(container, 'oklch(0.8214 0.1337 49.9802 / 30%)')
+		const terminal = new XTerm.Terminal({
 			allowProposedApi: true,
 			customGlyphs: true,
 			fastScrollSensitivity: 10,
@@ -132,24 +131,23 @@ export const Terminal = forwardRef<
 		}
 
 		function fitAndNotify() {
-			if (disposed || container.clientWidth < 8 || container.clientHeight < 8) return
+			if (lifecycle.disposed || container.clientWidth < 8 || container.clientHeight < 8) return
 
 			fit.fit()
 			alignScreen()
 			terminal.refresh(0, terminal.rows - 1)
-			const nextSize = {cols: terminal.cols, rows: terminal.rows}
-			if (nextSize.cols < 2 || nextSize.rows < 1) return
-			if (lastSize?.cols === nextSize.cols && lastSize.rows === nextSize.rows) return
+			if (terminal.cols < 2 || terminal.rows < 1) return
+			if (lifecycle.lastSize.cols === terminal.cols && lifecycle.lastSize.rows === terminal.rows) return
 
-			lastSize = nextSize
-			callbacksRef.current.onResize?.(nextSize)
+			lifecycle.lastSize = {cols: terminal.cols, rows: terminal.rows}
+			callbacksRef.current.onResize?.({cols: terminal.cols, rows: terminal.rows})
 		}
 
 		function resize() {
-			if (disposed) return
-			if (animationFrame !== undefined) cancelAnimationFrame(animationFrame)
-			animationFrame = requestAnimationFrame(() => {
-				animationFrame = undefined
+			if (lifecycle.disposed) return
+			if (lifecycle.animationFrame !== 0) cancelAnimationFrame(lifecycle.animationFrame)
+			lifecycle.animationFrame = requestAnimationFrame(() => {
+				lifecycle.animationFrame = 0
 				fitAndNotify()
 			})
 		}
@@ -159,7 +157,7 @@ export const Terminal = forwardRef<
 		terminal.loadAddon(new Unicode11Addon())
 		terminal.unicode.activeVersion = '11'
 		terminal.loadAddon(new WebLinksAddon())
-		terminal.open(element)
+		terminal.open(container)
 		terminal.focus()
 		try {
 			const webgl = new WebglAddon()
@@ -173,10 +171,9 @@ export const Terminal = forwardRef<
 		terminal.onData(pushInput)
 
 		resize()
-		for (const delay of [16, 50, 100, 250, 500]) {
-			timeouts.push(setTimeout(resize, delay))
-		}
+		const timeouts = Array.map([16, 50, 100, 250, 500], delay => setTimeout(resize, delay))
 		terminalRef.current = terminal
+		callbacksRef.current.onReady?.()
 
 		function paste(event: ClipboardEvent) {
 			const text = event.clipboardData?.getData('text/plain') ?? event.clipboardData?.getData('text') ?? ''
@@ -187,30 +184,29 @@ export const Terminal = forwardRef<
 			terminal.paste(text)
 		}
 
-		element.addEventListener('paste', paste, {capture: true})
+		container.addEventListener('paste', paste, {capture: true})
 
 		const observer = new ResizeObserver(resize)
-		observer.observe(element)
-		if (element.parentElement) observer.observe(element.parentElement)
+		observer.observe(container)
+		if (container.parentElement) observer.observe(container.parentElement)
 
-		const window = element.ownerDocument.defaultView
-		window?.addEventListener('resize', resize)
-		void element.ownerDocument.fonts.ready.then(resize)
+		container.ownerDocument.defaultView?.addEventListener('resize', resize)
+		void container.ownerDocument.fonts.ready.then(resize)
 
 		return () => {
-			disposed = true
+			lifecycle.disposed = true
 			terminalRef.current = null
 			inputBufferRef.current = ''
 			if (inputFlushRef.current) clearTimeout(inputFlushRef.current)
 			inputFlushRef.current = null
 			for (const timeout of timeouts) clearTimeout(timeout)
-			if (animationFrame !== undefined) cancelAnimationFrame(animationFrame)
-			window?.removeEventListener('resize', resize)
-			element.removeEventListener('paste', paste, {capture: true})
+			if (lifecycle.animationFrame !== 0) cancelAnimationFrame(lifecycle.animationFrame)
+			container.ownerDocument.defaultView?.removeEventListener('resize', resize)
+			container.removeEventListener('paste', paste, {capture: true})
 			observer.disconnect()
 			terminal.dispose()
 		}
-	}, [])
+	}
 	const terminalError = pipe(
 		Match.value(input.state),
 		Match.when('exited', () => 'Terminal exited.'),

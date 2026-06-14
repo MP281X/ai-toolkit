@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Predicate, Schema, pipe} from 'effect'
+import {Array, Predicate, Schema} from 'effect'
 
 import {createFileRoute} from '@tanstack/react-router'
 
@@ -19,7 +19,7 @@ function PortlessPage() {
 	const origins = useAtomSuspense(portlessOriginsAtom(activeHome.value.activeWorktree?.root ?? ''))
 	if (!activeHome.value.activeWorktree) return
 	const origin =
-		Predicate.isNotUndefined(search.origin) && pipe(origins.value, Array.contains(search.origin))
+		Predicate.isNotUndefined(search.origin) && Array.contains(origins.value, search.origin)
 			? search.origin
 			: origins.value[0]
 

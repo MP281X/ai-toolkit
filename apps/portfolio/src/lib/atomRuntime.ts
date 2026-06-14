@@ -1,4 +1,4 @@
-import {Config, ConfigProvider, Effect, Layer, Option, pipe} from 'effect'
+import {Array, Config, ConfigProvider, Effect, Layer, Option, String, pipe} from 'effect'
 
 import {FetchHttpClient} from 'effect/unstable/http'
 import {AtomRpc} from 'effect/unstable/reactivity'
@@ -52,7 +52,13 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 							Option.orElse(() =>
 								Option.map(config.origin, origin => {
 									const url = new URL(origin)
-									url.hostname = ['server', ...url.hostname.split('.').slice(1)].join('.')
+									url.hostname = pipe(
+										url.hostname,
+										String.split('.'),
+										Array.drop(1),
+										Array.prepend('server'),
+										Array.join('.')
+									)
 
 									return url.origin
 								})

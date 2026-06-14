@@ -22,13 +22,12 @@
 
 ## Implementation
 
-- Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
+- Final shape first: direct, functional, composable, Effect-native
 - Structure only from domain, Effect, React, or external boundary
-- Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
+- Prefer problem-local domain flow over new abstractions when an extraction does not add meaning
 - Optimize the actual method/workflow to be fast enough on demand; do not hide slow paths with preloading, broad caching, speculative warming, or background refresh unless explicitly requested
 - Treat caching/preloading as correctness-owned state with invalidation cost, not as a substitute for making the underlying operation efficient and observable
-- Inline simple types, props, helpers, expressions, and derived values
-- Repeated local code stays visible when extraction only hides
+- Repeated local code stays visible when extraction only hides incidental complexity
 - Delete/replace incidental complexity
 - Refactor = old implementation fully replaced
 - No legacy paths, compatibility wrappers, adapters, fallback branches, duplicate implementations

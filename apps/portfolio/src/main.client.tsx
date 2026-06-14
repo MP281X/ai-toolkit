@@ -17,7 +17,6 @@ const router = createRouter({
 })
 
 declare module '@tanstack/react-router' {
-	// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- TanStack Router augments this interface by name.
 	interface Register {
 		readonly router: typeof router
 	}

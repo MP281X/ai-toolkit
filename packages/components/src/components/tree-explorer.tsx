@@ -31,11 +31,6 @@ export function TreeExplorerRow(props: {
 	readonly title?: string
 	readonly children: React.ReactNode
 }) {
-	const className = cn(
-		'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
-		props.selected === true &&
-			'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
-	)
 	const label = (
 		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
 			{Predicate.isNotUndefined(props.icon) && (
@@ -51,7 +46,11 @@ export function TreeExplorerRow(props: {
 		return (
 			<div
 				aria-current={props.selected === true ? 'page' : undefined}
-				className={className}
+				className={cn(
+					'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
+					props.selected === true &&
+						'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
+				)}
 				style={{paddingLeft: 12, paddingRight: 8}}
 				title={props.title}
 			>
@@ -73,7 +72,11 @@ export function TreeExplorerRow(props: {
 				type="button"
 				aria-current={props.selected === true ? 'page' : undefined}
 				onClick={props.onClick}
-				className={className}
+				className={cn(
+					'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
+					props.selected === true &&
+						'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
+				)}
 				style={{paddingLeft: 12, paddingRight: 8}}
 				title={props.title}
 			>
@@ -84,7 +87,15 @@ export function TreeExplorerRow(props: {
 	}
 
 	return (
-		<div className={className} style={{paddingLeft: 12, paddingRight: 8}} title={props.title}>
+		<div
+			className={cn(
+				'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
+				props.selected === true &&
+					'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
+			)}
+			style={{paddingLeft: 12, paddingRight: 8}}
+			title={props.title}
+		>
 			{label}
 			{props.actions}
 		</div>

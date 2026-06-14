@@ -5,12 +5,6 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 
 # React
 
-## Compiler
-
-- React Compiler on
-- Zero manual memo: no `memo`, `useMemo`, `useCallback`
-- Remove manual memo when touched
-
 ## State And RPC
 
 - Components render; atoms own logic
@@ -25,7 +19,8 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 
 ## Components
 
-- Inline prop types for structural service mirrors
+- React Compiler is enabled; do not add manual memoization unless a measured boundary requires it
+- Name component data shapes only when they are real domain concepts
 - No service-schema imports in reusable component packages
 - No bridge props inferable from existing props
 - Local obvious derivation stays at use site

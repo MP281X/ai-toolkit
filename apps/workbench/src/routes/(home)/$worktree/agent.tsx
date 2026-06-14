@@ -6,6 +6,7 @@ import {createFileRoute} from '@tanstack/react-router'
 
 import {activeHomeAtom, agentsAtom} from '#lib/state.ts'
 import {WorkbenchTerminal} from '#routes/components/-workbench-terminal.tsx'
+import {TerminalPayload} from '#rpcs/contracts.ts'
 
 export const Route = createFileRoute('/(home)/$worktree/agent')({
 	component: AgentPage,
@@ -30,12 +31,12 @@ function AgentPage() {
 		<div className="bg-background h-full min-h-0 min-w-0">
 			<WorkbenchTerminal
 				key={search.agentId}
-				session={{
+				session={TerminalPayload.make({
 					args: session.args,
 					command: session.command,
 					cwd: activeHome.value.activeWorktree.root,
 					sessionId: search.agentId
-				}}
+				})}
 			/>
 		</div>
 	)

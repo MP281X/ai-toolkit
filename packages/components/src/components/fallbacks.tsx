@@ -32,7 +32,10 @@ export function Error(props: {readonly error: Error; readonly reset: () => void}
 		<Button
 			variant="ghost"
 			onClick={() => {
-				void navigator.clipboard.writeText(message)
+				void navigator.clipboard.writeText(message).then(
+					() => {},
+					() => {}
+				)
 				props.reset()
 			}}
 			className="flex h-full w-full cursor-pointer items-center justify-center p-4 select-text"

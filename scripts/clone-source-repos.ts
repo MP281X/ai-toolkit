@@ -1,4 +1,4 @@
-import {NodeServices} from '@effect/platform-node'
+import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
 import {Effect, FileSystem} from 'effect'
 
@@ -28,7 +28,7 @@ const repositories = [
 ] as const
 
 const program = Effect.gen(function* () {
-	const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
+	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 	const fs = yield* FileSystem.FileSystem
 
 	yield* fs.makeDirectory('.agents/repos', {recursive: true})
@@ -40,10 +40,10 @@ const program = Effect.gen(function* () {
 
 			if (exists) {
 				yield* Effect.log(`updating ${repository.name}`)
-				yield* execString(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only']))
+				yield* spawner.string(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only']))
 			} else {
 				yield* Effect.log(`cloning ${repository.name}`)
-				yield* execString(
+				yield* spawner.string(
 					ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', repository.url, directory])
 				)
 			}
@@ -53,4 +53,4 @@ const program = Effect.gen(function* () {
 	)
 })
 
-await Effect.runPromise(program.pipe(Effect.provide(NodeServices.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))

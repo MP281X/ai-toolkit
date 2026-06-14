@@ -1,24 +1,23 @@
-import {createServer} from 'node:net'
+import {readFileSync, statSync} from 'node:fs'
+import {createServer, IncomingMessage, ServerResponse} from 'node:http'
+import * as net from 'node:net'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import type {FileSystem, Path} from 'effect'
-import {Array, Context, Effect, Layer, Option, Predicate, Semaphore, String, pipe} from 'effect'
+import {Array, Context, Effect, Layer, Match, Option, Semaphore, String, pipe} from 'effect'
 
-import type {PlatformError} from 'effect/PlatformError'
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
-import type {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import type {ChildProcessSpawner} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
-import {PortlessOrigin, type PortlessPreparedRun, PortlessRun, PortlessScript} from './schema.ts'
+import {PortlessOrigin, PortlessRun, PortlessScript, PortlessStatus} from './schema.ts'
+import type {PortlessPreparedRun} from './schema.ts'
 
 import {command, discover} from '#lib/utils.ts'
 
-type PortlessMock = {
-	readonly clear?: (cwd: string) => Effect.Effect<void>
-	readonly remove?: (input: {readonly cwd: string; readonly sessionId: string}) => Effect.Effect<void>
-	readonly scripts?: (cwd: string) => Effect.Effect<PortlessPreparedRun[], PlatformError>
-}
-
-const INJECTED_HEAD = `<script>
+function injectScripts(html: string) {
+	const injectedHead = `<script>
 (() => {
   if (window.__deslopBrowserBridge) return
   window.__deslopBrowserBridge = true
@@ -77,14 +76,10 @@ const INJECTED_HEAD = `<script>
 </script>
 <script crossorigin="anonymous" src="//unpkg.com/react-scan/dist/auto.global.js" onload="window.reactScan?.({allowInIframe: true, _debug: 'verbose'})"></script>
 <script src="https://unpkg.com/react-grab/dist/index.global.js"></script>`
+	const match = /<head[^>]*>/iu.exec(html)
+	if (match === null) return `${injectedHead}\n${html}`
 
-const portlessHopsHeader = 'x-portless-hops'
-const maxProxyHops = 5
-
-function injectScripts(html: string) {
-	return /<head[^>]*>/i.test(html)
-		? html.replace(/<head[^>]*>/i, match => `${match}\n${INJECTED_HEAD}`)
-		: `${INJECTED_HEAD}\n${html}`
+	return `${String.slice(0, match.index + match[0].length)(html)}\n${injectedHead}${String.slice(match.index + match[0].length)(html)}`
 }
 
 function proxyHops(header: string | undefined | null) {
@@ -93,28 +88,29 @@ function proxyHops(header: string | undefined | null) {
 }
 
 function loopDetected(hops: number) {
-	return hops >= maxProxyHops
+	return hops >= 5
 }
 
 function loopDetectedResponse(hops: number) {
-	return pipe(
+	return HttpServerResponse.setStatus(
 		HttpServerResponse.html(
 			`<!doctype html><html><head><title>Loop Detected</title></head><body><h1>Loop Detected</h1><p>This request passed through Portless ${hops} times. This usually means a dev server proxy is forwarding back through Portless without rewriting the Host header.</p><p>Set <code>changeOrigin: true</code> in the dev server proxy config.</p></body></html>`
 		),
-		HttpServerResponse.setStatus(508, 'Loop Detected')
+		508,
+		'Loop Detected'
 	)
 }
 
 const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
-	const hops = proxyHops(webRequest.headers.get(portlessHopsHeader))
+	const hops = proxyHops(webRequest.headers.get('x-portless-hops'))
 	if (loopDetected(hops)) return loopDetectedResponse(hops)
 
-	const [pathname = '/', search = ''] = request.url.split('?')
+	const [pathname, search] = String.split('?')(request.url)
 	const upstreamHeaders = new Headers(webRequest.headers)
 	upstreamHeaders.set('host', new URL(origin).host)
-	upstreamHeaders.set(portlessHopsHeader, `${hops + 1}`)
-	const upstreamRequest = new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, {
+	upstreamHeaders.set('x-portless-hops', `${hops + 1}`)
+	const upstreamRequest = new Request(`${origin}${pathname}${String.includes('?')(request.url) ? `?${search}` : ''}`, {
 		body: webRequest.body,
 		headers: upstreamHeaders,
 		method: webRequest.method,
@@ -126,7 +122,7 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	headers.delete('content-length')
 	headers.delete('content-encoding')
 	const shouldRewriteHtml =
-		request.method === 'GET' && (upstreamResponse.headers.get('content-type') ?? '').includes('text/html')
+		request.method === 'GET' && String.includes('text/html')(upstreamResponse.headers.get('content-type') ?? '')
 
 	if (!shouldRewriteHtml) {
 		return HttpServerResponse.fromWeb(
@@ -151,67 +147,111 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 })
 
 const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const hops = proxyHops(request.headers[portlessHopsHeader])
+	const hops = proxyHops(request.headers['x-portless-hops'])
 	if (loopDetected(hops)) return loopDetectedResponse(hops)
 
-	const [pathname = '/', search = ''] = request.url.split('?')
-	const protocols = pipe(
-		Option.fromUndefinedOr(request.headers['sec-websocket-protocol']),
-		Option.map(header => pipe(header, String.split(','), Array.map(String.trim), Array.filter(String.isNonEmpty)))
+	const [pathname, search] = String.split('?')(request.url)
+	const protocols = Option.map(Option.fromUndefinedOr(request.headers['sec-websocket-protocol']), header =>
+		pipe(header, String.split(','), Array.map(String.trim), Array.filter(String.isNonEmpty))
 	)
 	const inbound = yield* request.upgrade
 	const upstreamUrl = new URL(origin)
 	upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 	upstreamUrl.pathname = pathname
-	upstreamUrl.search = search
+	upstreamUrl.search = search ?? ''
 	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString(), {
 		protocols: Option.getOrUndefined(protocols)
 	}).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
 
-	yield* outbound
-		.runRaw(message => writeInbound(message))
-		.pipe(
-			Effect.catchReason('SocketError', 'SocketCloseError', reason =>
-				writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.catch(() =>
-				writeInbound(new Socket.CloseEvent(1011, 'proxy error')).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.forkScoped
-		)
+	yield* outbound.runRaw(writeInbound).pipe(Effect.forkScoped)
 
-	yield* inbound
-		.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-		.pipe(
-			Effect.catch(() => Effect.void),
-			Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
-		)
+	yield* inbound.runRaw(writeOutbound).pipe(Effect.ensuring(Effect.orDie(writeOutbound(new Socket.CloseEvent()))))
 
 	return HttpServerResponse.empty()
 })
 
 function requestHostname(host: string | undefined) {
-	return pipe(
-		Option.fromUndefinedOr(host),
-		Option.flatMap(value => pipe(value, String.split(':'), Array.head))
-	)
+	return Option.flatMap(Option.fromUndefinedOr(host), value => pipe(value, String.split(':'), Array.head))
 }
 
 function isLocalHostname(hostname: string) {
 	return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
 
-const browserBlockedPorts = new Set([
-	4000, 4045, 4111, 4190, 4279, 4333, 4559, 4567, 4661, 4662, 4663, 4664, 4665, 4666, 4667, 4668, 4669
-])
+function staticContentType(file: string) {
+	return Match.value(file).pipe(
+		Match.when(String.endsWith('.html'), () => 'text/html; charset=utf-8'),
+		Match.when(String.endsWith('.css'), () => 'text/css; charset=utf-8'),
+		Match.when(
+			value => String.endsWith('.js')(value) || String.endsWith('.mjs')(value),
+			() => 'text/javascript; charset=utf-8'
+		),
+		Match.when(String.endsWith('.json'), () => 'application/json; charset=utf-8'),
+		Match.when(String.endsWith('.png'), () => 'image/png'),
+		Match.when(String.endsWith('.svg'), () => 'image/svg+xml'),
+		Match.when(String.endsWith('.woff2'), () => 'font/woff2'),
+		Match.orElse(() => 'application/octet-stream')
+	)
+}
+
+function localStaticRequest(request: IncomingMessage) {
+	return Option.match(requestHostname(request.headers.host), {onNone: () => true, onSome: isLocalHostname})
+}
+
+function serverResponse(value: unknown): value is ServerResponse {
+	return value instanceof ServerResponse
+}
+
+function staticFile(input: {readonly clientRoot: string; readonly url: string | undefined}) {
+	const indexFile = path.join(input.clientRoot, 'index.html')
+	const pathname = decodeURIComponent(new URL(input.url ?? '/', 'http://localhost').pathname)
+	const requested = path.resolve(input.clientRoot, `.${pathname}`)
+	if (!String.startsWith(`${input.clientRoot}${path.sep}`)(requested) && requested !== input.clientRoot) return
+
+	const file = requested === input.clientRoot ? indexFile : requested
+	try {
+		return statSync(file).isFile() ? file : indexFile
+	} catch {
+		return String.startsWith('/assets/')(pathname) ? undefined : indexFile
+	}
+}
+
+function serveStaticFile(input: {
+	readonly clientRoot: string
+	readonly request: IncomingMessage
+	readonly response: ServerResponse
+}) {
+	const file = staticFile({clientRoot: input.clientRoot, url: input.request.url})
+	if (file === undefined) {
+		input.response.writeHead(404).end()
+		return
+	}
+
+	const info = statSync(file)
+	input.response.writeHead(200, {'content-length': info.size, 'content-type': staticContentType(file)})
+	if (input.request.method === 'HEAD') {
+		input.response.end()
+		return
+	}
+	input.response.end(readFileSync(file))
+}
+
+function staticRequest(input: {readonly apiPrefix: string; readonly request: IncomingMessage}) {
+	return (
+		localStaticRequest(input.request) &&
+		input.request.url !== undefined &&
+		!String.startsWith(input.apiPrefix)(input.request.url) &&
+		(input.request.method === 'GET' || input.request.method === 'HEAD')
+	)
+}
 
 function portAvailable(port: number) {
 	return Effect.promise<boolean>(
 		() =>
 			new Promise(resolve => {
-				const server = createServer()
+				const server = net.createServer()
 				server.once('error', () => {
 					resolve(false)
 				})
@@ -228,10 +268,10 @@ function portAvailable(port: number) {
 export class Portless extends Context.Service<Portless>()('@deslop/portless/service/Portless', {
 	make: Effect.gen(function* () {
 		const server = yield* HttpServer.HttpServer
-		const proxyPort =
-			server.address._tag === 'TcpAddress'
-				? server.address.port.toString()
-				: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
+		const proxyPort = yield* Match.value(server.address).pipe(
+			Match.tag('TcpAddress', address => Effect.succeed(address.port.toString())),
+			Match.orElse(() => Effect.die(new Error('portless requires a TCP HTTP server address')))
+		)
 		const ports = new Map<string, number>()
 		const routes = new Map<string, string>()
 		const cwdRoutes = new Map<string, Set<string>>()
@@ -253,21 +293,18 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			const request = yield* HttpServerRequest.HttpServerRequest
 			const hostname = requestHostname(request.headers['host'])
 			if (Option.isNone(hostname) || isLocalHostname(hostname.value)) return yield* app
-			if (!hostname.value.endsWith('.localhost')) return yield* app
+			if (!String.endsWith('.localhost')(hostname.value)) return yield* app
 
 			const route = lookup(request.headers['host'])
 			if (Option.isNone(route)) return HttpServerResponse.empty({status: 404})
-			if (request.headers['upgrade']?.toLowerCase() === 'websocket') {
+			if (String.toLowerCase(request.headers['upgrade'] ?? '') === 'websocket') {
 				return yield* proxyWebSocket(request, route.value)
 			}
 
 			return yield* proxy(request, route.value)
 		})
 		function lookup(host: string | undefined) {
-			return pipe(
-				requestHostname(host),
-				Option.flatMap(hostname => Option.fromUndefinedOr(routes.get(hostname)))
-			)
+			return Option.flatMap(requestHostname(host), hostname => Option.fromUndefinedOr(routes.get(hostname)))
 		}
 		function removeRoute(host: string | undefined) {
 			if (host === undefined) return
@@ -297,7 +334,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			}
 		}
 		function replaceRoutes(cwd: string, discovered: readonly PortlessPreparedRun[]) {
-			const nextSessionKeys = new Set(discovered.map(route => `${cwd}:${route.script.sessionId}`))
+			const nextSessionKeys = new Set(Array.map(discovered, route => `${cwd}:${route.script.sessionId}`))
 			removeCwd(cwd, nextSessionKeys)
 
 			const hosts = new Set<string>()
@@ -312,22 +349,25 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			cwdRoutes.set(cwd, hosts)
 		}
 		const port = Effect.fnUntraced(function* (key: string) {
-			return yield* pipe(
+			return yield* portLock.withPermit(
 				Effect.gen(function* () {
 					const existing = ports.get(key)
 					if (existing !== undefined) return existing
 
 					const reserved = new Set(ports.values())
-					for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
-						if (browserBlockedPorts.has(candidatePort) || reserved.has(candidatePort)) continue
-						if (yield* portAvailable(candidatePort)) {
-							ports.set(key, candidatePort)
-							return candidatePort
-						}
-					}
-					throw new Error('no portless app ports available')
-				}),
-				Semaphore.withPermit(portLock)
+					const candidate = yield* Effect.findFirst(Array.range(4000, 4999), candidatePort =>
+						Array.contains(
+							[4000, 4045, 4111, 4190, 4279, 4333, 4559, 4567, 4661, 4662, 4663, 4664, 4665, 4666, 4667, 4668, 4669],
+							candidatePort
+						) || reserved.has(candidatePort)
+							? Effect.succeed(false)
+							: portAvailable(candidatePort)
+					)
+					if (Option.isNone(candidate)) throw new Error('no portless app ports available')
+
+					ports.set(key, candidate.value)
+					return candidate.value
+				})
 			)
 		})
 		const scripts = Effect.fn('Portless.scripts')(function* (cwd: string) {
@@ -337,7 +377,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
 				Effect.provide(discoveryContext),
 				Effect.map(discovered =>
-					discovered.map(route =>
+					Array.map(discovered, route =>
 						Object.assign(
 							new PortlessRun({
 								origin: new PortlessOrigin({
@@ -349,13 +389,17 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 									taskId: route.script.taskId
 								}),
 								script: new PortlessScript(route.script),
-								status: {state: 'prepared'}
+								status: new PortlessStatus({state: 'prepared'})
 							}),
 							{preparedCommand: command(route.script, route.port)}
 						)
 					)
 				),
-				Effect.tap(discovered => Effect.sync(() => replaceRoutes(cwd, discovered)))
+				Effect.tap(discovered =>
+					Effect.sync(() => {
+						replaceRoutes(cwd, discovered)
+					})
+				)
 			)
 		})
 
@@ -374,25 +418,6 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)
-	public static layerMock(input: PortlessMock = {}) {
-		return Layer.succeed(this, {
-			clear: Effect.fn('Portless.mock.clear')(function* (cwd: string) {
-				if (input.clear !== undefined) yield* input.clear(cwd)
-			}),
-			middleware: Effect.fnUntraced(function* <E, R>(app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) {
-				return yield* app
-			}),
-			remove: Effect.fn('Portless.mock.remove')(function* (payload: {
-				readonly cwd: string
-				readonly sessionId: string
-			}) {
-				if (input.remove !== undefined) yield* input.remove(payload)
-			}),
-			scripts: Effect.fn('Portless.mock.scripts')(function* (cwd: string) {
-				return input.scripts === undefined ? [] : yield* input.scripts(cwd)
-			})
-		})
-	}
 
 	public static middleware = Effect.fnUntraced(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
@@ -401,4 +426,25 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 
 		return yield* portless.middleware(app)
 	})
+
+	public static staticServer(input: {readonly apiPrefix: string; readonly clientRoot: URL}) {
+		const clientRoot = fileURLToPath(input.clientRoot)
+		const server = createServer()
+		const emit = server.emit.bind(server)
+		server.emit = (event: string | symbol, ...args: unknown[]) => {
+			if (
+				event === 'request' &&
+				args[0] instanceof IncomingMessage &&
+				serverResponse(args[1]) &&
+				staticRequest({apiPrefix: input.apiPrefix, request: args[0]})
+			) {
+				serveStaticFile({clientRoot, request: args[0], response: args[1]})
+				return true
+			}
+
+			return Reflect.apply(emit, server, [event, ...args])
+		}
+
+		return server
+	}
 }

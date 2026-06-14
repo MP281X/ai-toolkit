@@ -1,20 +1,20 @@
-import {Array, Predicate, String} from 'effect'
+import {Array, Option, Predicate, String} from 'effect'
 
 import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
-import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
+import {File, FileDiff} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {CircleCheckIcon, CopyIcon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
-import {GithubLight} from '../svgs/githubLight.tsx'
-
 import {Markdown} from './markdown.tsx'
 
+import {GithubLight} from '#components/svgs/githubLight.tsx'
 import {Spinner} from '#components/ui/spinner.tsx'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
-const DIFF_CSS = `
+function diffCss() {
+	return `
 	:host,
 	pre {
 		--diffs-bg: var(--background) !important;
@@ -71,8 +71,9 @@ const DIFF_CSS = `
 		color: var(--muted-foreground) !important;
 	}
 `
+}
 
-type DiffComment = {
+interface DiffComment {
 	readonly filePath: string
 	readonly lineNumber: number
 	readonly side?: AnnotationSide
@@ -105,23 +106,27 @@ export function formatCopiedComment(comment: {
 }
 
 function captureScrollAnchor(container: HTMLElement, clientY: number) {
-	const lineElement = [
-		...(container
-			.querySelector('diffs-container')
-			?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? [])
-	].find(element => {
-		const rect = element.getBoundingClientRect()
-		return clientY >= rect.top && clientY <= rect.bottom
-	})
+	const lineElement = Option.getOrUndefined(
+		Array.findFirst(
+			[
+				...(container
+					.querySelector('diffs-container')
+					?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? [])
+			],
+			element => {
+				const rect = element.getBoundingClientRect()
+				return clientY >= rect.top && clientY <= rect.bottom
+			}
+		)
+	)
 
 	if (!lineElement) return
 
-	const lineNumber = lineElement.dataset['line']
-	if (Predicate.isUndefined(lineNumber) || String.isEmpty(lineNumber)) return
+	if (Predicate.isUndefined(lineElement.dataset['line']) || String.isEmpty(lineElement.dataset['line'])) return
 
 	return {
 		clientY,
-		lineNumber,
+		lineNumber: lineElement.dataset['line'],
 		offsetWithinLine: clientY - lineElement.getBoundingClientRect().top,
 		scrollTop: container.scrollTop
 	}
@@ -301,15 +306,19 @@ function CommentAnnotation(props: {
 export function PatchDiff(props: {
 	readonly filePath: string
 	readonly fileContent?: string
+	readonly loadFileContent?: () => Promise<string>
 	readonly patch: string
 	readonly comments?: readonly DiffComment[]
 	readonly onSaveComment?: (comment: DiffComment) => void
 	readonly onResolveComment?: (comment: DiffComment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
+	const loadFileContentRef = useRef(props.loadFileContent)
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
 	const [draftComment, setDraftComment] = useState<DiffComment>()
+	const [fileContent, setFileContent] = useState(props.fileContent ?? '')
+	const [fileContentLoading, setFileContentLoading] = useState(false)
 	const [mode, setMode] = useState<'diff' | 'file'>('diff')
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
@@ -317,29 +326,53 @@ export function PatchDiff(props: {
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
 	useEffect(() => {
+		loadFileContentRef.current = props.loadFileContent
+	}, [props.loadFileContent])
+
+	useEffect(() => {
 		containerRef.current?.focus()
 	}, [mode, props.filePath, props.patch])
 
 	useEffect(() => {
 		setMode('diff')
-	}, [props.filePath, props.patch])
+		setFileContent(props.fileContent ?? '')
+		setFileContentLoading(false)
+	}, [props.fileContent, props.filePath, props.patch])
+
+	useEffect(() => {
+		if (mode !== 'file' || String.isNonEmpty(fileContent) || loadFileContentRef.current === undefined) return
+
+		const active = {current: true}
+		setFileContentLoading(true)
+		void loadFileContentRef.current().then(
+			content => {
+				if (!active.current) return
+				setFileContent(content)
+				setFileContentLoading(false)
+			},
+			() => {
+				if (active.current) setFileContentLoading(false)
+			}
+		)
+
+		return () => {
+			active.current = false
+		}
+	}, [fileContent, mode])
 
 	useLayoutEffect(() => {
-		const container = containerRef.current
-		const anchor = scrollAnchorRef.current
-		if (Predicate.isNull(container) || Predicate.isNull(anchor)) return
-		if (restoreScrollAnchor(container, anchor, mode)) scrollAnchorRef.current = null
-	}, [mode, props.fileContent])
+		if (Predicate.isNull(containerRef.current) || Predicate.isNull(scrollAnchorRef.current)) return
+		if (restoreScrollAnchor(containerRef.current, scrollAnchorRef.current, mode)) scrollAnchorRef.current = null
+	}, [fileContent, mode])
 
 	function toggleMode() {
-		const container = containerRef.current
-		if (Predicate.isNull(container)) return
+		if (Predicate.isNull(containerRef.current)) return
 
-		const rect = container.getBoundingClientRect()
+		const rect = containerRef.current.getBoundingClientRect()
 		const clientY = Predicate.isNull(pointerClientYRef.current)
 			? rect.top + rect.height / 2
 			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
+		scrollAnchorRef.current = captureScrollAnchor(containerRef.current, clientY) ?? null
 		setMode(current => (current === 'diff' ? 'file' : 'diff'))
 	}
 
@@ -396,7 +429,7 @@ export function PatchDiff(props: {
 			}}
 		>
 			{mode === 'diff' ? (
-				<PierreFileDiff<DiffComment>
+				<FileDiff<DiffComment>
 					key={props.patch}
 					fileDiff={fileDiff}
 					options={{
@@ -412,7 +445,7 @@ export function PatchDiff(props: {
 						overflow: 'scroll',
 						theme: HIGHLIGHT_THEMES,
 						themeType: 'system',
-						unsafeCSS: DIFF_CSS
+						unsafeCSS: diffCss()
 					}}
 					lineAnnotations={Array.map(commentsWithDraft, comment => ({
 						lineNumber: comment.lineNumber,
@@ -432,36 +465,45 @@ export function PatchDiff(props: {
 					)}
 				/>
 			) : (
-				<File<DiffComment>
-					key={props.filePath}
-					file={{contents: props.fileContent ?? '', lang: language, name: props.filePath}}
-					options={{
-						disableFileHeader: true,
-						disableLineNumbers: false,
-						onLineNumberClick: line => {
-							openComment({lineNumber: line.lineNumber})
-						},
-						overflow: 'scroll',
-						theme: HIGHLIGHT_THEMES,
-						themeType: 'system',
-						unsafeCSS: DIFF_CSS
-					}}
-					lineAnnotations={Array.map(
-						Array.filter(commentsWithDraft, comment => comment.side !== 'deletions'),
-						comment => ({lineNumber: comment.lineNumber, metadata: comment})
+				<>
+					{fileContentLoading && (
+						<div className="text-muted-foreground flex h-full items-center justify-center">
+							<Spinner className="size-4 border opacity-60" />
+						</div>
 					)}
-					renderAnnotation={annotation => (
-						<CommentAnnotation
-							comment={annotation.metadata}
-							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
-							onSaveComment={props.onSaveComment}
-							onResolveComment={props.onResolveComment}
-							onCloseDraft={() => {
-								setDraftComment(undefined)
+					{!fileContentLoading && (
+						<File<DiffComment>
+							key={props.filePath}
+							file={{contents: fileContent, lang: language, name: props.filePath}}
+							options={{
+								disableFileHeader: true,
+								disableLineNumbers: false,
+								onLineNumberClick: line => {
+									openComment({lineNumber: line.lineNumber})
+								},
+								overflow: 'scroll',
+								theme: HIGHLIGHT_THEMES,
+								themeType: 'system',
+								unsafeCSS: diffCss()
 							}}
+							lineAnnotations={Array.map(
+								Array.filter(commentsWithDraft, comment => comment.side !== 'deletions'),
+								comment => ({lineNumber: comment.lineNumber, metadata: comment})
+							)}
+							renderAnnotation={annotation => (
+								<CommentAnnotation
+									comment={annotation.metadata}
+									isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+									onSaveComment={props.onSaveComment}
+									onResolveComment={props.onResolveComment}
+									onCloseDraft={() => {
+										setDraftComment(undefined)
+									}}
+								/>
+							)}
 						/>
 					)}
-				/>
+				</>
 			)}
 		</section>
 	)

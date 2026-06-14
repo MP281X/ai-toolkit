@@ -31,7 +31,7 @@ description: Use when changing component layout, visual styling, controls, icons
 - Avoid gradients, shadows, blur, glass, decorative backgrounds, and marketing composition
 - Motion only for function
 - No nested cards
-- No prop-renaming wrappers
+- Add wrapper components only when they own behavior or a domain concept
 
 ## Controls
 

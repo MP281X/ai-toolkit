@@ -2,10 +2,9 @@ import {Schema} from 'effect'
 
 import type {ChildProcess} from 'effect/unstable/process'
 
-export type PortlessStatus = typeof PortlessStatus.Type
-export const PortlessStatus = Schema.Struct({
+export class PortlessStatus extends Schema.Class<PortlessStatus>('PortlessStatus')({
 	state: Schema.Literals(['idle', 'prepared', 'running', 'stopped', 'exited', 'failed'])
-})
+}) {}
 
 export class PortlessScript extends Schema.Class<PortlessScript>('PortlessScript')({
 	baseOrigin: Schema.optional(Schema.String),

@@ -1,0 +1,17 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/rules",
+
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+
+	"exports": {
+		".": "./src/rules.ts"
+	},
+
+	"devDependencies": {
+		"oxc-parser": "latest"
+	}
+}

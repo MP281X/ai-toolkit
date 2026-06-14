@@ -1,4 +1,4 @@
-import {DateTime, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, DateTime, Predicate, Schema, String} from 'effect'
 
 import {
 	ArrowLeftIcon,
@@ -22,7 +22,7 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/
 import {cn, formatTimestamp} from '#lib/utils.ts'
 
 function browserUrl(origin: string, rest: string) {
-	return `${origin}${rest.startsWith('/') ? rest : `/${rest}`}`
+	return `${origin}${String.startsWith('/')(rest) ? rest : `/${rest}`}`
 }
 
 function originLabel(origin: string) {
@@ -32,11 +32,10 @@ function originLabel(origin: string) {
 		const url = new URL(origin)
 		return url.host
 	} catch {
-		return origin.replace(/^https?:\/\//u, '')
+		return String.replace(/^https?:\/\//u, '')(origin)
 	}
 }
 
-type BrowserLog = {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}
 const BrowserMessage = Schema.Union([
 	Schema.Struct({deslopBrowserFavicon: Schema.Literal(true), href: Schema.optional(Schema.String)}),
 	Schema.Struct({deslopBrowserLocation: Schema.Literal(true), path: Schema.optional(Schema.String)}),
@@ -62,14 +61,14 @@ function LogLevelIcon(props: {readonly level: string}) {
 }
 
 function isIgnoredBrowserLog(message: string) {
-	const lower = message.toLowerCase()
+	const lower = String.toLowerCase(message)
 
 	return (
-		message.startsWith('[vite]') ||
-		lower.includes('react scan') ||
-		lower.includes('react-scan') ||
-		lower.includes('react grab') ||
-		lower.includes('react-grab')
+		String.startsWith('[vite]')(message) ||
+		String.includes('react scan')(lower) ||
+		String.includes('react-scan')(lower) ||
+		String.includes('react grab')(lower) ||
+		String.includes('react-grab')(lower)
 	)
 }
 
@@ -83,7 +82,9 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	const [faviconUrl, setFaviconUrl] = useState<string>()
 	const [isListening, setIsListening] = useState(false)
 	const [isLoading, setIsLoading] = useState(() => origin !== '')
-	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
+	const [logs, setLogs] = useState<
+		readonly {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}[]
+	>([])
 
 	useEffect(() => {
 		setAddress('/')
@@ -95,28 +96,21 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	useLayoutEffect(() => {
 		setIsListening(false)
 
-		function onMessage(event: MessageEvent) {
+		function onMessage(event: MessageEvent<unknown>) {
 			if (event.origin !== origin) return
+			if (!Schema.is(BrowserMessage)(event.data)) return
 
-			pipe(
-				Schema.decodeUnknownOption(BrowserMessage)(event.data),
-				Option.match({
-					onNone: () => {},
-					onSome: data => {
-						if ('deslopBrowserFavicon' in data) {
-							setFaviconUrl(data.href)
-							return
-						}
+			if ('deslopBrowserFavicon' in event.data) {
+				setFaviconUrl(event.data.href)
+				return
+			}
 
-						if ('deslopBrowserLocation' in data) {
-							setAddress(data.path ?? '/')
-							return
-						}
+			if ('deslopBrowserLocation' in event.data) {
+				setAddress(event.data.path ?? '/')
+				return
+			}
 
-						addLog(data.level, data.message)
-					}
-				})
-			)
+			addLog(event.data.level, event.data.message)
 		}
 
 		window.addEventListener('message', onMessage)
@@ -173,7 +167,11 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 	function addLog(level: string, message: string) {
 		if (isIgnoredBrowserLog(message)) return
 
-		setLogs(current => [...current.slice(-199), {id: logIdRef.current++, level, message, time: DateTime.nowUnsafe()}])
+		logIdRef.current += 1
+		setLogs(current => [
+			...Array.drop(current, -199),
+			{id: logIdRef.current, level, message, time: DateTime.nowUnsafe()}
+		])
 	}
 
 	return (
@@ -207,11 +205,11 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 						<span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{originLabel(origin)}</span>
 					</div>
 					<Input
-						value={address.startsWith('/') ? address.slice(1) : address}
+						value={String.startsWith('/')(address) ? String.slice(1)(address) : address}
 						placeholder=""
 						className="min-w-[7rem] flex-1 text-xs"
 						onChange={event => {
-							setAddress(`/${event.currentTarget.value.replace(/^\/+/, '')}`)
+							setAddress(`/${String.replace(/^\/+/u, '')(event.currentTarget.value)}`)
 						}}
 					/>
 				</div>
@@ -236,6 +234,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 									key={frameKey}
 									title={currentUrl}
 									src={isListening ? currentUrl : undefined}
+									sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
 									className="bg-background h-full min-h-0 w-full border-0"
 									onLoad={() => {
 										setIsLoading(false)
@@ -252,7 +251,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 						<ResizablePanel collapsible collapsedSize={0} defaultSize={0} minSize={0} maxSize="50%">
 							<div className="flex h-full min-h-0 flex-col overflow-hidden">
 								<div className={cn('min-h-0 flex-1 overflow-auto font-mono text-xs', logs.length === 0 && 'hidden')}>
-									{logs.map(log => (
+									{Array.map(logs, log => (
 										<div key={log.id} className="grid grid-cols-[8rem_1rem_minmax(0,1fr)] gap-3 px-2 py-1">
 											<span className="overflow-hidden whitespace-nowrap select-none">{formatTimestamp(log.time)}</span>
 											<span

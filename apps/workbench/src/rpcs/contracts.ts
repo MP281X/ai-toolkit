@@ -26,21 +26,17 @@ import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
 import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
 
-const CwdPayloadFields = {cwd: Schema.String}
-const CwdPayload = Schema.Struct(CwdPayloadFields)
+export class CwdPayload extends Schema.Class<CwdPayload>('CwdPayload')({cwd: Schema.String}) {}
 
-const TerminalPayloadFields = {
+export class TerminalPayload extends Schema.Class<TerminalPayload>('TerminalPayload')({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
-}
+}) {}
 
-export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
-export type TerminalPayload = typeof TerminalPayload.Type
-
-export const AgentSession = Schema.Struct({
+export class AgentSession extends Schema.Class<AgentSession>('AgentSession')({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
@@ -49,38 +45,33 @@ export const AgentSession = Schema.Struct({
 	profileId: AgentCommandProfileId,
 	state: TerminalStatus,
 	uuid: Schema.String
-})
-export type AgentSession = typeof AgentSession.Type
+}) {}
 
-export const ScriptRun = Schema.Struct({
+export class ScriptRun extends Schema.Class<ScriptRun>('ScriptRun')({
 	command: Schema.String,
 	scriptName: Schema.String,
 	sessionId: Schema.String,
 	taskId: Schema.String
-})
-export type ScriptRun = typeof ScriptRun.Type
+}) {}
 
-export const SidebarWorktree = Schema.Struct({
+export class SidebarWorktree extends Schema.Class<SidebarWorktree>('SidebarWorktree')({
 	agents: Schema.Array(AgentSession),
 	branch: Schema.optional(Schema.String),
 	portlessRuns: Schema.Array(PortlessRun),
 	root: Schema.String,
 	runStatuses: Schema.Record(Schema.String, TerminalStatus),
 	scriptRuns: Schema.Array(ScriptRun)
-})
-export type SidebarWorktree = typeof SidebarWorktree.Type
+}) {}
 
-export const SidebarProject = Schema.Struct({
+export class SidebarProject extends Schema.Class<SidebarProject>('SidebarProject')({
 	repository: GitProject.fields.repository,
 	worktrees: Schema.Array(SidebarWorktree)
-})
-export type SidebarProject = typeof SidebarProject.Type
+}) {}
 
-export const HomeSidebar = Schema.Struct({
+export class HomeSidebar extends Schema.Class<HomeSidebar>('HomeSidebar')({
 	agentProfiles: Schema.Array(AgentCommandProfile),
 	projects: Schema.Array(SidebarProject)
-})
-export type HomeSidebar = typeof HomeSidebar.Type
+}) {}
 
 const PublishDraftError = Schema.Union([GitError, AiError])
 
@@ -99,27 +90,32 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
 	Rpc.make('review.diffs', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, target: GitReviewTarget}),
+		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget}),
 		stream: true,
 		success: Schema.Array(GitDiff)
+	}),
+	Rpc.make('review.fileContent', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, filePath: Schema.String, target: GitReviewTarget}),
+		success: Schema.String
 	}),
 	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, marks: Schema.Array(GitReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.state.unmark', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, marks: Schema.Array(GitReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, comment: GitReviewComment})
+		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
 	}),
 	Rpc.make('review.comments.resolve', {
 		error: GitError,
 		payload: Schema.Struct({
-			...CwdPayloadFields,
+			cwd: Schema.String,
 			filePath: Schema.String,
 			lineNumber: Schema.Number,
 			side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
@@ -128,13 +124,13 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('publish.approve', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, message: Schema.String}),
+		payload: Schema.Struct({cwd: Schema.String, message: Schema.String}),
 		success: Schema.optional(GitPullRequest)
 	}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, branch: Schema.String, source: GitWorktreeSource}),
+		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String, source: GitWorktreeSource}),
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
@@ -143,11 +139,26 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
 	Rpc.make('terminal.write', {
 		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, data: TerminalInput})
+		payload: Schema.Struct({
+			args: Schema.optional(Schema.Array(Schema.String)),
+			command: Schema.optional(Schema.String),
+			cwd: Schema.String,
+			data: TerminalInput,
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+			sessionId: Schema.optional(Schema.String)
+		})
 	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Number, rows: Schema.Number})
+		payload: Schema.Struct({
+			args: Schema.optional(Schema.Array(Schema.String)),
+			cols: Schema.Number,
+			command: Schema.optional(Schema.String),
+			cwd: Schema.String,
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+			rows: Schema.Number,
+			sessionId: Schema.optional(Schema.String)
+		})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
@@ -155,9 +166,13 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('terminal.attach', {
 		error: TerminalError,
 		payload: Schema.Struct({
-			...TerminalPayloadFields,
+			args: Schema.optional(Schema.Array(Schema.String)),
 			cols: Schema.optional(Schema.Number),
-			rows: Schema.optional(Schema.Number)
+			command: Schema.optional(Schema.String),
+			cwd: Schema.String,
+			env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+			rows: Schema.optional(Schema.Number),
+			sessionId: Schema.optional(Schema.String)
 		}),
 		stream: true,
 		success: TerminalFrame

@@ -1,4 +1,4 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtom, useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Effect, Match, Number, Option, Predicate, Stream, String, pipe} from 'effect'
 
@@ -15,36 +15,69 @@ import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles}
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {cn} from '@deslop/components/utils'
 
-const cursorPalette = [
-	'oklch(0.74 0.19 118)',
-	'oklch(0.76 0.2 128)',
-	'oklch(0.75 0.18 138)',
-	'oklch(0.73 0.17 150)',
-	'oklch(0.74 0.18 162)',
-	'oklch(0.76 0.17 174)',
-	'oklch(0.75 0.18 186)',
-	'oklch(0.73 0.19 198)',
-	'oklch(0.72 0.2 210)',
-	'oklch(0.74 0.18 222)',
-	'oklch(0.71 0.18 234)',
-	'oklch(0.73 0.19 246)',
-	'oklch(0.75 0.19 258)',
-	'oklch(0.74 0.2 270)',
-	'oklch(0.73 0.21 282)',
-	'oklch(0.74 0.2 296)',
-	'oklch(0.75 0.19 310)',
-	'oklch(0.74 0.18 324)',
-	'oklch(0.73 0.19 338)',
-	'oklch(0.72 0.2 352)'
-]
-
 function pickRandomCursorColor() {
-	return cursorPalette[Math.floor(Math.random() * cursorPalette.length)] ?? 'oklch(0.72 0.2 210)'
+	return Option.getOrElse(
+		Array.get(
+			[
+				'oklch(0.74 0.19 118)',
+				'oklch(0.76 0.2 128)',
+				'oklch(0.75 0.18 138)',
+				'oklch(0.73 0.17 150)',
+				'oklch(0.74 0.18 162)',
+				'oklch(0.76 0.17 174)',
+				'oklch(0.75 0.18 186)',
+				'oklch(0.73 0.19 198)',
+				'oklch(0.72 0.2 210)',
+				'oklch(0.74 0.18 222)',
+				'oklch(0.71 0.18 234)',
+				'oklch(0.73 0.19 246)',
+				'oklch(0.75 0.19 258)',
+				'oklch(0.74 0.2 270)',
+				'oklch(0.73 0.21 282)',
+				'oklch(0.74 0.2 296)',
+				'oklch(0.75 0.19 310)',
+				'oklch(0.74 0.18 324)',
+				'oklch(0.73 0.19 338)',
+				'oklch(0.72 0.2 352)'
+			],
+			Math.floor(Math.random() * 20)
+		),
+		() => 'oklch(0.72 0.2 210)'
+	)
 }
 
 function pickNextCursorColor(currentColor: string) {
-	const nextPalette = Array.filter(cursorPalette, color => color !== currentColor)
-	return nextPalette[Math.floor(Math.random() * nextPalette.length)] ?? pickRandomCursorColor()
+	return Option.getOrElse(
+		Array.get(
+			Array.filter(
+				[
+					'oklch(0.74 0.19 118)',
+					'oklch(0.76 0.2 128)',
+					'oklch(0.75 0.18 138)',
+					'oklch(0.73 0.17 150)',
+					'oklch(0.74 0.18 162)',
+					'oklch(0.76 0.17 174)',
+					'oklch(0.75 0.18 186)',
+					'oklch(0.73 0.19 198)',
+					'oklch(0.72 0.2 210)',
+					'oklch(0.74 0.18 222)',
+					'oklch(0.71 0.18 234)',
+					'oklch(0.73 0.19 246)',
+					'oklch(0.75 0.19 258)',
+					'oklch(0.74 0.2 270)',
+					'oklch(0.73 0.21 282)',
+					'oklch(0.74 0.2 296)',
+					'oklch(0.75 0.19 310)',
+					'oklch(0.74 0.18 324)',
+					'oklch(0.73 0.19 338)',
+					'oklch(0.72 0.2 352)'
+				],
+				color => color !== currentColor
+			),
+			Math.floor(Math.random() * 19)
+		),
+		pickRandomCursorColor
+	)
 }
 
 function getIdentity() {
@@ -57,7 +90,7 @@ function getIdentity() {
 
 	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
 
-	const next = {color: pickRandomCursorColor(), id: `v-${seed}`, name: `Guest-${pipe(seed, String.slice(0, 3))}`}
+	const next = {color: pickRandomCursorColor(), id: `v-${seed}`, name: `Guest-${String.slice(0, 3)(seed)}`}
 
 	sessionStorage.setItem('portfolio.id', next.id)
 	sessionStorage.setItem('portfolio.name', next.name)
@@ -69,15 +102,17 @@ function getIdentity() {
 const identity = getIdentity()
 
 function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
-	for (let index = 0; index < visitors.length; index += 1) {
-		if (visitors[index]?.id !== visitor.id) continue
-
-		const nextVisitors = Array.copy(visitors)
-		nextVisitors[index] = visitor
-		return nextVisitors
-	}
-
-	return Array.append(visitors, visitor)
+	return Option.match(
+		Array.findFirstIndex(visitors, current => current.id === visitor.id),
+		{
+			onNone: () => Array.append(visitors, visitor),
+			onSome: index => {
+				const nextVisitors = Array.copy(visitors)
+				nextVisitors[index] = visitor
+				return nextVisitors
+			}
+		}
+	)
 }
 
 function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
@@ -127,12 +162,12 @@ const portfolioAtom = Atom.keepAlive(
 	)
 )
 
-const frameListeners = new Set<(now: number) => void>()
-let frameId = 0
+interface Viewport {
+	readonly width: number
+	readonly height: number
+}
 
-type Viewport = {readonly width: number; readonly height: number}
-
-type CursorMotion = {
+interface CursorMotion {
 	readonly x: number
 	readonly y: number
 	readonly targetX: number
@@ -142,133 +177,18 @@ type CursorMotion = {
 	readonly viewportHeight: number
 }
 
-type Point = {readonly x: number; readonly y: number}
-
-let localPointer: Point | undefined
-const SUMMARY_LINES = [
-	"I'm a frontend TypeScript developer with production experience building real-time, type-safe web applications using React and modern frontend tooling.",
-	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
-	'I use AI coding agents daily to accelerate development, refactoring, and testing while maintaining manual code review to ensure consistency and quality.'
-]
-
-const TECHNICAL_SKILLS = [
-	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
-	{area: 'Backend', icon: Server, items: 'Node.js, Effect-TS (functional TypeScript library), RESTful API'},
-	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
-	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
-	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
-]
-
-const WORK_EXPERIENCE = [
-	{
-		company: 'Humans.Tech',
-		highlights: [],
-		location: 'Frosinone, Italy',
-		note: '',
-		period: 'Apr 2026 – Present',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'Tinexta Cyber',
-		highlights: [
-			'Developed a real-time network inventory application for a major telecommunications company',
-			'Built the real-time frontend in React with ElectricSQL for live updates across all users',
-			'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
-			'Gathered requirements directly from end users and iterated through feedback rounds',
-			'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
-			'Used AI coding agents daily with project-specific guidelines for development'
-		],
-		location: 'Udine, Italy',
-		note: '',
-		period: 'Oct 2024 – Mar 2026',
-		role: 'Full-Stack Developer'
-	},
-	{
-		company: 'Altitudo',
-		highlights: [
-			'Migrated the build system from Create React App to Vite',
-			'Improved rendering performance by adding proper memoization',
-			'Migrated legacy class components to modern functional components using React hooks',
-			'Recreated and restyled multiple pages using React and Tailwind CSS'
-		],
-		location: 'Salzburg, Austria',
-		note: 'Erasmus Internship',
-		period: 'Jan 2024 – Mar 2024',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'BizAway',
-		highlights: [
-			'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
-			'Built a type-safe email template framework using TSX-style components',
-			'Migrated API endpoints from the old OpenAPI version to the new specification',
-			'Built and updated multiple Angular components and features'
-		],
-		location: 'Spilimbergo, Italy',
-		note: 'Internship',
-		period: 'Jun 2023 – Aug 2023',
-		role: 'Backend Developer'
-	}
-]
-
-const EDUCATION_DATA = [
-	{
-		degree: 'Cloud Developer Diploma',
-		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
-		grade: '95/100',
-		period: '2022 – 2024',
-		school: 'ITS Alto Adriatico'
-	},
-	{
-		degree: 'High School Diploma – IT and Telecommunications',
-		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
-		grade: '',
-		period: '2017 – 2022',
-		school: 'ISIS A. Malignani'
-	}
-]
-
-const LANGUAGES_DATA = [
-	{language: 'Italian', level: 'Native'},
-	{language: 'English', level: 'C1'},
-	{language: 'Spanish', level: 'Basic'}
-]
-
-const CONTACT_ITEMS = [
-	{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
-	{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
-	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
-]
-
-function subscribeFrame(listener: (now: number) => void) {
-	frameListeners.add(listener)
-
-	if (!frameId) {
-		frameId = requestAnimationFrame(function tick(now) {
-			for (const frameListener of frameListeners) frameListener(now)
-
-			if (frameListeners.size === 0) {
-				frameId = 0
-				return
-			}
-
-			frameId = requestAnimationFrame(tick)
-		})
-	}
-
-	return () => {
-		frameListeners.delete(listener)
-
-		if (frameListeners.size === 0 && frameId) {
-			cancelAnimationFrame(frameId)
-			frameId = 0
-		}
-	}
+interface Point {
+	readonly x: number
+	readonly y: number
 }
 
-function getDisplayCursorTarget(cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
-	if (isMe && localPointer) {
+function getDisplayCursorTarget(
+	cursor: Readonly<PortfolioVisitor>,
+	isMe: boolean,
+	localPointer: Point | null,
+	viewport: Viewport
+) {
+	if (isMe && Predicate.isNotNull(localPointer)) {
 		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
 	}
 
@@ -307,8 +227,14 @@ function stepCursorMotion(motion: CursorMotion, now: number) {
 	}
 }
 
-function syncCursorMotion(motion: CursorMotion, cursor: Readonly<PortfolioVisitor>, isMe: boolean, viewport: Viewport) {
-	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport)
+function syncCursorMotion(
+	motion: CursorMotion,
+	cursor: Readonly<PortfolioVisitor>,
+	isMe: boolean,
+	localPointer: Point | null,
+	viewport: Viewport
+) {
+	const nextTarget = getDisplayCursorTarget(cursor, isMe, localPointer, viewport)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
 		return createCursorMotion(nextTarget, viewport)
@@ -335,7 +261,7 @@ function useViewport() {
 		getViewportSnapshot
 	)
 
-	const [width, height] = pipe(snapshot, String.split(':'))
+	const [width, height] = String.split(snapshot, ':')
 
 	return {
 		height: Option.getOrElse(Number.parse(height ?? '0'), () => 0),
@@ -403,13 +329,13 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 			if (!previous) {
 				context.fillStyle = current.trail.color
 				context.fillRect(current.col * 26 + 1, current.row * 26 + 1, 24, 24)
-				previousByVisitor.set(trail.visitorId, current)
+				previousByVisitor.set(trail.visitorId, {col: current.col, row: current.row, trail: current.trail})
 				continue
 			}
 
 			const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
 
-			for (let step = 0; step <= stepCount; step += 1) {
+			for (const step of Array.range(0, stepCount)) {
 				const progress = stepCount === 0 ? 1 : step / stepCount
 				const col = Math.round(previous.col + (current.col - previous.col) * progress)
 				const row = Math.round(previous.row + (current.row - previous.row) * progress)
@@ -418,7 +344,7 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 				context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
 			}
 
-			previousByVisitor.set(trail.visitorId, current)
+			previousByVisitor.set(trail.visitorId, {col: current.col, row: current.row, trail: current.trail})
 		}
 
 		context.globalAlpha = 1
@@ -427,26 +353,40 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 	return <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-1" />
 }
 
-function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: boolean; readonly viewport: Viewport}) {
+function CursorEl(input: {
+	readonly cursor: PortfolioVisitor
+	readonly isMe: boolean
+	readonly localPointerRef: React.RefObject<Point | null>
+	readonly viewport: Viewport
+}) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
 	const latestRef = useRef({cursor: input.cursor, isMe: input.isMe, viewport: input.viewport})
 	const motionRef = useRef(
-		createCursorMotion(getDisplayCursorTarget(input.cursor, input.isMe, input.viewport), input.viewport)
+		createCursorMotion(
+			getDisplayCursorTarget(input.cursor, input.isMe, input.localPointerRef.current, input.viewport),
+			input.viewport
+		)
 	)
 
 	useEffect(() => {
 		latestRef.current = {cursor: input.cursor, isMe: input.isMe, viewport: input.viewport}
-		motionRef.current = syncCursorMotion(motionRef.current, input.cursor, input.isMe, input.viewport)
+		motionRef.current = syncCursorMotion(
+			motionRef.current,
+			input.cursor,
+			input.isMe,
+			input.localPointerRef.current,
+			input.viewport
+		)
 
 		if (nodeRef.current) setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
-	}, [input.cursor, input.isMe, input.viewport])
+	}, [input.cursor, input.isMe, input.localPointerRef, input.viewport])
 
 	useEffect(() => {
 		if (!nodeRef.current) return
 
 		setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
-
-		return subscribeFrame(now => {
+		const frame = {id: 0}
+		function animate(now: number) {
 			if (!nodeRef.current) return
 
 			motionRef.current = stepCursorMotion(
@@ -454,14 +394,21 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 					motionRef.current,
 					latestRef.current.cursor,
 					latestRef.current.isMe,
+					input.localPointerRef.current,
 					latestRef.current.viewport
 				),
 				now
 			)
 
 			setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
-		})
-	}, [])
+			frame.id = requestAnimationFrame(animate)
+		}
+		frame.id = requestAnimationFrame(animate)
+
+		return () => {
+			cancelAnimationFrame(frame.id)
+		}
+	}, [input.localPointerRef])
 
 	return (
 		<div
@@ -557,11 +504,18 @@ function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				<Panel className="p-5 sm:p-6">
 					<div className="flex flex-col gap-4">
-						{Array.map(SUMMARY_LINES, line => (
-							<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
-								{line}
-							</p>
-						))}
+						{Array.map(
+							[
+								"I'm a frontend TypeScript developer with production experience building real-time, type-safe web applications using React and modern frontend tooling.",
+								'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
+								'I use AI coding agents daily to accelerate development, refactoring, and testing while maintaining manual code review to ensure consistency and quality.'
+							],
+							line => (
+								<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
+									{line}
+								</p>
+							)
+						)}
 					</div>
 				</Panel>
 			</div>
@@ -574,17 +528,27 @@ function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElemen
 		<Section id={2} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Skills" />
 			<div className="grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				{Array.map(TECHNICAL_SKILLS, skill => (
-					<Panel key={skill.area} className="p-4 sm:p-5">
-						<div className="mb-3 flex items-center gap-3">
-							<skill.icon className="text-primary size-4" />
-							<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
-								{skill.area}
-							</h3>
-						</div>
-						<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
-					</Panel>
-				))}
+				{Array.map(
+					[
+						{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
+						{area: 'Backend', icon: Server, items: 'Node.js, Effect-TS (functional TypeScript library), RESTful API'},
+						{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
+						{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
+						{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
+						{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
+					],
+					skill => (
+						<Panel key={skill.area} className="p-4 sm:p-5">
+							<div className="mb-3 flex items-center gap-3">
+								<skill.icon className="text-primary size-4" />
+								<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
+									{skill.area}
+								</h3>
+							</div>
+							<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
+						</Panel>
+					)
+				)}
 			</div>
 		</Section>
 	)
@@ -595,37 +559,90 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 		<Section id={3} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Experience" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(WORK_EXPERIENCE, job => (
-					<Panel key={job.company} className="px-4 py-4 sm:px-5">
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-							<div className="space-y-1">
-								<p className="text-foreground font-mono text-sm font-semibold tracking-[0.08em] uppercase">
-									{job.company}
-								</p>
-								<div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs sm:text-sm">
-									<span>{job.role}</span>
-									{job.note && <span className="text-muted-foreground/80">· {job.note}</span>}
+				{Array.map(
+					[
+						{
+							company: 'Humans.Tech',
+							highlights: [],
+							location: 'Frosinone, Italy',
+							note: '',
+							period: 'Apr 2026 - Present',
+							role: 'Frontend Developer'
+						},
+						{
+							company: 'Tinexta Cyber',
+							highlights: [
+								'Developed a real-time network inventory application for a major telecommunications company',
+								'Built the real-time frontend in React with ElectricSQL for live updates across all users',
+								'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
+								'Gathered requirements directly from end users and iterated through feedback rounds',
+								'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
+								'Used AI coding agents daily with project-specific guidelines for development'
+							],
+							location: 'Udine, Italy',
+							note: '',
+							period: 'Oct 2024 - Mar 2026',
+							role: 'Full-Stack Developer'
+						},
+						{
+							company: 'Altitudo',
+							highlights: [
+								'Migrated the build system from Create React App to Vite',
+								'Improved rendering performance by adding proper memoization',
+								'Migrated legacy class components to modern functional components using React hooks',
+								'Recreated and restyled multiple pages using React and Tailwind CSS'
+							],
+							location: 'Salzburg, Austria',
+							note: 'Erasmus Internship',
+							period: 'Jan 2024 - Mar 2024',
+							role: 'Frontend Developer'
+						},
+						{
+							company: 'BizAway',
+							highlights: [
+								'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
+								'Built a type-safe email template framework using TSX-style components',
+								'Migrated API endpoints from the old OpenAPI version to the new specification',
+								'Built and updated multiple Angular components and features'
+							],
+							location: 'Spilimbergo, Italy',
+							note: 'Internship',
+							period: 'Jun 2023 - Aug 2023',
+							role: 'Backend Developer'
+						}
+					],
+					job => (
+						<Panel key={job.company} className="px-4 py-4 sm:px-5">
+							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+								<div className="space-y-1">
+									<p className="text-foreground font-mono text-sm font-semibold tracking-[0.08em] uppercase">
+										{job.company}
+									</p>
+									<div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs sm:text-sm">
+										<span>{job.role}</span>
+										{job.note && <span className="text-muted-foreground/80">· {job.note}</span>}
+									</div>
 								</div>
+								<p className="text-muted-foreground font-mono text-[11px] sm:text-right">
+									{job.period} · {job.location}
+								</p>
 							</div>
-							<p className="text-muted-foreground font-mono text-[11px] sm:text-right">
-								{job.period} · {job.location}
-							</p>
-						</div>
-						{job.highlights.length > 0 && (
-							<ul className="mt-3 flex flex-col gap-1.5">
-								{Array.map(job.highlights, highlight => (
-									<li
-										key={highlight}
-										className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
-									>
-										<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
-										<span>{highlight}</span>
-									</li>
-								))}
-							</ul>
-						)}
-					</Panel>
-				))}
+							{job.highlights.length > 0 && (
+								<ul className="mt-3 flex flex-col gap-1.5">
+									{Array.map(job.highlights, highlight => (
+										<li
+											key={highlight}
+											className="text-foreground/85 flex items-start gap-2 font-mono text-xs leading-6 sm:text-sm"
+										>
+											<span className="bg-foreground/50 mt-2 h-1 w-1 shrink-0 rounded-full" aria-hidden="true" />
+											<span>{highlight}</span>
+										</li>
+									))}
+								</ul>
+							)}
+						</Panel>
+					)
+				)}
 			</div>
 		</Section>
 	)
@@ -636,26 +653,54 @@ function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLEle
 		<Section id={4} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Education & Languages" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(EDUCATION_DATA, entry => (
-					<Panel key={entry.school} className="px-4 py-4 sm:px-5">
-						<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-							<div className="flex flex-wrap items-baseline gap-x-3">
-								<span className="text-foreground font-mono text-sm font-semibold">{entry.school}</span>
-								<span className="text-muted-foreground font-mono text-xs sm:text-sm">{entry.degree}</span>
-								{entry.grade && <span className="text-muted-foreground/80 font-mono text-[10px]">({entry.grade})</span>}
+				{Array.map(
+					[
+						{
+							degree: 'Cloud Developer Diploma',
+							description:
+								'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
+							grade: '95/100',
+							period: '2022 - 2024',
+							school: 'ITS Alto Adriatico'
+						},
+						{
+							degree: 'High School Diploma - IT and Telecommunications',
+							description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
+							grade: '',
+							period: '2017 - 2022',
+							school: 'ISIS A. Malignani'
+						}
+					],
+					entry => (
+						<Panel key={entry.school} className="px-4 py-4 sm:px-5">
+							<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+								<div className="flex flex-wrap items-baseline gap-x-3">
+									<span className="text-foreground font-mono text-sm font-semibold">{entry.school}</span>
+									<span className="text-muted-foreground font-mono text-xs sm:text-sm">{entry.degree}</span>
+									{entry.grade && (
+										<span className="text-muted-foreground/80 font-mono text-[10px]">({entry.grade})</span>
+									)}
+								</div>
+								<span className="text-muted-foreground/80 font-mono text-[10px]">{entry.period}</span>
 							</div>
-							<span className="text-muted-foreground/80 font-mono text-[10px]">{entry.period}</span>
-						</div>
-						<p className="text-foreground/85 mt-2 font-mono text-xs leading-6 sm:text-sm">{entry.description}</p>
-					</Panel>
-				))}
-				<div className="grid gap-3 sm:grid-cols-3">
-					{Array.map(LANGUAGES_DATA, lang => (
-						<Panel key={lang.language} className="px-4 py-3">
-							<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
-							<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
+							<p className="text-foreground/85 mt-2 font-mono text-xs leading-6 sm:text-sm">{entry.description}</p>
 						</Panel>
-					))}
+					)
+				)}
+				<div className="grid gap-3 sm:grid-cols-3">
+					{Array.map(
+						[
+							{language: 'Italian', level: 'Native'},
+							{language: 'English', level: 'C1'},
+							{language: 'Spanish', level: 'Basic'}
+						],
+						lang => (
+							<Panel key={lang.language} className="px-4 py-3">
+								<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
+								<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
+							</Panel>
+						)
+					)}
 				</div>
 			</div>
 		</Section>
@@ -667,18 +712,25 @@ function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLEleme
 		<Section id={5} sectionRefs={input.sectionRefs}>
 			<SectionLabel title="Contact" />
 			<div className="flex w-full max-w-5xl flex-col gap-3">
-				{Array.map(CONTACT_ITEMS, item => (
-					<a
-						key={item.label}
-						href={item.href}
-						className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
-						<span className="text-foreground break-all">{item.value}</span>
-					</a>
-				))}
+				{Array.map(
+					[
+						{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
+						{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
+						{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
+					],
+					item => (
+						<a
+							key={item.label}
+							href={item.href}
+							className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
+							<span className="text-foreground break-all">{item.value}</span>
+						</a>
+					)
+				)}
 			</div>
 			<p className="text-muted-foreground/70 mt-6 font-mono text-[10px]">
 				© 2026 Matteo Paludgnach · Moimacco (UD), Italy
@@ -718,22 +770,32 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 	)
 }
 
-function RealtimeLayer(input: {readonly identityColor: string; readonly viewport: Viewport}) {
-	const {value: state} = useAtomSuspense(portfolioAtom)
+function RealtimeLayer(input: {
+	readonly identityColor: string
+	readonly localPointerRef: React.RefObject<Point | null>
+	readonly viewport: Viewport
+}) {
+	const state = useAtomSuspense(portfolioAtom)
 
 	return (
 		<>
 			<GridOverlay />
-			<TrailCanvas trails={state.trails} viewport={input.viewport} />
+			<TrailCanvas trails={state.value.trails} viewport={input.viewport} />
 
-			{Array.map(state.visitors, cursor => (
-				<CursorEl key={cursor.id} cursor={cursor} isMe={cursor.id === identity.id} viewport={input.viewport} />
+			{Array.map(state.value.visitors, cursor => (
+				<CursorEl
+					key={cursor.id}
+					cursor={cursor}
+					isMe={cursor.id === identity.id}
+					localPointerRef={input.localPointerRef}
+					viewport={input.viewport}
+				/>
 			))}
 
 			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
 				<span className="size-2" style={{backgroundColor: input.identityColor}} />
-				<span className="text-primary">{state.visitors.length}</span>
-				<span className="text-muted-foreground">{state.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
+				<span className="text-primary">{state.value.visitors.length}</span>
+				<span className="text-muted-foreground">{state.value.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
 			</div>
 		</>
 	)
@@ -743,8 +805,9 @@ function PortfolioRoute() {
 	const viewport = useViewport()
 	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
 	const currentSectionRef = useRef(0)
-	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
+	const [, moveRpc] = useAtom(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
+	const localPointerRef = useRef<Point>(null)
 	const queuedPointerRef = useRef<Point>(null)
 	const lastSentPointerRef = useRef<Point & {readonly sentAt: number}>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
@@ -758,16 +821,22 @@ function PortfolioRoute() {
 	)
 
 	function scrollTo(index: number) {
-		const target = sectionRefs.current[index]
-		if (!target) return
-
-		target.scrollIntoView({behavior: 'smooth', block: 'start'})
-		currentSectionRef.current = index
+		pipe(
+			Array.get(sectionRefs.current, index),
+			Option.filter(Predicate.isNotNull),
+			Option.match({
+				onNone: () => {},
+				onSome: section => {
+					section.scrollIntoView({behavior: 'smooth', block: 'start'})
+					currentSectionRef.current = index
+				}
+			})
+		)
 	}
 
 	function updateColor() {
 		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
+		const currentPointer = localPointerRef.current ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
 
 		identity.color = nextColor
 		setIdentityColor(nextColor)
@@ -818,13 +887,14 @@ function PortfolioRoute() {
 			onPointerMove={event => {
 				if (viewport.width === 0 || viewport.height === 0) return
 
-				const nextPointer = {
+				localPointerRef.current = {
 					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
 					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
 				}
-
-				localPointer = nextPointer
-				queuedPointerRef.current = nextPointer
+				queuedPointerRef.current = {
+					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
+					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
+				}
 
 				if (pointerFrameRef.current !== 0) return
 
@@ -873,7 +943,7 @@ function PortfolioRoute() {
 			<ContactSection sectionRefs={sectionRefs} />
 
 			<Suspense fallback={<Loading />}>
-				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
+				<RealtimeLayer identityColor={identityColor} localPointerRef={localPointerRef} viewport={viewport} />
 			</Suspense>
 
 			<button

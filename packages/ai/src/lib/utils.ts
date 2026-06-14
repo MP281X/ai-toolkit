@@ -1,4 +1,4 @@
-import {Array, Effect, Predicate, Queue, Ref, Stream, String, pipe} from 'effect'
+import {Array, Effect, Queue, Ref, Stream, String, pipe} from 'effect'
 
 import type {Prompt, Response, Tool} from 'effect/unstable/ai'
 
@@ -18,10 +18,7 @@ export const makeResumableStream = Effect.fnUntraced(function* <A>() {
 				yield* Queue.offer(subscriber, part)
 			}
 		}),
-		history: pipe(
-			Ref.get(state),
-			Effect.map(current => current.history)
-		),
+		history: Effect.map(Ref.get(state), current => current.history),
 		stream: Stream.callback<A>(queue =>
 			Effect.gen(function* () {
 				const snapshot = yield* Ref.modify(state, current => [
@@ -31,7 +28,7 @@ export const makeResumableStream = Effect.fnUntraced(function* <A>() {
 				yield* Effect.addFinalizer(() =>
 					Ref.update(state, current => ({
 						...current,
-						subscribers: current.subscribers.filter(subscriber => subscriber !== queue)
+						subscribers: Array.filter(current.subscribers, subscriber => subscriber !== queue)
 					}))
 				)
 
@@ -109,8 +106,12 @@ export function serializePromptMessagesToMarkdown(input: readonly Prompt.Message
 								part.reason === undefined ? '' : `\n\nReason: ${part.reason}`
 							}`
 						}
+						default: {
+							return ''
+						}
 					}
 				}),
+				Array.filter(String.isNonEmpty),
 				Array.join('\n\n'),
 				content => `## ${message.role}\n\n${content}`,
 				String.trim
@@ -140,7 +141,8 @@ export function serializeResponsePartsToMarkdown<Tools extends Record<string, To
 					return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(part.result, undefined, 2)}\n\`\`\``
 				}
 				case 'response-metadata': {
-					return part.modelId !== undefined && String.isNonEmpty(part.modelId) ? `Model: ${part.modelId}` : undefined
+					if (part.modelId !== undefined && String.isNonEmpty(part.modelId)) return `Model: ${part.modelId}`
+					return ''
 				}
 				case 'finish': {
 					return `Finish: ${part.reason}`
@@ -158,10 +160,14 @@ export function serializeResponsePartsToMarkdown<Tools extends Record<string, To
 				case 'tool-params-delta':
 				case 'tool-params-end':
 				case 'tool-params-start': {
+					return ''
+				}
+				default: {
+					return ''
 				}
 			}
 		}),
-		Array.filter(Predicate.isNotUndefined),
+		Array.filter(String.isNonEmpty),
 		Array.join('\n\n---\n\n'),
 		String.trim
 	)

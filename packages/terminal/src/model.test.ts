@@ -1,4 +1,4 @@
-import {Array, pipe} from 'effect'
+import {Array} from 'effect'
 
 import {describe, expect, it} from 'vite-plus/test'
 
@@ -10,7 +10,7 @@ describe('@deslop/terminal model', () => {
 		const chunks = terminalChunks(data, 6)
 
 		expect(chunks).toEqual(['aaaaab', 'bbbbcc', 'ccc'])
-		expect(pipe(chunks, Array.join(''))).toBe(data)
+		expect(Array.join(chunks, '')).toBe(data)
 	})
 
 	it('keeps surrogate pairs in the same output chunk', () => {
@@ -18,20 +18,20 @@ describe('@deslop/terminal model', () => {
 		const chunks = terminalChunks(data, 4)
 
 		expect(chunks).toEqual(['abc', '🙂de', 'f'])
-		expect(pipe(chunks, Array.join(''))).toBe(data)
-		expect(chunks.every(chunk => !/[\ud800-\udbff]$|^[\udc00-\udfff]/u.test(chunk))).toBe(true)
+		expect(Array.join(chunks, '')).toBe(data)
+		expect(Array.every(chunks, chunk => !/[\uD800-\uDBFF]$|^[\uDC00-\uDFFF]/u.test(chunk))).toBe(true)
 	})
 
 	it('parses exact OSC title and progress signals', () => {
-		expect(terminalOscUpdates('\u001b]2;build ready\u0007').updates).toEqual([{title: 'build ready', type: 'title'}])
-		expect(terminalOscUpdates('\u001b]0;Action\u001b\\').updates).toEqual([{title: 'Action', type: 'title'}])
-		expect(terminalOscUpdates('\u001b]9;4;4\u0007').updates).toEqual([{state: 'waiting', type: 'progress'}])
-		expect(terminalOscUpdates('\u001b]9;4;0\u0007').updates).toEqual([{state: 'idle', type: 'progress'}])
-		expect(terminalOscUpdates('\u001b]1;ignored\u0007').updates).toEqual([])
-		expect(terminalOscUpdates('2;build ready\u0007', terminalOscUpdates('\u001b]').carry).updates).toEqual([
+		expect(terminalOscUpdates('\u001B]2;build ready\u0007').updates).toEqual([{title: 'build ready', type: 'title'}])
+		expect(terminalOscUpdates('\u001B]0;Action\u001B\\').updates).toEqual([{title: 'Action', type: 'title'}])
+		expect(terminalOscUpdates('\u001B]9;4;4\u0007').updates).toEqual([{state: 'waiting', type: 'progress'}])
+		expect(terminalOscUpdates('\u001B]9;4;0\u0007').updates).toEqual([{state: 'idle', type: 'progress'}])
+		expect(terminalOscUpdates('\u001B]1;ignored\u0007').updates).toEqual([])
+		expect(terminalOscUpdates('2;build ready\u0007', terminalOscUpdates('\u001B]').carry).updates).toEqual([
 			{title: 'build ready', type: 'title'}
 		])
-		expect(terminalOscUpdates('\\', terminalOscUpdates('\u001b]9;4;4\u001b').carry).updates).toEqual([
+		expect(terminalOscUpdates('\\', terminalOscUpdates('\u001B]9;4;4\u001B').carry).updates).toEqual([
 			{state: 'waiting', type: 'progress'}
 		])
 	})

@@ -14,7 +14,7 @@ export default defineConfig({
 	pack: {
 		banner: '#!/usr/bin/env -S node --max-old-space-size=16384 --heapsnapshot-near-heap-limit=3 --report-on-fatalerror',
 		clean: false,
-		deps: {neverBundle: ['effect', /^@effect\//, '@lydell/node-pty', /^@lydell\/node-pty-/]},
+		deps: {neverBundle: ['@lydell/node-pty', /^@lydell\/node-pty-/u]},
 		entry: ['src/main.server.ts'],
 		format: 'esm',
 		outDir: 'dist',

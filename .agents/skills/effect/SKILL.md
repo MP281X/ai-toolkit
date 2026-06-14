@@ -7,12 +7,12 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 
 ## Programs
 
-- Effect-first: no ad-hoc async/runtime when an Effect primitive exists
+- Effect-first when work crosses async, resource, stream, service, state, or error boundaries
 - Common primitives: `Effect`, `Stream`, `Layer`, `Context`, `Scope`, `RcMap`, `SubscriptionRef`, `Ref`, `Queue`, `PubSub`, `Schema`
 - Use `Effect.gen` or `Effect.fn`; public service methods use `Effect.fn("Service.method")`
 - `Effect.fnUntraced`: private hot path or intentionally untraced code only
 - Resource lifetime: `Scope`
-- Concurrency, retry, schedule, interruption, cleanup: Effect APIs
+- Concurrency, scheduling, interruption, and cleanup: Effect APIs when the behavior is intentional
 
 ## Services
 
@@ -34,10 +34,10 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 
 ## Schemas
 
-- Schema-owned types: infer from schema, not inverse
+- Schema owns boundary shape and validation
 - Schema classes/tagged classes/tagged errors preferred
 - Literals/brands over generic strings
-- Plain schemas: `type Name = typeof Name.Type` immediately before `const Name = ...`
+- Plain schemas without class constructors keep their inferred type colocated with the schema
 - Validate at boundaries; trust typed internals
 
 ## Errors
@@ -46,7 +46,7 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 - Service error shape: optional `cause`, optional `message`
 - Public service methods expose only the service error
 - RPC handlers may expose the full error channel
-- Fail loud: no suppression, fake empty values, or generic fallback
+- Fail loud; do not hide debuggable failures behind fake success values
 
 ## Equality
 

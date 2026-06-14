@@ -7,15 +7,10 @@ description: Use when editing TypeScript implementation code, public types, loca
 
 ## Rules
 
-- Inference-first local code
-- Exported types only for schemas, public boundaries, external contracts
-- No cast/assertion to bypass inference
 - Redesign the value shape when TypeScript cannot prove it
 - Transformations local, readable, pipeable
-- Stable literals: `as const`
-- No destructuring unless local API forces it
-- Inline one-use prop/parameter/helper types
-- Repeated local expressions stay visible when extraction only hides
+- Name types only for schemas, public boundaries, external contracts, or domain concepts
+- Keep repeated local expressions visible when extraction only hides context
 
 ## Helpers
 
@@ -26,4 +21,4 @@ Keep helpers only for:
 - reuse across distance
 - non-trivial transformations that become clearer when named
 
-Delete helpers that only hide constructor/property access/one-line predicate/cast/assertion/local control flow.
+Delete helpers when inlining makes the review path shorter and no domain policy or distant reuse remains.

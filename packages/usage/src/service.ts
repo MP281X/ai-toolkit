@@ -1,6 +1,6 @@
 import {cpus, freemem, homedir, totalmem} from 'node:os'
 
-import {Config, Context, Effect, FileSystem, Layer, Schema, Stream, pipe} from 'effect'
+import {Array, Config, Context, Effect, FileSystem, Layer, Option, Schema, Stream, pipe} from 'effect'
 
 import {HttpClient} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
@@ -11,23 +11,26 @@ const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
-const ClaudeUsageWindow = Schema.Struct({
+class ClaudeUsageWindow extends Schema.Class<ClaudeUsageWindow>('ClaudeUsageWindow')({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
 	utilization: Schema.Number
-})
+}) {}
 
-const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
+class ClaudeUsage extends Schema.Class<ClaudeUsage>('ClaudeUsage')({
+	five_hour: ClaudeUsageWindow,
+	seven_day: ClaudeUsageWindow
+}) {}
 
 const CodexCredentials = Schema.fromJsonString(Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})}))
 
-const CodexUsageWindow = Schema.Struct({
+class CodexUsageWindow extends Schema.Class<CodexUsageWindow>('CodexUsageWindow')({
 	reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
 	used_percent: Schema.Number
-})
+}) {}
 
-const CodexUsage = Schema.Struct({
+class CodexUsage extends Schema.Class<CodexUsage>('CodexUsage')({
 	rate_limit: Schema.Struct({primary_window: CodexUsageWindow, secondary_window: CodexUsageWindow})
-})
+}) {}
 
 function codexWindow(window: typeof CodexUsageWindow.Type) {
 	return new UsageWindow({
@@ -37,28 +40,23 @@ function codexWindow(window: typeof CodexUsageWindow.Type) {
 }
 
 function cpuTimes() {
-	return cpus().reduce(
-		(total, cpu) => ({
-			idle: total.idle + cpu.times.idle,
-			total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
-		}),
-		{idle: 0, total: 0}
-	)
+	return Array.reduce(cpus(), {idle: 0, total: 0}, (total, cpu) => ({
+		idle: total.idle + cpu.times.idle,
+		total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
+	}))
 }
 
 function usageError(error: unknown) {
 	return error instanceof UsageError ? error : new UsageError({cause: error})
 }
 
-const fallbackClaudeVersion = '2.0.31'
-
 export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage', {
 	make: Effect.gen(function* () {
 		const client = yield* HttpClient.HttpClient
 		const fs = yield* FileSystem.FileSystem
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-		const home = yield* pipe(Config.string('HOME'), Config.withDefault(homedir()))
-		const codexHome = yield* pipe(Config.string('CODEX_HOME'), Config.withDefault(`${home}/.codex`))
+		const home = yield* Config.withDefault(Config.string('HOME'), homedir())
+		const codexHome = yield* Config.withDefault(Config.string('CODEX_HOME'), `${home}/.codex`)
 
 		const commandOutput = Effect.fn('Usage.commandOutput')(function* (command: string, args: readonly string[]) {
 			return yield* Effect.scoped(
@@ -67,7 +65,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 					const stdout = yield* pipe(
 						Stream.decodeText(handle.stdout),
 						Stream.mkString,
-						Effect.orElseSucceed(() => '')
+						Effect.mapError(cause => new UsageError({cause}))
 					)
 					const exitCode = yield* handle.exitCode
 					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
@@ -78,42 +76,30 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			)
 		})
 
-		const keychainCredentials = commandOutput('security', [
-			'find-generic-password',
-			'-s',
-			'Claude Code-credentials',
-			'-w'
-		])
-
 		const claudeVersion = yield* Effect.cached(
-			pipe(
-				commandOutput('claude', ['--version']),
-				Effect.map(output => /\d+\.\d+\.\d+/u.exec(output)?.[0] ?? fallbackClaudeVersion),
-				Effect.orElseSucceed(() => fallbackClaudeVersion)
+			Effect.flatMap(commandOutput('claude', ['--version']), output =>
+				Option.match(Option.fromUndefinedOr(/\d+\.\d+\.\d+/u.exec(output)?.[0]), {
+					onNone: () => new UsageError({message: 'Unable to parse Claude version.'}),
+					onSome: Effect.succeed
+				})
 			)
 		)
-
 		const claudeCredentialsFile = fs.readFileString(`${home}/.claude/.credentials.json`)
 		const claudeToken = pipe(
-			process.platform === 'darwin'
-				? pipe(
-						claudeCredentialsFile,
-						Effect.catch(() => keychainCredentials)
-					)
-				: claudeCredentialsFile,
+			claudeCredentialsFile,
 			Effect.flatMap(Schema.decodeEffect(ClaudeCredentials)),
 			Effect.map(credentials => credentials.claudeAiOauth.accessToken),
-			Effect.catch(() => new UsageError({message: 'not signed in'}))
+			Effect.mapError(() => new UsageError({message: 'not signed in'}))
 		)
 
 		const codexToken = pipe(
 			fs.readFileString(`${codexHome}/auth.json`),
 			Effect.flatMap(Schema.decodeEffect(CodexCredentials)),
 			Effect.map(credentials => credentials.tokens.access_token),
-			Effect.catch(() => new UsageError({message: 'not signed in'}))
+			Effect.mapError(() => new UsageError({message: 'not signed in'}))
 		)
 
-		const system = pipe(
+		const system = Effect.withSpan(
 			Effect.gen(function* () {
 				const before = cpuTimes()
 				yield* Effect.sleep('250 millis')
@@ -125,17 +111,17 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 					memoryUtilization: ((totalmem() - freemem()) / totalmem()) * 100
 				})
 			}),
-			Effect.withSpan('Usage.system')
+			'Usage.system'
 		)
 
 		const claude = pipe(
 			Effect.all({token: claudeToken, version: claudeVersion}, {concurrency: 2}),
-			Effect.flatMap(({token, version}) =>
+			Effect.flatMap(credentials =>
 				client.get('https://api.anthropic.com/api/oauth/usage', {
 					headers: {
 						'anthropic-beta': 'oauth-2025-04-20',
-						authorization: `Bearer ${token}`,
-						'user-agent': `claude-code/${version}`
+						authorization: `Bearer ${credentials.token}`,
+						'user-agent': `claude-code/${credentials.version}`
 					}
 				})
 			),

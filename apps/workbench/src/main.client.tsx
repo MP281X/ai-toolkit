@@ -4,12 +4,12 @@ import {createRoot} from 'react-dom/client'
 
 import {routeTree} from './routeTree.gen.ts'
 
-import {Error, Loading, NotFound} from '@deslop/components/fallbacks'
+import * as Fallbacks from '@deslop/components/fallbacks'
 
 const router = createRouter({
-	defaultErrorComponent: Error,
-	defaultNotFoundComponent: NotFound,
-	defaultPendingComponent: Loading,
+	defaultErrorComponent: Fallbacks.Error,
+	defaultNotFoundComponent: Fallbacks.NotFound,
+	defaultPendingComponent: Fallbacks.Loading,
 	defaultPendingMs: 0,
 	defaultPreload: 'intent',
 	routeTree,
@@ -17,13 +17,15 @@ const router = createRouter({
 })
 
 declare module '@tanstack/react-router' {
-	// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- TanStack Router augments this interface by name.
 	interface Register {
 		readonly router: typeof router
 	}
 }
 
-createRoot(document.querySelector('#root')!).render(
+const root = document.querySelector('#root')
+if (!(root instanceof HTMLElement)) throw new Error('Missing #root element')
+
+createRoot(root).render(
 	<StrictMode>
 		<RouterProvider router={router} />
 	</StrictMode>

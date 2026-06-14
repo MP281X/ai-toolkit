@@ -1,6 +1,6 @@
 import {useAtomValue} from '@effect/atom-react'
 
-import {DateTime, Option, pipe} from 'effect'
+import {Array, DateTime, Option} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 
@@ -18,7 +18,7 @@ function utilizationClass(utilization: number) {
 }
 
 function WindowValue(input: {readonly icon: React.ReactNode; readonly window: UsageWindow}) {
-	const resets = pipe(Option.fromNullishOr(input.window.resetsAt), Option.flatMap(DateTime.make))
+	const resets = Option.flatMap(Option.fromNullishOr(input.window.resetsAt), DateTime.make)
 
 	return (
 		<span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2.5">
@@ -103,7 +103,7 @@ export function UsageStrip() {
 				</span>
 				<SystemWindows />
 			</div>
-			{providers.map(layer => (
+			{Array.map(providers, layer => (
 				<div key={layer} className="flex h-7 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
