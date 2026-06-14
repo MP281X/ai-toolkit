@@ -7,9 +7,8 @@ import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} 
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import type {AiError, AgentStatus} from '../schema.ts'
+import type {AgentLayerConfig, AgentPrompt, AiError, AgentStatus} from '../schema.ts'
 import {AiError as AiErrorSchema} from '../schema.ts'
-import type {AgentLayerConfig, AgentPrompt} from '../service.ts'
 
 const emptyUsage = new Response.Usage({
 	inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
@@ -43,6 +42,8 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 }
 
 type AgentPart = Response.StreamPart<Toolkit.Any['tools']>
+
+const agentEventQueueCapacity = 1_024
 
 function imageDataFromFilePart(part: Prompt.FilePart) {
 	if (part.data instanceof URL) return
@@ -292,19 +293,38 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 
 	return {
 		history: Ref.get(history),
-		status,
-		streamText: (input: AgentPrompt) =>
+		prompt: (input: AgentPrompt) =>
 			Stream.callback<AgentPart, AiError>(queue =>
 				pipe(
 					Effect.gen(function* () {
+						yield* Effect.annotateCurrentSpan({
+							cwd: config.cwd,
+							messageCount: input.messages.length,
+							model: input.model,
+							provider: input.provider,
+							thinkingLevel: input.thinkingLevel ?? 'default'
+						})
 						const current = yield* session(input)
-						const events = yield* Queue.unbounded<AgentSessionEvent>()
+						const events = yield* Queue.bounded<AgentSessionEvent>(agentEventQueueCapacity)
 						const finished = yield* Ref.make(false)
 						const finishPart = yield* Ref.make<AgentPart | undefined>(void 0)
 						yield* Ref.set(history, input.messages)
 						yield* setStatus('running')
+						let overflowed = false
 						const unsubscribe = current.session.subscribe(event => {
-							Queue.offerUnsafe(events, event)
+							if (Queue.offerUnsafe(events, event)) return
+							if (overflowed) return
+
+							overflowed = true
+							void current.session.abort()
+							Effect.runFork(
+								pipe(
+									Ref.set(finished, true),
+									Effect.andThen(setStatus('error')),
+									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: 'agent event queue overflow'}))),
+									Effect.andThen(Queue.end(queue))
+								)
+							)
 						})
 						yield* Effect.addFinalizer(() =>
 							pipe(
@@ -369,8 +389,10 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 							)
 						)
 					}),
-					Semaphore.withPermit(promptLock)
+					Semaphore.withPermit(promptLock),
+					Effect.withSpan('Agent.prompt')
 				)
-			)
+			),
+		status
 	}
 })

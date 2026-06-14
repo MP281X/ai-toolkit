@@ -13,6 +13,15 @@ describe('@deslop/terminal model', () => {
 		expect(pipe(chunks, Array.join(''))).toBe(data)
 	})
 
+	it('keeps surrogate pairs in the same output chunk', () => {
+		const data = `abc🙂def`
+		const chunks = terminalChunks(data, 4)
+
+		expect(chunks).toEqual(['abc', '🙂de', 'f'])
+		expect(pipe(chunks, Array.join(''))).toBe(data)
+		expect(chunks.every(chunk => !/[\ud800-\udbff]$|^[\udc00-\udfff]/u.test(chunk))).toBe(true)
+	})
+
 	it('parses exact OSC title and progress signals', () => {
 		expect(terminalOscUpdates('\u001b]2;build ready\u0007').updates).toEqual([{title: 'build ready', type: 'title'}])
 		expect(terminalOscUpdates('\u001b]0;Action\u001b\\').updates).toEqual([{title: 'Action', type: 'title'}])

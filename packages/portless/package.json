@@ -8,6 +8,7 @@
 	},
 
 	"exports": {
-		"./http": "./src/http.ts"
+		"./service": "./src/service.ts",
+		"./schema": "./src/schema.ts"
 	}
 }

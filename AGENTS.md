@@ -2,44 +2,46 @@
 
 ## Role
 
-- Work in this repo as an implementation agent, not as a general assistant
-- Make the requested change directly and verify it before reporting back
+- Mode: implementation agent
+- Exit: requested change made, verified, reported
 
 ## Context
 
-- Package manager: `vp` (Vite Plus)
-- Monorepo: `@deslop/*` packages live in `packages/*`; read package source directly
-- External API source of truth is `.opencode/resources/*`
-- Effect source of truth is `.opencode/resources/effect/LLMS.md`
-- Never search `node_modules`
+- Package manager: `vp`
+- Workspaces: `apps/*`, `packages/*`
+- External source refs: `.agents/repos/*`
+- Effect source ref: `.agents/repos/effect/LLMS.md`
+- No `node_modules` search
 
 ## Research
 
-- Verify APIs, libraries, and patterns against repo source or `.opencode/resources/*`
-- Do not rely on memory when local sources can answer the question
-
-## Work Style
-
-- Reason from facts only: read the relevant source, local references, and cloned repos before deciding an implementation
-- Before adding behavior, search for similar code and follow the existing package patterns
-- Write the final shape first: smaller, direct, inferred, functional, composable, pipeable, and Effect-native
-- Prefer behavior-preserving simplifications that delete concepts instead of reorganizing incidental complexity
-- Ask only when the repo cannot determine scope, success criteria, or a major tradeoff
-- If the codebase clearly implies one path, proceed and state the facts that led to it
+- APIs/libraries/patterns: repo source or `.agents/repos/*`
+- Package boundary/public service change: read package source first
+- New behavior: search similar local code first
+- Local source > memory
 
 ## Implementation
 
-- Make the smallest coherent change that fully satisfies the request
-- Keep only structure forced by the domain, Effect, React, or an external boundary
-- Prefer direct local code over helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, or compatibility paths
-- When refactoring, replace the old implementation completely; do not keep legacy paths, compatibility wrappers, adapters, fallback branches, or duplicate implementations
-- Do not preserve backward compatibility unless the request explicitly requires it
-- Do not add regression tests, migration code, compatibility layers, or "just in case" code unless explicitly requested
-- Use the repo's libraries and patterns to their full extent, especially Effect; prefer library-native modeling over custom control flow
-- Use the type system as the boundary; do not add defensive runtime validation, re-validation, or guard code to compensate for weak types
-- Do not add speculative abstractions or single-use helpers
+- Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
+- Structure only from domain, Effect, React, or external boundary
+- Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
+- Optimize the actual method/workflow to be fast enough on demand; do not hide slow paths with preloading, broad caching, speculative warming, or background refresh unless explicitly requested
+- Treat caching/preloading as correctness-owned state with invalidation cost, not as a substitute for making the underlying operation efficient and observable
+- Inline simple types, props, helpers, expressions, and derived values
+- Repeated local code stays visible when extraction only hides
+- Delete/replace incidental complexity
+- Refactor = old implementation fully replaced
+- No legacy paths, compatibility wrappers, adapters, fallback branches, duplicate implementations
+- No backward compatibility unless explicitly requested
+- No speculative abstractions, single-use helpers, migration code, just-in-case code
+- Type system, schemas, UI state are boundaries; no impossible-state revalidation
+- Dead/unused code removed
+- Lockfile: no manual `pnpm-lock.yaml` edits; manifest change => `vp install`, commit generated output
+- Ask only for undiscoverable scope, success criteria, or major tradeoff
 
 ## Verification
 
-- After code changes, run `vp run check` before yielding back
-- Treat TypeScript and Biome diagnostics as design feedback; rewrite the code instead of suppressing, bypassing, or working around them
+- Commands: `vp run <script>`
+- Code change: `vp run check`
+- Behavior/test change: `vp run test`
+- Diagnostics = design feedback; rewrite instead of suppress/bypass

@@ -1,16 +1,18 @@
 import {Function, Match, pipe} from 'effect'
 
-import {Braces, CirclePauseIcon, CircleIcon, File, Loader2Icon, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
+import {Braces, CirclePauseIcon, CircleIcon, File, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
 
-import {BashDark} from './ui/svgs/bashDark.tsx'
-import {CodexDark} from './ui/svgs/codexDark.tsx'
-import {EffectDark} from './ui/svgs/effectDark.tsx'
-import {MarkdownDark} from './ui/svgs/markdownDark.tsx'
-import {OpenaiDark} from './ui/svgs/openaiDark.tsx'
-import {OpencodeDark} from './ui/svgs/opencodeDark.tsx'
-import {OpenrouterDark} from './ui/svgs/openrouterDark.tsx'
-import {PiDark} from './ui/svgs/pi.tsx'
-import {ReactDark} from './ui/svgs/reactDark.tsx'
+import {BashDark} from './svgs/bashDark.tsx'
+import {ClaudeDark} from './svgs/claudeDark.tsx'
+import {CodexDark} from './svgs/codexDark.tsx'
+import {EffectDark} from './svgs/effectDark.tsx'
+import {MarkdownDark} from './svgs/markdownDark.tsx'
+import {OpenaiDark} from './svgs/openaiDark.tsx'
+import {OpencodeDark} from './svgs/opencodeDark.tsx'
+import {OpenrouterDark} from './svgs/openrouterDark.tsx'
+import {PiDark} from './svgs/pi.tsx'
+import {ReactDark} from './svgs/reactDark.tsx'
+import {Spinner} from './ui/spinner.tsx'
 
 import {resolveLanguage} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
@@ -18,11 +20,12 @@ import {cn} from '#lib/utils.ts'
 export * from 'lucide-react'
 
 export function AgentIcon(props: {
-	readonly layer: 'codex' | 'effect' | 'opencode' | 'pi'
+	readonly layer: 'claude' | 'codex' | 'effect' | 'opencode' | 'pi'
 	readonly className?: string
 }) {
 	return pipe(
 		Match.value(props.layer),
+		Match.when('claude', () => <ClaudeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('codex', () => <CodexDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('effect', () => <EffectDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('opencode', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
@@ -37,7 +40,7 @@ export function ProcessStateIcon(props: {
 }) {
 	return pipe(
 		Match.value(props.state),
-		Match.when('starting', () => <Loader2Icon className={cn('text-primary size-3 animate-spin', props.className)} />),
+		Match.when('starting', () => <Spinner className={cn('text-primary size-3', props.className)} />),
 		Match.when('running', () => <CircleIcon className={cn('fill-primary text-primary size-2.5', props.className)} />),
 		Match.when('waiting', () => <CirclePauseIcon className={cn('size-3 text-amber-500', props.className)} />),
 		Match.when(Match.is('failed', 'stopped'), () => (
@@ -57,7 +60,7 @@ export function StatusIcon(props: {
 	return pipe(
 		Match.value(props.state),
 		Match.when('idle', Function.constUndefined),
-		Match.when('running', () => <Loader2Icon className={cn('size-3 animate-spin text-blue-500', props.className)} />),
+		Match.when('running', () => <Spinner className={cn('size-3 text-blue-500', props.className)} />),
 		Match.when('error', () => <OctagonXIcon className={cn('text-destructive size-3', props.className)} />),
 		Match.orElse(() => <TriangleAlertIcon className={cn('size-3 text-amber-500', props.className)} />)
 	)

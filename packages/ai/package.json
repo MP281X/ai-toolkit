@@ -4,10 +4,8 @@
 	"name": "@deslop/ai",
 
 	"exports": {
-		"./catalog": "./src/catalog.ts",
 		"./schema": "./src/schema.ts",
-		"./service": "./src/service.ts",
-		"./utils": "./src/lib/utils.ts"
+		"./service": "./src/service.ts"
 	},
 
 	"dependencies": {

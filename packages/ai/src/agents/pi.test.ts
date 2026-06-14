@@ -27,7 +27,7 @@ describe.skip('@deslop/ai Pi agent debug integration', () => {
 		const parts = await Effect.runPromise(
 			pipe(
 				Agent,
-				Effect.flatMap(agent => Stream.runCollect(agent.streamText(request))),
+				Effect.flatMap(agent => Stream.runCollect(agent.prompt(request))),
 				Effect.provide(layer),
 				Effect.scoped
 			)
@@ -41,7 +41,7 @@ describe.skip('@deslop/ai Pi agent debug integration', () => {
 		const history = await Effect.runPromise(
 			pipe(
 				Agent,
-				Effect.flatMap(agent => pipe(Stream.runCollect(agent.streamText(request)), Effect.andThen(agent.history))),
+				Effect.flatMap(agent => pipe(Stream.runCollect(agent.prompt(request)), Effect.andThen(agent.history))),
 				Effect.provide(layer),
 				Effect.scoped
 			)
@@ -56,7 +56,7 @@ describe.skip('@deslop/ai Pi agent debug integration', () => {
 				Agent,
 				Effect.flatMap(agent =>
 					pipe(
-						agent.streamText({
+						agent.prompt({
 							...request,
 							messages: [
 								Prompt.makeMessage('user', {
