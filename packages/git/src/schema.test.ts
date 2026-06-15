@@ -6,8 +6,8 @@ import {
 	GitDiff,
 	GitDiffSegment,
 	GitReviewComment,
+	GitReviewMark,
 	GitReviewState,
-	gitReviewMarkKey,
 	gitReviewMarksForDiff,
 	gitReviewStateForMarks,
 	gitReviewStateMark,
@@ -24,7 +24,8 @@ describe('@deslop/git review state', () => {
 				filePath: 'src/file.ts',
 				lineNumber: 12,
 				resolved: false,
-				side: 'additions'
+				side: 'additions',
+				source: 'local'
 			})
 		)
 		const resolved = gitReviewStateResolveComment(saved, {filePath: 'src/file.ts', lineNumber: 12, side: 'additions'})
@@ -56,18 +57,16 @@ describe('@deslop/git review state', () => {
 			})
 		)
 		const reviewed = gitReviewStateMark(new GitReviewState({comments: Array.empty(), marks: Array.empty()}), firstMarks)
-		const reviewedKeys = new Set(Array.map(reviewed.marks, gitReviewMarkKey))
 
-		expect(gitReviewStateForMarks(firstMarks, reviewedKeys)).toBe('checked')
-		expect(gitReviewStateForMarks(secondMarks, reviewedKeys)).toBe('unchecked')
+		expect(gitReviewStateForMarks(firstMarks, reviewed.marks)).toBe('checked')
+		expect(gitReviewStateForMarks(secondMarks, reviewed.marks)).toBe('unchecked')
 	})
 
 	it('shares reviewed state between commit segments with the same file diff', () => {
-		const firstMarks = [{filePath: 'src/file.ts', fingerprint: 'same diff', segmentId: 'first-parent->first-commit'}]
-		const secondMarks = [{filePath: 'src/file.ts', fingerprint: 'same diff', segmentId: 'second-parent->second-commit'}]
+		const firstMarks = [new GitReviewMark({filePath: 'src/file.ts', fingerprint: 'same diff'})]
+		const secondMarks = [new GitReviewMark({filePath: 'src/file.ts', fingerprint: 'same diff'})]
 		const reviewed = gitReviewStateMark(new GitReviewState({comments: Array.empty(), marks: Array.empty()}), firstMarks)
-		const reviewedKeys = new Set(Array.map(reviewed.marks, gitReviewMarkKey))
 
-		expect(gitReviewStateForMarks(secondMarks, reviewedKeys)).toBe('checked')
+		expect(gitReviewStateForMarks(secondMarks, reviewed.marks)).toBe('checked')
 	})
 })

@@ -67,6 +67,17 @@ describe('@deslop/rules direct code style', () => {
 		expectClean('no-import-rename', "import {FileDiff} from '@pierre/diffs/react'")
 	})
 
+	test('bans Data.Class', () => {
+		expectDiagnostic('no-data-class', 'class Input extends Data.Class<{readonly id: string}>() {}')
+		expectClean('no-data-class', 'class Input extends Schema.Class<Input>("Input")({id: Schema.String}) {}')
+	})
+
+	test('bans interfaces', () => {
+		expectDiagnostic('no-interface', 'interface Input { readonly id: string }')
+		expectClean('no-interface', 'type Input = {readonly id: string}')
+		expectClean('no-interface', "declare module 'package' { interface Register { readonly value: string } }")
+	})
+
 	test('bans type assertions except as const', () => {
 		expectDiagnostic('no-type-assertion-except-as-const', 'const value = input as PackageJson')
 		expectClean('no-type-assertion-except-as-const', "const value = ['a'] as const")
@@ -124,6 +135,16 @@ describe('@deslop/rules direct code style', () => {
 		expectClean('no-signature-wrapper', 'const matches = value => /^x/u.test(value)')
 		expectClean('no-signature-wrapper', 'const toGitError = error => new GitError({cause: error})')
 		expectClean('no-signature-wrapper', 'class TokenNode { static importJSON(node) { return new TokenNode(node) } }')
+	})
+
+	test('bans identity functions', () => {
+		expectDiagnostic('no-identity-function', 'const identity = input => input')
+		expectDiagnostic(
+			'no-identity-function',
+			'function packageRunIdentity(input) { return new PackageRunIdentity(input) }'
+		)
+		expectClean('no-identity-function', 'function getIdentity() { return {color: "red"} }')
+		expectClean('no-identity-function', 'const makeUser = input => new User(input)')
 	})
 
 	test('bans pipe with only one transformation', () => {

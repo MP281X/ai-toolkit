@@ -176,9 +176,9 @@ export const discover = Effect.fnUntraced(function* (
 
 				return {
 					host,
+					origin,
 					port,
 					script: {
-						baseOrigin: packageOrigin,
 						...(script?.command === undefined ? {} : {command: script.command}),
 						cwd,
 						env: {
@@ -191,10 +191,6 @@ export const discover = Effect.fnUntraced(function* (
 							VITE_PORTLESS_ORIGIN: origin,
 							VITE_PORTLESS_URL: origin
 						},
-						origin,
-						...(packageName === undefined ? {} : {packageName}),
-						portless: true,
-						...(scriptName === undefined ? {} : {scriptName}),
 						sessionId: taskId,
 						taskId
 					}

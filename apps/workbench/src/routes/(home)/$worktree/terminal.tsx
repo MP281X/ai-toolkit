@@ -2,20 +2,18 @@ import {useAtomSuspense} from '@effect/atom-react'
 
 import {createFileRoute} from '@tanstack/react-router'
 
-import {activeHomeAtom} from '#lib/state.ts'
-import {WorkbenchTerminal} from '#routes/components/-workbench-terminal.tsx'
-import {TerminalPayload} from '#rpcs/contracts.ts'
+import {activeWorktreeAtom} from '#lib/state.ts'
+import {WorkbenchShellTerminal} from '#routes/components/-workbench-terminal.tsx'
 
 export const Route = createFileRoute('/(home)/$worktree/terminal')({component: TerminalPage})
 
 function TerminalPage() {
 	const params = Route.useParams()
-	const activeHome = useAtomSuspense(activeHomeAtom(params.worktree))
-	if (!activeHome.value.activeWorktree) return
+	const activeWorktree = useAtomSuspense(activeWorktreeAtom(params.worktree))
 
 	return (
-		<div key={activeHome.value.activeWorktree.root} className="bg-background h-full min-h-0 min-w-0">
-			<WorkbenchTerminal session={TerminalPayload.make({cwd: activeHome.value.activeWorktree.root})} />
+		<div className="bg-background h-full min-h-0 min-w-0">
+			<WorkbenchShellTerminal cwd={activeWorktree.value.root} />
 		</div>
 	)
 }

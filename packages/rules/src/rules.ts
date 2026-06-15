@@ -366,6 +366,34 @@ export const noObjectDestructuring = {
 	title: 'No object destructuring'
 } satisfies Rule
 
+export const noDataClass = {
+	create(context) {
+		return {
+			CallExpression(node: Node) {
+				if (!isCallExpression(node) || !isNamespaceMemberCall(node, 'Data', new Set(['Class']))) return
+				report(context, node, 'Do not use Data.Class. Use Schema.Class for domain values and structural equality.')
+			}
+		}
+	},
+	id: 'no-data-class',
+	severity: 'error',
+	title: 'No Data.Class'
+} satisfies Rule
+
+export const noInterface = {
+	create(context) {
+		return {
+			TSInterfaceDeclaration(node: Node) {
+				if (node.parent?.type === 'TSModuleBlock') return
+				report(context, node, 'Do not use TypeScript interfaces. Use type aliases.')
+			}
+		}
+	},
+	id: 'no-interface',
+	severity: 'error',
+	title: 'No interfaces'
+} satisfies Rule
+
 function isSimpleAccessExpression(node: Node | undefined) {
 	if (node === undefined) return false
 	if (isTSAsExpression(node)) return isSimpleAccessExpression(node.expression)
@@ -493,6 +521,52 @@ function forwardsAllParameters(expression: CallExpressionNode | NewExpressionNod
 function isRegExpTestAdapter(expression: CallExpressionNode | NewExpressionNode) {
 	return isCallExpression(expression) && staticMemberName(expression.callee) === 'test'
 }
+
+function functionName(node: Node) {
+	if ('id' in node && isNode(node.id) && isIdentifier(node.id)) return node.id.name
+	if (isVariableDeclarator(node.parent) && isIdentifier(node.parent.id)) return node.parent.id.name
+}
+
+function onlyParameterName(node: Node) {
+	if (!isFunctionLike(node) || node.params?.length !== 1) return
+	const [parameter] = node.params
+	if (!isIdentifier(parameter)) return
+	return parameter.name
+}
+
+function returnsOnlyParameter(node: Node, expression: Node) {
+	const parameterName = onlyParameterName(node)
+	return parameterName !== undefined && isIdentifier(expression) && expression.name === parameterName
+}
+
+function returnsSchemaIdentityConstructor(expression: Node) {
+	return isNewExpression(expression) && /Identity$/u.test(staticName(expression.callee) ?? '')
+}
+
+export const noIdentityFunction = {
+	create(context) {
+		function check(node: Node) {
+			const expression = functionReturnExpression(node)
+			if (expression === undefined) return
+			if (returnsOnlyParameter(node, expression)) {
+				report(context, node, 'Do not define identity functions. Use the value directly.')
+				return
+			}
+			if (!returnsSchemaIdentityConstructor(expression)) return
+			const name = functionName(node)
+			if (name === undefined || !/Identity$/iu.test(name)) return
+			report(
+				context,
+				node,
+				'Do not wrap schema identity constructors in helper functions. Construct the identity value at the use site.'
+			)
+		}
+		return {ArrowFunctionExpression: check, FunctionDeclaration: check, FunctionExpression: check}
+	},
+	id: 'no-identity-function',
+	severity: 'error',
+	title: 'No identity functions'
+} satisfies Rule
 
 export const noSignatureWrapper = {
 	create(context) {
@@ -839,10 +913,13 @@ export const rules = {
 	'no-classname-indirection': noClassNameIndirection,
 	'no-classname-variable': noClassNameVariable,
 	'no-config-or-else': noConfigOrElse,
+	'no-data-class': noDataClass,
 	'no-direct-tag-field': noDirectTagField,
 	'no-effect-error-to-success': noEffectErrorToSuccess,
 	'no-effect-run-in-source': noEffectRunInSource,
+	'no-identity-function': noIdentityFunction,
 	'no-import-rename': noImportRename,
+	'no-interface': noInterface,
 	'no-layer-mock': noLayerMock,
 	'no-let': noLet,
 	'no-local-type-alias': noLocalTypeAlias,

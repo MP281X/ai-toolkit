@@ -2,15 +2,22 @@ import {useAtom, useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Effect, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
 
-import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
+import {Outlet, createFileRoute, useParams, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, startTransition, useState} from 'react'
+import type {ReactNode} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
+import {activeSidebarAtom} from '#lib/state.ts'
 import {UsageStrip} from '#routes/components/-usage-strip.tsx'
-import {TerminalPayload} from '#rpcs/contracts.ts'
-import type {AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import {TerminalPackageScriptPayload, TerminalPortlessScriptPayload} from '#rpcs/contracts.ts'
+import type {
+	AgentSession,
+	SidebarPackageRun,
+	SidebarPortlessRun,
+	SidebarProject,
+	SidebarWorktree
+} from '#rpcs/contracts.ts'
 import type {AgentCommandProfile} from '@deslop/ai/schema'
 import {Loading} from '@deslop/components/fallbacks'
 import {
@@ -29,7 +36,7 @@ import {
 	TerminalIcon,
 	Trash
 } from '@deslop/components/icons'
-import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
+import {TreeExplorer, TreeExplorerGroup, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
 import {Button} from '@deslop/components/ui/button'
 import {
 	Command,
@@ -59,7 +66,6 @@ import {
 	GitWorktreeNewSource,
 	GitWorktreeRemoteSource
 } from '@deslop/git/schema'
-import type {PortlessRun} from '@deslop/portless/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
@@ -70,81 +76,21 @@ export const Route = createFileRoute('/(home)')({
 const branchesAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd)
-					? client('projects.branches', {cwd})
-					: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
-			),
+			Effect.flatMap(RpcClient, client => client('projects.branches', {cwd})),
 			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
 		)
 	)
 )
 
 function HomeLayout() {
-	const navigate = Route.useNavigate()
-	const homeRouteState = useRouterState({
-		select: state => ({
-			activeView: pipe(
-				Match.value(state.location.pathname),
-				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
-				Match.when(String.endsWith('/portless'), () => 'portless' as const),
-				Match.when(String.endsWith('/run'), () => 'run' as const),
-				Match.when(String.endsWith('/agent'), () => 'agent' as const),
-				Match.orElse(() => 'diff' as const)
-			),
-			activeWorktreeId: String.split('/')(state.location.pathname)[1]
-		})
-	})
-	const activeHome = useAtomSuspense(activeSidebarAtom(homeRouteState.activeWorktreeId))
+	const activeWorktreeId = useParams({select: params => params.worktree, strict: false})
+	const activeHome = useAtomSuspense(activeSidebarAtom(activeWorktreeId))
 
 	return (
 		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
-					<WorktreeManager
-						activeProject={activeHome.value.activeProject}
-						activeWorktree={activeHome.value.activeWorktree}
-						activeView={homeRouteState.activeView}
-						agentProfiles={activeHome.value.agentProfiles}
-						projects={activeHome.value.projects}
-						selectWorktree={worktreeRoot => {
-							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/diff'})
-							})
-						}}
-						selectTerminal={worktreeRoot => {
-							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
-							})
-						}}
-						selectPortless={(worktreeRoot, origin) => {
-							startTransition(() => {
-								void navigate({
-									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {origin},
-									to: '/$worktree/portless'
-								})
-							})
-						}}
-						selectAgent={(worktreeRoot, agentId) => {
-							startTransition(() => {
-								void navigate({
-									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {agentId},
-									to: '/$worktree/agent'
-								})
-							})
-						}}
-						selectRun={(worktreeRoot, sessionId, inactive) => {
-							startTransition(() => {
-								void navigate({
-									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {inactive, sessionId},
-									to: '/$worktree/run'
-								})
-							})
-						}}
-					/>
+					<WorktreeManager sidebar={activeHome.value} />
 				</ResizablePanel>
 
 				<ResizableHandle />
@@ -178,31 +124,28 @@ function shortPath(value: string) {
 	return pathLabel(value)
 }
 
-function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) {
-	if (input.root) return <PanelTop className={input.dirty ? 'text-amber-500' : 'text-current'} />
-	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
+function WorktreeIcon(input: {readonly root: boolean}) {
+	if (input.root) return <PanelTop />
+	return <Square />
 }
 
 function validNewWorktreeBranch(branch: string) {
 	return String.isNonEmpty(String.trim(branch)) && !/\s/u.test(branch)
 }
 
-function sortScriptRuns(runs: readonly ScriptRun[]) {
-	return Array.sortWith(runs, run => run.taskId, Order.String)
-}
-
-function sortPortlessRuns(runs: readonly PortlessRun[]) {
-	return Array.sortWith(runs, run => run.script.taskId, Order.String)
+function branchSource(candidate: {readonly remote?: string; readonly type: 'local' | 'remote'}) {
+	return Match.value(candidate).pipe(
+		Match.when({type: 'local'}, () => new GitWorktreeLocalSource({})),
+		Match.orElse(remoteBranch => new GitWorktreeRemoteSource({remote: remoteBranch.remote ?? 'origin'}))
+	)
 }
 
 function WorktreeScripts(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly scripts: readonly ScriptRun[]
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	readonly runs: readonly SidebarPackageRun[]
+	readonly selectRun: (run: SidebarPackageRun) => void
 }) {
 	const expandedState = useState(false)
-	const sortedRuns = sortScriptRuns(input.scripts)
+	const sortedRuns = Array.sortWith(input.runs, run => run.taskId, Order.String)
 
 	if (sortedRuns.length === 0) return null
 
@@ -210,7 +153,6 @@ function WorktreeScripts(input: {
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				icon={<Braces />}
-				selected={false}
 				onClick={() => {
 					expandedState[1](expanded => !expanded)
 				}}
@@ -218,136 +160,51 @@ function WorktreeScripts(input: {
 				scripts
 			</TreeExplorerRow>
 			{expandedState[0] && (
-				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+				<TreeExplorerGroup>
 					{Array.map(sortedRuns, run => (
 						<Suspense key={run.sessionId} fallback={<Loading />}>
-							<ScriptRunRow
-								cwd={input.cwd}
+							<RunToggleRow
 								run={run}
-								status={input.runStatuses[run.sessionId] ?? {state: 'idle', title: ''}}
-								selectRun={input.selectRun}
+								onSelect={() => {
+									input.selectRun(run)
+								}}
 							/>
 						</Suspense>
 					))}
-				</ul>
+				</TreeExplorerGroup>
 			)}
 		</li>
 	)
 }
 
-function ScriptRunRow(input: {
-	readonly cwd: string
-	readonly run: ScriptRun
-	readonly status: AgentSession['state']
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+function RunRow(input: {
+	readonly actions: ReactNode
+	readonly command?: string
+	readonly onSelect: () => void
+	readonly status: SidebarPackageRun['status']
+	readonly taskId: string
 }) {
-	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const actionState = useState(false)
-
-	const active = terminalStatusActive(input.status.state) && input.status.state !== 'idle'
-	const actionIcon = Match.value({active, pending: actionState[0]}).pipe(
-		Match.when(
-			value => value.pending,
-			() => <Spinner className="size-2.5 border opacity-60" />
-		),
-		Match.when(
-			value => value.active,
-			() => <Square className="size-3" />
-		),
-		Match.orElse(() => <PlayIcon className="size-3" />)
-	)
-
-	async function toggleRun() {
-		if (actionState[0]) return
-
-		actionState[1](true)
-		try {
-			await (active
-				? stop({payload: TerminalPayload.make({cwd: input.cwd, sessionId: input.run.sessionId})})
-				: restart({payload: TerminalPayload.make({cwd: input.cwd, sessionId: input.run.sessionId})}))
-		} catch (error) {
-			toast.error(formatError(error))
-		} finally {
-			actionState[1](false)
-		}
-	}
-
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
-				actions={
-					<span className="flex h-full items-center justify-end">
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="text-muted-foreground hover:text-foreground"
-							disabled={actionState[0]}
-							onClick={event => {
-								event.stopPropagation()
-								void toggleRun()
-							}}
-							title={active ? `Stop ${input.run.taskId}` : `Start ${input.run.taskId}`}
-						>
-							{actionIcon}
-						</Button>
-					</span>
-				}
+				actions={input.actions}
 				icon={<ProcessStateIcon state={input.status.state} />}
-				selected={false}
-				title={input.run.command}
-				onClick={() => {
-					input.selectRun(input.cwd, input.run.sessionId, input.status.state === 'idle')
-				}}
+				title={input.command ?? input.taskId}
+				onClick={input.onSelect}
 			>
-				{input.run.taskId}
+				{input.taskId}
 			</TreeExplorerRow>
 		</li>
 	)
 }
 
-function WorktreePortless(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+function RunActionButton(input: {
+	readonly active: boolean
+	readonly label: string
+	readonly onToggle: () => Promise<void>
 }) {
-	const sortedRuns = sortPortlessRuns(input.runs)
-
-	if (sortedRuns.length === 0) return null
-
-	return (
-		<PortlessGroup
-			cwd={input.cwd}
-			runs={sortedRuns}
-			runStatuses={input.runStatuses}
-			selectPortless={input.selectPortless}
-			selectRun={input.selectRun}
-		/>
-	)
-}
-
-function PortlessGroup(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
-}) {
-	const expandedState = useState(true)
-	const active = Array.some(
-		input.runs,
-		run =>
-			terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
-			input.runStatuses[run.script.sessionId]?.state !== 'idle'
-	)
-	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const actionState = useState(false)
-
-	const actionIcon = Match.value({active, pending: actionState[0]}).pipe(
+	const pendingState = useState(false)
+	const actionIcon = Match.value({active: input.active, pending: pendingState[0]}).pipe(
 		Match.when(
 			value => value.pending,
 			() => <Spinner className="size-2.5 border opacity-60" />
@@ -359,44 +216,108 @@ function PortlessGroup(input: {
 		Match.orElse(() => <PlayIcon className="size-3" />)
 	)
 
-	async function toggleRuns() {
-		if (actionState[0]) return
+	async function toggle() {
+		if (pendingState[0]) return
 
-		actionState[1](true)
+		pendingState[1](true)
 		try {
-			for (const run of input.runs) {
-				await (active
-					? stop({payload: TerminalPayload.make({cwd: run.script.cwd, sessionId: run.script.sessionId})})
-					: restart({payload: TerminalPayload.make({cwd: run.script.cwd, sessionId: run.script.sessionId})}))
-			}
+			await input.onToggle()
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			actionState[1](false)
+			pendingState[1](false)
 		}
 	}
 
 	return (
+		<TreeActionButton
+			disabled={pendingState[0]}
+			onClick={() => {
+				void toggle()
+			}}
+			title={`${input.active ? 'Stop' : 'Start'} ${input.label}`}
+		>
+			{actionIcon}
+		</TreeActionButton>
+	)
+}
+
+function TreeActionButton(input: {
+	readonly children: ReactNode
+	readonly disabled?: boolean
+	readonly onClick: () => void
+	readonly title: string
+}) {
+	return (
+		<Button
+			type="button"
+			variant="ghost"
+			size="icon-xs"
+			className="text-muted-foreground hover:text-foreground"
+			disabled={input.disabled}
+			onClick={event => {
+				event.stopPropagation()
+				input.onClick()
+			}}
+			title={input.title}
+		>
+			{input.children}
+		</Button>
+	)
+}
+
+function RunToggleRow(input: {readonly onSelect: () => void; readonly run: SidebarPackageRun}) {
+	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const active = terminalStatusActive(input.run.status.state) && input.run.status.state !== 'idle'
+
+	return (
+		<RunRow
+			actions={
+				<span className="flex h-full items-center justify-end">
+					<RunActionButton
+						active={active}
+						label={input.run.taskId}
+						onToggle={async () => {
+							const payload = new TerminalPackageScriptPayload({cwd: input.run.cwd, sessionId: input.run.sessionId})
+							await (active ? stop({payload}) : restart({payload}))
+						}}
+					/>
+				</span>
+			}
+			command={input.run.command}
+			onSelect={input.onSelect}
+			status={input.run.status}
+			taskId={input.run.taskId}
+		/>
+	)
+}
+
+function PortlessGroup(input: {
+	readonly openPreview: (run: SidebarPortlessRun) => void
+	readonly runs: readonly SidebarPortlessRun[]
+	readonly selectRun: (run: SidebarPortlessRun) => void
+}) {
+	const expandedState = useState(true)
+	const sortedRuns = Array.sortWith(input.runs, run => run.taskId, Order.String)
+	const active = Array.some(sortedRuns, run => terminalStatusActive(run.status.state) && run.status.state !== 'idle')
+	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+
+	async function toggleRuns() {
+		for (const run of sortedRuns) {
+			const payload = new TerminalPortlessScriptPayload({cwd: run.cwd, sessionId: run.sessionId})
+			await (active ? stop({payload}) : restart({payload}))
+		}
+	}
+
+	if (sortedRuns.length === 0) return null
+
+	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
-				actions={
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="text-muted-foreground hover:text-foreground"
-						disabled={actionState[0]}
-						onClick={event => {
-							event.stopPropagation()
-							void toggleRuns()
-						}}
-						title={active ? 'Stop deslop' : 'Start deslop'}
-					>
-						{actionIcon}
-					</Button>
-				}
+				actions={<RunActionButton active={active} label="deslop" onToggle={toggleRuns} />}
 				icon={<GlobeIcon />}
-				selected={false}
 				onClick={() => {
 					expandedState[1](expanded => !expanded)
 				}}
@@ -404,56 +325,31 @@ function PortlessGroup(input: {
 				deslop
 			</TreeExplorerRow>
 			{expandedState[0] && (
-				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{Array.map(input.runs, run => (
-						<Suspense key={run.script.sessionId} fallback={<Loading />}>
-							<PortlessRunRow
-								run={run}
-								status={input.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}}
-								selectPortless={input.selectPortless}
-								selectRun={input.selectRun}
+				<TreeExplorerGroup>
+					{Array.map(sortedRuns, run => (
+						<Suspense key={run.sessionId} fallback={<Loading />}>
+							<RunRow
+								actions={
+									<TreeActionButton
+										onClick={() => {
+											input.openPreview(run)
+										}}
+										title={`Open ${run.taskId} preview`}
+									>
+										<GlobeIcon className="size-3" />
+									</TreeActionButton>
+								}
+								command={run.command}
+								onSelect={() => {
+									input.selectRun(run)
+								}}
+								status={run.status}
+								taskId={run.taskId}
 							/>
 						</Suspense>
 					))}
-				</ul>
+				</TreeExplorerGroup>
 			)}
-		</li>
-	)
-}
-
-function PortlessRunRow(input: {
-	readonly run: PortlessRun
-	readonly status: AgentSession['state']
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
-}) {
-	return (
-		<li className="w-full min-w-0">
-			<TreeExplorerRow
-				actions={
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="text-muted-foreground hover:text-foreground"
-						onClick={event => {
-							event.stopPropagation()
-							input.selectPortless(input.run.script.cwd, input.run.origin.origin)
-						}}
-						title={`Open ${input.run.script.taskId} preview`}
-					>
-						<GlobeIcon className="size-3" />
-					</Button>
-				}
-				icon={<ProcessStateIcon state={input.status.state} />}
-				selected={false}
-				title={input.run.script.command ?? input.run.script.taskId}
-				onClick={() => {
-					input.selectRun(input.run.script.cwd, input.run.script.sessionId, input.status.state === 'idle')
-				}}
-			>
-				{input.run.script.taskId}
-			</TreeExplorerRow>
 		</li>
 	)
 }
@@ -468,23 +364,17 @@ function AgentSessionRow(input: {
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				actions={
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="text-muted-foreground hover:text-foreground"
+					<TreeActionButton
 						disabled={input.stopping}
-						onClick={event => {
-							event.stopPropagation()
+						onClick={() => {
 							input.onStop()
 						}}
 						title={`Stop ${input.session.label}`}
 					>
 						{input.stopping ? <Spinner className="size-2.5 border opacity-60" /> : <Square className="size-3" />}
-					</Button>
+					</TreeActionButton>
 				}
 				icon={<ProcessStateIcon state={input.session.state.state} />}
-				selected={false}
 				title={input.session.state.title ? `Title: ${input.session.state.title}` : input.session.label}
 				onClick={input.onSelect}
 			>
@@ -495,10 +385,9 @@ function AgentSessionRow(input: {
 }
 
 function WorktreeAgents(input: {
-	readonly cwd: string
 	readonly profiles: readonly AgentCommandProfile[]
-	readonly sessions: readonly AgentSession[]
-	readonly selectAgent: (cwd: string, agentId: string) => void
+	readonly selectAgent: (agentId: string) => void
+	readonly worktree: SidebarWorktree
 }) {
 	const [, create] = useAtom(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const [, remove] = useAtom(RpcClient.mutation('agents.remove'), {mode: 'promise'})
@@ -510,8 +399,8 @@ function WorktreeAgents(input: {
 
 		startingProfilesState[1](current => new Set([...current, profile.id]))
 		try {
-			const session = await create({payload: {cwd: input.cwd, profileId: profile.id}})
-			input.selectAgent(input.cwd, session.uuid)
+			const session = await create({payload: {cwd: input.worktree.root, profileId: profile.id}})
+			input.selectAgent(session.uuid)
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
@@ -528,7 +417,7 @@ function WorktreeAgents(input: {
 
 		stoppingSessionsState[1](current => new Set([...current, session.uuid]))
 		try {
-			await remove({payload: {cwd: input.cwd, uuid: session.uuid}})
+			await remove({payload: {cwd: input.worktree.root, uuid: session.uuid}})
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
@@ -542,24 +431,17 @@ function WorktreeAgents(input: {
 
 	return (
 		<li className="w-full min-w-0">
-			<TreeExplorerRow icon={<BotIcon />} selected={false}>
-				agents
-			</TreeExplorerRow>
-			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+			<TreeExplorerRow icon={<BotIcon />}>agents</TreeExplorerRow>
+			<TreeExplorerGroup>
 				{Array.map(input.profiles, profile => {
-					const profileSessions = Array.filter(input.sessions, session => session.profileId === profile.id)
+					const profileSessions = Array.filter(input.worktree.agents, session => session.profileId === profile.id)
 					return (
 						<li key={profile.id} className="w-full min-w-0">
 							<TreeExplorerRow
 								actions={
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										className="text-muted-foreground hover:text-foreground"
+									<TreeActionButton
 										disabled={startingProfilesState[0].has(profile.id)}
-										onClick={event => {
-											event.stopPropagation()
+										onClick={() => {
 											void startAgent(profile)
 										}}
 										title={`Start ${profile.label}`}
@@ -569,21 +451,20 @@ function WorktreeAgents(input: {
 										) : (
 											<PlayIcon className="size-3" />
 										)}
-									</Button>
+									</TreeActionButton>
 								}
 								icon={<AgentIcon layer={profile.icon} />}
-								selected={false}
 							>
 								{profile.label}
 							</TreeExplorerRow>
 							{profileSessions.length > 0 && (
-								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+								<TreeExplorerGroup>
 									{Array.map(profileSessions, session => (
 										<AgentSessionRow
 											key={session.uuid}
 											session={session}
 											onSelect={() => {
-												input.selectAgent(input.cwd, session.uuid)
+												input.selectAgent(session.uuid)
 											}}
 											onStop={() => {
 												void stopAgent(session)
@@ -591,49 +472,34 @@ function WorktreeAgents(input: {
 											stopping={stoppingSessionsState[0].has(session.uuid)}
 										/>
 									))}
-								</ul>
+								</TreeExplorerGroup>
 							)}
 						</li>
 					)
 				})}
-			</ul>
+			</TreeExplorerGroup>
 		</li>
 	)
 }
 
-function WorktreeManager(input: {
-	readonly activeProject?: SidebarProject
-	readonly activeWorktree?: SidebarWorktree
-	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
-	readonly agentProfiles: readonly AgentCommandProfile[]
-	readonly projects: readonly SidebarProject[]
-	readonly selectWorktree: (worktreeRoot: string) => void
-	readonly selectTerminal: (worktreeRoot: string) => void
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
-	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+function CreateWorktreeDialog(input: {
+	readonly project: SidebarProject
+	readonly selectWorktree: (worktreeId: string) => void
+	readonly setProject: (project: SidebarProject | undefined) => void
 }) {
-	const [, fixProject] = useAtom(RpcClient.mutation('projects.fix'), {mode: 'promise'})
 	const [, createWorktree] = useAtom(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
-	const [, deleteWorktree] = useAtom(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const branchState = useState('')
-	const actionsOpenState = useState(false)
-	const createWorktreeProjectRootState = useState(input.activeProject?.repository.root)
 	const creatingBranchState = useState('')
-	const deletingWorktreeState = useState(false)
-	const deleteDialogOpenState = useState(false)
-	const fixingProjectState = useState('')
-	const createWorktreeProject =
-		pipe(
-			input.projects,
-			Array.findFirst(project => project.repository.root === createWorktreeProjectRootState[0]),
-			Option.getOrUndefined
-		) ?? input.activeProject
-	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
+	const branchSnapshot = useAtomSuspense(branchesAtom(input.project.repository.root))
 	const localBranchNames = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => candidate.type === 'local'),
 		Array.map(candidate => candidate.name)
+	)
+	const usedBranchNames = pipe(
+		input.project.worktrees,
+		Array.map(worktree => worktree.branch ?? ''),
+		Array.filter(String.isNonEmpty)
 	)
 	const availableBranches = pipe(
 		branchSnapshot.value.branches,
@@ -642,59 +508,201 @@ function WorktreeManager(input: {
 		Array.dedupeWith(
 			(left, right) => left.name === right.name && left.type === right.type && left.remote === right.remote
 		),
-		Array.filter(
-			candidate =>
-				!pipe(
-					createWorktreeProject?.worktrees ?? [],
-					Array.map(worktree => worktree.branch ?? ''),
-					Array.filter(String.isNonEmpty),
-					Array.contains(candidate.name)
-				)
-		)
+		Array.filter(candidate => !Array.contains(usedBranchNames, candidate.name))
 	)
 	const newBranch = String.trim(branchState[0])
-	const branchAvailable = Array.some(availableBranches, candidate => candidate.name === newBranch)
-	const canCreateNewBranch = String.isNonEmpty(newBranch) && validNewWorktreeBranch(newBranch) && !branchAvailable
-	async function createFastWorktree(candidate?: (typeof availableBranches)[number]) {
-		const nextBranch = candidate?.name ?? newBranch
-		if (String.isEmpty(nextBranch) || String.isNonEmpty(creatingBranchState[0])) return
-		if (candidate === undefined && !validNewWorktreeBranch(nextBranch)) {
-			toast.error('Branch names cannot contain spaces.')
-			return
-		}
+	const newBranchInvalid = String.isNonEmpty(newBranch) && !validNewWorktreeBranch(newBranch)
+	const branchCandidate = pipe(
+		availableBranches,
+		Array.findFirst(candidate => candidate.name === newBranch),
+		Option.match({
+			onNone: () => {
+				if (String.isEmpty(newBranch) || newBranchInvalid || Array.contains(usedBranchNames, newBranch)) return
+				return {name: newBranch, source: new GitWorktreeNewSource({}), type: 'new' as const}
+			},
+			onSome: candidate => ({name: candidate.name, source: branchSource(candidate), type: 'existing' as const})
+		})
+	)
+	const emptyBranchMessage = Match.value({
+		invalid: newBranchInvalid,
+		used: Array.contains(usedBranchNames, newBranch)
+	}).pipe(
+		Match.when({invalid: true}, () => 'Branch names cannot contain spaces.'),
+		Match.when({used: true}, () => 'Branch already has a worktree.'),
+		Match.orElse(() => 'No matching branch.')
+	)
 
-		const source =
-			candidate === undefined
-				? new GitWorktreeNewSource({})
-				: Match.value(candidate).pipe(
-						Match.when({type: 'local'}, () => new GitWorktreeLocalSource({})),
-						Match.orElse(remoteBranch => new GitWorktreeRemoteSource({remote: remoteBranch.remote ?? 'origin'}))
-					)
+	async function createFastWorktree(candidate: {
+		readonly name: string
+		readonly source: GitWorktreeLocalSource | GitWorktreeNewSource | GitWorktreeRemoteSource
+	}) {
+		if (String.isNonEmpty(creatingBranchState[0])) return
 
-		creatingBranchState[1](nextBranch)
+		creatingBranchState[1](candidate.name)
 		try {
-			const worktreeRoot = await createWorktree({
-				payload: {
-					branch: nextBranch,
-					cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
-					source
-				}
+			const worktree = await createWorktree({
+				payload: {branch: candidate.name, cwd: input.project.repository.root, source: candidate.source}
 			})
-			actionsOpenState[1](false)
+			input.setProject(undefined)
 			branchState[1]('')
-			input.selectWorktree(worktreeRoot)
+			input.selectWorktree(worktree.id)
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
 			creatingBranchState[1]('')
 		}
 	}
+
+	return (
+		<CommandDialog
+			open
+			onOpenChange={open => {
+				if (!open) input.setProject(undefined)
+			}}
+			title="Create worktree"
+			description="Create or open a worktree branch."
+			className="sm:max-w-2xl"
+		>
+			<Command
+				onKeyDown={event => {
+					event.stopPropagation()
+					if (event.key === 'Escape') input.setProject(undefined)
+				}}
+			>
+				<CommandInput
+					placeholder={`Find or create branch in ${pathLabel(input.project.repository.root)}...`}
+					value={branchState[0]}
+					onValueChange={branchState[1]}
+					onKeyDown={event => {
+						if (event.key === 'Enter' && branchCandidate !== undefined) {
+							event.preventDefault()
+							void createFastWorktree(branchCandidate)
+						}
+					}}
+				/>
+				<CommandList>
+					<CommandEmpty>{emptyBranchMessage}</CommandEmpty>
+					<CommandGroup>
+						{branchCandidate?.type === 'new' && (
+							<CommandItem
+								value={branchCandidate.name}
+								disabled={String.isNonEmpty(creatingBranchState[0])}
+								onSelect={() => {
+									void createFastWorktree(branchCandidate)
+								}}
+							>
+								{creatingBranchState[0] === branchCandidate.name ? (
+									<Spinner className="size-2.5 border opacity-60" />
+								) : (
+									<GitBranchPlus />
+								)}
+								<span className="min-w-0 truncate">Create {branchCandidate.name}</span>
+								<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
+							</CommandItem>
+						)}
+						{Array.map(availableBranches, candidate => (
+							<CommandItem
+								key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
+								value={candidate.name}
+								disabled={String.isNonEmpty(creatingBranchState[0])}
+								onSelect={() => {
+									branchState[1](candidate.name)
+									void createFastWorktree({name: candidate.name, source: branchSource(candidate)})
+								}}
+							>
+								{creatingBranchState[0] === candidate.name ? (
+									<Spinner className="size-2.5 border opacity-60" />
+								) : (
+									Match.value(candidate.type).pipe(
+										Match.when('local', () => <GitBranch />),
+										Match.orElse(() => <GlobeIcon />)
+									)
+								)}
+								<span className="min-w-0 truncate">{candidate.name}</span>
+								<CommandShortcut>{candidate.type}</CommandShortcut>
+							</CommandItem>
+						))}
+					</CommandGroup>
+				</CommandList>
+			</Command>
+		</CommandDialog>
+	)
+}
+
+function WorktreeManager(input: {
+	readonly sidebar: {
+		readonly activeProject?: SidebarProject
+		readonly activeWorktree?: SidebarWorktree
+		readonly agentProfiles: readonly AgentCommandProfile[]
+		readonly projects: readonly SidebarProject[]
+	}
+}) {
+	const navigate = Route.useNavigate()
+	const activeView = useRouterState({
+		select: state =>
+			pipe(
+				pipe(state.matches, Array.last, Option.getOrThrow).routeId,
+				Match.value,
+				Match.when('/(home)/$worktree/terminal', () => 'terminal' as const),
+				Match.when('/(home)/$worktree/portless', () => 'portless' as const),
+				Match.when('/(home)/$worktree/run', () => 'run' as const),
+				Match.when('/(home)/$worktree/agent', () => 'agent' as const),
+				Match.orElse(() => 'diff' as const)
+			)
+	})
+	const [, fixProject] = useAtom(RpcClient.mutation('projects.fix'), {mode: 'promise'})
+	const [, deleteWorktree] = useAtom(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
+	const createWorktreeProjectState = useState<SidebarProject | undefined>()
+	const deletingWorktreeState = useState(false)
+	const deleteDialogOpenState = useState(false)
+	const fixingProjectState = useState('')
+	function selectWorktree(worktreeId: string) {
+		startTransition(() => {
+			void navigate({params: {worktree: worktreeId}, to: '/$worktree/diff'})
+		})
+	}
+	function selectTerminal(worktreeId: string) {
+		startTransition(() => {
+			void navigate({params: {worktree: worktreeId}, to: '/$worktree/terminal'})
+		})
+	}
+	function selectPortless(worktreeId: string, origin: string) {
+		startTransition(() => {
+			void navigate({params: {worktree: worktreeId}, search: {origin}, to: '/$worktree/portless'})
+		})
+	}
+	function selectAgent(worktreeId: string, agentId: string) {
+		startTransition(() => {
+			void navigate({params: {worktree: worktreeId}, search: {agentId}, to: '/$worktree/agent'})
+		})
+	}
+	function selectRun(worktreeId: string, run: SidebarPackageRun | SidebarPortlessRun) {
+		startTransition(() => {
+			void Match.value(run).pipe(
+				Match.tag('package-script', packageRun =>
+					navigate({
+						params: {worktree: worktreeId},
+						search: {sessionId: packageRun.sessionId, type: 'package-script'},
+						to: '/$worktree/run'
+					})
+				),
+				Match.tag('portless-script', portlessRun =>
+					navigate({
+						params: {worktree: worktreeId},
+						search: {sessionId: portlessRun.sessionId, type: 'portless-script'},
+						to: '/$worktree/run'
+					})
+				),
+				Match.exhaustive
+			)
+		})
+	}
 	async function deleteActiveWorktree() {
-		if (!input.activeWorktree || deletingWorktreeState[0]) return
+		if (!input.sidebar.activeWorktree || deletingWorktreeState[0]) return
 
 		deletingWorktreeState[1](true)
 		try {
-			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
+			await deleteWorktree({payload: {cwd: input.sidebar.activeWorktree.root}})
 			deleteDialogOpenState[1](false)
 		} catch (error) {
 			toast.error(formatError(error))
@@ -724,8 +732,8 @@ function WorktreeManager(input: {
 					size="sm"
 					className="text-muted-foreground hover:text-foreground flex h-full w-full min-w-0 justify-start px-3 text-left"
 					onClick={() => {
-						if (input.activeWorktree) {
-							void navigator.clipboard.writeText(input.activeWorktree.root).then(
+						if (input.sidebar.activeWorktree) {
+							void navigator.clipboard.writeText(input.sidebar.activeWorktree.root).then(
 								() => {},
 								() => {}
 							)
@@ -733,28 +741,29 @@ function WorktreeManager(input: {
 					}}
 				>
 					<span className="min-w-0 truncate">
-						{input.activeWorktree ? shortPath(input.activeWorktree.root) : 'No worktree selected'}
+						{input.sidebar.activeWorktree ? shortPath(input.sidebar.activeWorktree.root) : 'No worktree selected'}
 					</span>
 				</Button>
-				{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
-					<Button
-						type="button"
-						variant="destructive"
-						size="icon"
-						className="h-8 w-8"
-						disabled={deletingWorktreeState[0]}
-						onClick={() => {
-							deleteDialogOpenState[1](true)
-						}}
-						title="Delete worktree"
-					>
-						{deletingWorktreeState[0] ? (
-							<Spinner className="size-2.5 border opacity-60" />
-						) : (
-							<Trash className="size-3" />
-						)}
-					</Button>
-				)}
+				{input.sidebar.activeWorktree &&
+					input.sidebar.activeWorktree.root !== input.sidebar.activeProject?.repository.root && (
+						<Button
+							type="button"
+							variant="destructive"
+							size="icon"
+							className="h-8 w-8"
+							disabled={deletingWorktreeState[0]}
+							onClick={() => {
+								deleteDialogOpenState[1](true)
+							}}
+							title="Delete worktree"
+						>
+							{deletingWorktreeState[0] ? (
+								<Spinner className="size-2.5 border opacity-60" />
+							) : (
+								<Trash className="size-3" />
+							)}
+						</Button>
+					)}
 			</div>
 
 			<Dialog open={deleteDialogOpenState[0]} onOpenChange={deleteDialogOpenState[1]}>
@@ -762,8 +771,8 @@ function WorktreeManager(input: {
 					<DialogHeader>
 						<DialogTitle>Delete worktree</DialogTitle>
 						<DialogDescription>
-							{input.activeWorktree
-								? `Delete ${input.activeWorktree.branch ?? pathLabel(input.activeWorktree.root)}?`
+							{input.sidebar.activeWorktree
+								? `Delete ${input.sidebar.activeWorktree.branch ?? pathLabel(input.sidebar.activeWorktree.root)}?`
 								: 'No worktree selected.'}
 						</DialogDescription>
 					</DialogHeader>
@@ -781,10 +790,9 @@ function WorktreeManager(input: {
 						<Button
 							type="button"
 							variant="destructive"
-							disabled={!input.activeWorktree || deletingWorktreeState[0]}
+							disabled={!input.sidebar.activeWorktree || deletingWorktreeState[0]}
 							onClick={() => {
 								void deleteActiveWorktree()
-								actionsOpenState[1](false)
 							}}
 						>
 							{deletingWorktreeState[0] ? (
@@ -798,128 +806,24 @@ function WorktreeManager(input: {
 				</DialogContent>
 			</Dialog>
 
-			<CommandDialog
-				open={actionsOpenState[0]}
-				onOpenChange={actionsOpenState[1]}
-				title="Create worktree"
-				description="Create or open a worktree branch."
-				className="sm:max-w-2xl"
-			>
-				<Command
-					onKeyDown={event => {
-						event.stopPropagation()
-						if (event.key === 'Escape') actionsOpenState[1](false)
-					}}
-				>
-					<CommandInput
-						placeholder={`Find or create branch in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
-						value={branchState[0]}
-						onValueChange={branchState[1]}
-						onKeyDown={event => {
-							if (event.key === 'Enter' && String.isNonEmpty(newBranch) && createWorktreeProject) {
-								event.preventDefault()
-								void createFastWorktree(
-									pipe(
-										availableBranches,
-										Array.findFirst(candidate => candidate.name === newBranch),
-										Option.getOrUndefined
-									)
-								)
-							}
-						}}
-					/>
-					<CommandList>
-						<CommandEmpty>
-							{String.isNonEmpty(newBranch) && !validNewWorktreeBranch(newBranch)
-								? 'Branch names cannot contain spaces.'
-								: 'No matching branch.'}
-						</CommandEmpty>
-						{createWorktreeProject && (
-							<CommandGroup>
-								{canCreateNewBranch && (
-									<CommandItem
-										value={newBranch}
-										disabled={String.isNonEmpty(creatingBranchState[0])}
-										onSelect={() => {
-											void createFastWorktree()
-										}}
-									>
-										{creatingBranchState[0] === newBranch ? (
-											<Spinner className="size-2.5 border opacity-60" />
-										) : (
-											<GitBranchPlus />
-										)}
-										<span className="min-w-0 truncate">Create {newBranch}</span>
-										<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
-									</CommandItem>
-								)}
-								{Array.map(availableBranches, candidate => {
-									const icon =
-										creatingBranchState[0] === candidate.name ? (
-											<Spinner className="size-2.5 border opacity-60" />
-										) : (
-											Match.value(candidate.type).pipe(
-												Match.when('local', () => <GitBranch />),
-												Match.orElse(() => <GlobeIcon />)
-											)
-										)
-
-									return (
-										<CommandItem
-											key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
-											value={candidate.name}
-											onSelect={() => {
-												branchState[1](candidate.name)
-												void createFastWorktree(candidate)
-											}}
-										>
-											{icon}
-											<span className="min-w-0 truncate">{candidate.name}</span>
-											<CommandShortcut>{candidate.type}</CommandShortcut>
-										</CommandItem>
-									)
-								})}
-							</CommandGroup>
-						)}
-					</CommandList>
-				</Command>
-			</CommandDialog>
+			{createWorktreeProjectState[0] && (
+				<CreateWorktreeDialog
+					project={createWorktreeProjectState[0]}
+					selectWorktree={selectWorktree}
+					setProject={createWorktreeProjectState[1]}
+				/>
+			)}
 
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
-					{Array.map(input.projects, project => {
-						const projectWorktree =
-							Option.getOrUndefined(
-								Array.findFirst(project.worktrees, candidate => candidate.root === project.repository.root)
-							) ?? project.worktrees[0]
-
-						return (
-							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
-								<div className="text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 pr-2 text-left font-normal hover:bg-transparent">
-									<span className="flex min-w-0 flex-1 items-center gap-1.5">
-										<span className="flex size-3 shrink-0 items-center justify-center [&_svg]:size-3">
-											<Layers />
-										</span>
-										<span className="min-w-0 flex-1 truncate">
-											<button
-												type="button"
-												className="tree-label flex min-w-0 items-center gap-1.5 text-left"
-												onClick={() => {
-													if (projectWorktree) input.selectWorktree(projectWorktree.root)
-												}}
-											>
-												<span className="min-w-0 truncate">{pathLabel(project.repository.root)}</span>
-											</button>
-										</span>
-									</span>
+					{Array.map(input.sidebar.projects, project => (
+						<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
+							<TreeExplorerRow
+								actions={
 									<span className="flex items-center">
-										<Button
-											variant="ghost"
-											size="icon-xs"
-											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
+										<TreeActionButton
 											disabled={fixingProjectState[0] === project.repository.root}
-											onClick={event => {
-												event.stopPropagation()
+											onClick={() => {
 												void fixActiveProject(project)
 											}}
 											title="Fix repo state"
@@ -929,80 +833,83 @@ function WorktreeManager(input: {
 											) : (
 												<RefreshCwIcon className="size-3" />
 											)}
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon-xs"
-											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											onClick={event => {
-												event.stopPropagation()
-												createWorktreeProjectRootState[1](project.repository.root)
-												branchState[1]('')
-												actionsOpenState[1](true)
+										</TreeActionButton>
+										<TreeActionButton
+											onClick={() => {
+												createWorktreeProjectState[1](project)
 											}}
 											title="Create worktree"
 										>
 											<GitBranchPlus className="size-3" />
-										</Button>
+										</TreeActionButton>
 									</span>
-								</div>
-								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-									{Array.map(project.worktrees, worktree => (
-										<li key={worktree.root} className="w-full min-w-0">
-											<TreeExplorerRow
-												key={worktree.root}
-												icon={<WorktreeIcon dirty={false} root={worktree.root === project.repository.root} />}
-												selected={input.activeView === 'diff' && input.activeWorktree?.root === worktree.root}
-												onClick={() => {
-													input.selectWorktree(worktree.root)
-												}}
-											>
-												{worktree.branch ?? pathLabel(worktree.root)}
-											</TreeExplorerRow>
-											<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-												<Suspense fallback={<Loading />}>
-													<WorktreeAgents
-														cwd={worktree.root}
-														profiles={input.agentProfiles}
-														sessions={worktree.agents}
-														selectAgent={input.selectAgent}
-													/>
-												</Suspense>
-												<li className="w-full min-w-0">
-													<TreeExplorerRow
-														icon={<TerminalIcon />}
-														selected={input.activeView === 'terminal' && input.activeWorktree?.root === worktree.root}
-														onClick={() => {
-															input.selectTerminal(worktree.root)
-														}}
-													>
-														terminal
-													</TreeExplorerRow>
-												</li>
-												<Suspense fallback={<Loading />}>
-													<WorktreePortless
-														cwd={worktree.root}
-														runStatuses={worktree.runStatuses}
-														runs={worktree.portlessRuns}
-														selectPortless={input.selectPortless}
-														selectRun={input.selectRun}
-													/>
-												</Suspense>
-												<Suspense fallback={<Loading />}>
-													<WorktreeScripts
-														cwd={worktree.root}
-														runStatuses={worktree.runStatuses}
-														scripts={worktree.scriptRuns}
-														selectRun={input.selectRun}
-													/>
-												</Suspense>
-											</ul>
-										</li>
-									))}
-								</ul>
-							</li>
-						)
-					})}
+								}
+								className="text-foreground hover:text-foreground hover:bg-transparent"
+								icon={<Layers />}
+								onClick={() => {
+									selectWorktree(project.rootWorktree.id)
+								}}
+							>
+								{pathLabel(project.repository.root)}
+							</TreeExplorerRow>
+							<TreeExplorerGroup>
+								{Array.map(project.worktrees, worktree => (
+									<li key={worktree.id} className="w-full min-w-0">
+										<TreeExplorerRow
+											icon={<WorktreeIcon root={worktree.root === project.repository.root} />}
+											selected={activeView === 'diff' && input.sidebar.activeWorktree?.id === worktree.id}
+											onClick={() => {
+												selectWorktree(worktree.id)
+											}}
+										>
+											{worktree.branch ?? pathLabel(worktree.root)}
+										</TreeExplorerRow>
+										<TreeExplorerGroup>
+											<Suspense fallback={<Loading />}>
+												<WorktreeAgents
+													profiles={input.sidebar.agentProfiles}
+													selectAgent={agentId => {
+														selectAgent(worktree.id, agentId)
+													}}
+													worktree={worktree}
+												/>
+											</Suspense>
+											<li className="w-full min-w-0">
+												<TreeExplorerRow
+													icon={<TerminalIcon />}
+													selected={activeView === 'terminal' && input.sidebar.activeWorktree?.id === worktree.id}
+													onClick={() => {
+														selectTerminal(worktree.id)
+													}}
+												>
+													terminal
+												</TreeExplorerRow>
+											</li>
+											<Suspense fallback={<Loading />}>
+												<PortlessGroup
+													openPreview={run => {
+														selectPortless(worktree.id, run.origin.origin)
+													}}
+													runs={worktree.portlessRuns}
+													selectRun={run => {
+														selectRun(worktree.id, run)
+													}}
+												/>
+											</Suspense>
+											<Suspense fallback={<Loading />}>
+												<WorktreeScripts
+													runs={worktree.packageRuns}
+													selectRun={run => {
+														selectRun(worktree.id, run)
+													}}
+												/>
+											</Suspense>
+										</TreeExplorerGroup>
+									</li>
+								))}
+							</TreeExplorerGroup>
+						</li>
+					))}
 				</TreeExplorerSection>
 			</TreeExplorer>
 

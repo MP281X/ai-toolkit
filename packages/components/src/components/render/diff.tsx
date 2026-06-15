@@ -73,14 +73,14 @@ function diffCss() {
 `
 }
 
-interface DiffComment {
+export type DiffComment = {
 	readonly filePath: string
 	readonly lineNumber: number
 	readonly side?: AnnotationSide
 	readonly body: string
 	readonly resolved?: boolean
 	readonly resolving?: boolean
-	readonly source?: 'github' | 'local'
+	readonly source: 'github' | 'local'
 	readonly threadId?: string
 }
 
@@ -335,6 +335,7 @@ export function PatchDiff(props: {
 
 	useEffect(() => {
 		setMode('diff')
+		setDraftComment(undefined)
 		setFileContent(props.fileContent ?? '')
 		setFileContentLoading(false)
 	}, [props.fileContent, props.filePath, props.patch])
@@ -406,7 +407,8 @@ export function PatchDiff(props: {
 				body: '',
 				filePath: props.filePath,
 				lineNumber: line.lineNumber,
-				side: line.side === 'deletions' ? line.side : undefined
+				side: line.side === 'deletions' ? line.side : undefined,
+				source: 'local'
 			})
 		}
 	}

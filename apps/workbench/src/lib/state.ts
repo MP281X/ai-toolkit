@@ -1,29 +1,22 @@
-import {Array, Effect, Hash, Option, Order, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, Option, Schema, Stream, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {TerminalPayload} from '#rpcs/contracts.ts'
-import {TerminalStatus} from '@deslop/terminal/schema'
-
-class TerminalAttachmentSize extends Schema.Class<TerminalAttachmentSize>('TerminalAttachmentSize')({
-	cols: Schema.Number,
-	rows: Schema.Number
-}) {}
+import type {SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import {TerminalSize, TerminalStatus} from '@deslop/terminal/schema'
 
 export class TerminalAttachmentInput extends Schema.Class<TerminalAttachmentInput>('TerminalAttachmentInput')({
-	attachId: Schema.Number,
 	session: TerminalPayload,
-	size: TerminalAttachmentSize
+	size: TerminalSize
 }) {}
-
-export function worktreeRouteId(root: string) {
-	return Math.abs(Hash.string(root)).toString(36)
-}
 
 const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachmentInput) =>
 	RpcClient.runtime.atom(
-		Effect.flatMap(RpcClient, client => client('terminal.attach', {...input.session, ...input.size}, {asQueue: true}))
+		Effect.flatMap(RpcClient, client =>
+			client('terminal.attach', {session: input.session, size: input.size}, {asQueue: true})
+		)
 	)
 )
 
@@ -50,51 +43,6 @@ export const terminalStatusAtom = Atom.family((input: TerminalPayload) =>
 	)
 )
 
-export const portlessRunsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
-
-export const scriptRunsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
-
-export const portlessOriginsAtom = Atom.family((cwd: string) =>
-	Atom.make(get =>
-		Effect.map(get.result(portlessRunsAtom(cwd)), scripts =>
-			pipe(
-				scripts,
-				Array.map(run => run.origin.origin),
-				Array.dedupe,
-				Array.sortWith(origin => origin, Order.String)
-			)
-		)
-	)
-)
-
-export const projectsAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('projects', void 0)),
-			Stream.unwrap
-		)
-	)
-)
-
 export const homeSidebarAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
@@ -105,41 +53,26 @@ export const homeSidebarAtom = Atom.keepAlive(
 	)
 )
 
-export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
-	Atom.keepAlive(
-		Atom.make(get =>
-			Effect.map(get.result(projectsAtom), projects => {
-				const activeProject = Array.findFirst(projects, project =>
-					Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-				)
-				const activeWorktree = Option.flatMap(activeProject, project =>
-					Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-				)
-
-				return {
-					activeProject: Option.getOrUndefined(activeProject),
-					activeWorktree: Option.getOrUndefined(activeWorktree),
-					projects
-				}
-			})
-		)
-	)
-)
-
 export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
 	Atom.keepAlive(
 		Atom.make(get =>
 			Effect.map(get.result(homeSidebarAtom), sidebar => {
-				const activeProject = Array.findFirst(sidebar.projects, project =>
-					Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-				)
-				const activeWorktree = Option.flatMap(activeProject, project =>
-					Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
+				const active = Array.reduce(
+					sidebar.projects,
+					Option.none<readonly [SidebarProject, SidebarWorktree]>(),
+					(current, project) =>
+						Option.isSome(current)
+							? current
+							: pipe(
+									project.worktrees,
+									Array.findFirst(worktree => worktree.id === worktreeId),
+									Option.map(worktree => [project, worktree] as const)
+								)
 				)
 
 				return {
-					activeProject: Option.getOrUndefined(activeProject),
-					activeWorktree: Option.getOrUndefined(activeWorktree),
+					activeProject: Option.getOrUndefined(Option.map(active, value => value[0])),
+					activeWorktree: Option.getOrUndefined(Option.map(active, value => value[1])),
 					agentProfiles: sidebar.agentProfiles,
 					projects: sidebar.projects
 				}
@@ -148,20 +81,14 @@ export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
 	)
 )
 
-export const agentsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('agents', {cwd})),
-			Stream.unwrap
+export const activeWorktreeAtom = Atom.family((worktreeId: string) =>
+	Atom.keepAlive(
+		Atom.make(get =>
+			Effect.map(get.result(activeSidebarAtom(worktreeId)), sidebar => {
+				if (sidebar.activeWorktree === undefined) throw new Error(`Unknown worktree: ${worktreeId}`)
+				return sidebar.activeWorktree
+			})
 		)
-	)
-)
-
-export const agentProfilesAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		Effect.flatMap(RpcClient, client => client('agents.profiles', void 0)),
-		{initialValue: []}
 	)
 )
 

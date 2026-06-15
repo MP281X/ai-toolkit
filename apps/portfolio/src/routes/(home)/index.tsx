@@ -162,12 +162,9 @@ const portfolioAtom = Atom.keepAlive(
 	)
 )
 
-interface Viewport {
-	readonly width: number
-	readonly height: number
-}
+export type Viewport = {readonly width: number; readonly height: number}
 
-interface CursorMotion {
+export type CursorMotion = {
 	readonly x: number
 	readonly y: number
 	readonly targetX: number
@@ -177,10 +174,7 @@ interface CursorMotion {
 	readonly viewportHeight: number
 }
 
-interface Point {
-	readonly x: number
-	readonly y: number
-}
+export type Point = {readonly x: number; readonly y: number}
 
 function getDisplayCursorTarget(
 	cursor: Readonly<PortfolioVisitor>,

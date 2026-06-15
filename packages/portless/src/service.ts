@@ -11,7 +11,7 @@ import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable
 import type {ChildProcessSpawner} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
-import {PortlessOrigin, PortlessRun, PortlessScript, PortlessStatus} from './schema.ts'
+import {PortlessOrigin, PortlessScript} from './schema.ts'
 import type {PortlessPreparedRun} from './schema.ts'
 
 import {command, discover} from '#lib/utils.ts'
@@ -377,22 +377,14 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
 				Effect.provide(discoveryContext),
 				Effect.map(discovered =>
-					Array.map(discovered, route =>
-						Object.assign(
-							new PortlessRun({
-								origin: new PortlessOrigin({
-									base: route.script.baseOrigin,
-									host: route.host,
-									origin: route.script.origin,
-									port: route.port,
-									sessionId: route.script.sessionId,
-									taskId: route.script.taskId
-								}),
-								script: new PortlessScript(route.script),
-								status: new PortlessStatus({state: 'prepared'})
-							}),
-							{preparedCommand: command(route.script, route.port)}
-						)
+					Array.map(
+						discovered,
+						route =>
+							({
+								origin: new PortlessOrigin({host: route.host, origin: route.origin, port: route.port}),
+								preparedCommand: command(route.script, route.port),
+								script: new PortlessScript(route.script)
+							}) satisfies PortlessPreparedRun
 					)
 				),
 				Effect.tap(discovered =>

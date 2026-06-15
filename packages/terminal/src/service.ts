@@ -98,23 +98,24 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const publishStatus = Effect.fnUntraced(function* (nextStatus: TerminalStatus) {
-			const decodedStatus = new TerminalStatus(nextStatus)
 			yield* SubscriptionRef.getAndUpdateSome(status, current =>
-				current.state === decodedStatus.state && current.title === decodedStatus.title
+				current.state === nextStatus.state && current.title === nextStatus.title
 					? Option.none()
-					: Option.some(decodedStatus)
+					: Option.some(nextStatus)
 			)
 		})
 
 		function setStatus(state: TerminalStatus['state']) {
-			return SubscriptionRef.get(status).pipe(Effect.flatMap(current => publishStatus({...current, state})))
+			return SubscriptionRef.get(status).pipe(
+				Effect.flatMap(current => publishStatus(new TerminalStatus({...current, state})))
+			)
 		}
 
 		function setTitle(title: string) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current => {
 					if (!terminalStatusActive(current.state)) return Effect.void
-					return publishStatus({...current, ...terminalTitleStatus(title)})
+					return publishStatus(new TerminalStatus({...current, ...terminalTitleStatus(title)}))
 				})
 			)
 		}
@@ -122,7 +123,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setProgress(state: TerminalStatus['state']) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current =>
-					terminalStatusActive(current.state) ? publishStatus({...current, state}) : Effect.void
+					terminalStatusActive(current.state) ? publishStatus(new TerminalStatus({...current, state})) : Effect.void
 				)
 			)
 		}
@@ -191,9 +192,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				handle.process.kill('SIGTERM')
 			})
 			yield* Effect.sleep('250 millis')
-			yield* Effect.sync(() => {
-				handle.process.kill('SIGKILL')
-			})
+			if ((yield* Ref.get(processRef)) === handle) {
+				yield* Effect.sync(() => {
+					handle.process.kill('SIGKILL')
+				})
+			}
 			if (state) yield* setStatus(state)
 		})
 
@@ -219,9 +222,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			const backpressure = {draining: false, pending: Array.empty<{readonly data: string; readonly process: IPty}>()}
 			const drainBackpressure = Effect.fnUntraced(function* () {
 				while (!Array.isReadonlyArrayEmpty(backpressure.pending)) {
-					const next = Option.getOrThrow(Array.head(backpressure.pending))
-					backpressure.pending = Array.drop(backpressure.pending, 1)
-					yield* Queue.offer(dataQueue, next)
+					for (const next of backpressure.pending.splice(0)) {
+						yield* Queue.offer(dataQueue, next)
+					}
 				}
 				yield* waitForDataQueueDrain()
 			})
@@ -233,7 +236,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					return
 				}
 
-				backpressure.pending = Array.append(backpressure.pending, {data: chunk, process: subprocess})
+				backpressure.pending.push({data: chunk, process: subprocess})
 				if (backpressure.draining) return
 
 				backpressure.draining = true
@@ -278,7 +281,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const startDefaultProcess = Effect.fnUntraced(function* () {
 			if (config.command !== undefined) return
-			if (yield* Ref.get(processRef)) return
 
 			yield* pipe(
 				Effect.gen(function* () {
@@ -327,6 +329,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.gen(function* () {
 				const attached = yield* Ref.get(attachedRef)
 				yield* stopProcess()
+				yield* Queue.shutdown(callbackQueue)
 				yield* Queue.shutdown(dataQueue)
 				yield* Queue.shutdown(resizeQueue)
 				yield* Effect.forEach(attached, Queue.shutdown, {discard: true})
@@ -336,12 +339,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			})
 		)
 		return {
-			attach: (size?: TerminalSize) =>
+			attach: (size: TerminalSize) =>
 				Stream.unwrap(
 					Effect.gen(function* () {
-						yield* Effect.annotateCurrentSpan({cols: size?.cols ?? -1, cwd: config.cwd, rows: size?.rows ?? -1})
+						yield* Effect.annotateCurrentSpan({cols: size.cols, cwd: config.cwd, rows: size.rows})
 						const queue = yield* Queue.bounded<TerminalFrame>(1024)
-						if (size !== undefined) yield* screenLock.withPermit(resizeLocked(size))
+						yield* screenLock.withPermit(resizeLocked(size))
 						yield* Ref.update(attachedRef, current => Array.append(current, queue))
 						yield* startDefaultProcess()
 						const snapshot = yield* screenLock.withPermit(
@@ -370,6 +373,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				),
 			resize: Effect.fn('Terminal.resize')(function* (size: TerminalSize) {
 				yield* Effect.annotateCurrentSpan({cols: size.cols, cwd: config.cwd, rows: size.rows})
+				const current = yield* Ref.get(sizeRef)
+				if (current.cols === size.cols && current.rows === size.rows) return
 				yield* Queue.offer(resizeQueue, size)
 			}),
 			restart: Effect.fn('Terminal.restart')(function* () {

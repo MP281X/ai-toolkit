@@ -23,37 +23,42 @@ export function TreeExplorerSection(props: {
 	)
 }
 
+export function TreeExplorerGroup(props: {readonly className?: string; readonly children: React.ReactNode}) {
+	return (
+		<ul className={cn('border-border/70 ml-[19px] flex flex-col border-l pl-2', props.className)}>{props.children}</ul>
+	)
+}
+
 export function TreeExplorerRow(props: {
 	readonly selected?: boolean
 	readonly onClick?: () => void
-	readonly icon?: React.ReactNode
+	readonly icon: React.ReactNode
 	readonly actions?: React.ReactNode
+	readonly className?: string
 	readonly title?: string
 	readonly children: React.ReactNode
 }) {
 	const label = (
 		<span className="flex h-full min-w-0 flex-1 items-center gap-1.5">
-			{Predicate.isNotUndefined(props.icon) && (
-				<span className="flex size-3 shrink-0 items-center justify-center [&_svg]:size-3 [&_svg]:shrink-0">
-					{props.icon}
-				</span>
-			)}
+			<span className="flex size-3 shrink-0 items-center justify-center [&_svg]:size-3 [&_svg]:shrink-0">
+				{props.icon}
+			</span>
 			<span className="min-w-0 flex-1 truncate">{props.children}</span>
 		</span>
 	)
-
-	if (Predicate.isNotUndefined(props.onClick) && Predicate.isNotUndefined(props.actions)) {
-		return (
-			<div
-				aria-current={props.selected === true ? 'page' : undefined}
-				className={cn(
-					'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
-					props.selected === true &&
-						'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
-				)}
-				style={{paddingLeft: 12, paddingRight: 8}}
-				title={props.title}
-			>
+	return (
+		<div
+			aria-current={props.selected === true ? 'page' : undefined}
+			className={cn(
+				'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
+				props.selected === true &&
+					'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]',
+				props.className
+			)}
+			style={{paddingLeft: 12, paddingRight: 8}}
+			title={props.title}
+		>
+			{Predicate.isNotUndefined(props.onClick) ? (
 				<button
 					type="button"
 					onClick={props.onClick}
@@ -61,42 +66,9 @@ export function TreeExplorerRow(props: {
 				>
 					{label}
 				</button>
-				{props.actions}
-			</div>
-		)
-	}
-
-	if (Predicate.isNotUndefined(props.onClick)) {
-		return (
-			<button
-				type="button"
-				aria-current={props.selected === true ? 'page' : undefined}
-				onClick={props.onClick}
-				className={cn(
-					'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
-					props.selected === true &&
-						'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
-				)}
-				style={{paddingLeft: 12, paddingRight: 8}}
-				title={props.title}
-			>
-				{label}
-				{props.actions}
-			</button>
-		)
-	}
-
-	return (
-		<div
-			className={cn(
-				'text-muted-foreground hover:bg-muted/60 hover:text-foreground grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left font-normal',
-				props.selected === true &&
-					'bg-muted text-foreground hover:bg-muted hover:text-foreground shadow-[inset_1px_0_0_hsl(var(--primary))]'
+			) : (
+				label
 			)}
-			style={{paddingLeft: 12, paddingRight: 8}}
-			title={props.title}
-		>
-			{label}
 			{props.actions}
 		</div>
 	)

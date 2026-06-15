@@ -1,4 +1,4 @@
-import {Array, Match, Schema} from 'effect'
+import {Array, Equal, Match, Schema} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
@@ -53,13 +53,6 @@ export function gitReviewTargetIsScope(target: GitReviewTarget): target is GitRe
 	)
 }
 
-export function gitReviewTargetKey(target: GitReviewTarget) {
-	return Match.value(target).pipe(
-		Match.tag('commit', value => `commit\u0000${value.hash}`),
-		Match.orElse(() => gitReviewTargetTag(target))
-	)
-}
-
 export function gitReviewTargetTag(target: GitReviewTarget) {
 	return Match.value(target).pipe(
 		Match.tag('changes', () => 'changes' as const),
@@ -89,8 +82,7 @@ export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitRevie
 
 export class GitReviewMark extends Schema.Class<GitReviewMark>('GitReviewMark')({
 	filePath: Schema.String,
-	fingerprint: Schema.String,
-	segmentId: Schema.String
+	fingerprint: Schema.String
 }) {}
 
 export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewComment')({
@@ -99,7 +91,7 @@ export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewC
 	lineNumber: Schema.Number,
 	resolved: Schema.Boolean,
 	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
-	source: Schema.optional(Schema.Literals(['local', 'github'])),
+	source: Schema.Literals(['local', 'github']),
 	threadId: Schema.optional(Schema.String),
 	url: Schema.optional(Schema.String)
 }) {}
@@ -144,30 +136,31 @@ export class GitProject extends Schema.Class<GitProject>('GitProject')({
 	worktrees: Schema.Array(GitWorktree)
 }) {}
 
-export function gitReviewCommentKey(input: {
+function gitReviewCommentLocation(input: {
 	readonly filePath: string
 	readonly lineNumber: number
 	readonly side?: 'additions' | 'deletions'
-	readonly source?: 'github' | 'local'
+	readonly source: 'github' | 'local'
 	readonly threadId?: string
 }) {
-	return `${input.source ?? 'local'}:${input.threadId ?? ''}:${input.filePath}:${input.side ?? 'additions'}:${input.lineNumber}`
-}
-
-export function gitReviewMarkKey(input: {readonly filePath: string; readonly fingerprint: string}) {
-	return `${input.filePath}:${input.fingerprint}`
+	return {
+		filePath: input.filePath,
+		lineNumber: input.lineNumber,
+		side: input.side ?? 'additions',
+		source: input.source,
+		threadId: input.threadId
+	}
 }
 
 export function gitReviewMarksForDiff(diff: GitDiff) {
-	return Array.map(diff.segments, segment => ({
-		filePath: segment.filePath,
-		fingerprint: segment.fingerprint,
-		segmentId: segment.id
-	}))
+	return Array.map(
+		diff.segments,
+		segment => new GitReviewMark({filePath: segment.filePath, fingerprint: segment.fingerprint})
+	)
 }
 
-export function gitReviewStateForMarks(segments: readonly GitReviewMark[], reviewedKeys: ReadonlySet<string>) {
-	const reviewed = Array.filter(segments, segment => reviewedKeys.has(gitReviewMarkKey(segment)))
+export function gitReviewStateForMarks(segments: readonly GitReviewMark[], reviewedMarks: readonly GitReviewMark[]) {
+	const reviewed = Array.filter(segments, segment => Array.containsWith(Equal.equals)(segment)(reviewedMarks))
 
 	if (Array.isReadonlyArrayEmpty(segments) || Array.isReadonlyArrayEmpty(reviewed)) return 'unchecked' as const
 	if (Array.length(reviewed) === Array.length(segments)) return 'checked' as const
@@ -176,11 +169,12 @@ export function gitReviewStateForMarks(segments: readonly GitReviewMark[], revie
 }
 
 export function gitReviewStateSaveComment(state: GitReviewState, comment: GitReviewComment) {
-	const key = gitReviewCommentKey(comment)
-
 	return new GitReviewState({
 		comments: Array.append(
-			Array.filter(state.comments, currentComment => gitReviewCommentKey(currentComment) !== key),
+			Array.filter(
+				state.comments,
+				currentComment => !Equal.equals(gitReviewCommentLocation(currentComment), gitReviewCommentLocation(comment))
+			),
 			new GitReviewComment({
 				body: comment.body,
 				filePath: comment.filePath,
@@ -200,11 +194,9 @@ export function gitReviewStateResolveComment(
 	state: GitReviewState,
 	input: {readonly filePath: string; readonly lineNumber: number; readonly side?: 'additions' | 'deletions'}
 ) {
-	const key = gitReviewCommentKey({...input, source: 'local'})
-
 	return new GitReviewState({
 		comments: Array.map(state.comments, comment =>
-			gitReviewCommentKey(comment) === key
+			Equal.equals(gitReviewCommentLocation(comment), gitReviewCommentLocation({...input, source: 'local'}))
 				? new GitReviewComment({
 						body: comment.body,
 						filePath: comment.filePath,
@@ -222,22 +214,18 @@ export function gitReviewStateResolveComment(
 }
 
 export function gitReviewStateMark(state: GitReviewState, marks: readonly GitReviewMark[]) {
-	const keys = new Set(Array.map(marks, gitReviewMarkKey))
-
 	return new GitReviewState({
 		comments: state.comments,
 		marks: Array.appendAll(
-			Array.filter(state.marks, mark => !keys.has(gitReviewMarkKey(mark))),
+			Array.filter(state.marks, mark => !Array.containsWith(Equal.equals)(mark)(marks)),
 			marks
 		)
 	})
 }
 
 export function gitReviewStateUnmark(state: GitReviewState, marks: readonly GitReviewMark[]) {
-	const keys = new Set(Array.map(marks, gitReviewMarkKey))
-
 	return new GitReviewState({
 		comments: state.comments,
-		marks: Array.filter(state.marks, mark => !keys.has(gitReviewMarkKey(mark)))
+		marks: Array.filter(state.marks, mark => !Array.containsWith(Equal.equals)(mark)(marks))
 	})
 }

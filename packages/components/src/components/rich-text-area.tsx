@@ -14,18 +14,18 @@ import {createPortal} from 'react-dom'
 import {Command, CommandItem, CommandList} from '#components/ui/command.tsx'
 import {cn} from '#lib/utils.ts'
 
-interface TextAreaEntry<TValue extends RichTextArea.Value = RichTextArea.Value> {
+export type TextAreaEntry<TValue extends RichTextArea.Value = RichTextArea.Value> = {
 	readonly trigger: string
 	readonly value: TValue
 	readonly color: string
 }
 
-interface TextAreaEntryToken<TValue extends RichTextArea.Value = RichTextArea.Value> extends TextAreaEntry<TValue> {
+export type TextAreaEntryToken<TValue extends RichTextArea.Value = RichTextArea.Value> = TextAreaEntry<TValue> & {
 	readonly id: string
 	readonly kind: 'entry'
 }
 
-interface TextAreaFileToken {
+export type TextAreaFileToken = {
 	readonly id: string
 	readonly kind: 'file'
 	readonly color: string
