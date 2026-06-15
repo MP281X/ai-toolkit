@@ -10,28 +10,11 @@
 	width: 100%;
 }
 
-.terminal-renderer .xterm-screen,
-.terminal-renderer .xterm-helpers,
-.terminal-renderer .xterm-viewport,
-.terminal-renderer .xterm-scroll-area {
-	margin: 0 !important;
-}
-
 .terminal-renderer .xterm-viewport,
 .terminal-renderer .xterm-scrollable-element {
 	background: var(--background) !important;
-	scrollbar-width: none;
 }
 
 .terminal-renderer .xterm .xterm-selection div {
 	background-color: oklch(0.8214 0.1337 49.9802 / 30%) !important;
-}
-
-.terminal-renderer .xterm-viewport::-webkit-scrollbar,
-.terminal-renderer .xterm-scrollable-element::-webkit-scrollbar,
-.terminal-renderer .xterm .xterm-scrollable-element > .xterm-scrollbar,
-.terminal-renderer .xterm .xterm-scrollable-element > .scrollbar {
-	display: none;
-	height: 0 !important;
-	width: 0 !important;
 }

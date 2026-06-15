@@ -15,18 +15,19 @@ export function terminalStatusActive(state: TerminalStatus['state']) {
 }
 
 export class TerminalSize extends Schema.Class<TerminalSize>('TerminalSize')({
-	cols: Schema.Number,
-	rows: Schema.Number
+	cols: Schema.Int.check(Schema.isBetween({maximum: 1_000, minimum: 2})),
+	rows: Schema.Int.check(Schema.isBetween({maximum: 1_000, minimum: 1}))
 }) {}
 
 export type TerminalInput = typeof TerminalInput.Type
 export const TerminalInput = Schema.Union([
-	Schema.Struct({data: Schema.String, type: Schema.Literal('text')}),
-	Schema.Struct({data: Schema.Uint8ArrayFromBase64, type: Schema.Literal('bytes')})
+	Schema.Struct({data: Schema.String.check(Schema.isMaxLength(64 * 1024)), type: Schema.Literal('text')}),
+	Schema.Struct({data: Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(64 * 1024)), type: Schema.Literal('bytes')})
 ])
 
 export type TerminalFrame = typeof TerminalFrame.Type
 export const TerminalFrame = Schema.Union([
 	Schema.Struct({sequence: Schema.Number, type: Schema.Literal('reset')}),
-	Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('output')})
+	Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('output')}),
+	Schema.Struct({sequence: Schema.Number, type: Schema.Literal('overflow')})
 ])

@@ -2,7 +2,15 @@ import {Array} from 'effect'
 
 import {describe, expect, it} from 'vite-plus/test'
 
-import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
+import {
+	appendTerminalHistory,
+	emptyTerminalHistory,
+	terminalChunks,
+	terminalHistoryMaxBytes,
+	terminalHistoryMaxLines,
+	terminalOscUpdates,
+	terminalTitleStatus
+} from './model.ts'
 
 describe('@deslop/terminal model', () => {
 	it('chunks terminal output without dropping or reordering data', () => {
@@ -43,5 +51,36 @@ describe('@deslop/terminal model', () => {
 		})
 		expect(terminalTitleStatus('Working | compiling')).toEqual({state: 'running', title: 'Working | compiling'})
 		expect(terminalTitleStatus('')).toEqual({state: 'idle', title: ''})
+	})
+
+	it('trims retained terminal history by bytes', () => {
+		const chunk = 'x'.repeat(1024 * 1024)
+		const history = Array.reduce(Array.range(0, 8), emptyTerminalHistory(), (current, sequence) =>
+			appendTerminalHistory(current, chunk, sequence)
+		)
+
+		expect(history.bytes).toBeLessThanOrEqual(terminalHistoryMaxBytes)
+		expect(history.chunks[0]?.sequence).toBe(1)
+		expect(history.chunks.at(-1)?.sequence).toBe(8)
+	})
+
+	it('trims retained terminal history by lines', () => {
+		const history = Array.reduce(
+			Array.range(0, terminalHistoryMaxLines + 1),
+			emptyTerminalHistory(),
+			(current, sequence) => appendTerminalHistory(current, `${sequence}\n`, sequence)
+		)
+
+		expect(history.lines).toBeLessThanOrEqual(terminalHistoryMaxLines)
+		expect(history.chunks.at(-1)?.sequence).toBe(terminalHistoryMaxLines + 1)
+	})
+
+	it('coalesces small retained history chunks', () => {
+		const history = Array.reduce(Array.range(0, 99), emptyTerminalHistory(), (current, sequence) =>
+			appendTerminalHistory(current, 'x', sequence)
+		)
+
+		expect(history.chunks.length).toBe(1)
+		expect(history.chunks[0]).toEqual({data: 'x'.repeat(100), sequence: 99})
 	})
 })

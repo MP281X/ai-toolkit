@@ -4,6 +4,7 @@
 	"name": "@deslop/terminal",
 
 	"exports": {
+		"./model": "./src/model.ts",
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts"
 	},

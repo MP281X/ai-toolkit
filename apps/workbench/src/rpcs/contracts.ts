@@ -2,13 +2,7 @@ import {Hash, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {
-	AgentCommandIcon,
-	AgentCommandProfile,
-	AgentCommandProfileId,
-	AgentCommandRequest,
-	AiError
-} from '@deslop/ai/schema'
+import {AgentCommandIcon, AgentCommandProfile, AgentCommandProfileId, AiError} from '@deslop/ai/schema'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
@@ -77,6 +71,17 @@ export class TerminalAttachPayload extends Schema.Class<TerminalAttachPayload>('
 	size: TerminalSize
 }) {}
 
+export class TerminalStartPayload extends Schema.Class<TerminalStartPayload>('TerminalStartPayload')({
+	session: TerminalPayload,
+	size: TerminalSize
+}) {}
+
+export class AgentCreatePayload extends Schema.Class<AgentCreatePayload>('AgentCreatePayload')({
+	cwd: Schema.String,
+	profileId: AgentCommandProfileId,
+	size: TerminalSize
+}) {}
+
 export class AgentSession extends Schema.Class<AgentSession>('AgentSession')({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
@@ -136,7 +141,7 @@ export class HomeSidebar extends Schema.Class<HomeSidebar>('HomeSidebar')({
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
-	Rpc.make('agents.create', {error: TerminalError, payload: AgentCommandRequest, success: AgentSession}),
+	Rpc.make('agents.create', {error: TerminalError, payload: AgentCreatePayload, success: AgentSession}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('home.sidebar', {
 		error: Schema.Union([GitError, TerminalError, AiError]),
@@ -194,7 +199,7 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('projects.fix', {error: GitError, payload: CwdPayload}),
 	Rpc.make('terminal.write', {error: TerminalError, payload: TerminalWritePayload}),
 	Rpc.make('terminal.resize', {error: TerminalError, payload: TerminalResizePayload}),
-	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
+	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalStartPayload, success: TerminalStatus}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.attach', {

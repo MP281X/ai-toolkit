@@ -1,12 +1,13 @@
 import {useAtom, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 
-import {Equal} from 'effect'
+import {Array, Match} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 import {useEffect, useRef, useState} from 'react'
+import type {RefObject} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {TerminalAttachmentInput, terminalFramePullAtom, terminalStatusAtom} from '#lib/state.ts'
+import {terminalFramePullAtom, terminalStatusAtom} from '#lib/state.ts'
 import {
 	TerminalCommandPayload,
 	TerminalPackageScriptPayload,
@@ -14,8 +15,12 @@ import {
 	TerminalShellPayload
 } from '#rpcs/contracts.ts'
 import type {AgentSession, SidebarPackageRun, SidebarPortlessRun, TerminalPayload} from '#rpcs/contracts.ts'
+import type {AgentCommandProfileId} from '@deslop/ai/schema'
 import {Terminal} from '@deslop/components/render/terminal'
 import type {TerminalHandle} from '@deslop/components/render/terminal'
+import {toast} from '@deslop/components/ui/sonner'
+import {formatError} from '@deslop/components/utils'
+import {terminalChunks} from '@deslop/terminal/model'
 import {TerminalSize} from '@deslop/terminal/schema'
 import type {TerminalFrame} from '@deslop/terminal/schema'
 
@@ -55,42 +60,125 @@ export function WorkbenchPortlessRunTerminal(input: {readonly run: SidebarPortle
 	)
 }
 
+export function WorkbenchPendingAgentTerminal(input: {
+	readonly cwd: string
+	readonly onCreated: (session: AgentSession) => void
+	readonly profileId: AgentCommandProfileId
+}) {
+	const [, create] = useAtom(RpcClient.mutation('agents.create'), {mode: 'promise'})
+	const mountedRef = useRef(true)
+	const startedRef = useRef(false)
+
+	useEffect(
+		() => () => {
+			mountedRef.current = false
+		},
+		[]
+	)
+
+	return (
+		<Terminal
+			className="h-full min-h-0 w-full min-w-0 overflow-hidden"
+			onData={() => {}}
+			onReady={size => {
+				if (startedRef.current) return
+
+				startedRef.current = true
+				void create({payload: {cwd: input.cwd, profileId: input.profileId, size}}).then(
+					session => {
+						if (mountedRef.current) input.onCreated(session)
+					},
+					error => {
+						if (!mountedRef.current) return
+						startedRef.current = false
+						toast.error(formatError(error))
+					}
+				)
+			}}
+			state="starting"
+		/>
+	)
+}
+
+export function WorkbenchPendingRunsTerminal(input: {
+	readonly onStarted: () => void
+	readonly sessions: readonly TerminalPayload[]
+}) {
+	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const mountedRef = useRef(true)
+	const startedRef = useRef(false)
+
+	useEffect(
+		() => () => {
+			mountedRef.current = false
+		},
+		[]
+	)
+
+	return (
+		<Terminal
+			className="h-full min-h-0 w-full min-w-0 overflow-hidden"
+			onData={() => {}}
+			onReady={size => {
+				if (startedRef.current) return
+
+				startedRef.current = true
+				void Promise.all(Array.map(input.sessions, session => restart({payload: {session, size}}))).then(
+					() => {
+						if (mountedRef.current) input.onStarted()
+					},
+					error => {
+						if (!mountedRef.current) return
+						startedRef.current = false
+						toast.error(formatError(error))
+					}
+				)
+			}}
+			state="starting"
+		/>
+	)
+}
+
 function WorkbenchTerminal(input: {readonly session: TerminalPayload}) {
 	const [, resize] = useAtom(RpcClient.mutation('terminal.resize'))
 	const [, write] = useAtom(RpcClient.mutation('terminal.write'))
 	const status = useAtomSuspense(terminalStatusAtom(input.session))
 	const terminalRef = useRef<TerminalHandle>(null)
-	const latestSizeRef = useRef(new TerminalSize({cols: 120, rows: 32}))
-	const sessionRef = useRef(input.session)
-	const [attachmentSize, setAttachmentSize] = useState<TerminalSize | null>(null)
-
-	useEffect(() => {
-		if (Equal.equals(sessionRef.current, input.session)) return
-		sessionRef.current = input.session
-		terminalRef.current?.reset()
-		latestSizeRef.current = new TerminalSize({cols: 120, rows: 32})
-		setAttachmentSize(terminalRef.current === null ? null : latestSizeRef.current)
-	}, [input.session])
+	const terminalKey = Match.value(input.session).pipe(
+		Match.tag('shell', session => `shell:${session.cwd}`),
+		Match.tag('command', session => `command:${session.cwd}:${session.sessionId}`),
+		Match.tag('package-script', session => `package-script:${session.cwd}:${session.sessionId}`),
+		Match.tag('portless-script', session => `portless-script:${session.cwd}:${session.sessionId}`),
+		Match.exhaustive
+	)
+	const [attachment, setAttachment] = useState<{readonly key: string; readonly size: TerminalSize} | null>(null)
 
 	return (
 		<>
 			<Terminal
+				key={terminalKey}
 				ref={terminalRef}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
-				onReady={() => {
-					setAttachmentSize(latestSizeRef.current)
+				onReady={size => {
+					setAttachment({key: terminalKey, size: new TerminalSize(size)})
 				}}
 				onData={data => {
-					write({payload: {data: {data, type: 'text'}, session: input.session}})
+					for (const chunk of terminalChunks(data, 16 * 1024)) {
+						write({payload: {data: {data: chunk, type: 'text'}, session: input.session}})
+					}
 				}}
 				onResize={size => {
-					resize({payload: {session: input.session, size}})
-					latestSizeRef.current = size
+					resize({payload: {session: input.session, size: new TerminalSize(size)}})
 				}}
 				state={status.value.state}
 			/>
-			{attachmentSize !== null && (
-				<TerminalAttachment session={input.session} size={attachmentSize} terminalRef={terminalRef} />
+			{attachment !== null && attachment.key === terminalKey && (
+				<TerminalAttachment
+					key={`attachment:${attachment.key}`}
+					session={input.session}
+					size={attachment.size}
+					terminalRef={terminalRef}
+				/>
 			)}
 		</>
 	)
@@ -99,9 +187,9 @@ function WorkbenchTerminal(input: {readonly session: TerminalPayload}) {
 function TerminalAttachment(input: {
 	readonly session: TerminalPayload
 	readonly size: TerminalSize
-	readonly terminalRef: React.RefObject<TerminalHandle | null>
+	readonly terminalRef: RefObject<TerminalHandle | null>
 }) {
-	const framePull = terminalFramePullAtom(new TerminalAttachmentInput({session: input.session, size: input.size}))
+	const [framePull] = useState(() => terminalFramePullAtom({session: input.session, size: input.size}))
 	const [, pullFrames] = useAtom(framePull)
 	const activeRef = useRef(true)
 	const lastSequenceRef = useRef(-1)
@@ -127,6 +215,7 @@ function TerminalAttachment(input: {
 		writingRef.current = true
 
 		const frames = pendingFramesRef.current.splice(0)
+		const state = {chunks: Array.empty<string>(), index: 0}
 
 		function finishBatch() {
 			writingRef.current = false
@@ -145,33 +234,41 @@ function TerminalAttachment(input: {
 			input.terminalRef.current?.write(data, done)
 		}
 
-		function process(index: number, output: string) {
+		function flushOutput(done: () => void) {
+			writeOutput(Array.join(state.chunks, ''), done)
+			state.chunks.splice(0, state.chunks.length, '')
+		}
+
+		function processFrames() {
 			if (!activeRef.current) return
 
-			if (index >= frames.length) {
-				writeOutput(output, () => {
-					if (activeRef.current) finishBatch()
-				})
-				return
-			}
-			if (frames[index]!.sequence <= lastSequenceRef.current) {
-				process(index + 1, output)
-				return
+			while (state.index < frames.length) {
+				const frame = frames[state.index]!
+				state.index += 1
+
+				if (frame.type === 'reset' || frame.type === 'overflow') {
+					flushOutput(() => {
+						if (!activeRef.current) return
+
+						input.terminalRef.current?.reset()
+						lastSequenceRef.current = -1
+						processFrames()
+					})
+					return
+				}
+
+				if (frame.sequence <= lastSequenceRef.current) continue
+
+				lastSequenceRef.current = frame.sequence
+				state.chunks.push(frame.data)
 			}
 
-			lastSequenceRef.current = frames[index]!.sequence
-			if (frames[index]!.type === 'output') {
-				process(index + 1, `${output}${frames[index]!.data}`)
-				return
-			}
-
-			writeOutput(output, () => {
-				if (!activeRef.current) return
-				input.terminalRef.current?.reset()
-				process(index + 1, '')
+			flushOutput(() => {
+				if (activeRef.current) finishBatch()
 			})
 		}
-		process(0, '')
+
+		processFrames()
 	}
 
 	useAtomSubscribe(

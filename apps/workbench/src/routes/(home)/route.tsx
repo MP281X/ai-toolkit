@@ -143,6 +143,7 @@ function branchSource(candidate: {readonly remote?: string; readonly type: 'loca
 function WorktreeScripts(input: {
 	readonly runs: readonly SidebarPackageRun[]
 	readonly selectRun: (run: SidebarPackageRun) => void
+	readonly startRun: (run: SidebarPackageRun) => void
 }) {
 	const expandedState = useState(false)
 	const sortedRuns = Array.sortWith(input.runs, run => run.taskId, Order.String)
@@ -167,6 +168,9 @@ function WorktreeScripts(input: {
 								run={run}
 								onSelect={() => {
 									input.selectRun(run)
+								}}
+								onStart={() => {
+									input.startRun(run)
 								}}
 							/>
 						</Suspense>
@@ -266,8 +270,11 @@ function TreeActionButton(input: {
 	)
 }
 
-function RunToggleRow(input: {readonly onSelect: () => void; readonly run: SidebarPackageRun}) {
-	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+function RunToggleRow(input: {
+	readonly onSelect: () => void
+	readonly onStart: () => void
+	readonly run: SidebarPackageRun
+}) {
 	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const active = terminalStatusActive(input.run.status.state) && input.run.status.state !== 'idle'
 
@@ -280,7 +287,8 @@ function RunToggleRow(input: {readonly onSelect: () => void; readonly run: Sideb
 						label={input.run.taskId}
 						onToggle={async () => {
 							const payload = new TerminalPackageScriptPayload({cwd: input.run.cwd, sessionId: input.run.sessionId})
-							await (active ? stop({payload}) : restart({payload}))
+							if (active) await stop({payload})
+							else input.onStart()
 						}}
 					/>
 				</span>
@@ -297,17 +305,22 @@ function PortlessGroup(input: {
 	readonly openPreview: (run: SidebarPortlessRun) => void
 	readonly runs: readonly SidebarPortlessRun[]
 	readonly selectRun: (run: SidebarPortlessRun) => void
+	readonly startRuns: (runs: readonly SidebarPortlessRun[]) => void
 }) {
 	const expandedState = useState(true)
 	const sortedRuns = Array.sortWith(input.runs, run => run.taskId, Order.String)
 	const active = Array.some(sortedRuns, run => terminalStatusActive(run.status.state) && run.status.state !== 'idle')
-	const [, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const [, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 
 	async function toggleRuns() {
+		if (!active) {
+			input.startRuns(sortedRuns)
+			return
+		}
+
 		for (const run of sortedRuns) {
 			const payload = new TerminalPortlessScriptPayload({cwd: run.cwd, sessionId: run.sessionId})
-			await (active ? stop({payload}) : restart({payload}))
+			await stop({payload})
 		}
 	}
 
@@ -387,30 +400,11 @@ function AgentSessionRow(input: {
 function WorktreeAgents(input: {
 	readonly profiles: readonly AgentCommandProfile[]
 	readonly selectAgent: (agentId: string) => void
+	readonly startAgent: (profileId: AgentCommandProfile['id']) => void
 	readonly worktree: SidebarWorktree
 }) {
-	const [, create] = useAtom(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const [, remove] = useAtom(RpcClient.mutation('agents.remove'), {mode: 'promise'})
-	const startingProfilesState = useState<ReadonlySet<string>>(new Set())
 	const stoppingSessionsState = useState<ReadonlySet<string>>(new Set())
-
-	async function startAgent(profile: (typeof input.profiles)[number]) {
-		if (startingProfilesState[0].has(profile.id)) return
-
-		startingProfilesState[1](current => new Set([...current, profile.id]))
-		try {
-			const session = await create({payload: {cwd: input.worktree.root, profileId: profile.id}})
-			input.selectAgent(session.uuid)
-		} catch (error) {
-			toast.error(formatError(error))
-		} finally {
-			startingProfilesState[1](current => {
-				const next = new Set(current)
-				next.delete(profile.id)
-				return next
-			})
-		}
-	}
 
 	async function stopAgent(session: AgentSession) {
 		if (stoppingSessionsState[0].has(session.uuid)) return
@@ -440,17 +434,12 @@ function WorktreeAgents(input: {
 							<TreeExplorerRow
 								actions={
 									<TreeActionButton
-										disabled={startingProfilesState[0].has(profile.id)}
 										onClick={() => {
-											void startAgent(profile)
+											input.startAgent(profile.id)
 										}}
 										title={`Start ${profile.label}`}
 									>
-										{startingProfilesState[0].has(profile.id) ? (
-											<Spinner className="size-2.5 border opacity-60" />
-										) : (
-											<PlayIcon className="size-3" />
-										)}
+										<PlayIcon className="size-3" />
 									</TreeActionButton>
 								}
 								icon={<AgentIcon layer={profile.icon} />}
@@ -676,25 +665,42 @@ function WorktreeManager(input: {
 			void navigate({params: {worktree: worktreeId}, search: {agentId}, to: '/$worktree/agent'})
 		})
 	}
-	function selectRun(worktreeId: string, run: SidebarPackageRun | SidebarPortlessRun) {
+	function startAgent(worktreeId: string, profileId: AgentCommandProfile['id']) {
+		startTransition(() => {
+			void navigate({params: {worktree: worktreeId}, search: {profileId}, to: '/$worktree/agent'})
+		})
+	}
+	function selectRun(worktreeId: string, run: SidebarPackageRun | SidebarPortlessRun, start = false) {
 		startTransition(() => {
 			void Match.value(run).pipe(
 				Match.tag('package-script', packageRun =>
 					navigate({
 						params: {worktree: worktreeId},
-						search: {sessionId: packageRun.sessionId, type: 'package-script'},
+						search: {sessionId: packageRun.sessionId, start, type: 'package-script'},
 						to: '/$worktree/run'
 					})
 				),
 				Match.tag('portless-script', portlessRun =>
 					navigate({
 						params: {worktree: worktreeId},
-						search: {sessionId: portlessRun.sessionId, type: 'portless-script'},
+						search: {sessionId: portlessRun.sessionId, start, type: 'portless-script'},
 						to: '/$worktree/run'
 					})
 				),
 				Match.exhaustive
 			)
+		})
+	}
+	function startPortlessRuns(worktreeId: string, runs: readonly SidebarPortlessRun[]) {
+		const firstRun = pipe(runs, Array.head, Option.getOrUndefined)
+		if (firstRun === undefined) return
+
+		startTransition(() => {
+			void navigate({
+				params: {worktree: worktreeId},
+				search: {sessionId: firstRun.sessionId, startAll: true, type: 'portless-script'},
+				to: '/$worktree/run'
+			})
 		})
 	}
 	async function deleteActiveWorktree() {
@@ -871,6 +877,9 @@ function WorktreeManager(input: {
 													selectAgent={agentId => {
 														selectAgent(worktree.id, agentId)
 													}}
+													startAgent={profileId => {
+														startAgent(worktree.id, profileId)
+													}}
 													worktree={worktree}
 												/>
 											</Suspense>
@@ -894,6 +903,9 @@ function WorktreeManager(input: {
 													selectRun={run => {
 														selectRun(worktree.id, run)
 													}}
+													startRuns={runs => {
+														startPortlessRuns(worktree.id, runs)
+													}}
 												/>
 											</Suspense>
 											<Suspense fallback={<Loading />}>
@@ -901,6 +913,9 @@ function WorktreeManager(input: {
 													runs={worktree.packageRuns}
 													selectRun={run => {
 														selectRun(worktree.id, run)
+													}}
+													startRun={run => {
+														selectRun(worktree.id, run, true)
 													}}
 												/>
 											</Suspense>

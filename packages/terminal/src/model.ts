@@ -1,8 +1,64 @@
-import {Array, Option, String} from 'effect'
+import {Array, Option, String, pipe} from 'effect'
 
 import type {TerminalStatus} from './schema.ts'
 
-export function terminalChunks(data: string, chunkSize = 64 * 1024) {
+export const terminalHistoryMaxBytes = 8 * 1024 * 1024
+export const terminalHistoryMaxChunks = 4_096
+export const terminalHistoryMaxLines = 10_000
+
+export type TerminalHistory = {
+	readonly bytes: number
+	readonly chunks: readonly {readonly data: string; readonly sequence: number}[]
+	readonly lines: number
+}
+
+export function emptyTerminalHistory(): TerminalHistory {
+	return {bytes: 0, chunks: [], lines: 0}
+}
+
+function lineCount(data: string) {
+	return Array.length(String.split('\n')(data)) - 1
+}
+
+export function trimTerminalHistory(input: TerminalHistory): TerminalHistory {
+	const state = {bytes: input.bytes, lines: input.lines, start: 0}
+
+	while (
+		(state.bytes > terminalHistoryMaxBytes ||
+			state.lines > terminalHistoryMaxLines ||
+			input.chunks.length - state.start > terminalHistoryMaxChunks) &&
+		state.start < input.chunks.length
+	) {
+		if (input.chunks[state.start] === undefined) break
+
+		state.bytes -= Buffer.byteLength(input.chunks[state.start]!.data)
+		state.lines -= lineCount(input.chunks[state.start]!.data)
+		state.start += 1
+	}
+
+	return {bytes: state.bytes, chunks: Array.drop(input.chunks, state.start), lines: state.lines}
+}
+
+export function appendTerminalHistory(input: TerminalHistory, data: string, sequence: number): TerminalHistory {
+	if (data === '') return input
+
+	const chunks = pipe(
+		Array.last(input.chunks),
+		Option.filter(last => Buffer.byteLength(last.data) + Buffer.byteLength(data) <= 16 * 1024),
+		Option.match({
+			onNone: () => Array.append(input.chunks, {data, sequence}),
+			onSome: last => Array.append(Array.dropRight(input.chunks, 1), {data: `${last.data}${data}`, sequence})
+		})
+	)
+
+	return trimTerminalHistory({
+		bytes: input.bytes + Buffer.byteLength(data),
+		chunks,
+		lines: input.lines + lineCount(data)
+	})
+}
+
+export function terminalChunks(data: string, chunkSize = 16 * 1024) {
 	if (data === '') return Array.empty<string>()
 
 	return Array.unfold(0, start => {

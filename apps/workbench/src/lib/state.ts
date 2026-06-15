@@ -1,36 +1,25 @@
-import {Array, Effect, Option, Schema, Stream, pipe} from 'effect'
+import {Array, Effect, Option, Stream, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {TerminalPayload} from '#rpcs/contracts.ts'
-import type {SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
-import {TerminalSize, TerminalStatus} from '@deslop/terminal/schema'
+import type {SidebarProject, SidebarWorktree, TerminalPayload} from '#rpcs/contracts.ts'
+import {TerminalStatus} from '@deslop/terminal/schema'
+import type {TerminalSize} from '@deslop/terminal/schema'
 
-export class TerminalAttachmentInput extends Schema.Class<TerminalAttachmentInput>('TerminalAttachmentInput')({
-	session: TerminalPayload,
-	size: TerminalSize
-}) {}
-
-const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachmentInput) =>
-	RpcClient.runtime.atom(
+export function terminalFramePullAtom(input: {readonly session: TerminalPayload; readonly size: TerminalSize}) {
+	const terminalAttachQueueAtom = RpcClient.runtime.atom(
 		Effect.flatMap(RpcClient, client =>
 			client('terminal.attach', {session: input.session, size: input.size}, {asQueue: true})
 		)
 	)
-)
 
-export const terminalFramePullAtom = Atom.family((input: TerminalAttachmentInput) =>
-	Atom.pull(
+	return Atom.pull(
 		get =>
-			pipe(
-				get.result(terminalAttachQueueAtomFamily(input), {suspendOnWaiting: true}),
-				Effect.map(Stream.fromQueue),
-				Stream.unwrap
-			),
+			pipe(get.result(terminalAttachQueueAtom, {suspendOnWaiting: true}), Effect.map(Stream.fromQueue), Stream.unwrap),
 		{disableAccumulation: true}
 	)
-)
+}
 
 export const terminalStatusAtom = Atom.family((input: TerminalPayload) =>
 	RpcClient.runtime.atom(

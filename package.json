@@ -34,11 +34,14 @@
 		"@effect/openapi-generator": "^4.0.0-beta"
 	},
 	"devDependencies": {
+    "vite": "catalog:",
+		"vite-plus": "catalog:",
+
 		"typescript": "latest",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-		"vite": "catalog:",
-		"vite-plus": "catalog:"
+
+		"playwright": "latest"
 	}
 }
