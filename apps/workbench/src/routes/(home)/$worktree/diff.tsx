@@ -618,25 +618,26 @@ function CommitActionForm(input: {
 
 	const commitActions = (
 		<div className="flex shrink-0 items-center gap-1">
-			{input.unpushedCommits && (
-				<span
-					className="text-muted-foreground px-0.5 text-xs"
-					title={
-						input.unpushedCount > 0
-							? `${input.unpushedCount} ${input.unpushedCount === 1 ? 'commit' : 'commits'} to push`
-							: 'Unpushed commits'
-					}
-				>
-					↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
-				</span>
-			)}
-			{input.upstream !== undefined && (input.upstream.ahead > 0 || input.upstream.behind > 0) && (
+			{input.upstream !== undefined && (input.upstream.ahead > 0 || input.upstream.behind > 0) ? (
 				<span
 					className="text-muted-foreground px-0.5 text-xs"
 					title={`${input.upstream.ahead} ahead, ${input.upstream.behind} behind upstream`}
 				>
 					↑{input.upstream.ahead} ↓{input.upstream.behind}
 				</span>
+			) : (
+				input.unpushedCommits && (
+					<span
+						className="text-muted-foreground px-0.5 text-xs"
+						title={
+							input.unpushedCount > 0
+								? `${input.unpushedCount} ${input.unpushedCount === 1 ? 'commit' : 'commits'} to push`
+								: 'Unpushed commits'
+						}
+					>
+						↑{input.unpushedCount > 0 ? input.unpushedCount : ''}
+					</span>
+				)
 			)}
 			<Button
 				type="button"
