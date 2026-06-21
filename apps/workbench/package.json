@@ -24,11 +24,13 @@
 		"preview": "vp run build && PORT=7010 node ./dist/server.js"
 	},
 
+	"dependencies": {
+		"@deslop/terminal": "workspace:*"
+	},
+
 	"devDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
-
-		"@lydell/node-pty": "1.2.0-beta.12",
 
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
@@ -37,14 +39,9 @@
 		"@deslop/ai": "workspace:*",
 		"@deslop/git": "workspace:*",
 		"@deslop/portless": "workspace:*",
-		"@deslop/terminal": "workspace:*",
 		"@deslop/usage": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
-
-		"effect": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta",
-		"@effect/opentelemetry": "^4.0.0-beta",
 
 		"@vitejs/plugin-react": "latest",
 		"@rolldown/plugin-babel": "latest",
