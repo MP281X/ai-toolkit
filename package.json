@@ -34,7 +34,7 @@
 		"@effect/openapi-generator": "^4.0.0-beta"
 	},
 	"devDependencies": {
-		"typescript": "latest",
+		"typescript": "rc",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
