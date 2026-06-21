@@ -214,7 +214,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					nodePty.spawn(processCommand, [...processArgs], {
 						cols: size.cols,
 						cwd: processCwd,
-						env: {...process.env, ...processEnv, TERM: 'xterm-256color'},
+						env: {
+							...process.env,
+							...processEnv,
+							SHELL_SESSIONS_DISABLE: '1',
+							TERM: 'xterm-256color',
+							TERM_PROGRAM: 'deslop'
+						},
 						name: 'xterm-256color',
 						rows: size.rows
 					})

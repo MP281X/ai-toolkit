@@ -169,6 +169,7 @@ export default defineConfig({
 			'react/no-children-prop': 'error',
 			'react/no-danger-with-children': 'error',
 			'react/no-unstable-nested-components': ['error', {allowAsProps: true}],
+			'react/react-compiler': 'error',
 			'react/rules-of-hooks': 'error',
 			'react/style-prop-object': 'error',
 			'react/void-dom-elements-no-children': 'error',

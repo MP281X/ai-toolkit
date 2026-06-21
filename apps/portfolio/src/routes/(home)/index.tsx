@@ -429,10 +429,11 @@ function TrailCanvas(input: {readonly trails: readonly PortfolioTrail[]; readonl
 
 function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: boolean; readonly viewport: Viewport}) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
-	const latestRef = useRef({cursor: input.cursor, isMe: input.isMe, viewport: input.viewport})
-	const motionRef = useRef(
+	const [initialMotion] = useState(() =>
 		createCursorMotion(getDisplayCursorTarget(input.cursor, input.isMe, input.viewport), input.viewport)
 	)
+	const latestRef = useRef({cursor: input.cursor, isMe: input.isMe, viewport: input.viewport})
+	const motionRef = useRef(initialMotion)
 
 	useEffect(() => {
 		latestRef.current = {cursor: input.cursor, isMe: input.isMe, viewport: input.viewport}
@@ -467,7 +468,7 @@ function CursorEl(input: {readonly cursor: PortfolioVisitor; readonly isMe: bool
 		<div
 			ref={nodeRef}
 			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
-			style={{transform: `translate3d(${motionRef.current.x}px, ${motionRef.current.y}px, 0)`}}
+			style={{transform: `translate3d(${initialMotion.x}px, ${initialMotion.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">
 				<MousePointer2 className="size-4" style={{color: input.cursor.color}} />
@@ -487,15 +488,17 @@ function Section(input: {
 	readonly id: number
 	readonly className?: string
 	readonly children: React.ReactNode
-	readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>
+	readonly registerSection: (id: number, node: HTMLElement | null) => void
 }) {
+	const id = input.id
+	const registerSection = input.registerSection
+
 	return (
 		<section
 			ref={node => {
-				// oxlint-disable-next-line no-param-reassign
-				input.sectionRefs.current[input.id] = node
+				registerSection(id, node)
 			}}
-			data-section={input.id}
+			data-section={id}
 			className={cn(
 				'relative z-10 flex min-h-dvh snap-start flex-col items-center justify-center overflow-hidden px-4 py-16 sm:px-6',
 				input.className
@@ -518,9 +521,9 @@ function SectionLabel(input: {readonly title: string}) {
 	)
 }
 
-function HeroSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function HeroSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={0} sectionRefs={input.sectionRefs}>
+		<Section id={0} registerSection={input.registerSection}>
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
 				<div className="space-y-1 text-center">
 					<h1 className="text-foreground font-mono text-4xl font-black tracking-[0.15em] uppercase sm:text-5xl md:text-6xl">
@@ -550,9 +553,9 @@ function HeroSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement 
 	)
 }
 
-function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function AboutSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={1} sectionRefs={input.sectionRefs}>
+		<Section id={1} registerSection={input.registerSection}>
 			<SectionLabel title="About" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				<Panel className="p-5 sm:p-6">
@@ -569,9 +572,9 @@ function AboutSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement
 	)
 }
 
-function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function SkillsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={2} sectionRefs={input.sectionRefs}>
+		<Section id={2} registerSection={input.registerSection}>
 			<SectionLabel title="Skills" />
 			<div className="grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
 				{Array.map(TECHNICAL_SKILLS, skill => (
@@ -590,9 +593,9 @@ function SkillsSection(input: {readonly sectionRefs: React.RefObject<(HTMLElemen
 	)
 }
 
-function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function ExperienceSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={3} sectionRefs={input.sectionRefs}>
+		<Section id={3} registerSection={input.registerSection}>
 			<SectionLabel title="Experience" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				{Array.map(WORK_EXPERIENCE, job => (
@@ -631,9 +634,9 @@ function ExperienceSection(input: {readonly sectionRefs: React.RefObject<(HTMLEl
 	)
 }
 
-function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function EducationSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={4} sectionRefs={input.sectionRefs}>
+		<Section id={4} registerSection={input.registerSection}>
 			<SectionLabel title="Education & Languages" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				{Array.map(EDUCATION_DATA, entry => (
@@ -662,9 +665,9 @@ function EducationSection(input: {readonly sectionRefs: React.RefObject<(HTMLEle
 	)
 }
 
-function ContactSection(input: {readonly sectionRefs: React.RefObject<(HTMLElement | null)[]>}) {
+function ContactSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={5} sectionRefs={input.sectionRefs}>
+		<Section id={5} registerSection={input.registerSection}>
 			<SectionLabel title="Contact" />
 			<div className="flex w-full max-w-5xl flex-col gap-3">
 				{Array.map(CONTACT_ITEMS, item => (
@@ -749,6 +752,10 @@ function PortfolioRoute() {
 	const lastSentPointerRef = useRef<Point & {readonly sentAt: number}>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
 	const [showShortcuts, setShowShortcuts] = useState(false)
+
+	function registerSection(id: number, node: HTMLElement | null) {
+		sectionRefs.current[id] = node
+	}
 
 	useEffect(
 		() => () => {
@@ -865,12 +872,12 @@ function PortfolioRoute() {
 				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
 			}}
 		>
-			<HeroSection sectionRefs={sectionRefs} />
-			<AboutSection sectionRefs={sectionRefs} />
-			<SkillsSection sectionRefs={sectionRefs} />
-			<ExperienceSection sectionRefs={sectionRefs} />
-			<EducationSection sectionRefs={sectionRefs} />
-			<ContactSection sectionRefs={sectionRefs} />
+			<HeroSection registerSection={registerSection} />
+			<AboutSection registerSection={registerSection} />
+			<SkillsSection registerSection={registerSection} />
+			<ExperienceSection registerSection={registerSection} />
+			<EducationSection registerSection={registerSection} />
+			<ContactSection registerSection={registerSection} />
 
 			<Suspense fallback={<Loading />}>
 				<RealtimeLayer identityColor={identityColor} viewport={viewport} />
