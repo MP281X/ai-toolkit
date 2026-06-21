@@ -5,7 +5,7 @@ import {Array, Effect, HashMap, Match, Option, Schema, Stream, String, pipe} fro
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
 import {AsyncResult, Atom} from 'effect/unstable/reactivity'
-import {startTransition, useEffect, useState, type MouseEvent} from 'react'
+import {startTransition, useState, type MouseEvent} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeHomeAtom} from '#lib/state.ts'
@@ -256,11 +256,16 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
 	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const hasReviewableChanges = reviewDiffsLoaded && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
+	const selectedFilePath =
+		String.isNonEmpty(selectedFilePathState[0]) &&
+		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
+			? selectedFilePathState[0]
+			: ''
 	const selectedEntry =
-		(String.isNonEmpty(selectedFilePathState[0])
+		(String.isNonEmpty(selectedFilePath)
 			? pipe(
 					reviewDiffsValue,
-					Array.findFirst(diff => diff.filePath === selectedFilePathState[0]),
+					Array.findFirst(diff => diff.filePath === selectedFilePath),
 					Option.getOrUndefined
 				)
 			: undefined) ?? reviewDiffsValue[0]
@@ -298,14 +303,22 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		)
 	)
 	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => visibleSegmentKeys.has(gitReviewMarkKey(mark)))
-	useEffect(() => {
-		if (
-			String.isNonEmpty(selectedFilePathState[0]) &&
-			!Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
-		) {
-			selectedFilePathState[1]('')
+
+	async function markFileReviewed(marks: readonly GitReviewMark[]) {
+		try {
+			await markReviewed({payload: {cwd: input.cwd, marks}})
+		} catch {
+			toast.error('Failed to mark file reviewed.')
 		}
-	})
+	}
+
+	async function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
+		try {
+			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
+		} catch {
+			toast.error('Failed to unmark file reviewed.')
+		}
+	}
 
 	function openFile(filePath: string) {
 		selectedFilePathState[1](filePath)
@@ -329,22 +342,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	function refreshReview() {
 		refreshDiffs()
 		refreshReviewState()
-	}
-
-	async function markFileReviewed(marks: readonly GitReviewMark[]) {
-		try {
-			await markReviewed({payload: {cwd: input.cwd, marks}})
-		} catch {
-			toast.error('Failed to mark file reviewed.')
-		}
-	}
-
-	async function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
-		try {
-			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
-		} catch {
-			toast.error('Failed to unmark file reviewed.')
-		}
 	}
 
 	async function saveQueuedComment(comment: QueuedComment) {

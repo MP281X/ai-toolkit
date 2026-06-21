@@ -19,69 +19,54 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 	const sessionKey = terminalSessionKey(input.session)
 	const status = useAtomSuspense(terminalStatusAtom(input.session))
 	const terminalRef = useRef<TerminalHandle>(null)
-	const attachRef = useRef<{readonly id: number; readonly size: {readonly cols: number; readonly rows: number}} | null>(
-		null
-	)
-	const sessionKeyRef = useRef(sessionKey)
+	const sizeRef = useRef<{readonly cols: number; readonly rows: number} | null>(null)
 	const reattachTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
 	const [attachment, setAttachment] = useState<{
 		readonly id: number
+		readonly sessionKey: string
 		readonly size: {readonly cols: number; readonly rows: number}
 	} | null>(null)
 
-	if (sessionKeyRef.current !== sessionKey) {
-		sessionKeyRef.current = sessionKey
-		attachRef.current = null
-		if (reattachTimeoutRef.current) clearTimeout(reattachTimeoutRef.current)
-		reattachTimeoutRef.current = null
-	}
-
-	useEffect(() => {
-		terminalRef.current?.reset()
-		attachRef.current = null
-		setAttachment(null)
-		return () => {
+	useEffect(
+		() => () => {
 			if (reattachTimeoutRef.current) clearTimeout(reattachTimeoutRef.current)
 			reattachTimeoutRef.current = null
-		}
-	}, [sessionKey])
+		},
+		[sessionKey]
+	)
 
 	function reattach() {
-		if (!attachRef.current || reattachTimeoutRef.current) return
+		if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
+		if (reattachTimeoutRef.current) return
 
 		reattachTimeoutRef.current = setTimeout(() => {
 			reattachTimeoutRef.current = null
-			const current = attachRef.current
-			if (!current) return
-
-			const next = nextAttachment(current.size)
-			attachRef.current = next
-			setAttachment(next)
+			if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
+			setAttachment(current =>
+				current?.sessionKey === sessionKey ? {...nextAttachment(sizeRef.current ?? current.size), sessionKey} : current
+			)
 		}, 300)
 	}
 
 	return (
 		<>
 			<Terminal
+				key={sessionKey}
 				ref={terminalRef}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				onData={data => {
 					write({payload: {...input.session, data: {data, type: 'text'}}})
 				}}
 				onResize={size => {
+					sizeRef.current = size
 					resize({payload: {...input.session, cols: size.cols, rows: size.rows}})
-					const current = attachRef.current
-					if (current === null) {
-						const next = nextAttachment(size)
-						attachRef.current = next
-						setAttachment(next)
-					} else {
-						attachRef.current = {...current, size}
-					}
+					setAttachment(current =>
+						current?.sessionKey === sessionKey ? current : {...nextAttachment(size), sessionKey}
+					)
 				}}
 				state={status.value.state}
 			/>
-			{attachment !== null && (
+			{attachment !== null && attachment.sessionKey === sessionKey && (
 				<TerminalAttachment
 					key={`${sessionKey}:${attachment.id}`}
 					attachId={attachment.id}
@@ -124,11 +109,13 @@ function TerminalAttachment(input: {
 		result => {
 			if (!activeRef.current) return
 			if (result._tag === 'Failure') {
+				activeRef.current = false
 				input.onDone()
 				return
 			}
 			if (result._tag !== 'Success' || result.waiting || writingRef.current) return
 			if (result.value.done) {
+				activeRef.current = false
 				input.onDone()
 				return
 			}

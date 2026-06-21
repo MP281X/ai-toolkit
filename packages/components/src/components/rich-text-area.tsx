@@ -260,30 +260,36 @@ function closeXmlTag(event: KeyboardEvent) {
 	return true
 }
 
-function EditorPlugin<TValue extends RichTextArea.Value>(props: {
+function EditorPlugin<TValue extends RichTextArea.Value>({
+	editorRef,
+	initialSnapshot,
+	isMenuOpen,
+	onSubmit,
+	tokensRef
+}: {
 	readonly editorRef: {current: Lexical.LexicalEditor | null}
 	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
 	readonly initialSnapshot?: Readonly<RichTextArea.Snapshot<TValue>>
-	readonly menuRef: {current: boolean}
+	readonly isMenuOpen: () => boolean
 	readonly onSubmit?: (snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void
 }) {
 	const [editor] = useLexicalComposerContext()
 	const initializedRef = useRef(false)
 
 	useEffect(() => {
-		Reflect.set(props.editorRef, 'current', editor)
+		Reflect.set(editorRef, 'current', editor)
 
 		return () => {
-			Reflect.set(props.editorRef, 'current', null)
+			Reflect.set(editorRef, 'current', null)
 		}
-	}, [editor, props.editorRef])
+	}, [editor, editorRef])
 
 	useEffect(() => {
 		if (initializedRef.current) return
 		initializedRef.current = true
 
-		if (Predicate.isNotUndefined(props.initialSnapshot)) restore(editor, props.initialSnapshot, props.tokensRef.current)
-	}, [editor, props.initialSnapshot, props.tokensRef])
+		if (Predicate.isNotUndefined(initialSnapshot)) restore(editor, initialSnapshot, tokensRef.current)
+	}, [editor, initialSnapshot, tokensRef])
 
 	useEffect(
 		() =>
@@ -291,15 +297,15 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 				Lexical.KEY_ENTER_COMMAND,
 				event => {
 					if (continueList(event ?? undefined)) return true
-					if (event?.shiftKey === true || props.menuRef.current || Predicate.isUndefined(props.onSubmit)) return false
+					if (event?.shiftKey === true || isMenuOpen() || Predicate.isUndefined(onSubmit)) return false
 
 					event?.preventDefault()
-					props.onSubmit(editorSnapshot(editor, props.tokensRef.current))
+					onSubmit(editorSnapshot(editor, tokensRef.current))
 					return true
 				},
 				Lexical.COMMAND_PRIORITY_LOW
 			),
-		[editor, props, props.menuRef, props.onSubmit, props.tokensRef]
+		[editor, isMenuOpen, onSubmit, tokensRef]
 	)
 
 	useEffect(
@@ -329,7 +335,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 
 						for (const file of files) {
 							const id = crypto.randomUUID()
-							props.tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
+							tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
 
 							selection.insertNodes([
 								Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
@@ -344,7 +350,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 				},
 				Lexical.COMMAND_PRIORITY_HIGH
 			),
-		[editor, props.tokensRef]
+		[editor, tokensRef]
 	)
 
 	return <HistoryPlugin />
@@ -353,7 +359,8 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
-	readonly menuRef: {current: boolean}
+	readonly onClose: () => void
+	readonly onOpen: () => void
 	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
 	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
 }) {
@@ -362,14 +369,8 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
-			onOpen={() => {
-				// oxlint-disable-next-line no-param-reassign
-				props.menuRef.current = true
-			}}
-			onClose={() => {
-				// oxlint-disable-next-line no-param-reassign
-				props.menuRef.current = false
-			}}
+			onOpen={props.onOpen}
+			onClose={props.onClose}
 			triggerFn={text => {
 				const next = match(
 					text,
@@ -499,16 +500,22 @@ export declare namespace RichTextArea {
 	}
 }
 
-export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Value>(
-	props: RichTextArea.Props<TValue>
-) {
+export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Value>({
+	children,
+	className,
+	initialSnapshot,
+	onSubmit,
+	options,
+	placeholder,
+	ref
+}: RichTextArea.Props<TValue>) {
 	const editorRef = useRef<Lexical.LexicalEditor | null>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
 	const tokensRef = useRef(new Map<string, TextAreaToken<TValue>>())
 
 	useImperativeHandle(
-		props.ref,
+		ref,
 		() => ({
 			clear() {
 				if (!editorRef.current) return
@@ -529,7 +536,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	)
 
 	return (
-		<div className={cn('relative', props.className)}>
+		<div className={cn('relative', className)}>
 			<LexicalComposer
 				initialConfig={{
 					namespace: 'rich-text-area',
@@ -550,7 +557,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 							}
 							placeholder={
 								<div className="text-muted-foreground pointer-events-none absolute inset-x-2 top-2 select-none">
-									{props.placeholder ?? 'Write something...'}
+									{placeholder ?? 'Write something...'}
 								</div>
 							}
 							ErrorBoundary={LexicalErrorBoundary}
@@ -560,13 +567,23 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 
 				<EditorPlugin
 					editorRef={editorRef}
-					initialSnapshot={props.initialSnapshot}
-					menuRef={menuRef}
-					onSubmit={props.onSubmit}
+					initialSnapshot={initialSnapshot}
+					isMenuOpen={() => menuRef.current}
+					onSubmit={onSubmit}
 					tokensRef={tokensRef}
 				/>
-				<TypeaheadPlugin menuBoxRef={menuBoxRef} menuRef={menuRef} options={props.options} tokensRef={tokensRef}>
-					{props.children}
+				<TypeaheadPlugin
+					menuBoxRef={menuBoxRef}
+					onClose={() => {
+						menuRef.current = false
+					}}
+					onOpen={() => {
+						menuRef.current = true
+					}}
+					options={options}
+					tokensRef={tokensRef}
+				>
+					{children}
 				</TypeaheadPlugin>
 			</LexicalComposer>
 		</div>

@@ -13,7 +13,7 @@ import {
 	Trash2Icon,
 	TriangleAlertIcon
 } from 'lucide-react'
-import {useEffect, useLayoutEffect, useRef, useState} from 'react'
+import {useLayoutEffect, useRef, useState} from 'react'
 
 import {Fallback, Loading} from '#components/fallbacks.tsx'
 import {Button} from '#components/ui/button.tsx'
@@ -74,27 +74,29 @@ function isIgnoredBrowserLog(message: string) {
 }
 
 export function Browser(props: {readonly className?: string; readonly origin?: string}) {
+	const origin = props.origin ?? ''
+
+	return <BrowserInstance key={origin} className={props.className} origin={origin} />
+}
+
+function BrowserInstance(props: {readonly className?: string; readonly origin: string}) {
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const logIdRef = useRef(0)
-	const origin = props.origin ?? ''
+	const origin = props.origin
 	const [currentUrl, setCurrentUrl] = useState(() => (origin ? browserUrl(origin, '/') : ''))
 	const [frameKey, setFrameKey] = useState(0)
 	const [address, setAddress] = useState('/')
 	const [faviconUrl, setFaviconUrl] = useState<string>()
-	const [isListening, setIsListening] = useState(false)
 	const [isLoading, setIsLoading] = useState(() => origin !== '')
 	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
 
-	useEffect(() => {
-		setAddress('/')
-		setCurrentUrl(origin ? browserUrl(origin, '/') : '')
-		setFaviconUrl(undefined)
-		setIsLoading(origin !== '')
-	}, [origin])
+	function addLog(level: string, message: string) {
+		if (isIgnoredBrowserLog(message)) return
+
+		setLogs(current => [...current.slice(-199), {id: logIdRef.current++, level, message, time: DateTime.nowUnsafe()}])
+	}
 
 	useLayoutEffect(() => {
-		setIsListening(false)
-
 		function onMessage(event: MessageEvent) {
 			if (event.origin !== origin) return
 
@@ -120,11 +122,9 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 		}
 
 		window.addEventListener('message', onMessage)
-		setIsListening(true)
 
 		return () => {
 			window.removeEventListener('message', onMessage)
-			setIsListening(false)
 		}
 	}, [origin])
 
@@ -168,12 +168,6 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 		try {
 			iframeRef.current?.contentWindow?.history.forward()
 		} catch {}
-	}
-
-	function addLog(level: string, message: string) {
-		if (isIgnoredBrowserLog(message)) return
-
-		setLogs(current => [...current.slice(-199), {id: logIdRef.current++, level, message, time: DateTime.nowUnsafe()}])
 	}
 
 	return (
@@ -235,7 +229,7 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 									ref={iframeRef}
 									key={frameKey}
 									title={currentUrl}
-									src={isListening ? currentUrl : undefined}
+									src={currentUrl}
 									className="bg-background h-full min-h-0 w-full border-0"
 									onLoad={() => {
 										setIsLoading(false)

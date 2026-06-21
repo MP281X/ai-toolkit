@@ -51,7 +51,10 @@ export const Terminal = forwardRef<
 	const inputBufferRef = useRef('')
 	const inputFlushRef = useRef<ReturnType<typeof setTimeout>>(null)
 
-	callbacksRef.current = {onData: input.onData, onResize: input.onResize}
+	useEffect(() => {
+		callbacksRef.current = {onData: input.onData, onResize: input.onResize}
+	}, [input.onData, input.onResize])
+
 	useImperativeHandle(
 		ref,
 		() => ({

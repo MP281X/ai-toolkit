@@ -310,7 +310,12 @@ export function PatchDiff(props: {
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
 	const [draftComment, setDraftComment] = useState<DiffComment>()
-	const [mode, setMode] = useState<'diff' | 'file'>('diff')
+	const modeKey = `${props.filePath}\u0000${props.patch}`
+	const [modeState, setModeState] = useState<{readonly key: string; readonly mode: 'diff' | 'file'}>(() => ({
+		key: modeKey,
+		mode: 'diff'
+	}))
+	const mode = modeState.key === modeKey ? modeState.mode : 'diff'
 	const language = resolveLanguage(props.filePath)
 	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
 	const comments = props.comments ?? []
@@ -319,10 +324,6 @@ export function PatchDiff(props: {
 	useEffect(() => {
 		containerRef.current?.focus()
 	}, [mode, props.filePath, props.patch])
-
-	useEffect(() => {
-		setMode('diff')
-	}, [props.filePath, props.patch])
 
 	useLayoutEffect(() => {
 		const container = containerRef.current
@@ -340,7 +341,10 @@ export function PatchDiff(props: {
 			? rect.top + rect.height / 2
 			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
 		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
-		setMode(current => (current === 'diff' ? 'file' : 'diff'))
+		setModeState(current => ({
+			key: modeKey,
+			mode: current.key === modeKey && current.mode === 'file' ? 'diff' : 'file'
+		}))
 	}
 
 	useHotkey(
