@@ -7,23 +7,35 @@ description: Use when adding, rewriting, removing, or running tests, including p
 
 ## Tooling
 
-- Vitest, `vite-plus/test`
-- Existing Vite Plus config pattern; no standalone test configs
-- Colocated tests: `name.test.ts` / `name.test.tsx`
+- Vitest through `vite-plus/test`.
+- Vite Plus config only.
+- Colocated tests: `name.test.ts` / `name.test.tsx`.
+- TypeScript tests only.
+- Package tests through public exports only.
+- Apps no tests by default; app tests allowed for real behavior.
 
 ## Scope
 
-- Breakable behavior only: public API, state transitions, pure transforms, perf-sensitive paths
-- No type/schema/library/implementation-shape tests
-- External command/API/CLI/network: fake, mock, layer, or in-memory boundary
+- Test breakable public behavior.
+- Test real boundary first.
+- No private implementation tests.
+- No fake AST/context harness when lint/tool boundary exists.
+- No test helper that selects target, changes signature, or hides branch.
+- No package private imports.
+- No RPC contract tests.
+- No type/schema/library-shape tests.
+- Delete low-value tests for removed private behavior.
+- Custom lint rule test: fixture `.test.ts` with intentional violations and matching `oxlint-disable-next-line`.
+- Unused disable directive is assertion.
+- No exact diagnostic message runtime test.
+
+## Boundaries
+
+- External command/API/CLI/network: fake, mock, layer, in-memory boundary.
+- Package public API/state transitions/pure transforms/perf-sensitive paths are valid test targets.
 
 ## Performance
 
-- Add perf tests for long sessions, high-frequency streams, large buffers, repeated UI updates
-- Structural/asymptotic assertions > timing-only assertions
-- Representative fixtures
-
-## Rewrites
-
-- Rewrite stale tests when public interfaces change
-- Delete tests for removed behavior
+- Add perf tests for long sessions, high-frequency streams, large buffers, repeated UI updates.
+- Structural/asymptotic assertions > timing-only assertions.
+- Representative fixtures.

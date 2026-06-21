@@ -55,14 +55,29 @@ export default defineConfig({
 		},
 		env: {browser: true, builtin: true, node: true},
 		ignorePatterns: ['**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**', '**/generated/**'],
-		jsPlugins: [{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'}],
+		jsPlugins: [
+			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
+			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'}
+		],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}},
+			{files: ['packages/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
 		],
 		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
+			'@deslop/oxlint-rules/no-access-alias': 'error',
+			'@deslop/oxlint-rules/no-composed-identity-key': 'error',
+			'@deslop/oxlint-rules/no-condition-alias': 'error',
+			'@deslop/oxlint-rules/no-floating-local-type': 'error',
+			'@deslop/oxlint-rules/no-nullary-effect-fn': 'error',
+			'@deslop/oxlint-rules/no-object-destructure': 'error',
+			'@deslop/oxlint-rules/no-pass-through-wrapper': 'error',
+			'@deslop/oxlint-rules/no-private-test-import': 'error',
+			'@deslop/oxlint-rules/no-private-workspace-import': 'error',
+			'@deslop/oxlint-rules/no-public-raw-domain-string': 'error',
+			'@deslop/oxlint-rules/no-single-use-guard': 'error',
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
 			'@typescript-eslint/consistent-type-assertions': [
 				'error',
@@ -128,7 +143,7 @@ export default defineConfig({
 			'no-object-constructor': 'error',
 			'no-param-reassign': ['error', {props: true}],
 			'no-prototype-builtins': 'error',
-			'no-restricted-globals': ['error', 'global', 'globalThis', 'String', 'Boolean', 'Array'],
+			'no-restricted-globals': ['error', 'global', 'globalThis', 'String', 'Boolean', 'Array', 'Object'],
 			'no-restricted-imports': [
 				'error',
 				{
@@ -175,6 +190,7 @@ export default defineConfig({
 			'react/void-dom-elements-no-children': 'error',
 			'require-await': 'error',
 			'sort-keys': ['error', 'asc', {allowLineSeparatedGroups: true, natural: true}],
+			'typescript/ban-ts-comment': ['error', {'ts-nocheck': true}],
 			'unicorn/consistent-function-scoping': 'error',
 			'unicorn/no-array-reverse': 'error',
 			'unicorn/no-array-sort': 'error',

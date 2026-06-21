@@ -2,46 +2,55 @@
 
 ## Role
 
-- Mode: implementation agent
-- Exit: requested change made, verified, reported
+- Implementation agent.
+- Exit only after requested change made, verified, reported.
 
 ## Context
 
-- Package manager: `vp`
-- Workspaces: `apps/*`, `packages/*`
-- External source refs: `.agents/repos/*`
-- Effect source ref: `.agents/repos/effect/LLMS.md`
-- No `node_modules` search
+- Package manager: `vp`.
+- Workspaces: `apps/*`, `packages/*`.
+- No `node_modules` search unless tooling API unavailable elsewhere.
+- External refs: list `.agents/repos/*`; never assume clone names.
+- Effect refs: read `.agents/repos/effect/LLMS.md` before nontrivial Effect work.
 
 ## Research
 
-- APIs/libraries/patterns: repo source or `.agents/repos/*`
-- Package boundary/public service change: read package source first
-- New behavior: search similar local code first
-- Local source > memory
+- Read repo source before acting.
+- Local source > `.agents/repos/*` > memory.
+- New behavior: search existing local pattern first.
+- Package boundary, public service, schema, config, test strategy: read package source first.
+- Interface first: public signatures, services, schemas stable; implementation disposable.
 
 ## Implementation
 
-- Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
-- Structure only from domain, Effect, React, or external boundary
-- Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
-- Optimize the actual method/workflow to be fast enough on demand; do not hide slow paths with preloading, broad caching, speculative warming, or background refresh unless explicitly requested
-- Treat caching/preloading as correctness-owned state with invalidation cost, not as a substitute for making the underlying operation efficient and observable
-- Inline simple types, props, helpers, expressions, and derived values
-- Repeated local code stays visible when extraction only hides
-- Delete/replace incidental complexity
-- Refactor = old implementation fully replaced
-- No legacy paths, compatibility wrappers, adapters, fallback branches, duplicate implementations
-- No backward compatibility unless explicitly requested
-- No speculative abstractions, single-use helpers, migration code, just-in-case code
-- Type system, schemas, UI state are boundaries; no impossible-state revalidation
-- Dead/unused code removed
-- Lockfile: no manual `pnpm-lock.yaml` edits; manifest change => `vp install`, commit generated output
-- Ask only for undiscoverable scope, success criteria, or major tradeoff
+- Final shape: flat, direct, typed, inferred, functional, pipeable, Effect-native.
+- Structure from domain, Effect, React, or external boundary only.
+- Direct code > helpers, wrappers, config bags, floating types, casts, assertions.
+- Inline simple types, props, helpers, checks, aliases, derived values.
+- Repeated local code stays visible when extraction only hides.
+- Refactor means old implementation fully replaced.
+- Delete dead code, unused exports, stale tests, obsolete prompts.
+- No compatibility paths.
+- No fallback branches unless behavior requires them.
+- No duplicate implementations.
+- No speculative abstractions.
+- No migration code unless requested.
+- No broad caching, preloading, warming, background refresh to hide slow paths.
+- Optimize actual operation; make cost observable.
+- Type system, schemas, UI state are boundaries; no impossible-state revalidation.
+- Lockfile: no manual edits; manifest change => package manager generated output.
+- Ask only for undiscoverable scope, success criteria, or major tradeoff.
+
+## Subagents
+
+- Use read-only subagents for broad, risky, interface, test-design, or review work.
+- Main agent owns synthesis and edits.
+- Review after implementation for interface, correctness, simplification, dead code, signature reduction.
 
 ## Verification
 
-- Commands: `vp run <script>`
-- Code change: `vp run check`
-- Behavior/test change: `vp run test`
-- Diagnostics = design feedback; rewrite instead of suppress/bypass
+- Commands through `vp run <script>`.
+- Code/config/instruction change: `vp run check`.
+- Behavior/test change: also `vp run test`.
+- Package-local change: targeted package scripts first.
+- Diagnostics are design feedback; rewrite instead of suppress/bypass.

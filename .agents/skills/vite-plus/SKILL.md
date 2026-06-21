@@ -5,17 +5,26 @@ description: Use when changing Vite Plus tooling, package scripts, linting, form
 
 # Vite Plus
 
-## Rules
+## Config
 
-- Add a package script before introducing repeated project commands
-- Follow existing Vite Plus config files and patterns
-- No parallel lint, format, or test config files unless already present
-- Monorepo defaults at root; package overrides in package configs
-- Package-specific lint/format behavior through Vite Plus overrides
+- `vite.config.ts` is sole lint/format/test config.
+- Root owns monorepo defaults.
+- Package configs own package-specific build/runtime plugins.
+- No standalone ESLint, Prettier, Vitest, Oxlint config unless Vite Plus requires it.
+- Native Oxlint/plugin rules first.
+- Custom JS plugin rules last.
+- Disable native rules only for generated/vendor files, true conflicts, duplicate worse diagnostics.
+- Native rule before custom rule.
+- Do not add config exceptions to escape bad code.
 
-## Workspace Scripts
+## Scripts
 
-- Existing `vp run` patterns for recursive, targeted, filtered package tasks
-- Recursive: `vp run -r <task>`
-- Targeted: `vp run @scope/name#<task>`
-- Filtered: `vp run --filter <selector> <task>`
+- Root owns check/fix/test scripts.
+- Packages do not add check/fix/test scripts.
+- Commands through `vp run`.
+- Recursive: `vp run -r <script>`.
+- Targeted: `vp run @scope/name#<script>`.
+- Filtered: `vp run --filter <selector> <script>`.
+- Add package script before repeated package-local command.
+- Manifest change => package manager generated lockfile.
+- No `pnpm-workspace.yaml` catalog edit unless requested.

@@ -39,6 +39,8 @@
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 
+		"@deslop/oxlint-rules": "workspace:*",
+
 		"vite": "catalog:",
 		"vite-plus": "catalog:"
 	}
