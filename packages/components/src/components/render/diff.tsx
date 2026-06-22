@@ -1,8 +1,8 @@
-import {Array, Predicate, String} from 'effect'
+import {Array, Option, Predicate, String, pipe} from 'effect'
 
 import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
-import {File, FileDiff as PierreFileDiff} from '@pierre/diffs/react'
+import {File, FileDiff} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {CircleCheckIcon, CopyIcon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
@@ -72,15 +72,17 @@ const DIFF_CSS = `
 	}
 `
 
-type DiffComment = {
-	readonly filePath: string
-	readonly lineNumber: number
-	readonly side?: AnnotationSide
-	readonly body: string
-	readonly resolved?: boolean
-	readonly resolving?: boolean
-	readonly source?: 'github' | 'local'
-	readonly threadId?: string
+export declare namespace PatchDiff {
+	export type Comment = {
+		readonly filePath: string
+		readonly lineNumber: number
+		readonly side?: AnnotationSide
+		readonly body: string
+		readonly resolved?: boolean
+		readonly resolving?: boolean
+		readonly source?: 'github' | 'local'
+		readonly threadId?: string
+	}
 }
 
 function sameDiffLine(
@@ -105,23 +107,26 @@ export function formatCopiedComment(comment: {
 }
 
 function captureScrollAnchor(container: HTMLElement, clientY: number) {
-	const lineElement = [
-		...(container
-			.querySelector('diffs-container')
-			?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? [])
-	].find(element => {
-		const rect = element.getBoundingClientRect()
-		return clientY >= rect.top && clientY <= rect.bottom
-	})
+	const lineElement = pipe(
+		Array.fromIterable(
+			container
+				.querySelector('diffs-container')
+				?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? []
+		),
+		Array.findFirst(element => {
+			const rect = element.getBoundingClientRect()
+			return clientY >= rect.top && clientY <= rect.bottom
+		}),
+		Option.getOrUndefined
+	)
 
 	if (!lineElement) return
 
-	const lineNumber = lineElement.dataset['line']
-	if (Predicate.isUndefined(lineNumber) || String.isEmpty(lineNumber)) return
+	if (Predicate.isUndefined(lineElement.dataset['line']) || String.isEmpty(lineElement.dataset['line'])) return
 
 	return {
 		clientY,
-		lineNumber,
+		lineNumber: lineElement.dataset['line'],
 		offsetWithinLine: clientY - lineElement.getBoundingClientRect().top,
 		scrollTop: container.scrollTop
 	}
@@ -158,10 +163,10 @@ function restoreScrollAnchor(
 }
 
 function CommentAnnotation(props: {
-	readonly comment: DiffComment
+	readonly comment: PatchDiff.Comment
 	readonly isDraft?: boolean
-	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onResolveComment?: (comment: DiffComment) => void
+	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
+	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
 	readonly onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -171,10 +176,6 @@ function CommentAnnotation(props: {
 	useEffect(() => {
 		if (editing) inputRef.current?.focus()
 	}, [editing])
-
-	async function copyComment() {
-		await navigator.clipboard.writeText(formatCopiedComment(props.comment))
-	}
 
 	function saveDraft() {
 		if (String.isEmpty(String.trim(body))) {
@@ -194,22 +195,16 @@ function CommentAnnotation(props: {
 		props.onCloseDraft?.()
 	}
 
-	const sourceIcon =
-		props.comment.source === 'github' ? (
-			<GithubLight className="size-3 shrink-0" />
-		) : (
-			<MessageSquareTextIcon className="size-3 shrink-0" />
-		)
-	const iconCell = (
-		<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
-			{sourceIcon}
-		</div>
-	)
-
 	if (editing) {
 		return (
 			<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
-				{iconCell}
+				<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
+					{props.comment.source === 'github' ? (
+						<GithubLight className="size-3 shrink-0" />
+					) : (
+						<MessageSquareTextIcon className="size-3 shrink-0" />
+					)}
+				</div>
 				<div className="min-w-0">
 					<textarea
 						ref={inputRef}
@@ -245,7 +240,13 @@ function CommentAnnotation(props: {
 	if (props.comment.resolved === true) {
 		return (
 			<div className="text-muted-foreground bg-muted/70 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
-				{iconCell}
+				<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
+					{props.comment.source === 'github' ? (
+						<GithubLight className="size-3 shrink-0" />
+					) : (
+						<MessageSquareTextIcon className="size-3 shrink-0" />
+					)}
+				</div>
 				<span className="decoration-muted-foreground/60 min-w-0 truncate line-through">{props.comment.body}</span>
 				<div />
 			</div>
@@ -254,7 +255,13 @@ function CommentAnnotation(props: {
 
 	return (
 		<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
-			{iconCell}
+			<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
+				{props.comment.source === 'github' ? (
+					<GithubLight className="size-3 shrink-0" />
+				) : (
+					<MessageSquareTextIcon className="size-3 shrink-0" />
+				)}
+			</div>
 			<button
 				type="button"
 				className="min-w-0 bg-transparent p-0 text-left"
@@ -273,7 +280,7 @@ function CommentAnnotation(props: {
 					title="Copy comment"
 					onClick={event => {
 						event.stopPropagation()
-						void copyComment()
+						void navigator.clipboard.writeText(formatCopiedComment(props.comment))
 					}}
 				>
 					<CopyIcon className="size-3" />
@@ -302,14 +309,14 @@ export function PatchDiff(props: {
 	readonly filePath: string
 	readonly fileContent?: string
 	readonly patch: string
-	readonly comments?: readonly DiffComment[]
-	readonly onSaveComment?: (comment: DiffComment) => void
-	readonly onResolveComment?: (comment: DiffComment) => void
+	readonly comments?: readonly PatchDiff.Comment[]
+	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
+	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
-	const [draftComment, setDraftComment] = useState<DiffComment>()
+	const [draftComment, setDraftComment] = useState<PatchDiff.Comment>()
 	const modeKey = `${props.filePath}\u0000${props.patch}`
 	const [modeState, setModeState] = useState<{readonly key: string; readonly mode: 'diff' | 'file'}>(() => ({
 		key: modeKey,
@@ -326,21 +333,18 @@ export function PatchDiff(props: {
 	}, [mode, props.filePath, props.patch])
 
 	useLayoutEffect(() => {
-		const container = containerRef.current
-		const anchor = scrollAnchorRef.current
-		if (Predicate.isNull(container) || Predicate.isNull(anchor)) return
-		if (restoreScrollAnchor(container, anchor, mode)) scrollAnchorRef.current = null
+		if (Predicate.isNull(containerRef.current) || Predicate.isNull(scrollAnchorRef.current)) return
+		if (restoreScrollAnchor(containerRef.current, scrollAnchorRef.current, mode)) scrollAnchorRef.current = null
 	}, [mode, props.fileContent])
 
 	function toggleMode() {
-		const container = containerRef.current
-		if (Predicate.isNull(container)) return
+		if (Predicate.isNull(containerRef.current)) return
 
-		const rect = container.getBoundingClientRect()
+		const rect = containerRef.current.getBoundingClientRect()
 		const clientY = Predicate.isNull(pointerClientYRef.current)
 			? rect.top + rect.height / 2
 			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-		scrollAnchorRef.current = captureScrollAnchor(container, clientY) ?? null
+		scrollAnchorRef.current = captureScrollAnchor(containerRef.current, clientY) ?? null
 		setModeState(current => ({
 			key: modeKey,
 			mode: current.key === modeKey && current.mode === 'file' ? 'diff' : 'file'
@@ -400,7 +404,7 @@ export function PatchDiff(props: {
 			}}
 		>
 			{mode === 'diff' ? (
-				<PierreFileDiff<DiffComment>
+				<FileDiff<PatchDiff.Comment>
 					key={props.patch}
 					fileDiff={fileDiff}
 					options={{
@@ -436,7 +440,7 @@ export function PatchDiff(props: {
 					)}
 				/>
 			) : (
-				<File<DiffComment>
+				<File<PatchDiff.Comment>
 					key={props.filePath}
 					file={{contents: props.fileContent ?? '', lang: language, name: props.filePath}}
 					options={{

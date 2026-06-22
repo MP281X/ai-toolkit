@@ -1,4 +1,4 @@
-import {Array, Effect, Predicate, Queue, Ref, Stream, String, pipe} from 'effect'
+import {Array, Effect, Predicate, Queue, Ref, Schema, Stream, String, pipe} from 'effect'
 
 import type {Prompt, Response, Tool} from 'effect/unstable/ai'
 
@@ -31,7 +31,7 @@ export const makeResumableStream = Effect.fnUntraced(function* <A>() {
 				yield* Effect.addFinalizer(() =>
 					Ref.update(state, current => ({
 						...current,
-						subscribers: current.subscribers.filter(subscriber => subscriber !== queue)
+						subscribers: Array.filter(current.subscribers, subscriber => subscriber !== queue)
 					}))
 				)
 
@@ -96,17 +96,17 @@ export function serializePromptMessagesToMarkdown(input: readonly Prompt.Message
 								: `File: ${part.fileName ?? 'attachment'} (${part.mediaType})`
 						}
 						case 'tool-call': {
-							return `Tool call: ${part.name}\n\n\`\`\`json\n${JSON.stringify(part.params, undefined, 2)}\n\`\`\``
+							return `Tool call: ${part.name}\n\n\`\`\`json\n${Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(part.params)}\n\`\`\``
 						}
 						case 'tool-result': {
-							return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(part.result, undefined, 2)}\n\`\`\``
+							return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(part.result)}\n\`\`\``
 						}
 						case 'tool-approval-request': {
 							return `Tool approval request: ${part.approvalId}\n\nTool call: ${part.toolCallId}`
 						}
 						case 'tool-approval-response': {
 							return `Tool approval response: ${part.approvalId}\n\nApproved: ${part.approved}${
-								part.reason === undefined ? '' : `\n\nReason: ${part.reason}`
+								Predicate.isUndefined(part.reason) ? '' : `\n\nReason: ${part.reason}`
 							}`
 						}
 					}
@@ -134,13 +134,15 @@ export function serializeResponsePartsToMarkdown<Tools extends Record<string, To
 					return part.delta
 				}
 				case 'tool-call': {
-					return `Tool call: ${part.name}\n\n\`\`\`json\n${JSON.stringify(part.params, undefined, 2)}\n\`\`\``
+					return `Tool call: ${part.name}\n\n\`\`\`json\n${Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(part.params)}\n\`\`\``
 				}
 				case 'tool-result': {
-					return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${JSON.stringify(part.result, undefined, 2)}\n\`\`\``
+					return `Tool result: ${part.name}${part.isFailure ? ' (failed)' : ''}\n\n\`\`\`json\n${Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(part.result)}\n\`\`\``
 				}
 				case 'response-metadata': {
-					return part.modelId !== undefined && String.isNonEmpty(part.modelId) ? `Model: ${part.modelId}` : undefined
+					return Predicate.isNotUndefined(part.modelId) && String.isNonEmpty(part.modelId)
+						? `Model: ${part.modelId}`
+						: ''
 				}
 				case 'finish': {
 					return `Finish: ${part.reason}`
@@ -158,10 +160,11 @@ export function serializeResponsePartsToMarkdown<Tools extends Record<string, To
 				case 'tool-params-delta':
 				case 'tool-params-end':
 				case 'tool-params-start': {
+					return ''
 				}
 			}
 		}),
-		Array.filter(Predicate.isNotUndefined),
+		Array.filter(String.isNonEmpty),
 		Array.join('\n\n---\n\n'),
 		String.trim
 	)

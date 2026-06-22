@@ -1,59 +1,60 @@
-import {Array, Data, Effect, Hash, Option, Order, Stream, String, pipe} from 'effect'
+import {Array, Effect, Function, Hash, Option, Order, Predicate, Record, Schema, Stream, String, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {HomeSidebar} from '#rpcs/contracts.ts'
-import type {TerminalStatus} from '@deslop/terminal/schema'
 
-export type TerminalSessionInput = {
-	readonly args?: readonly string[]
-	readonly command?: string
-	readonly cwd: string
-	readonly env?: Readonly<Record<string, string>>
-	readonly sessionId?: string
-}
+export class TerminalSessionInput extends Schema.Class<TerminalSessionInput>('TerminalSessionInput')({
+	args: Schema.optional(Schema.Array(Schema.String)),
+	command: Schema.optional(Schema.String),
+	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+	sessionId: Schema.optional(Schema.String)
+}) {}
 
-class TerminalSessionAtomKey extends Data.Class<TerminalSessionInput> {}
-class TerminalAttachAtomKey extends Data.Class<{
-	readonly attachId: number
-	readonly session: TerminalSessionInput
-	readonly size: {readonly cols: number; readonly rows: number}
-}> {}
+export class TerminalSessionAtomKey extends Schema.Class<TerminalSessionAtomKey>('TerminalSessionAtomKey')({
+	args: Schema.optional(Schema.Array(Schema.String)),
+	command: Schema.optional(Schema.String),
+	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+	sessionId: Schema.optional(Schema.String)
+}) {}
+
+export class TerminalAttachAtomKey extends Schema.Class<TerminalAttachAtomKey>('TerminalAttachAtomKey')({
+	attachId: Schema.Number,
+	session: TerminalSessionInput,
+	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number})
+}) {}
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {
-	if (env === undefined) return
+	if (Predicate.isUndefined(env)) return
 
-	return Object.fromEntries(
-		pipe(
-			Object.entries(env),
-			Array.sortWith(entry => entry[0], Order.String)
-		)
+	return pipe(
+		env,
+		Record.toEntries,
+		Array.sortWith(entry => entry[0], Order.String),
+		Record.fromEntries
 	)
 }
 
-function terminalSessionInput(input: TerminalSessionInput): TerminalSessionInput {
+export function terminalSessionInput(input: TerminalSessionInput) {
 	const env = terminalSessionEnv(input.env)
 
 	return {
-		...(input.args === undefined ? {} : {args: [...input.args]}),
-		...(input.command === undefined ? {} : {command: input.command}),
+		...(Predicate.isUndefined(input.args) ? {} : {args: [...input.args]}),
+		...(Predicate.isUndefined(input.command) ? {} : {command: input.command}),
 		cwd: input.cwd,
-		...(env === undefined ? {} : {env}),
-		...(input.sessionId === undefined ? {} : {sessionId: input.sessionId})
+		...(Predicate.isUndefined(env) ? {} : {env}),
+		...(Predicate.isUndefined(input.sessionId) ? {} : {sessionId: input.sessionId})
 	}
 }
 
 export function terminalSessionKey(input: TerminalSessionInput) {
-	return JSON.stringify(terminalSessionInput(input))
+	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(terminalSessionInput(input))
 }
 
 export function worktreeRouteId(root: string) {
 	return Math.abs(Hash.string(root)).toString(36)
-}
-
-function terminalSessionStatus(): TerminalStatus {
-	return {state: 'idle', title: ''}
 }
 
 const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
@@ -67,7 +68,7 @@ const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey)
 	)
 )
 
-const terminalFramePullAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
+export const terminalFramePullAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
 	Atom.pull(
 		get =>
 			pipe(
@@ -79,28 +80,16 @@ const terminalFramePullAtomFamily = Atom.family((input: TerminalAttachAtomKey) =
 	)
 )
 
-export function terminalFramePullAtom(
-	input: TerminalSessionInput,
-	attachId: number,
-	size: {readonly cols: number; readonly rows: number}
-) {
-	return terminalFramePullAtomFamily(new TerminalAttachAtomKey({attachId, session: terminalSessionInput(input), size}))
-}
-
-const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
+export const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
 			Effect.map(client => client('terminal.status', terminalSessionInput(input))),
 			Stream.unwrap
 		),
-		{initialValue: terminalSessionStatus()}
+		{initialValue: {state: 'idle', title: ''}}
 	)
 )
-
-export function terminalStatusAtom(input: TerminalSessionInput) {
-	return terminalStatusAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input)))
-}
 
 export const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
@@ -133,7 +122,7 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 					scripts,
 					Array.map(run => run.origin.origin),
 					Array.dedupe,
-					Array.sortWith(origin => origin, Order.String)
+					Array.sortWith(Function.identity, Order.String)
 				)
 			)
 		)
@@ -192,7 +181,7 @@ export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
 		Atom.make(get =>
 			pipe(
 				get.result(homeSidebarAtom),
-				Effect.map((sidebar: HomeSidebar) => {
+				Effect.map(sidebar => {
 					const activeProject = Array.findFirst(sidebar.projects, project =>
 						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
 					)

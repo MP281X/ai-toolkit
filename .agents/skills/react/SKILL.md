@@ -26,7 +26,9 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 ## Compiler
 
 - React Compiler on.
+- React 19 ref props.
 - No `memo`, `useMemo`, `useCallback`.
+- No `forwardRef`.
 - Remove manual memo when touched.
 
 ## Components

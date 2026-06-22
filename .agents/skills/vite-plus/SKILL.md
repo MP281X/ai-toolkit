@@ -26,4 +26,5 @@ description: Use when changing Vite Plus tooling, package scripts, linting, form
 - Add package script before repeated package-local command.
 - Manifest change => package manager generated lockfile.
 - No `pnpm-workspace.yaml` catalog edit unless requested.
+- No package-manager patching for verification unless requested.
 - Keep root `check` and `test` scripts as the verification path.

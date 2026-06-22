@@ -34,6 +34,15 @@
 - Lockfile: no manual edits; manifest change => package manager generated output.
 - Ask only for undiscoverable scope, success criteria, or major tradeoff.
 
+## Lint Refactors
+
+- Collect diagnostics for the file or package before editing.
+- Classify by root cause; fix the root shape once.
+- Inspect schemas, public APIs, and constructors before replacing types or tagged values.
+- Batch related edits; avoid one-diagnostic wrapper fixes.
+- If a fix creates another forbidden shape, backtrack and reshape.
+- Do not mutate workspace, lockfile, patch, or package-manager state to make verification run.
+
 ## Subagents
 
 - Use read-only subagents for broad, risky, interface, test-design, or review work.

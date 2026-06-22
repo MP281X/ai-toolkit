@@ -12,6 +12,11 @@ import oxlintPlugin from '../src/oxlint-plugin.ts'
 describe.skip('oxlint plugin fixture', () => {})
 
 const source = {prefix: 'fixture', value: 'value'} as const
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-single-use-helper -- fixture
+function forwardRef(callback: () => boolean) {
+	return callback
+}
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const values: readonly (string | null)[] = [source.value]
 
@@ -69,10 +74,9 @@ const uselessEffectWrapper = Effect.fn('Fixture.useless')(function* () {
 // oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
 type Local = string
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
+// oxlint-disable-next-line @deslop/oxlint-rules/no-primitive-const, @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const localValue: Local = 'local'
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
 type SharedLocal = {value: string}
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
@@ -80,12 +84,24 @@ const sharedLocalOne: SharedLocal = {value: 'one'}
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const sharedLocalTwo: SharedLocal = {value: 'two'}
 
+type ReusedLocal = {readonly value: string}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-single-use-helper -- fixture
+function reusedLocalOne(value: ReusedLocal) {
+	return `${value.value} one`
+}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-single-use-helper -- fixture
+function reusedLocalTwo(value: ReusedLocal) {
+	return `${value.value} two`
+}
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-exported-local-type -- fixture
 export type LocalImplementation = {value: string}
 
 export type FixtureSchema = {value: string}
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-function-return-type, @deslop/oxlint-rules/no-single-use-helper -- fixture
+// oxlint-disable-next-line @deslop/oxlint-rules/no-function-return-type, @deslop/oxlint-rules/no-single-use-helper, @deslop/oxlint-rules/no-static-return-function -- fixture
 function explicitReturn(): string {
 	return 'explicit'
 }
@@ -105,6 +121,11 @@ function acceptsCallback(callback: (...args: unknown[]) => unknown) {
 	return callback
 }
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-single-use-helper -- fixture
+function acceptsStringCallback(callback: (value: string) => unknown) {
+	return callback
+}
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-native-prototype-method, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-typed-callback-params -- fixture
 const typedCallback = [1].map((value: number) => value)
 
@@ -112,10 +133,20 @@ const typedGeneratorCallback = acceptsCallback(function* (resume: unknown) {
 	yield resume
 })
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-typed-callback-params -- fixture
 const untypedGeneratorCallback = acceptsCallback(function* (resume) {
 	yield resume
 })
+
+const standaloneEffectFunction = Effect.fn('Fixture.standalone')(function* (value: string) {
+	return value
+})
+
+const contextOwnedEffectFunction = acceptsStringCallback(
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-typed-callback-params -- fixture
+	Effect.fn('Fixture.context')(function* (value: string) {
+		return value
+	})
+)
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type, @deslop/oxlint-rules/no-optional-undefined-property -- fixture
 type OptionalUndefined = {value?: string | undefined}
@@ -134,6 +165,21 @@ const constructedOption = Option.some(source.value)
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-native-mutable-collection -- fixture
 const nativeMutableCollection = new Map<string, string>()
+
+function mutableHolder(value: string) {
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-local-mutable-holder -- fixture
+	const holder = {value}
+	holder.value = 'next'
+	return holder.value
+}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-static-return-function -- fixture
+function staticReturn() {
+	return {value: 'static'}
+}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-forward-ref -- fixture
+const ForwardRefFixture = forwardRef(() => false)
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-promise-callback -- fixture
 const promiseCallback = Promise.resolve(source.value).then(value => value)
@@ -186,15 +232,18 @@ function matchable(value: 'one' | 'two' | 'three') {
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-pass-through-wrapper -- fixture
 function trivialHandler() {
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-effect-run-entrypoint -- fixture
 	Effect.runSync(Effect.void)
 }
 
 export const fixture = {
+	ForwardRefFixture,
 	GitWorkspace,
 	accessAlias,
 	accessField,
 	compare,
 	constructedOption,
+	contextOwnedEffectFunction,
 	destructuredValue,
 	effectReturningFunction,
 	emptyRecord,
@@ -207,6 +256,7 @@ export const fixture = {
 	joinedValues,
 	localValue,
 	matchable,
+	mutableHolder,
 	mutableModuleState,
 	mutableValue,
 	nativeMutableCollection,
@@ -219,8 +269,12 @@ export const fixture = {
 	promiseCallback,
 	rawTagged,
 	recursiveReturn,
+	reusedLocalOne,
+	reusedLocalTwo,
 	sharedLocalOne,
 	sharedLocalTwo,
+	standaloneEffectFunction,
+	staticReturn,
 	stringValue,
 	trivialHandler,
 	typedCallback,

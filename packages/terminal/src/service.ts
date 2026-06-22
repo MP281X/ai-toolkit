@@ -7,6 +7,7 @@ import {
 	Effect,
 	Layer,
 	Option,
+	Predicate,
 	Queue,
 	Ref,
 	Semaphore,
@@ -23,81 +24,58 @@ import HeadlessModule from '@xterm/headless'
 import type {ChildProcess} from 'effect/unstable/process'
 
 import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
-import type {TerminalFrame, TerminalInput, TerminalSize, TerminalStatus} from './schema.ts'
-import {TerminalError, terminalStatusActive} from './schema.ts'
-
-type RunningProcess = {
-	readonly data: {readonly dispose: () => void}
-	readonly exit: {readonly dispose: () => void}
-	readonly process: IPty
-}
-
-type QueuedOutput = {readonly data: string; readonly process: IPty}
-type AttachQueue = Queue.Queue<TerminalFrame, Cause.Done>
-type TerminalMock = {
-	readonly frames?: readonly TerminalFrame[]
-	readonly resize?: (size: TerminalSize) => Effect.Effect<void>
-	readonly status?: TerminalStatus
-	readonly write?: (input: TerminalInput) => Effect.Effect<void, TerminalError>
-}
-
-const terminalScrollbackLines = 20_000
-const terminalDataQueueCapacity = 128
-const terminalDataQueueLowWater = 32
-const terminalBackpressureCapacity = 1024
+import {TerminalError, TerminalStatus, type TerminalFrame, type TerminalInput, type TerminalSize} from './schema.ts'
 
 function terminalInputString(input: TerminalInput) {
 	return input.type === 'text' ? input.data : new TextDecoder().decode(input.data)
 }
 
 function pauseProcess(process: IPty) {
-	if ('pause' in process && typeof process.pause === 'function') process.pause()
+	if ('pause' in process && Predicate.isFunction(process.pause)) process.pause()
 }
 
 function resumeProcess(process: IPty) {
-	if ('resume' in process && typeof process.resume === 'function') process.resume()
+	if ('resume' in process && Predicate.isFunction(process.resume)) process.resume()
 }
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
 	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
-		const dataQueue = yield* Queue.bounded<QueuedOutput>(terminalDataQueueCapacity)
+		const dataQueue = yield* Queue.bounded<{readonly data: string; readonly process: IPty}>(128)
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
-		const processRef = yield* Ref.make<RunningProcess | undefined>(void 0)
+		const processRef = yield* Ref.make<
+			| {
+					readonly data: {readonly dispose: () => void}
+					readonly exit: {readonly dispose: () => void}
+					readonly process: IPty
+			  }
+			| undefined
+		>(void 0)
 		const replayProcessRef = yield* Ref.make<IPty | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
 		const oscRef = yield* Ref.make('')
-		const attachedRef = yield* Ref.make<readonly AttachQueue[]>([])
+		const attachedRef = yield* Ref.make<readonly Queue.Queue<TerminalFrame, Cause.Done>[]>([])
 		const sequenceRef = yield* Ref.make(0)
-		const screen = new HeadlessModule.Terminal({
-			allowProposedApi: true,
-			cols: 120,
-			rows: 32,
-			scrollback: terminalScrollbackLines
-		})
+		const screen = new HeadlessModule.Terminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 20_000})
 		const serialize = new SerializeAddon()
 		screen.loadAddon({
 			activate: terminal => {
-				Reflect.apply(serialize.activate, serialize, [terminal])
+				// @ts-expect-error SerializeAddon supports headless terminals at runtime, but its type targets the DOM terminal.
+				serialize.activate(terminal)
 			},
 			dispose: () => {
 				serialize.dispose()
 			}
 		})
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
-		const processCommand = config.command?.command ?? shell
-		const processArgs = config.command?.args ?? []
-		const processEnv = config.command?.options.env ?? {}
-		const processCwd = config.command?.options.cwd ?? config.cwd
-		const restartOnExit = config.command === undefined
 		const status = yield* SubscriptionRef.make<TerminalStatus>({state: 'idle', title: ''})
 
 		const nextSequence = Effect.fnUntraced(function* () {
 			return yield* Ref.modify(sequenceRef, current => [current, current + 1] as const)
 		})
 
-		const dropQueues = Effect.fnUntraced(function* (dropped: readonly AttachQueue[]) {
+		const dropQueues = Effect.fnUntraced(function* (dropped: readonly Queue.Queue<TerminalFrame, Cause.Done>[]) {
 			if (!Array.isReadonlyArrayNonEmpty(dropped)) return
 			yield* Ref.update(attachedRef, current => Array.filter(current, queue => !dropped.includes(queue)))
 			yield* Effect.forEach(dropped, Queue.shutdown, {discard: true})
@@ -110,10 +88,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const publishStatus = Effect.fnUntraced(function* (nextStatus: TerminalStatus) {
-			yield* SubscriptionRef.getAndUpdateSome(status, current =>
-				current.state === nextStatus.state && current.title === nextStatus.title
-					? Option.none()
-					: Option.some(nextStatus)
+			yield* SubscriptionRef.getAndUpdate(status, current =>
+				current.state === nextStatus.state && current.title === nextStatus.title ? current : nextStatus
 			)
 		})
 
@@ -124,7 +100,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setTitle(title: string) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current => {
-					if (!terminalStatusActive(current.state)) return Effect.void
+					if (!TerminalStatus.active(current.state)) return Effect.void
 					return publishStatus({...current, ...terminalTitleStatus(title)})
 				})
 			)
@@ -133,14 +109,16 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setProgress(state: TerminalStatus['state']) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current =>
-					terminalStatusActive(current.state) ? publishStatus({...current, state}) : Effect.void
+					TerminalStatus.active(current.state) ? publishStatus({...current, state}) : Effect.void
 				)
 			)
 		}
 
 		const parseScreen = Effect.fnUntraced(function* (chunk: string) {
 			yield* Effect.callback<true>(resume => {
-				screen.write(chunk, () => resume(Effect.succeed(true)))
+				screen.write(chunk, () => {
+					resume(Effect.succeed(true))
+				})
 			})
 		})
 
@@ -157,7 +135,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const resetScreen = Effect.fnUntraced(function* () {
-			yield* Effect.sync(() => screen.reset())
+			yield* Effect.sync(() => {
+				screen.reset()
+			})
 			yield* publishFrame({sequence: yield* nextSequence(), type: 'reset'})
 		})
 
@@ -177,7 +157,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const waitForDataQueueDrain = Effect.fnUntraced(function* () {
-			while ((yield* Queue.size(dataQueue)) > terminalDataQueueLowWater) {
+			while ((yield* Queue.size(dataQueue)) > 32) {
 				yield* Effect.sleep('16 millis')
 			}
 		})
@@ -194,9 +174,13 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				handle.exit.dispose()
 			})
 			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
-			yield* Effect.sync(() => handle.process.kill('SIGTERM')).pipe(Effect.ignore)
+			yield* Effect.sync(() => {
+				handle.process.kill('SIGTERM')
+			}).pipe(Effect.ignore)
 			yield* Effect.sleep('250 millis')
-			yield* Effect.sync(() => handle.process.kill('SIGKILL')).pipe(Effect.ignore)
+			yield* Effect.sync(() => {
+				handle.process.kill('SIGKILL')
+			}).pipe(Effect.ignore)
 			if (state) yield* setStatus(state)
 		})
 
@@ -211,12 +195,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			const subprocess = yield* Effect.try({
 				catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 				try: () =>
-					nodePty.spawn(processCommand, [...processArgs], {
+					nodePty.spawn(config.command?.command ?? shell, [...(config.command?.args ?? [])], {
 						cols: size.cols,
-						cwd: processCwd,
+						cwd: config.command?.options.cwd ?? config.cwd,
 						env: {
 							...process.env,
-							...processEnv,
+							...config.command?.options.env,
 							SHELL_SESSIONS_DISABLE: '1',
 							TERM: 'xterm-256color',
 							TERM_PROGRAM: 'deslop'
@@ -225,12 +209,14 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						rows: size.rows
 					})
 			})
-			const pendingBackpressure: QueuedOutput[] = []
-			let backpressureDraining = false
+			const backpressureState = {
+				draining: false,
+				pending: Array.empty<{readonly data: string; readonly process: IPty}>()
+			}
 			const drainBackpressure = Effect.fnUntraced(function* () {
-				while (pendingBackpressure.length > 0) {
-					const next = pendingBackpressure.shift()
-					if (next !== undefined) yield* Queue.offer(dataQueue, next)
+				while (backpressureState.pending.length > 0) {
+					const next = backpressureState.pending.shift()
+					if (Predicate.isNotUndefined(next)) yield* Queue.offer(dataQueue, next)
 				}
 				yield* waitForDataQueueDrain()
 			})
@@ -238,21 +224,21 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				const output = {data: chunk, process: subprocess}
 				if (Queue.offerUnsafe(dataQueue, output)) return
 
-				if (pendingBackpressure.length >= terminalBackpressureCapacity) {
+				if (backpressureState.pending.length >= 1024) {
 					Effect.runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
 					return
 				}
 
-				pendingBackpressure.push(output)
-				if (backpressureDraining) return
+				backpressureState.pending.push(output)
+				if (backpressureState.draining) return
 
-				backpressureDraining = true
+				backpressureState.draining = true
 				pauseProcess(subprocess)
 				Effect.runFork(
 					drainBackpressure().pipe(
 						Effect.ensuring(
 							Effect.sync(() => {
-								backpressureDraining = false
+								backpressureState.draining = false
 								resumeProcess(subprocess)
 							})
 						)
@@ -268,7 +254,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 							if (current !== handle) return
 
 							yield* Ref.update(processRef, value => (value === handle ? undefined : value))
-							if (restartOnExit) {
+							if (Predicate.isUndefined(config.command)) {
 								yield* pipe(
 									Effect.sleep('1 second'),
 									Effect.andThen(spawnProcess()),
@@ -290,7 +276,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		const startDefaultProcess = Effect.fnUntraced(function* () {
-			if (config.command !== undefined) return
+			if (Predicate.isNotUndefined(config.command)) return
 			if (yield* Ref.get(processRef)) return
 
 			yield* pipe(
@@ -339,31 +325,36 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			Effect.forkScoped
 		)
 
-		yield* Effect.addFinalizer(() =>
-			Effect.gen(function* () {
-				const attached = yield* Ref.get(attachedRef)
-				yield* stopProcess()
-				yield* Queue.shutdown(dataQueue)
-				yield* Queue.shutdown(resizeQueue)
-				yield* Effect.forEach(attached, Queue.shutdown, {discard: true})
-				yield* Effect.sync(() => screen.dispose())
+		const terminalFinalizer = Effect.gen(function* () {
+			const attached = yield* Ref.get(attachedRef)
+			yield* stopProcess()
+			yield* Queue.shutdown(dataQueue)
+			yield* Queue.shutdown(resizeQueue)
+			yield* Effect.forEach(attached, Queue.shutdown, {discard: true})
+			yield* Effect.sync(() => {
+				screen.dispose()
 			})
-		)
+		})
+		yield* Effect.addFinalizer(() => terminalFinalizer)
 		return {
 			attach: (size?: TerminalSize) =>
 				Stream.unwrap(
 					Effect.gen(function* () {
 						yield* Effect.annotateCurrentSpan({cols: size?.cols ?? -1, cwd: config.cwd, rows: size?.rows ?? -1})
 						const queue = yield* Queue.bounded<TerminalFrame, Cause.Done>(1024)
-						if (size !== undefined) yield* pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
+						if (Predicate.isNotUndefined(size)) yield* pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
 						yield* startDefaultProcess()
 						const snapshot = yield* pipe(
 							Effect.gen(function* () {
-								const reset: TerminalFrame = {sequence: yield* nextSequence(), type: 'reset'}
-								const frames: TerminalFrame[] = [reset]
-								for (const data of terminalChunks(serialize.serialize({scrollback: terminalScrollbackLines}))) {
-									frames.push({data, sequence: yield* nextSequence(), type: 'output'})
-								}
+								const reset = {sequence: yield* nextSequence(), type: 'reset'} satisfies TerminalFrame
+								const frames = pipe(
+									yield* Effect.forEach(terminalChunks(serialize.serialize({scrollback: 20_000})), data =>
+										Effect.gen(function* () {
+											return {data, sequence: yield* nextSequence(), type: 'output'} satisfies TerminalFrame
+										})
+									),
+									Array.prepend(reset)
+								)
 								yield* Ref.update(attachedRef, current => Array.append(current, queue))
 								return frames
 							}),
@@ -390,8 +381,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				yield* Effect.annotateCurrentSpan({cols: size.cols, cwd: config.cwd, rows: size.rows})
 				yield* Queue.offer(resizeQueue, size)
 			}),
-			restart: Effect.fn('Terminal.restart')(function* () {
-				yield* Effect.annotateCurrentSpan({command: processCommand, cwd: config.cwd, processCwd})
+			restart: Effect.gen(function* () {
+				yield* Effect.annotateCurrentSpan({
+					command: config.command?.command ?? shell,
+					cwd: config.cwd,
+					processCwd: config.command?.options.cwd ?? config.cwd
+				})
 				return yield* pipe(
 					spawnProcess(),
 					Semaphore.withPermit(lifecycleLock),
@@ -399,7 +394,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			}),
 			status,
-			stop: Effect.fn('Terminal.stop')(function* () {
+			stop: Effect.gen(function* () {
 				yield* Effect.annotateCurrentSpan({cwd: config.cwd})
 				yield* pipe(stopProcess('stopped'), Semaphore.withPermit(lifecycleLock))
 				return yield* SubscriptionRef.get(status)
@@ -423,33 +418,4 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 	})
 }) {
 	public static layer = flow(this.make, Layer.effect(this))
-	public static layerMock(input: TerminalMock = {}) {
-		return Layer.effect(
-			this,
-			Effect.gen(function* () {
-				const status = yield* SubscriptionRef.make<TerminalStatus>(input.status ?? {state: 'idle', title: ''})
-
-				return {
-					attach: (_size?: TerminalSize) => Stream.fromIterable(input.frames ?? []),
-					resize: Effect.fn('Terminal.mock.resize')(function* (size: TerminalSize) {
-						if (input.resize !== undefined) yield* input.resize(size)
-					}),
-					restart: Effect.fn('Terminal.mock.restart')(function* () {
-						const next = {state: 'running' as const, title: ''}
-						yield* SubscriptionRef.set(status, next)
-						return next
-					}),
-					status,
-					stop: Effect.fn('Terminal.mock.stop')(function* () {
-						const next = {state: 'stopped' as const, title: ''}
-						yield* SubscriptionRef.set(status, next)
-						return next
-					}),
-					write: Effect.fn('Terminal.mock.write')(function* (data: TerminalInput) {
-						if (input.write !== undefined) yield* input.write(data)
-					})
-				}
-			})
-		)
-	}
 }

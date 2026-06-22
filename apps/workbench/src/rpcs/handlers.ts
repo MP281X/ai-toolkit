@@ -5,11 +5,15 @@ import {
 	Context,
 	Duration,
 	Effect,
+	Equal,
 	HashMap,
+	HashSet,
 	Layer,
 	Option,
+	Predicate,
 	RcMap,
 	Ref,
+	Record,
 	Schedule,
 	Schema,
 	Stream,
@@ -22,79 +26,86 @@ import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
-import {discoverPackageScripts, packageScriptCommand, scriptRuns, type PackageScript} from '#rpcs/scripts.ts'
-import {AiError, type AgentCommandProfile} from '@deslop/ai/schema'
+import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
+import {AiError, type AgentCommandProfile, type AgentCommandRequest} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
-import {GitError} from '@deslop/git/schema'
+import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
 import {GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
-import {type PortlessPreparedRun, PortlessRun} from '@deslop/portless/schema'
+import {PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
-import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
+import {TerminalError, TerminalStatus} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 import {Usage} from '@deslop/usage/service'
 
-type TerminalSessionInput = {
-	readonly command?: ChildProcess.StandardCommand
-	readonly cwd: string
-	readonly sessionId?: string
-}
-
-type PackagePreparedRun = PackageScript & {readonly cwd: string; readonly preparedCommand: ChildProcess.StandardCommand}
-
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
+class ScriptSessionKey extends Schema.Class<ScriptSessionKey>('ScriptSessionKey')({
+	cwd: Schema.String,
+	sessionId: Schema.String
+}) {}
+
+class TerminalStatusKey extends Schema.Class<TerminalStatusKey>('TerminalStatusKey')({
+	cwd: Schema.String,
+	sessionId: Schema.optional(Schema.String)
+}) {}
+
+class TerminalSessionIdentity extends Schema.Class<TerminalSessionIdentity>('TerminalSessionIdentity')({
+	command: Schema.optional(Schema.Any),
+	cwd: Schema.String,
+	sessionId: Schema.optional(Schema.String)
+}) {}
+
 function terminalStatusDone(state: AgentSession['state']) {
-	return !terminalStatusActive(state.state)
-}
-
-function portlessScriptKey(input: {readonly cwd: string; readonly sessionId: string}) {
-	return `${input.cwd}:${input.sessionId}`
-}
-
-function terminalStatusKey(input: TerminalPayload) {
-	return input.sessionId === undefined ? input.cwd : portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
-}
-
-function sameTerminalSession(left: TerminalSessionInput, right: TerminalSessionInput) {
-	return left.cwd === right.cwd && left.sessionId === right.sessionId && left.command === right.command
+	return !TerminalStatus.active(state.state)
 }
 
 function replacePortlessScripts(
-	current: HashMap.HashMap<string, PortlessPreparedRun>,
+	current: HashMap.HashMap<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>,
 	cwd: string,
-	scripts: readonly PortlessPreparedRun[]
+	scripts: readonly (PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand})[]
 ) {
 	return pipe(
 		scripts,
 		Array.reduce(
 			HashMap.filter(current, script => script.script.cwd !== cwd),
-			(next, script) => HashMap.set(next, portlessScriptKey(script.script), script)
+			(next, script) =>
+				HashMap.set(next, new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId}), script)
 		)
 	)
 }
 
 function removePortlessScript(
-	current: HashMap.HashMap<string, PortlessPreparedRun>,
+	current: HashMap.HashMap<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>,
 	input: {readonly cwd: string; readonly sessionId?: string}
 ) {
-	if (input.sessionId === undefined) return {current, script: undefined}
+	if (Predicate.isUndefined(input.sessionId)) return {current, script: undefined}
 
-	const key = portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
+	const key = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
 	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
 	return {current: HashMap.remove(current, key), script}
 }
 
 function replacePackageScripts(
-	current: HashMap.HashMap<string, PackagePreparedRun>,
+	current: HashMap.HashMap<
+		ScriptSessionKey,
+		{
+			readonly command: string
+			readonly cwd: string
+			readonly preparedCommand: ChildProcess.StandardCommand
+			readonly scriptName: string
+			readonly sessionId: string
+			readonly taskId: string
+		}
+	>,
 	cwd: string,
-	scripts: readonly PackageScript[]
+	scripts: Parameters<typeof scriptRuns>[0]
 ) {
 	return pipe(
 		scripts,
 		Array.reduce(
 			HashMap.filter(current, script => script.cwd !== cwd),
 			(next, script) =>
-				HashMap.set(next, portlessScriptKey({cwd, sessionId: script.sessionId}), {
+				HashMap.set(next, new ScriptSessionKey({cwd, sessionId: script.sessionId}), {
 					...script,
 					cwd,
 					preparedCommand: packageScriptCommand(cwd, script)
@@ -103,7 +114,20 @@ function replacePackageScripts(
 	)
 }
 
-function removePackageScripts(current: HashMap.HashMap<string, PackagePreparedRun>, cwd: string) {
+function removePackageScripts(
+	current: HashMap.HashMap<
+		ScriptSessionKey,
+		{
+			readonly command: string
+			readonly cwd: string
+			readonly preparedCommand: ChildProcess.StandardCommand
+			readonly scriptName: string
+			readonly sessionId: string
+			readonly taskId: string
+		}
+	>,
+	cwd: string
+) {
 	return HashMap.filter(current, script => script.cwd !== cwd)
 }
 
@@ -132,18 +156,21 @@ function makeAgentSession(input: {
 	}
 }
 
-function terminalSessionInput(session: TerminalPayload | TerminalSessionInput): TerminalSessionInput {
+function terminalSessionInput(
+	session:
+		| TerminalPayload
+		| {readonly command?: ChildProcess.StandardCommand | string; readonly cwd: string; readonly sessionId?: string}
+) {
 	if ('args' in session || 'env' in session) {
 		return {
-			command:
-				session.command === undefined
-					? undefined
-					: ChildProcess.make(session.command, session.args ?? [], {env: session.env}),
+			command: Predicate.isUndefined(session.command)
+				? undefined
+				: ChildProcess.make(session.command, session.args ?? [], {env: session.env}),
 			cwd: session.cwd,
 			sessionId: session.sessionId
 		}
 	}
-	if (typeof session.command === 'string') {
+	if (Predicate.isString(session.command)) {
 		return {command: ChildProcess.make(session.command), cwd: session.cwd, sessionId: session.sessionId}
 	}
 
@@ -152,7 +179,11 @@ function terminalSessionInput(session: TerminalPayload | TerminalSessionInput): 
 
 const TerminalSessions = RcMap.make({
 	idleTimeToLive: Duration.infinity,
-	lookup: Effect.fnUntraced(function* (config: TerminalSessionInput) {
+	lookup: Effect.fnUntraced(function* (config: {
+		readonly command?: ChildProcess.StandardCommand
+		readonly cwd: string
+		readonly sessionId?: string
+	}) {
 		const context = yield* Layer.buildWithScope(Terminal.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Terminal)
@@ -247,11 +278,30 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const agentCommand = yield* AgentCommand
 		const portless = yield* Portless
 		const usage = yield* Usage
-		const portlessScripts = yield* Ref.make(HashMap.empty<string, PortlessPreparedRun>())
-		const packageScripts = yield* Ref.make(HashMap.empty<string, PackagePreparedRun>())
-		const portlessStatusWatchers = yield* Ref.make(new Set<string>())
-		const runStatuses = yield* SubscriptionRef.make(HashMap.empty<string, AgentSession['state']>())
-		const resolvedTerminals = yield* Ref.make(HashMap.empty<string, TerminalSessionInput>())
+		const portlessScripts = yield* Ref.make(
+			HashMap.empty<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>()
+		)
+		const packageScripts = yield* Ref.make(
+			HashMap.empty<
+				ScriptSessionKey,
+				{
+					readonly command: string
+					readonly cwd: string
+					readonly preparedCommand: ChildProcess.StandardCommand
+					readonly scriptName: string
+					readonly sessionId: string
+					readonly taskId: string
+				}
+			>()
+		)
+		const portlessStatusWatchers = yield* Ref.make(HashSet.empty<ScriptSessionKey>())
+		const runStatuses = yield* SubscriptionRef.make(HashMap.empty<ScriptSessionKey, AgentSession['state']>())
+		const resolvedTerminals = yield* Ref.make(
+			HashMap.empty<
+				TerminalStatusKey,
+				{readonly command?: ChildProcess.StandardCommand; readonly cwd: string; readonly sessionId?: string}
+			>()
+		)
 
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
@@ -284,18 +334,24 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 
 		const terminalSession = Effect.fnUntraced(function* (input: TerminalPayload) {
-			if (input.sessionId === undefined || input.command !== undefined) return input
+			if (Predicate.isUndefined(input.sessionId) || Predicate.isNotUndefined(input.command)) return input
 
-			const scriptKey = portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})
-			let portlessScript = pipe(yield* Ref.get(portlessScripts), HashMap.get(scriptKey), Option.getOrUndefined)
-			if (portlessScript === undefined) {
-				yield* pipe(
-					RcMap.get(portlessWorktrees, input.cwd),
-					Effect.withSpan('Workbench.Portless.prepareTerminalSession')
+			const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+			const portlessScript = yield* pipe(
+				Ref.get(portlessScripts),
+				Effect.map(current => pipe(current, HashMap.get(scriptKey), Option.getOrUndefined)),
+				Effect.flatMap(script =>
+					Predicate.isNotUndefined(script)
+						? Effect.succeed(script)
+						: pipe(
+								RcMap.get(portlessWorktrees, input.cwd),
+								Effect.withSpan('Workbench.Portless.prepareTerminalSession'),
+								Effect.andThen(Ref.get(portlessScripts)),
+								Effect.map(current => pipe(current, HashMap.get(scriptKey), Option.getOrUndefined))
+							)
 				)
-				portlessScript = pipe(yield* Ref.get(portlessScripts), HashMap.get(scriptKey), Option.getOrUndefined)
-			}
-			if (portlessScript !== undefined) {
+			)
+			if (Predicate.isNotUndefined(portlessScript)) {
 				return {
 					command: ChildProcess.make(portlessScript.preparedCommand.command, portlessScript.preparedCommand.args, {
 						...portlessScript.preparedCommand.options,
@@ -306,12 +362,21 @@ export const RpcHandlers = RpcContracts.toLayer(
 				}
 			}
 
-			let packageScript = pipe(yield* Ref.get(packageScripts), HashMap.get(scriptKey), Option.getOrUndefined)
-			if (packageScript === undefined) {
-				yield* pipe(RcMap.get(scriptWorktrees, input.cwd), Effect.withSpan('Workbench.Scripts.prepareTerminalSession'))
-				packageScript = pipe(yield* Ref.get(packageScripts), HashMap.get(scriptKey), Option.getOrUndefined)
-			}
-			if (packageScript !== undefined) {
+			const packageScript = yield* pipe(
+				Ref.get(packageScripts),
+				Effect.map(current => pipe(current, HashMap.get(scriptKey), Option.getOrUndefined)),
+				Effect.flatMap(script =>
+					Predicate.isNotUndefined(script)
+						? Effect.succeed(script)
+						: pipe(
+								RcMap.get(scriptWorktrees, input.cwd),
+								Effect.withSpan('Workbench.Scripts.prepareTerminalSession'),
+								Effect.andThen(Ref.get(packageScripts)),
+								Effect.map(current => pipe(current, HashMap.get(scriptKey), Option.getOrUndefined))
+							)
+				)
+			)
+			if (Predicate.isNotUndefined(packageScript)) {
 				return {command: packageScript.preparedCommand, cwd: packageScript.cwd, sessionId: packageScript.sessionId}
 			}
 
@@ -319,36 +384,35 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const session = yield* pipe(terminalSession(input), Effect.map(terminalSessionInput))
-			yield* Ref.update(resolvedTerminals, current => HashMap.set(current, terminalStatusKey(input), session))
+			yield* Ref.update(resolvedTerminals, current =>
+				HashMap.set(current, new TerminalStatusKey({cwd: input.cwd, sessionId: input.sessionId}), session)
+			)
 			return yield* RcMap.get(terminals, session)
 		})
 		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
-			if (removed.script === undefined) return
+			if (Predicate.isUndefined(removed.script)) return
 			yield* Ref.set(portlessScripts, removed.current)
 
-			const script = removed.script
-			yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
-			yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
-			yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
+			yield* portless.remove({cwd: removed.script.script.cwd, sessionId: removed.script.script.sessionId})
+			yield* pipe(RcMap.invalidate(portlessWorktrees, removed.script.script.cwd), Effect.ignore)
+			yield* pipe(RcMap.invalidate(scriptWorktrees, removed.script.script.cwd), Effect.ignore)
 		})
 		const watchPortlessRoute = Effect.fnUntraced(function* (
 			input: TerminalPayload,
 			sessionTerminal: {readonly status: SubscriptionRef.SubscriptionRef<AgentSession['state']>}
 		) {
-			if (input.sessionId === undefined) return
+			if (Predicate.isUndefined(input.sessionId)) return
 			const script = pipe(
 				yield* Ref.get(portlessScripts),
-				HashMap.get(portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId})),
+				HashMap.get(new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})),
 				Option.getOrUndefined
 			)
-			if (script === undefined) return
-			const watcherKey = `${script.script.cwd}:${script.script.sessionId}`
+			if (Predicate.isUndefined(script)) return
+			const watcherKey = new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId})
 			const watching = yield* Ref.modify(portlessStatusWatchers, current => {
-				if (current.has(watcherKey)) return [true, current] as const
-				const next = new Set(current)
-				next.add(watcherKey)
-				return [false, next] as const
+				if (HashSet.has(current, watcherKey)) return [true, current] as const
+				return [false, HashSet.add(current, watcherKey)] as const
 			})
 			if (watching) return
 
@@ -358,7 +422,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.runForEach(state =>
 					pipe(
 						SubscriptionRef.update(runStatuses, current =>
-							HashMap.set(current, portlessScriptKey(script.script), state)
+							HashMap.set(
+								current,
+								new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+								state
+							)
 						),
 						Effect.andThen(
 							terminalStatusDone(state)
@@ -369,13 +437,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 										),
 										Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
 										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
-										Effect.andThen(
-											Ref.update(portlessStatusWatchers, current => {
-												const next = new Set(current)
-												next.delete(watcherKey)
-												return next
-											})
-										)
+										Effect.andThen(Ref.update(portlessStatusWatchers, current => HashSet.remove(current, watcherKey)))
 									)
 								: Effect.void
 						)
@@ -419,18 +481,23 @@ export const RpcHandlers = RpcContracts.toLayer(
 												branch: worktree.branch,
 												portlessRuns,
 												root: worktree.root,
-												runStatuses: Object.fromEntries(
-													[
-														...packageRuns.map(run => run.sessionId),
-														...portlessRuns.map(run => run.script.sessionId)
-													].map(sessionId => [
-														sessionId,
-														pipe(
-															statuses,
-															HashMap.get(portlessScriptKey({cwd: worktree.root, sessionId})),
-															Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
-														)
-													])
+												runStatuses: pipe(
+													Array.appendAll(
+														Array.map(packageRuns, run => run.sessionId),
+														Array.map(portlessRuns, run => run.script.sessionId)
+													),
+													Array.map(
+														sessionId =>
+															[
+																sessionId,
+																pipe(
+																	statuses,
+																	HashMap.get(new ScriptSessionKey({cwd: worktree.root, sessionId})),
+																	Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+																)
+															] as const
+													),
+													Record.fromEntries
 												),
 												scriptRuns: packageRuns
 											}
@@ -453,7 +520,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const removeAgent = Effect.fnUntraced(function* (payload: typeof AgentSessionKey.Type) {
 			const session = pipe(yield* SubscriptionRef.get(agents), HashMap.get(payload), Option.getOrUndefined)
 			yield* SubscriptionRef.update(agents, current => HashMap.remove(current, payload))
-			if (session === undefined) return
+			if (Predicate.isUndefined(session)) return
 
 			const input = terminalSessionInput({
 				args: session.args,
@@ -463,12 +530,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 			})
 			yield* pipe(
 				RcMap.get(terminals, input),
-				Effect.flatMap(terminal => terminal.stop()),
+				Effect.flatMap(terminal => terminal.stop),
 				Effect.ignore
 			)
 			yield* pipe(RcMap.invalidate(terminals, input), Effect.ignore)
 			yield* Ref.update(resolvedTerminals, current =>
-				HashMap.remove(current, portlessScriptKey({cwd: payload.cwd, sessionId: payload.uuid}))
+				HashMap.remove(current, new TerminalStatusKey({cwd: payload.cwd, sessionId: payload.uuid}))
 			)
 		})
 
@@ -491,85 +558,86 @@ export const RpcHandlers = RpcContracts.toLayer(
 						)
 					)
 				),
-			'agents.create': payload =>
-				Effect.gen(function* () {
-					const preparedCommand = yield* pipe(
-						agentCommand.command({cwd: payload.cwd, profileId: payload.profileId}),
-						Effect.mapError(cause => new TerminalError({cause, message: cause.message}))
-					)
-					const profiles = yield* agentCommand.profiles
-					const profile = pipe(
-						profiles,
-						Array.findFirst(candidate => candidate.id === payload.profileId),
-						Option.getOrUndefined
-					)
-					if (profile === undefined) {
-						return yield* new TerminalError({message: `Unknown agent profile: ${payload.profileId}`})
-					}
-					const agentSession = makeAgentSession({
-						cwd: payload.cwd,
-						preparedCommand,
-						profile,
-						sessions: yield* SubscriptionRef.get(agents),
-						uuid: randomUUID()
-					})
+			'agents.create': Effect.fn('WorkbenchRpc.agents.create')(function* (payload: AgentCommandRequest) {
+				const preparedCommand = yield* pipe(
+					agentCommand.command({cwd: payload.cwd, profileId: payload.profileId}),
+					Effect.mapError(cause => new TerminalError({cause, message: cause.message}))
+				)
+				const profiles = yield* agentCommand.profiles
+				const profile = pipe(
+					profiles,
+					Array.findFirst(candidate => candidate.id === payload.profileId),
+					Option.getOrUndefined
+				)
+				if (Predicate.isUndefined(profile)) {
+					return yield* new TerminalError({message: `Unknown agent profile: ${payload.profileId}`})
+				}
+				const agentSession = makeAgentSession({
+					cwd: payload.cwd,
+					preparedCommand,
+					profile,
+					sessions: yield* SubscriptionRef.get(agents),
+					uuid: randomUUID()
+				})
 
-					yield* SubscriptionRef.update(agents, sessions =>
-						HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
-					)
-					const input = yield* terminalSession(
-						TerminalPayload.make({
-							args: agentSession.args,
-							command: agentSession.command,
-							cwd: agentSession.cwd,
-							sessionId: agentSession.uuid
-						})
-					).pipe(Effect.map(terminalSessionInput))
-					yield* Ref.update(resolvedTerminals, sessions =>
-						HashMap.set(sessions, portlessScriptKey({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
-					)
-					const sessionTerminal = yield* RcMap.get(terminals, input)
-					yield* sessionTerminal.restart()
-					const key = AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid})
-					yield* pipe(
-						Effect.scoped(
-							pipe(
-								SubscriptionRef.changes(sessionTerminal.status),
-								Stream.takeUntil(state => terminalStatusDone(state)),
-								Stream.runForEach(state =>
-									pipe(
-										SubscriptionRef.update(agents, sessions =>
-											HashMap.modifyAt(
-												sessions,
-												key,
-												Option.match({onNone: () => Option.none(), onSome: session => Option.some({...session, state})})
-											)
-										),
-										Effect.andThen(
-											terminalStatusDone(state)
-												? pipe(
-														SubscriptionRef.update(agents, sessions => HashMap.remove(sessions, key)),
-														Effect.andThen(pipe(RcMap.invalidate(terminals, input), Effect.ignore)),
-														Effect.andThen(
-															Ref.update(resolvedTerminals, sessions =>
-																HashMap.remove(
-																	sessions,
-																	portlessScriptKey({cwd: agentSession.cwd, sessionId: agentSession.uuid})
-																)
+				yield* SubscriptionRef.update(agents, sessions =>
+					HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
+				)
+				const input = yield* terminalSession(
+					TerminalPayload.make({
+						args: agentSession.args,
+						command: agentSession.command,
+						cwd: agentSession.cwd,
+						sessionId: agentSession.uuid
+					})
+				).pipe(Effect.map(terminalSessionInput))
+				yield* Ref.update(resolvedTerminals, sessions =>
+					HashMap.set(sessions, new TerminalStatusKey({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
+				)
+				const sessionTerminal = yield* RcMap.get(terminals, input)
+				yield* sessionTerminal.restart
+				const key = AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid})
+				yield* pipe(
+					Effect.scoped(
+						pipe(
+							SubscriptionRef.changes(sessionTerminal.status),
+							Stream.takeUntil(state => terminalStatusDone(state)),
+							Stream.runForEach(state =>
+								pipe(
+									SubscriptionRef.update(agents, sessions =>
+										pipe(
+											HashMap.get(sessions, key),
+											Option.match({
+												onNone: () => sessions,
+												onSome: session => HashMap.set(sessions, key, {...session, state})
+											})
+										)
+									),
+									Effect.andThen(
+										terminalStatusDone(state)
+											? pipe(
+													SubscriptionRef.update(agents, sessions => HashMap.remove(sessions, key)),
+													Effect.andThen(pipe(RcMap.invalidate(terminals, input), Effect.ignore)),
+													Effect.andThen(
+														Ref.update(resolvedTerminals, sessions =>
+															HashMap.remove(
+																sessions,
+																new TerminalStatusKey({cwd: agentSession.cwd, sessionId: agentSession.uuid})
 															)
 														)
 													)
-												: Effect.void
-										)
+												)
+											: Effect.void
 									)
 								)
 							)
-						),
-						Effect.forkDetach
-					)
+						)
+					),
+					Effect.forkDetach
+				)
 
-					return agentSession
-				}),
+				return agentSession
+			}),
 			'agents.profiles': () => agentCommand.profiles,
 			'agents.remove': payload => removeAgent(AgentSessionKey.make(payload)),
 			'home.sidebar': () =>
@@ -596,15 +664,17 @@ export const RpcHandlers = RpcContracts.toLayer(
 					RcMap.get(gitPublishes, payload.cwd),
 					Effect.flatMap(publish => publish.approve({message: payload.message}))
 				),
-			'publish.message.generate': payload =>
-				Effect.scoped(
+			'publish.message.generate': Effect.fn('WorkbenchRpc.publish.message.generate')(function* (payload: {
+				readonly cwd: string
+			}) {
+				return yield* Effect.scoped(
 					Effect.gen(function* () {
 						const review = yield* RcMap.get(gitReviews, payload.cwd)
-						const diffs = yield* review.reviewDiffs({_tag: 'changes'})
+						const diffs = yield* review.reviewDiffs(new GitReviewChangesTarget({}))
 						if (Array.isReadonlyArrayEmpty(diffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
-						const metadata = yield* review.metadata()
+						const metadata = yield* review.metadata
 						const recentSubjects = pipe(
 							Array.appendAll(metadata.localCommits, metadata.branchCommits),
 							Array.take(10),
@@ -624,7 +694,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 							}),
 							Stream.runFold(
 								() => '',
-								(message: string, part) => (part.type === 'text-delta' ? `${message}${part.delta}` : message)
+								(message, part) => (part.type === 'text-delta' ? `${message}${part.delta}` : message)
 							),
 							Effect.map(message => String.trim(message))
 						)
@@ -632,12 +702,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (String.isEmpty(text)) return yield* new AiError({message: 'Generated commit message was empty.'})
 						return text
 					})
-				),
+				)
+			}),
 			'review.comments.resolve': payload =>
 				pipe(
 					RcMap.get(gitReviews, payload.cwd),
 					Effect.flatMap(review =>
-						payload.threadId === undefined
+						Predicate.isUndefined(payload.threadId)
 							? review.resolveComment({filePath: payload.filePath, lineNumber: payload.lineNumber, side: payload.side})
 							: review.resolveReviewThread(payload.threadId)
 					)
@@ -686,7 +757,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						getTerminal(TerminalPayload.make(payload)),
 						Effect.map(sessionTerminal =>
 							sessionTerminal.attach(
-								payload.cols === undefined || payload.rows === undefined
+								Predicate.isUndefined(payload.cols) || Predicate.isUndefined(payload.rows)
 									? undefined
 									: {cols: payload.cols, rows: payload.rows}
 							)
@@ -698,48 +769,52 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
-			'terminal.restart': payload =>
-				Effect.gen(function* () {
-					const input = TerminalPayload.make(payload)
-					const sessionTerminal = yield* getTerminal(input)
-					const status = yield* sessionTerminal.restart()
-					if (input.sessionId !== undefined) {
-						yield* SubscriptionRef.update(runStatuses, current =>
-							HashMap.set(current, portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId ?? ''}), status)
-						)
-					}
-					yield* watchPortlessRoute(input, sessionTerminal)
-					return status
-				}),
+			'terminal.restart': Effect.fn('WorkbenchRpc.terminal.restart')(function* (payload: TerminalPayload) {
+				const input = TerminalPayload.make(payload)
+				const sessionTerminal = yield* getTerminal(input)
+				const status = yield* sessionTerminal.restart
+				if (Predicate.isNotUndefined(input.sessionId)) {
+					const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+				}
+				yield* watchPortlessRoute(input, sessionTerminal)
+				return status
+			}),
 			'terminal.status': payload =>
 				Stream.unwrap(
 					Effect.gen(function* () {
 						const input = TerminalPayload.make(payload)
-						const statusKey = terminalStatusKey(input)
+						const statusKey = new TerminalStatusKey({cwd: input.cwd, sessionId: input.sessionId})
+						const scriptKey = Predicate.isUndefined(input.sessionId)
+							? undefined
+							: new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
 						const session = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
-						const activeSession =
-							session === undefined
-								? false
-								: Array.some(Array.fromIterable(yield* RcMap.keys(terminals)), current =>
-										sameTerminalSession(current, session)
+						const activeSession = Predicate.isUndefined(session)
+							? false
+							: Array.some(Array.fromIterable(yield* RcMap.keys(terminals)), current =>
+									Equal.equals(new TerminalSessionIdentity(current), new TerminalSessionIdentity(session))
+								)
+						if (!activeSession || Predicate.isUndefined(session)) {
+							const idle = Predicate.isUndefined(scriptKey)
+								? ({state: 'idle' as const, title: ''} satisfies AgentSession['state'])
+								: pipe(
+										yield* SubscriptionRef.get(runStatuses),
+										HashMap.get(scriptKey),
+										Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
 									)
-						if (!activeSession || session === undefined) {
-							const idle = pipe(
-								yield* SubscriptionRef.get(runStatuses),
-								HashMap.get(statusKey),
-								Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
-							)
 							return pipe(
 								Stream.make(idle),
 								Stream.concat(
 									pipe(
 										SubscriptionRef.changes(runStatuses),
 										Stream.map(statuses =>
-											pipe(
-												statuses,
-												HashMap.get(statusKey),
-												Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
-											)
+											Predicate.isUndefined(scriptKey)
+												? ({state: 'idle' as const, title: ''} satisfies AgentSession['state'])
+												: pipe(
+														statuses,
+														HashMap.get(scriptKey),
+														Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+													)
 										),
 										Stream.changes
 									)
@@ -752,21 +827,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 						return pipe(Stream.make(state), Stream.concat(SubscriptionRef.changes(sessionTerminal.status)))
 					})
 				),
-			'terminal.stop': payload =>
-				Effect.gen(function* () {
-					const input = TerminalPayload.make(payload)
-					const status = yield* pipe(
-						getTerminal(input),
-						Effect.flatMap(sessionTerminal => sessionTerminal.stop())
-					)
-					if (input.sessionId !== undefined) {
-						yield* SubscriptionRef.update(runStatuses, current =>
-							HashMap.set(current, portlessScriptKey({cwd: input.cwd, sessionId: input.sessionId ?? ''}), status)
-						)
-					}
-					yield* releasePortlessRoute(input)
-					return status
-				}),
+			'terminal.stop': Effect.fn('WorkbenchRpc.terminal.stop')(function* (payload: TerminalPayload) {
+				const input = TerminalPayload.make(payload)
+				const status = yield* pipe(
+					getTerminal(input),
+					Effect.flatMap(sessionTerminal => sessionTerminal.stop)
+				)
+				if (Predicate.isNotUndefined(input.sessionId)) {
+					const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+				}
+				yield* releasePortlessRoute(input)
+				return status
+			}),
 			'terminal.write': payload =>
 				pipe(
 					getTerminal(TerminalPayload.make(payload)),

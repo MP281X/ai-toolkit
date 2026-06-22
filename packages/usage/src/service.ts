@@ -1,56 +1,27 @@
 import {cpus, freemem, homedir, totalmem} from 'node:os'
 
-import {Config, Context, Effect, FileSystem, Layer, Schema, Stream, pipe} from 'effect'
+import {Array, Config, Context, Effect, FileSystem, Layer, Match, Predicate, Schema, Stream, pipe} from 'effect'
 
 import {HttpClient} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-import {SystemUsage, UsageError, UsageProvider, UsageWindow} from './schema.ts'
-
-const ClaudeCredentials = Schema.fromJsonString(
-	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
-)
-
-const ClaudeUsageWindow = Schema.Struct({
-	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
-	utilization: Schema.Number
-})
-
-const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
-
-const CodexCredentials = Schema.fromJsonString(Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})}))
-
-const CodexUsageWindow = Schema.Struct({
-	reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
-	used_percent: Schema.Number
-})
-
-const CodexUsage = Schema.Struct({
-	rate_limit: Schema.Struct({primary_window: CodexUsageWindow, secondary_window: CodexUsageWindow})
-})
-
-function codexWindow(window: typeof CodexUsageWindow.Type) {
-	return new UsageWindow({
-		resetsAt: typeof window.reset_at === 'number' ? new Date(window.reset_at * 1000).toISOString() : undefined,
-		utilization: window.used_percent
-	})
-}
+import {
+	ClaudeCredentials,
+	ClaudeUsage,
+	CodexCredentials,
+	CodexUsage,
+	SystemUsage,
+	UsageError,
+	UsageProvider,
+	UsageWindow
+} from './schema.ts'
 
 function cpuTimes() {
-	return cpus().reduce(
-		(total, cpu) => ({
-			idle: total.idle + cpu.times.idle,
-			total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
-		}),
-		{idle: 0, total: 0}
-	)
+	return Array.reduce(cpus(), {idle: 0, total: 0}, (total, cpu) => ({
+		idle: total.idle + cpu.times.idle,
+		total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
+	}))
 }
-
-function usageError(error: unknown) {
-	return error instanceof UsageError ? error : new UsageError({cause: error})
-}
-
-const fallbackClaudeVersion = '2.0.31'
 
 export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage', {
 	make: Effect.gen(function* () {
@@ -88,8 +59,8 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 		const claudeVersion = yield* Effect.cached(
 			pipe(
 				commandOutput('claude', ['--version']),
-				Effect.map(output => /\d+\.\d+\.\d+/u.exec(output)?.[0] ?? fallbackClaudeVersion),
-				Effect.orElseSucceed(() => fallbackClaudeVersion)
+				Effect.map(output => /\d+\.\d+\.\d+/u.exec(output)?.[0] ?? '2.0.31'),
+				Effect.orElseSucceed(() => '2.0.31')
 			)
 		)
 
@@ -130,21 +101,23 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 
 		const claude = pipe(
 			Effect.all({token: claudeToken, version: claudeVersion}, {concurrency: 2}),
-			Effect.flatMap(({token, version}) =>
+			Effect.flatMap(credentials =>
 				client.get('https://api.anthropic.com/api/oauth/usage', {
 					headers: {
 						'anthropic-beta': 'oauth-2025-04-20',
-						authorization: `Bearer ${token}`,
-						'user-agent': `claude-code/${version}`
+						authorization: `Bearer ${credentials.token}`,
+						'user-agent': `claude-code/${credentials.version}`
 					}
 				})
 			),
 			Effect.flatMap(response =>
 				Effect.gen(function* () {
-					if (response.status === 401) return yield* new UsageError({message: 'not signed in'})
-					if (response.status !== 200) {
-						return yield* new UsageError({message: `claude usage responded with status ${response.status}`})
-					}
+					yield* pipe(
+						Match.value(response.status),
+						Match.when(401, () => new UsageError({message: 'not signed in'})),
+						Match.when(200, () => Effect.void),
+						Match.orElse(status => new UsageError({message: `claude usage responded with status ${status}`}))
+					)
 					const usage = yield* Effect.flatMap(response.json, Schema.decodeUnknownEffect(ClaudeUsage))
 					return new UsageProvider({
 						fiveHour: new UsageWindow({
@@ -159,7 +132,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 				})
 			),
 			Effect.timeout('10 seconds'),
-			Effect.mapError(usageError),
+			Effect.mapError(cause => new UsageError({cause})),
 			Effect.withSpan('Usage.claude')
 		)
 
@@ -170,19 +143,31 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			),
 			Effect.flatMap(response =>
 				Effect.gen(function* () {
-					if (response.status === 401) return yield* new UsageError({message: 'not signed in'})
-					if (response.status !== 200) {
-						return yield* new UsageError({message: `codex usage responded with status ${response.status}`})
-					}
+					yield* pipe(
+						Match.value(response.status),
+						Match.when(401, () => new UsageError({message: 'not signed in'})),
+						Match.when(200, () => Effect.void),
+						Match.orElse(status => new UsageError({message: `codex usage responded with status ${status}`}))
+					)
 					const usage = yield* Effect.flatMap(response.json, Schema.decodeUnknownEffect(CodexUsage))
 					return new UsageProvider({
-						fiveHour: codexWindow(usage.rate_limit.primary_window),
-						weekly: codexWindow(usage.rate_limit.secondary_window)
+						fiveHour: new UsageWindow({
+							resetsAt: Predicate.isNumber(usage.rate_limit.primary_window.reset_at)
+								? new Date(usage.rate_limit.primary_window.reset_at * 1000).toISOString()
+								: undefined,
+							utilization: usage.rate_limit.primary_window.used_percent
+						}),
+						weekly: new UsageWindow({
+							resetsAt: Predicate.isNumber(usage.rate_limit.secondary_window.reset_at)
+								? new Date(usage.rate_limit.secondary_window.reset_at * 1000).toISOString()
+								: undefined,
+							utilization: usage.rate_limit.secondary_window.used_percent
+						})
 					})
 				})
 			),
 			Effect.timeout('10 seconds'),
-			Effect.mapError(usageError),
+			Effect.mapError(cause => new UsageError({cause})),
 			Effect.withSpan('Usage.codex')
 		)
 

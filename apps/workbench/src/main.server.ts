@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url'
 
 import {NodeHttpServer, NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Config, Layer, pipe} from 'effect'
+import {Array, Config, Layer, Option, Predicate, String, pipe} from 'effect'
 
 import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
@@ -18,45 +18,45 @@ const clientRoot = fileURLToPath(new URL('./client', import.meta.url))
 const indexFile = path.join(clientRoot, 'index.html')
 
 function contentType(file: string) {
-	if (file.endsWith('.html')) return 'text/html; charset=utf-8'
-	if (file.endsWith('.css')) return 'text/css; charset=utf-8'
-	if (file.endsWith('.js') || file.endsWith('.mjs')) return 'text/javascript; charset=utf-8'
-	if (file.endsWith('.json')) return 'application/json; charset=utf-8'
-	if (file.endsWith('.png')) return 'image/png'
-	if (file.endsWith('.svg')) return 'image/svg+xml'
-	if (file.endsWith('.woff2')) return 'font/woff2'
+	if (String.endsWith('.html')(file)) return 'text/html; charset=utf-8'
+	if (String.endsWith('.css')(file)) return 'text/css; charset=utf-8'
+	if (String.endsWith('.js')(file) || String.endsWith('.mjs')(file)) return 'text/javascript; charset=utf-8'
+	if (String.endsWith('.json')(file)) return 'application/json; charset=utf-8'
+	if (String.endsWith('.png')(file)) return 'image/png'
+	if (String.endsWith('.svg')(file)) return 'image/svg+xml'
+	if (String.endsWith('.woff2')(file)) return 'font/woff2'
 	return 'application/octet-stream'
 }
 
 function localHostname(host: string | undefined) {
-	return host?.split(':')[0]
+	if (Predicate.isUndefined(host)) return
+	return pipe(host, String.split(':'), Array.head, Option.getOrUndefined)
 }
 
 function localRequest(request: IncomingMessage) {
 	const hostname = localHostname(request.headers.host)
-	return hostname === undefined || hostname === 'localhost'
-}
-
-function serverResponse(value: unknown): value is ServerResponse {
-	return value instanceof ServerResponse
+	return Predicate.isUndefined(hostname) || hostname === 'localhost'
 }
 
 function staticFile(url: string | undefined) {
 	const pathname = decodeURIComponent(new URL(url ?? '/', 'http://localhost').pathname)
 	const requested = path.resolve(clientRoot, `.${pathname}`)
-	if (!requested.startsWith(`${clientRoot}${path.sep}`) && requested !== clientRoot) return
+	if (!String.startsWith(`${clientRoot}${path.sep}`)(requested) && requested !== clientRoot) return
 
 	const file = requested === clientRoot ? indexFile : requested
 	try {
 		return statSync(file).isFile() ? file : indexFile
 	} catch {
-		return pathname.startsWith('/assets/') ? undefined : indexFile
+		return String.startsWith('/assets/')(pathname) ? undefined : indexFile
 	}
 }
 
-function serveStatic(request: IncomingMessage, response: ServerResponse) {
+function serveStatic(
+	request: IncomingMessage,
+	response: {readonly end: ServerResponse['end']; readonly writeHead: ServerResponse['writeHead']}
+) {
 	const file = staticFile(request.url)
-	if (file === undefined) {
+	if (Predicate.isUndefined(file)) {
 		response.writeHead(404).end()
 		return
 	}
@@ -74,12 +74,12 @@ function createWorkbenchServer() {
 	const server = createServer()
 	const emit = server.emit.bind(server)
 	server.emit = (event: string | symbol, ...args: unknown[]) => {
-		if (event === 'request' && args[0] instanceof IncomingMessage && serverResponse(args[1])) {
+		if (event === 'request' && args[0] instanceof IncomingMessage && args[1] instanceof ServerResponse) {
 			const request = args[0]
 			if (
 				localRequest(request) &&
-				request.url !== undefined &&
-				!request.url.startsWith('/api/rpc') &&
+				Predicate.isNotUndefined(request.url) &&
+				!String.startsWith('/api/rpc')(request.url) &&
 				(request.method === 'GET' || request.method === 'HEAD')
 			) {
 				serveStatic(request, args[1])
@@ -87,7 +87,7 @@ function createWorkbenchServer() {
 			}
 		}
 
-		return Reflect.apply(emit, server, [event, ...args])
+		return emit(event, ...args)
 	}
 
 	return server

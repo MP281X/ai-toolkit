@@ -19,3 +19,30 @@ export class SystemUsage extends Schema.Class<SystemUsage>('SystemUsage')({
 	cpuUtilization: Schema.Number,
 	memoryUtilization: Schema.Number
 }) {}
+
+export const ClaudeCredentials = Schema.fromJsonString(
+	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
+)
+
+class ClaudeUsageWindow extends Schema.Class<ClaudeUsageWindow>('ClaudeUsageWindow')({
+	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
+	utilization: Schema.Number
+}) {}
+
+export class ClaudeUsage extends Schema.Class<ClaudeUsage>('ClaudeUsage')({
+	five_hour: ClaudeUsageWindow,
+	seven_day: ClaudeUsageWindow
+}) {}
+
+export const CodexCredentials = Schema.fromJsonString(
+	Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})})
+)
+
+export class CodexUsageWindow extends Schema.Class<CodexUsageWindow>('CodexUsageWindow')({
+	reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
+	used_percent: Schema.Number
+}) {}
+
+export class CodexUsage extends Schema.Class<CodexUsage>('CodexUsage')({
+	rate_limit: Schema.Struct({primary_window: CodexUsageWindow, secondary_window: CodexUsageWindow})
+}) {}

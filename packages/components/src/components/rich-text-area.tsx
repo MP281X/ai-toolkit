@@ -1,4 +1,4 @@
-import {Array, Number, Option, Order, Predicate, Record, String, pipe} from 'effect'
+import {Array, HashSet, Number, Option, Order, Predicate, Record, String, pipe} from 'effect'
 
 import {LexicalComposer} from '@lexical/react/LexicalComposer'
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext'
@@ -58,55 +58,54 @@ class TokenNode extends Lexical.TextNode {
 }
 
 class Item<TValue extends RichTextArea.Value> extends MenuOption {
-	public readonly entry: TextAreaEntry<TValue>
+	public readonly entry: RichTextArea.Entry<TValue>
 
-	public constructor(entry: TextAreaEntry<TValue>, key: string) {
+	public constructor(entry: RichTextArea.Entry<TValue>, key: string) {
 		super(key)
 		this.entry = entry
 	}
 }
 
-function emptySnapshot<TValue extends RichTextArea.Value = RichTextArea.Value>() {
-	return {
-		editorState: {
-			root: {
-				children: [{children: [], direction: null, format: '', indent: 0, type: 'paragraph', version: 1}],
-				direction: null,
-				format: '',
-				indent: 0,
-				type: 'root',
-				version: 1
-			}
-		} satisfies Lexical.SerializedEditorState<Lexical.SerializedRootNode>,
-		text: '',
-		tokens: Array.empty<TextAreaToken<TValue>>()
-	}
-}
+class TokenRegistry<TValue extends RichTextArea.Value> extends Map<string, RichTextArea.Token<TValue>> {}
 
 function editorSnapshot<TValue extends RichTextArea.Value>(
 	editor: Lexical.LexicalEditor | undefined,
-	tokensMap: Map<string, TextAreaToken<TValue>>
+	tokensMap: Map<string, RichTextArea.Token<TValue>>
 ) {
-	if (!editor) return emptySnapshot<TValue>()
+	if (!editor) {
+		const emptyEditor = Lexical.createEditor({namespace: 'rich-text-area', nodes: [TokenNode]})
+		emptyEditor.update(
+			() => {
+				Lexical.$getRoot().append(Lexical.$createParagraphNode())
+			},
+			{discrete: true}
+		)
+
+		return {
+			editorState: emptyEditor.getEditorState().toJSON(),
+			text: '',
+			tokens: Array.empty<RichTextArea.Token<TValue>>()
+		}
+	}
 
 	const editorState = editor.getEditorState().toJSON()
-	const ids = new Set<string>()
 	const text = editor.getEditorState().read(() => {
-		const tokens = Array.empty<TextAreaToken<TValue>>()
+		const ids = Array.empty<string>()
+		const tokens = Array.empty<RichTextArea.Token<TValue>>()
 		for (const node of Lexical.$getRoot().getAllTextNodes()) {
 			if (!(node instanceof TokenNode)) continue
 
-			ids.add(node.__id)
+			ids.push(node.__id)
 
 			const value = tokensMap.get(node.__id)
 			if (value) tokens.push(value)
 		}
 
-		return {text: String.trim(Lexical.$getRoot().getTextContent()), tokens}
+		return {ids: HashSet.fromIterable(ids), text: String.trim(Lexical.$getRoot().getTextContent()), tokens}
 	})
 
 	for (const id of tokensMap.keys()) {
-		if (!ids.has(id)) tokensMap.delete(id)
+		if (!HashSet.has(text.ids, id)) tokensMap.delete(id)
 	}
 
 	return {editorState, text: text.text, tokens: text.tokens}
@@ -115,7 +114,7 @@ function editorSnapshot<TValue extends RichTextArea.Value>(
 function restore<TValue extends RichTextArea.Value>(
 	editor: Lexical.LexicalEditor | undefined,
 	snapshot: Readonly<RichTextArea.Snapshot<TValue>>,
-	tokensMap: Map<string, TextAreaToken<TValue>>
+	tokensMap: Map<string, RichTextArea.Token<TValue>>
 ) {
 	if (!editor) return
 
@@ -123,7 +122,7 @@ function restore<TValue extends RichTextArea.Value>(
 
 	for (const token of snapshot.tokens) tokensMap.set(token.id, token)
 
-	editor.setEditorState(editor.parseEditorState(JSON.stringify(snapshot.editorState)))
+	editor.setEditorState(editor.parseEditorState(snapshot.editorState))
 }
 
 function getItems<TValue extends RichTextArea.Value>(
@@ -143,21 +142,28 @@ function getItems<TValue extends RichTextArea.Value>(
 			const query = String.toLowerCase(search.query)
 			if (String.isEmpty(query)) return {score: 0, value}
 
-			let total = 0
-			let queryIndex = 0
-			let lastMatchIndex = -1
 			const label = String.toLowerCase(value.label)
+			const score = Array.reduce(
+				Array.range(0, String.length(label) - 1),
+				{lastMatchIndex: -1, queryIndex: 0, total: 0},
+				(state, index) => {
+					if (state.queryIndex >= String.length(query) || label[index] !== query[state.queryIndex]) return state
 
-			for (let index = 0; index < String.length(label) && queryIndex < String.length(query); index += 1) {
-				if (label[index] !== query[queryIndex]) continue
+					return {
+						lastMatchIndex: index,
+						queryIndex: state.queryIndex + 1,
+						total:
+							state.total +
+							(state.lastMatchIndex === index - 1 ? 8 : 1) +
+							(index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_' ? 4 : 0)
+					}
+				}
+			)
 
-				total += lastMatchIndex === index - 1 ? 8 : 1
-				if (index === 0 || label[index - 1] === '/' || label[index - 1] === '-' || label[index - 1] === '_') total += 4
-				lastMatchIndex = index
-				queryIndex += 1
+			return {
+				score: score.queryIndex === String.length(query) ? score.total - String.length(label) / 1000 : noMatchScore,
+				value
 			}
-
-			return {score: queryIndex === String.length(query) ? total - String.length(label) / 1000 : noMatchScore, value}
 		}),
 		Array.filter(candidate => candidate.score > noMatchScore),
 		Array.sortWith(candidate => -candidate.score, Order.Number),
@@ -184,17 +190,8 @@ function match(text: string, triggers: readonly string[]) {
 
 		return {leadOffset: index, query, replaceableString: String.slice(index)(text), trigger}
 	}
+	return null
 }
-
-type TextAreaEntry<TValue extends RichTextArea.Value = RichTextArea.Value> = {
-	readonly trigger: string
-	readonly value: TValue
-	readonly color: string
-}
-
-type TextAreaToken<TValue extends RichTextArea.Value = RichTextArea.Value> =
-	| ({readonly id: string; readonly kind: 'entry'} & TextAreaEntry<TValue>)
-	| {readonly id: string; readonly kind: 'file'; readonly color: string; readonly file: File}
 
 function currentTextNodeSelection() {
 	const selection = Lexical.$getSelection()
@@ -260,36 +257,30 @@ function closeXmlTag(event: KeyboardEvent) {
 	return true
 }
 
-function EditorPlugin<TValue extends RichTextArea.Value>({
-	editorRef,
-	initialSnapshot,
-	isMenuOpen,
-	onSubmit,
-	tokensRef
-}: {
-	readonly editorRef: {current: Lexical.LexicalEditor | null}
-	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
+function EditorPlugin<TValue extends RichTextArea.Value>(props: {
+	readonly tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
 	readonly initialSnapshot?: Readonly<RichTextArea.Snapshot<TValue>>
 	readonly isMenuOpen: () => boolean
 	readonly onSubmit?: (snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void
+	readonly setEditor: (editor: Lexical.LexicalEditor | null) => void
 }) {
 	const [editor] = useLexicalComposerContext()
 	const initializedRef = useRef(false)
 
 	useEffect(() => {
-		Reflect.set(editorRef, 'current', editor)
+		props.setEditor(editor)
 
 		return () => {
-			Reflect.set(editorRef, 'current', null)
+			props.setEditor(null)
 		}
-	}, [editor, editorRef])
+	}, [editor, props])
 
 	useEffect(() => {
 		if (initializedRef.current) return
 		initializedRef.current = true
 
-		if (Predicate.isNotUndefined(initialSnapshot)) restore(editor, initialSnapshot, tokensRef.current)
-	}, [editor, initialSnapshot, tokensRef])
+		if (Predicate.isNotUndefined(props.initialSnapshot)) restore(editor, props.initialSnapshot, props.tokensRef.current)
+	}, [editor, props.initialSnapshot, props.tokensRef])
 
 	useEffect(
 		() =>
@@ -297,15 +288,15 @@ function EditorPlugin<TValue extends RichTextArea.Value>({
 				Lexical.KEY_ENTER_COMMAND,
 				event => {
 					if (continueList(event ?? undefined)) return true
-					if (event?.shiftKey === true || isMenuOpen() || Predicate.isUndefined(onSubmit)) return false
+					if (event?.shiftKey === true || props.isMenuOpen() || Predicate.isUndefined(props.onSubmit)) return false
 
 					event?.preventDefault()
-					onSubmit(editorSnapshot(editor, tokensRef.current))
+					props.onSubmit(editorSnapshot(editor, props.tokensRef.current))
 					return true
 				},
 				Lexical.COMMAND_PRIORITY_LOW
 			),
-		[editor, isMenuOpen, onSubmit, tokensRef]
+		[editor, props]
 	)
 
 	useEffect(
@@ -325,17 +316,18 @@ function EditorPlugin<TValue extends RichTextArea.Value>({
 					event.preventDefault()
 
 					editor.update(() => {
-						let selection = Lexical.$getSelection()
+						const currentSelection = Lexical.$getSelection()
+						const selection = Lexical.$isRangeSelection(currentSelection)
+							? currentSelection
+							: pipe(Lexical.$getRoot().selectEnd(), () => Lexical.$getSelection())
 
 						if (!Lexical.$isRangeSelection(selection)) {
-							Lexical.$getRoot().selectEnd()
-							selection = Lexical.$getSelection()
-							if (!Lexical.$isRangeSelection(selection)) return
+							return
 						}
 
 						for (const file of files) {
 							const id = crypto.randomUUID()
-							tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
+							props.tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
 
 							selection.insertNodes([
 								Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
@@ -350,18 +342,18 @@ function EditorPlugin<TValue extends RichTextArea.Value>({
 				},
 				Lexical.COMMAND_PRIORITY_HIGH
 			),
-		[editor, tokensRef]
+		[editor, props.tokensRef]
 	)
 
 	return <HistoryPlugin />
 }
 
 function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
-	readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
+	readonly children?: (entry: RichTextArea.Entry<TValue>) => React.ReactNode
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
 	readonly onClose: () => void
 	readonly onOpen: () => void
-	readonly tokensRef: {current: Map<string, TextAreaToken<TValue>>}
+	readonly tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
 	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
 }) {
 	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>()
@@ -475,6 +467,14 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 
 export declare namespace RichTextArea {
 	export type Value = {readonly label: string}
+	export type Entry<TValue extends Value = Value> = {
+		readonly trigger: string
+		readonly value: TValue
+		readonly color: string
+	}
+	export type Token<TValue extends Value = Value> =
+		| ({readonly id: string; readonly kind: 'entry'} & Entry<TValue>)
+		| {readonly id: string; readonly kind: 'file'; readonly color: string; readonly file: File}
 
 	export type Handle<TValue extends Value = Value> = {
 		readonly getSnapshot: () => Snapshot<TValue>
@@ -486,7 +486,7 @@ export declare namespace RichTextArea {
 	export type Snapshot<TValue extends Value = Value> = {
 		readonly text: string
 		readonly editorState: Lexical.SerializedEditorState
-		readonly tokens: readonly TextAreaToken<TValue>[]
+		readonly tokens: readonly Token<TValue>[]
 	}
 
 	export type Props<TValue extends Value = Value> = {
@@ -494,25 +494,20 @@ export declare namespace RichTextArea {
 		readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
 		readonly onSubmit?: (snapshot: Readonly<Snapshot<TValue>>) => void
 		readonly initialSnapshot?: Readonly<Snapshot<TValue>>
-		readonly children?: (entry: TextAreaEntry<TValue>) => React.ReactNode
+		readonly children?: (entry: Entry<TValue>) => React.ReactNode
 		readonly placeholder?: string
 		readonly className?: string
 	}
 }
 
 export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Value>({
-	children,
-	className,
-	initialSnapshot,
-	onSubmit,
-	options,
-	placeholder,
-	ref
+	ref,
+	...input
 }: RichTextArea.Props<TValue>) {
 	const editorRef = useRef<Lexical.LexicalEditor | null>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
-	const tokensRef = useRef(new Map<string, TextAreaToken<TValue>>())
+	const tokensRef = useRef(new TokenRegistry<TValue>())
 
 	useImperativeHandle(
 		ref,
@@ -520,7 +515,15 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 			clear() {
 				if (!editorRef.current) return
 				menuRef.current = false
-				restore(editorRef.current, emptySnapshot<TValue>(), tokensRef.current)
+				tokensRef.current.clear()
+				editorRef.current.update(
+					() => {
+						const root = Lexical.$getRoot()
+						root.clear()
+						root.append(Lexical.$createParagraphNode())
+					},
+					{discrete: true}
+				)
 			},
 			focus() {
 				editorRef.current?.focus()
@@ -528,7 +531,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 			getSnapshot() {
 				return editorSnapshot(editorRef.current ?? undefined, tokensRef.current)
 			},
-			restore(nextSnapshot) {
+			restore(nextSnapshot: Readonly<RichTextArea.Snapshot<TValue>>) {
 				restore(editorRef.current ?? undefined, nextSnapshot, tokensRef.current)
 			}
 		}),
@@ -536,7 +539,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	)
 
 	return (
-		<div className={cn('relative', className)}>
+		<div className={cn('relative', input.className)}>
 			<LexicalComposer
 				initialConfig={{
 					namespace: 'rich-text-area',
@@ -557,7 +560,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 							}
 							placeholder={
 								<div className="text-muted-foreground pointer-events-none absolute inset-x-2 top-2 select-none">
-									{placeholder ?? 'Write something...'}
+									{input.placeholder ?? 'Write something...'}
 								</div>
 							}
 							ErrorBoundary={LexicalErrorBoundary}
@@ -566,10 +569,12 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				</div>
 
 				<EditorPlugin
-					editorRef={editorRef}
-					initialSnapshot={initialSnapshot}
+					initialSnapshot={input.initialSnapshot}
 					isMenuOpen={() => menuRef.current}
-					onSubmit={onSubmit}
+					onSubmit={input.onSubmit}
+					setEditor={editor => {
+						editorRef.current = editor
+					}}
 					tokensRef={tokensRef}
 				/>
 				<TypeaheadPlugin
@@ -580,34 +585,38 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 					onOpen={() => {
 						menuRef.current = true
 					}}
-					options={options}
+					options={input.options}
 					tokensRef={tokensRef}
 				>
-					{children}
+					{input.children}
 				</TypeaheadPlugin>
 			</LexicalComposer>
 		</div>
 	)
 }
 
-RichTextArea.Actions = (props: {readonly children: React.ReactNode; readonly className?: string}) => (
-	<div
-		className={cn(
-			'border-input bg-card absolute inset-x-0 bottom-full z-40 border border-b-0 shadow-lg',
-			props.className
-		)}
-	>
-		{props.children}
-	</div>
-)
+export function RichTextAreaActions(props: {readonly children: React.ReactNode; readonly className?: string}) {
+	return (
+		<div
+			className={cn(
+				'border-input bg-card absolute inset-x-0 bottom-full z-40 border border-b-0 shadow-lg',
+				props.className
+			)}
+		>
+			{props.children}
+		</div>
+	)
+}
 
-RichTextArea.ToolBar = (props: {readonly children: React.ReactNode; readonly className?: string}) => (
-	<div
-		className={cn(
-			'border-input bg-input/30 flex w-full flex-row items-center justify-between border border-t-0 p-2',
-			props.className
-		)}
-	>
-		{props.children}
-	</div>
-)
+export function RichTextAreaToolBar(props: {readonly children: React.ReactNode; readonly className?: string}) {
+	return (
+		<div
+			className={cn(
+				'border-input bg-input/30 flex w-full flex-row items-center justify-between border border-t-0 p-2',
+				props.className
+			)}
+		>
+			{props.children}
+		</div>
+	)
+}

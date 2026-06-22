@@ -1,11 +1,8 @@
 import {Schema} from 'effect'
 
-import type {ChildProcess} from 'effect/unstable/process'
-
-export type PortlessStatus = typeof PortlessStatus.Type
-export const PortlessStatus = Schema.Struct({
+export class PortlessStatus extends Schema.Class<PortlessStatus>('PortlessStatus')({
 	state: Schema.Literals(['idle', 'prepared', 'running', 'stopped', 'exited', 'failed'])
-})
+}) {}
 
 export class PortlessScript extends Schema.Class<PortlessScript>('PortlessScript')({
 	baseOrigin: Schema.optional(Schema.String),
@@ -35,4 +32,8 @@ export class PortlessRun extends Schema.Class<PortlessRun>('PortlessRun')({
 	status: PortlessStatus
 }) {}
 
-export type PortlessPreparedRun = PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}
+export class PortlessPackageJson extends Schema.Class<PortlessPackageJson>('PortlessPackageJson')({
+	deslop: Schema.optional(Schema.Struct({portless: Schema.optional(Schema.Array(Schema.String))})),
+	name: Schema.optional(Schema.String),
+	scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))
+}) {}

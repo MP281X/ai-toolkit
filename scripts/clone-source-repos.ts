@@ -1,4 +1,4 @@
-import {NodeServices} from '@effect/platform-node'
+import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
 import {Effect, FileSystem} from 'effect'
 
@@ -53,4 +53,4 @@ const program = Effect.gen(function* () {
 	)
 })
 
-await Effect.runPromise(program.pipe(Effect.provide(NodeServices.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))

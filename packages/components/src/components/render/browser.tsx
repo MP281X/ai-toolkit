@@ -1,4 +1,4 @@
-import {DateTime, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, DateTime, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {
 	ArrowLeftIcon,
@@ -22,7 +22,7 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/
 import {cn, formatTimestamp} from '#lib/utils.ts'
 
 function browserUrl(origin: string, rest: string) {
-	return `${origin}${rest.startsWith('/') ? rest : `/${rest}`}`
+	return `${origin}${String.startsWith('/')(rest) ? rest : `/${rest}`}`
 }
 
 function originLabel(origin: string) {
@@ -32,11 +32,10 @@ function originLabel(origin: string) {
 		const url = new URL(origin)
 		return url.host
 	} catch {
-		return origin.replace(/^https?:\/\//u, '')
+		return pipe(origin, String.replace(/^https?:\/\//u, ''))
 	}
 }
 
-type BrowserLog = {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}
 const BrowserMessage = Schema.Union([
 	Schema.Struct({deslopBrowserFavicon: Schema.Literal(true), href: Schema.optional(Schema.String)}),
 	Schema.Struct({deslopBrowserLocation: Schema.Literal(true), path: Schema.optional(Schema.String)}),
@@ -44,32 +43,24 @@ const BrowserMessage = Schema.Union([
 ])
 
 function logLevelClassName(level: string) {
-	if (level === 'error') return 'text-destructive'
-	if (level === 'warn') return 'text-chart-2'
-	if (level === 'info') return 'text-chart-1'
-	if (level === 'debug') return 'text-chart-4'
-
-	return 'text-muted-foreground'
+	return pipe(
+		Match.value(level),
+		Match.when('error', () => 'text-destructive' as const),
+		Match.when('warn', () => 'text-chart-2' as const),
+		Match.when('info', () => 'text-chart-1' as const),
+		Match.when('debug', () => 'text-chart-4' as const),
+		Match.orElse(() => 'text-muted-foreground' as const)
+	)
 }
 
 function LogLevelIcon(props: {readonly level: string}) {
-	if (props.level === 'error') return <CircleAlertIcon className="size-3.5" />
-	if (props.level === 'warn') return <TriangleAlertIcon className="size-3.5" />
-	if (props.level === 'info') return <InfoIcon className="size-3.5" />
-	if (props.level === 'debug') return <BugIcon className="size-3.5" />
-
-	return <CircleIcon className="size-2" />
-}
-
-function isIgnoredBrowserLog(message: string) {
-	const lower = message.toLowerCase()
-
-	return (
-		message.startsWith('[vite]') ||
-		lower.includes('react scan') ||
-		lower.includes('react-scan') ||
-		lower.includes('react grab') ||
-		lower.includes('react-grab')
+	return pipe(
+		Match.value(props.level),
+		Match.when('error', () => <CircleAlertIcon className="size-3.5" />),
+		Match.when('warn', () => <TriangleAlertIcon className="size-3.5" />),
+		Match.when('info', () => <InfoIcon className="size-3.5" />),
+		Match.when('debug', () => <BugIcon className="size-3.5" />),
+		Match.orElse(() => <CircleIcon className="size-2" />)
 	)
 }
 
@@ -82,23 +73,20 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 function BrowserInstance(props: {readonly className?: string; readonly origin: string}) {
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const logIdRef = useRef(0)
-	const origin = props.origin
-	const [currentUrl, setCurrentUrl] = useState(() => (origin ? browserUrl(origin, '/') : ''))
+	const [currentUrl, setCurrentUrl] = useState(() =>
+		String.isNonEmpty(props.origin) ? browserUrl(props.origin, '/') : ''
+	)
 	const [frameKey, setFrameKey] = useState(0)
 	const [address, setAddress] = useState('/')
 	const [faviconUrl, setFaviconUrl] = useState<string>()
-	const [isLoading, setIsLoading] = useState(() => origin !== '')
-	const [logs, setLogs] = useState<readonly BrowserLog[]>([])
-
-	function addLog(level: string, message: string) {
-		if (isIgnoredBrowserLog(message)) return
-
-		setLogs(current => [...current.slice(-199), {id: logIdRef.current++, level, message, time: DateTime.nowUnsafe()}])
-	}
+	const [isLoading, setIsLoading] = useState(() => String.isNonEmpty(props.origin))
+	const [logs, setLogs] = useState<
+		readonly {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}[]
+	>([])
 
 	useLayoutEffect(() => {
 		function onMessage(event: MessageEvent) {
-			if (event.origin !== origin) return
+			if (event.origin !== props.origin) return
 
 			pipe(
 				Schema.decodeUnknownOption(BrowserMessage)(event.data),
@@ -115,7 +103,21 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 							return
 						}
 
-						addLog(data.level, data.message)
+						const lowerMessage = String.toLowerCase(data.message)
+						if (
+							String.startsWith('[vite]')(data.message) ||
+							String.includes('react scan')(lowerMessage) ||
+							String.includes('react-scan')(lowerMessage) ||
+							String.includes('react grab')(lowerMessage) ||
+							String.includes('react-grab')(lowerMessage)
+						) {
+							return
+						}
+
+						setLogs(current => [
+							...Array.takeRight(current, 199),
+							{id: logIdRef.current++, level: data.level, message: data.message, time: DateTime.nowUnsafe()}
+						])
 					}
 				})
 			)
@@ -126,12 +128,12 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 		return () => {
 			window.removeEventListener('message', onMessage)
 		}
-	}, [origin])
+	}, [props.origin])
 
 	function navigate() {
-		if (String.isEmpty(origin)) return
+		if (String.isEmpty(props.origin)) return
 
-		const nextUrl = browserUrl(origin, String.trim(address) || '/')
+		const nextUrl = browserUrl(props.origin, String.trim(address) || '/')
 
 		setLogs([])
 		setCurrentUrl(nextUrl)
@@ -146,16 +148,10 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 	}
 
 	function clearCookies() {
-		if (String.isEmpty(origin)) return
+		if (String.isEmpty(props.origin)) return
 
 		setLogs([])
-		iframeRef.current?.contentWindow?.postMessage({deslopBrowserClear: true}, origin)
-	}
-
-	function openTopLevel() {
-		if (String.isEmpty(currentUrl)) return
-
-		window.open(currentUrl, '_blank', 'noopener,noreferrer')
+		iframeRef.current?.contentWindow?.postMessage({deslopBrowserClear: true}, props.origin)
 	}
 
 	function goBack() {
@@ -198,28 +194,36 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 				</div>
 				<div className="flex min-w-0 flex-1 items-center gap-1">
 					<div className="border-input bg-secondary text-secondary-foreground/70 flex h-8 min-w-0 shrink items-center border px-2 text-xs">
-						<span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{originLabel(origin)}</span>
+						<span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{originLabel(props.origin)}</span>
 					</div>
 					<Input
-						value={address.startsWith('/') ? address.slice(1) : address}
+						value={String.startsWith('/')(address) ? String.slice(1)(address) : address}
 						placeholder=""
 						className="min-w-[7rem] flex-1 text-xs"
 						onChange={event => {
-							setAddress(`/${event.currentTarget.value.replace(/^\/+/, '')}`)
+							setAddress(`/${pipe(event.currentTarget.value, String.replace(/^\/+/u, ''))}`)
 						}}
 					/>
 				</div>
-				<Button type="button" variant="outline" size="icon" aria-label="Open top-level preview" onClick={openTopLevel}>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					aria-label="Open top-level preview"
+					onClick={() => {
+						if (String.isNonEmpty(currentUrl)) window.open(currentUrl, '_blank', 'noopener,noreferrer')
+					}}
+				>
 					<ExternalLinkIcon className="size-3.5" />
 				</Button>
-				{origin && (
+				{String.isNonEmpty(props.origin) && (
 					<Button type="button" variant="outline" size="icon" aria-label="Clear cookies" onClick={clearCookies}>
 						<Trash2Icon className="size-3.5" />
 					</Button>
 				)}
 			</form>
 			<div className="flex min-h-0 flex-1 flex-col">
-				{origin === '' ? (
+				{String.isEmpty(props.origin) ? (
 					<Fallback message="Start a dev server in this worktree terminal to open a browser preview." />
 				) : (
 					<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
@@ -246,7 +250,7 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 						<ResizablePanel collapsible collapsedSize={0} defaultSize={0} minSize={0} maxSize="50%">
 							<div className="flex h-full min-h-0 flex-col overflow-hidden">
 								<div className={cn('min-h-0 flex-1 overflow-auto font-mono text-xs', logs.length === 0 && 'hidden')}>
-									{logs.map(log => (
+									{Array.map(logs, log => (
 										<div key={log.id} className="grid grid-cols-[8rem_1rem_minmax(0,1fr)] gap-3 px-2 py-1">
 											<span className="overflow-hidden whitespace-nowrap select-none">{formatTimestamp(log.time)}</span>
 											<span

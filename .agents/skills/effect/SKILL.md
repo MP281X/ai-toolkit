@@ -17,6 +17,7 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 - Public service method: `Effect.fn("Service.method")`.
 - `Effect.fnUntraced`: private hot path or intentionally untraced only.
 - Effect wrappers own behavior, not delegation.
+- Entrypoints use platform runtimes or Effect Atom runtimes.
 - Promise interop enters Effect at the boundary.
 - Async/await is transitional; convert when the Effect shape stays direct.
 - Resource lifetime: `Scope`.
@@ -46,7 +47,11 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 
 - Schema owns type; infer from schema.
 - Schema classes/tagged classes/tagged errors preferred.
+- Schema classes over Data classes.
+- Exported struct schemas are schema classes.
+- Schemas live in schema modules.
 - Public raw domain strings are branded/literal schemas.
+- JSON parsing/encoding uses schema transforms.
 - Plain schema type immediately before schema value.
 - Construct tagged values through schema-owned constructors/helpers.
 - Validate at boundaries; trust typed internals.
