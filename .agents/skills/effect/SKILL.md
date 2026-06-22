@@ -8,7 +8,7 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 ## Source
 
 - Read `.agents/repos/effect/LLMS.md` before nontrivial Effect work.
-- Prefer Effect module primitives over ad-hoc async/runtime code.
+- Prefer Effect primitives and modules over ad-hoc async/runtime code.
 
 ## Programs
 
@@ -16,6 +16,9 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 - Effectful function with arguments: `Effect.fn("Name")`.
 - Public service method: `Effect.fn("Service.method")`.
 - `Effect.fnUntraced`: private hot path or intentionally untraced only.
+- Effect wrappers own behavior, not delegation.
+- Promise interop enters Effect at the boundary.
+- Async/await is transitional; convert when the Effect shape stays direct.
 - Resource lifetime: `Scope`.
 - Concurrency, retry, schedule, interruption, cleanup: Effect APIs.
 - Fail loud; no fake empty values, swallowed causes, generic fallback.

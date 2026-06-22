@@ -23,21 +23,14 @@
 
 ## Implementation
 
-- Final shape: flat, direct, typed, inferred, functional, pipeable, Effect-native.
-- Structure from domain, Effect, React, or external boundary only.
-- Direct code over wrappers, aliases, helper extraction, and config bags.
-- Inline local mechanics when extraction only hides.
-- Preserve early returns when they simplify flow.
+- Preserve behavior and public boundaries.
+- Structure follows domain, framework, schema, or external boundary.
 - Refactor means old implementation fully replaced.
 - Delete dead code, unused exports, stale tests, obsolete prompts.
-- No compatibility paths.
-- No fallback branches unless behavior requires them.
-- No duplicate implementations.
-- No speculative abstractions.
-- No migration code unless requested.
-- No broad caching, preloading, warming, background refresh to hide slow paths.
-- Optimize actual operation; make cost observable.
-- Type system, schemas, UI state are boundaries; no impossible-state revalidation.
+- Replace obsolete branches; leave no dead compatibility layer.
+- Compatibility, fallback, migration, caching, and background work require behavior need.
+- Optimize actual operation; expose cost.
+- Type system, schemas, and UI state are boundaries.
 - Lockfile: no manual edits; manifest change => package manager generated output.
 - Ask only for undiscoverable scope, success criteria, or major tradeoff.
 

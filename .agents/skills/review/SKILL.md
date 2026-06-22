@@ -19,7 +19,6 @@ description: Use after implementation for read-only review passes over interface
 - Simplification: direct code, fewer helpers, less duplicated state.
 - Dead code: unused exports, obsolete tests, compatibility paths.
 - Signature reduction: one semantic input, inferred locals, no config bags.
-- Rules regression: flag helper extraction, exported-local-type escapes, `let`, import aliases, explicit return types, callback annotations, optional `| undefined`, identity callbacks, nullish comparisons, and Effect wrapper regressions.
 
 ## Output
 

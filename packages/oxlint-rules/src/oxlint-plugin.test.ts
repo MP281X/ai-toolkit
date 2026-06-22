@@ -1,5 +1,5 @@
 // oxlint-disable-next-line @deslop/oxlint-rules/no-import-alias -- fixture
-import {Effect, Record as EffectRecord, Schema} from 'effect'
+import {Effect, Option, Record as EffectRecord, Schema} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 import {describe} from 'vite-plus/test'
@@ -61,12 +61,18 @@ const zeroArgEffectFn = Effect.fn(function* () {
 	return 'ok'
 })
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-nullary-effect-fn, @deslop/oxlint-rules/no-useless-effect-wrapper -- fixture
+const uselessEffectWrapper = Effect.fn('Fixture.useless')(function* () {
+	yield* Effect.succeed('ok')
+})
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
 type Local = string
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const localValue: Local = 'local'
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
 type SharedLocal = {value: string}
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
@@ -99,7 +105,7 @@ function acceptsCallback(callback: (...args: unknown[]) => unknown) {
 	return callback
 }
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-typed-callback-params -- fixture
+// oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-native-prototype-method, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-typed-callback-params -- fixture
 const typedCallback = [1].map((value: number) => value)
 
 const typedGeneratorCallback = acceptsCallback(function* (resume: unknown) {
@@ -117,8 +123,20 @@ type OptionalUndefined = {value?: string | undefined}
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const optionalUndefined: OptionalUndefined = {}
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-pass-through-wrapper -- fixture
+// oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-native-prototype-method, @deslop/oxlint-rules/no-pass-through-wrapper -- fixture
 const identityCallback = [source.value].map(value => value)
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-native-prototype-method -- fixture
+const joinedValues = [source.value].join(',')
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-option-constructor -- fixture
+const constructedOption = Option.some(source.value)
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-native-mutable-collection -- fixture
+const nativeMutableCollection = new Map<string, string>()
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-promise-callback -- fixture
+const promiseCallback = Promise.resolve(source.value).then(value => value)
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-composed-identity-key -- fixture
 export const composedIdentity = source.prefix + source.value
@@ -166,11 +184,17 @@ function matchable(value: 'one' | 'two' | 'three') {
 	return 3
 }
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-pass-through-wrapper -- fixture
+function trivialHandler() {
+	Effect.runSync(Effect.void)
+}
+
 export const fixture = {
 	GitWorkspace,
 	accessAlias,
 	accessField,
 	compare,
+	constructedOption,
 	destructuredValue,
 	effectReturningFunction,
 	emptyRecord,
@@ -180,23 +204,28 @@ export const fixture = {
 	identityCallback,
 	iifeValue,
 	isFixture,
+	joinedValues,
 	localValue,
 	matchable,
 	mutableModuleState,
 	mutableValue,
+	nativeMutableCollection,
 	nulField,
 	nullaryEffect,
 	nullaryEffectWrapper,
 	optionalUndefined,
 	oxlintPlugin,
 	passThrough,
+	promiseCallback,
 	rawTagged,
 	recursiveReturn,
 	sharedLocalOne,
 	sharedLocalTwo,
 	stringValue,
+	trivialHandler,
 	typedCallback,
 	typedGeneratorCallback,
 	untypedGeneratorCallback,
+	uselessEffectWrapper,
 	zeroArgEffectFn
 }

@@ -14,10 +14,6 @@ description: Use when changing Vite Plus tooling, package scripts, linting, form
 - Native Oxlint/plugin rules first.
 - Custom JS plugin rules last.
 - Disable native rules only for generated/vendor files, true conflicts, duplicate worse diagnostics.
-- Native rule before custom rule.
-- Do not add config exceptions to escape bad code.
-- Do not add test-script shims or fixture exclusions to hide tooling issues.
-- New custom rules ship with fixture violations and unused-disable assertions.
 
 ## Scripts
 
