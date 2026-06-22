@@ -25,9 +25,9 @@
 
 - Final shape: flat, direct, typed, inferred, functional, pipeable, Effect-native.
 - Structure from domain, Effect, React, or external boundary only.
-- Direct code > helpers, wrappers, config bags, floating types, casts, assertions.
-- Inline simple types, props, helpers, checks, aliases, derived values.
-- Repeated local code stays visible when extraction only hides.
+- Direct code over wrappers, aliases, helper extraction, and config bags.
+- Inline local mechanics when extraction only hides.
+- Preserve early returns when they simplify flow.
 - Refactor means old implementation fully replaced.
 - Delete dead code, unused exports, stale tests, obsolete prompts.
 - No compatibility paths.

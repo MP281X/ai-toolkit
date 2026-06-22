@@ -14,11 +14,13 @@ description: Use when changing package boundaries, public exports, service inter
 - Apps compose; packages export.
 - Public surface: app-facing services, schemas, contract helpers.
 - Private surface: implementation mechanics, external response details.
+- Public exports are boundary decisions, not lint workarounds.
 
 ## Exports
 
 - Explicit exports.
 - Minimal app-facing entrypoints.
+- Minimal exports.
 - Split exports by runtime compatibility.
 - Schemas/utils must be frontend-backend safe when exported to apps.
 - Services backend-only unless explicitly safe.

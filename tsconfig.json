@@ -10,7 +10,7 @@
 		"noImplicitOverride": true,
 		"allowUnreachableCode": false,
 		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": true,
+		"exactOptionalPropertyTypes": false,
 		"noFallthroughCasesInSwitch": true,
 		"noPropertyAccessFromIndexSignature": true,
 

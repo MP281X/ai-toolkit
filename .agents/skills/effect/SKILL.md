@@ -12,9 +12,9 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 
 ## Programs
 
-- Nullary effect: `Effect.gen`.
-- Effect with arguments: `Effect.fn("Name")`.
-- Public service methods: `Effect.fn("Service.method")`.
+- Nullary work: `Effect.gen` value.
+- Effectful function with arguments: `Effect.fn("Name")`.
+- Public service method: `Effect.fn("Service.method")`.
 - `Effect.fnUntraced`: private hot path or intentionally untraced only.
 - Resource lifetime: `Scope`.
 - Concurrency, retry, schedule, interruption, cleanup: Effect APIs.
@@ -34,7 +34,8 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 - Mutable service state: `SubscriptionRef`.
 - Events/incremental output: `Stream`.
 - Static/computed value: `Effect`.
-- Commands: `(...args) => Effect`.
+- Commands with arguments: `(...args) => Effect`.
+- Public zero-arg commands: Effect fields, not wrapper methods.
 - One fact, one read path; superset wins.
 - Names omit type words: no `stream`, `watch`, `changes`, service-name suffix.
 
@@ -44,6 +45,7 @@ description: Use when writing Effect programs, services, schemas, RPCs, streams,
 - Schema classes/tagged classes/tagged errors preferred.
 - Public raw domain strings are branded/literal schemas.
 - Plain schema type immediately before schema value.
+- Construct tagged values through schema-owned constructors/helpers.
 - Validate at boundaries; trust typed internals.
 
 ## Equality

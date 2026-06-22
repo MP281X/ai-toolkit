@@ -9,26 +9,26 @@ description: Use when editing TypeScript implementation code, public types, loca
 
 - Inference first.
 - Contextual typing first.
+- Use expressions, `pipe`, `Option`/`Predicate`, array combinators, or early returns.
+- Preserve early returns when they simplify flow; do not replace them with accumulator variables.
 - Keep literals inside typed APIs, builders, configs, components.
-- Do not extract then repair with aliases, casts, annotations, `satisfies`.
+- Do not extract then repair with type escape hatches.
 - Exported types only for schemas, public boundaries, external contracts.
 - Minimal public signatures.
 - One semantic input; no overload/config-bag signature unless domain value.
-- Inline one-use prop, parameter, helper, expression, type.
-- Inline local types.
-- No object destructuring; use property access.
-- Array destructuring allowed.
-- Inline access aliases.
-- Inline simple boolean aliases.
+- Inline local mechanics.
+- Prefer `Predicate` for nullish checks.
+- Prefer `Function.identity` for identity callbacks.
 - Repeated local expressions stay visible when extraction only hides.
-- Global `Object` banned; use Effect `Record`, `Struct`, `Array`, or direct access.
+- Use Effect modules over global constructors when an Effect primitive exists.
 
 ## Safety
 
-- No casts/assertions.
+- No casts or assertions.
 - No escape hatches.
 - No file-type downgrade.
 - No lint/type suppression.
+- Do not export types, values, mocks, config, or helpers to silence lint; fix structure instead.
 - No non-null assertions.
 - No `any`.
 - No impossible-state revalidation.
@@ -40,10 +40,4 @@ description: Use when editing TypeScript implementation code, public types, loca
 
 - Reusable guard: top-level `is*`, complex predicate, used more than once.
 - Keep helper only for domain policy, external boundary, distant reuse, nontrivial transformation.
-- Delete one-line helper.
-- Delete access helper.
-- Delete predicate wrapper.
-- Delete signature adapter.
-- Delete callsite-branch helper.
-- Delete one-use helper.
-- Delete helper that needs types only because it exists.
+- Delete helpers that only access, rename, adapt, type-repair, or hide a callsite branch.
