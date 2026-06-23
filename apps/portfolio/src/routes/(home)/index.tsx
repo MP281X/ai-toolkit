@@ -92,18 +92,15 @@ function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
 function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
 	return pipe(
 		Match.value(event),
-		Match.tag('snapshot', next => new PortfolioState({trails: next.trails, visitors: next.visitors})),
-		Match.tag(
-			'visitor-upserted',
-			next => new PortfolioState({trails: state.trails, visitors: upsertVisitor(state.visitors, next.visitor)})
+		Match.tag('snapshot', next => PortfolioState.make({trails: next.trails, visitors: next.visitors})),
+		Match.tag('visitor-upserted', next =>
+			PortfolioState.make({trails: state.trails, visitors: upsertVisitor(state.visitors, next.visitor)})
 		),
-		Match.tag(
-			'visitor-removed',
-			next => new PortfolioState({trails: state.trails, visitors: removeVisitor(state.visitors, next.id)})
+		Match.tag('visitor-removed', next =>
+			PortfolioState.make({trails: state.trails, visitors: removeVisitor(state.visitors, next.id)})
 		),
-		Match.tag(
-			'trail-added',
-			next => new PortfolioState({trails: appendTrail(state.trails, next.trail), visitors: state.visitors})
+		Match.tag('trail-added', next =>
+			PortfolioState.make({trails: appendTrail(state.trails, next.trail), visitors: state.visitors})
 		),
 		Match.exhaustive
 	)
@@ -115,7 +112,7 @@ const portfolioAtom = Atom.keepAlive(
 			RpcClient,
 			Effect.map(client => client('portfolio.join', {color: identity.color, id: identity.id, name: identity.name})),
 			Stream.unwrap,
-			Stream.scan(new PortfolioState({}), applyPortfolioEvent)
+			Stream.scan(PortfolioState.make({}), applyPortfolioEvent)
 		)
 	)
 )

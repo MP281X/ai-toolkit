@@ -332,7 +332,7 @@ function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, rea
 		Match.orElse(() => 'modified' as const)
 	)
 
-	return new GitDiff({
+	return GitDiff.make({
 		filePath,
 		patch: chunk,
 		segments: Option.getOrElse(HashMap.get(segments, filePath), () => Array.empty()),
@@ -341,23 +341,21 @@ function diffFromPatchChunk(chunk: string, segments: HashMap.HashMap<string, rea
 }
 
 function withDisplayedPatchSegments(diffs: readonly GitDiff[], id: string, type: 'commit' | 'worktree') {
-	return Array.map(
-		diffs,
-		diff =>
-			new GitDiff({
-				fileContent: diff.fileContent,
-				filePath: diff.filePath,
-				patch: diff.patch,
-				segments: [new GitDiffSegment({filePath: diff.filePath, fingerprint: diff.patch, id, type})],
-				status: diff.status
-			})
+	return Array.map(diffs, diff =>
+		GitDiff.make({
+			fileContent: diff.fileContent,
+			filePath: diff.filePath,
+			patch: diff.patch,
+			segments: [GitDiffSegment.make({filePath: diff.filePath, fingerprint: diff.patch, id, type})],
+			status: diff.status
+		})
 	)
 }
 
 function commitFromLogLine(line: string) {
 	const parts = String.split('\u0000')(line)
 
-	return new GitCommit({hash: parts[0], shortHash: parts[1] ?? '', subject: parts[2] ?? ''})
+	return GitCommit.make({hash: parts[0], shortHash: parts[1] ?? '', subject: parts[2] ?? ''})
 }
 
 function parseWorktreeRecords(output: string) {
@@ -607,12 +605,11 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					},
 					{concurrency: 'unbounded'}
 				),
-				Effect.map(
-					repository =>
-						new GitRepository({
-							gitDirectory: repository.gitDirectory,
-							root: normalizePublicPath(firstWorktreeRoot(repository.worktrees, root))
-						})
+				Effect.map(repository =>
+					GitRepository.make({
+						gitDirectory: repository.gitDirectory,
+						root: normalizePublicPath(firstWorktreeRoot(repository.worktrees, root))
+					})
 				)
 			)
 		})
@@ -631,12 +628,11 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 			return pipe(
 				worktrees,
-				Array.map(
-					worktree =>
-						new GitWorktree({
-							branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
-							root: normalizePublicPath(worktree.root)
-						})
+				Array.map(worktree =>
+					GitWorktree.make({
+						branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
+						root: normalizePublicPath(worktree.root)
+					})
 				)
 			)
 		})
@@ -666,20 +662,19 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 								Effect.option(
 									pipe(
 										listWorktrees(repository.root),
-										Effect.map(
-											discoveredWorktrees =>
-												new GitProject({
-													repository: new GitRepository({
-														gitDirectory: repository.gitDirectory,
-														root: firstWorktreeRoot(discoveredWorktrees, repository.root)
-													}),
-													worktrees: Array.sortWith(
-														discoveredWorktrees,
-														worktree =>
-															`${worktree.root === firstWorktreeRoot(discoveredWorktrees, repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
-														Order.String
-													)
-												})
+										Effect.map(discoveredWorktrees =>
+											GitProject.make({
+												repository: GitRepository.make({
+													gitDirectory: repository.gitDirectory,
+													root: firstWorktreeRoot(discoveredWorktrees, repository.root)
+												}),
+												worktrees: Array.sortWith(
+													discoveredWorktrees,
+													worktree =>
+														`${worktree.root === firstWorktreeRoot(discoveredWorktrees, repository.root) ? '0' : '1'}:${worktree.branch ?? ''}:${worktree.root}`,
+													Order.String
+												)
+											})
 										)
 									)
 								),
@@ -702,10 +697,10 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		return {
 			branches: Effect.fn('GitWorkspace.branches')(function* (cwd: string) {
 				yield* Effect.annotateCurrentSpan({cwd})
-				return new GitBranchesSnapshot({
+				return GitBranchesSnapshot.make({
 					branches: yield* pipe(
 						git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
-						Effect.map(Array.map(name => new GitBranch({name, type: 'local'}))),
+						Effect.map(Array.map(name => GitBranch.make({name, type: 'local'}))),
 						Effect.flatMap(localBranches =>
 							pipe(
 								git.lines(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes']),
@@ -713,13 +708,12 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 									pipe(
 										lines,
 										Array.filter(name => !String.endsWith('/HEAD')(name)),
-										Array.map(
-											name =>
-												new GitBranch({
-													name: pipe(String.split('/')(name), Array.drop(1), Array.join('/')),
-													remote: String.split('/')(name)[0],
-													type: 'remote'
-												})
+										Array.map(name =>
+											GitBranch.make({
+												name: pipe(String.split('/')(name), Array.drop(1), Array.join('/')),
+												remote: String.split('/')(name)[0],
+												type: 'remote'
+											})
 										),
 										Array.filter(branch => String.isNonEmpty(branch.name)),
 										Array.appendAll(localBranches)
@@ -851,7 +845,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 		const git = yield* GitCommand
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
-		const state = yield* SubscriptionRef.make(new GitReviewState({comments: [], marks: []}))
+		const state = yield* SubscriptionRef.make(GitReviewState.make({comments: [], marks: []}))
 		const githubCommentsRef = yield* Ref.make<Option.Option<readonly GitReviewComment[]>>(
 			Array.head(emptyGitReviewCommentLists)
 		)
@@ -952,11 +946,11 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 									Array.join('\n')
 								)}`
 
-								return new GitDiff({
+								return GitDiff.make({
 									filePath,
 									patch,
 									segments: [
-										new GitDiffSegment({filePath, fingerprint: patch, id: 'HEAD->worktree', type: 'worktree'})
+										GitDiffSegment.make({filePath, fingerprint: patch, id: 'HEAD->worktree', type: 'worktree'})
 									],
 									status: 'added'
 								})
@@ -976,14 +970,19 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				Effect.map(([trackedDiffs, untracked]) =>
 					Array.appendAll(
 						Array.map(trackedDiffs, diff => {
-							const segment = new GitDiffSegment({
+							const segment = GitDiffSegment.make({
 								filePath: diff.filePath,
 								fingerprint: diff.patch,
 								id: 'HEAD->worktree',
 								type: 'worktree'
 							})
 
-							return new GitDiff({filePath: diff.filePath, patch: diff.patch, segments: [segment], status: diff.status})
+							return GitDiff.make({
+								filePath: diff.filePath,
+								patch: diff.patch,
+								segments: [segment],
+								status: diff.status
+							})
 						}),
 						untracked
 					)
@@ -1028,7 +1027,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 			return Array.map(input.diffs, diff =>
 				HashMap.has(contentByFilePath, diff.filePath)
-					? new GitDiff({
+					? GitDiff.make({
 							fileContent: Option.getOrUndefined(HashMap.get(contentByFilePath, diff.filePath)),
 							filePath: diff.filePath,
 							patch: diff.patch,
@@ -1330,19 +1329,17 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			return pipe(
 				threads,
 				Array.flatMap(thread =>
-					Array.map(
-						thread.comments.nodes,
-						comment =>
-							new GitReviewComment({
-								body: comment.body,
-								filePath: comment.path,
-								lineNumber: comment.line ?? comment.originalLine ?? 1,
-								resolved: thread.isResolved,
-								side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
-								source: 'github',
-								threadId: thread.id,
-								url: comment.url
-							})
+					Array.map(thread.comments.nodes, comment =>
+						GitReviewComment.make({
+							body: comment.body,
+							filePath: comment.path,
+							lineNumber: comment.line ?? comment.originalLine ?? 1,
+							resolved: thread.isResolved,
+							side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
+							source: 'github',
+							threadId: thread.id,
+							url: comment.url
+						})
 					)
 				)
 			)
@@ -1364,7 +1361,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const current = yield* SubscriptionRef.get(state)
 			const github = yield* githubComments()
 
-			return new GitReviewState({
+			return GitReviewState.make({
 				comments: pipe(
 					Array.appendAll(current.comments, github),
 					Array.filter(comment => !isReviewExcludedPath(comment.filePath))
@@ -1410,7 +1407,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 			const branchCommits = Array.filter(branchCommitCandidates, commit => !HashSet.has(localCommitHashes, commit.hash))
 
-			return new GitReviewMetadata({
+			return GitReviewMetadata.make({
 				branchCommits,
 				dirty: yield* hasWorktreeChanges,
 				localCommits,
@@ -1593,7 +1590,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 			),
 			Effect.flatMap(pr =>
 				String.isNonEmpty(pr.url ?? '')
-					? Effect.succeed(Array.head([new GitPullRequest({url: pr.url ?? ''})]))
+					? Effect.succeed(Array.head([GitPullRequest.make({url: pr.url ?? ''})]))
 					: Effect.succeed(Array.head(emptyGitPullRequests))
 			),
 			Effect.catchTag('GitError', () => Effect.succeed(Array.head(emptyGitPullRequests)))
@@ -1646,7 +1643,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 			ghString(['pr', 'create', '--draft', '--fill']),
 			Effect.map(output => {
 				const url = output.match(/https?:\/\/\S+/u)?.[0] ?? String.trim(output)
-				return Array.head(String.isNonEmpty(url) ? [new GitPullRequest({url})] : [])
+				return Array.head(String.isNonEmpty(url) ? [GitPullRequest.make({url})] : [])
 			})
 		)
 		const commit = Effect.fn('GitPublish.commit')(function* (message: string) {

@@ -24,7 +24,14 @@ import HeadlessModule from '@xterm/headless'
 import type {ChildProcess} from 'effect/unstable/process'
 
 import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
-import {TerminalError, TerminalStatus, type TerminalFrame, type TerminalInput, type TerminalSize} from './schema.ts'
+import {
+	TerminalError,
+	terminalStatusActive,
+	type TerminalFrame,
+	type TerminalInput,
+	type TerminalSize,
+	type TerminalStatus
+} from './schema.ts'
 
 function terminalInputString(input: TerminalInput) {
 	return input.type === 'text' ? input.data : new TextDecoder().decode(input.data)
@@ -100,7 +107,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setTitle(title: string) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current => {
-					if (!TerminalStatus.active(current.state)) return Effect.void
+					if (!terminalStatusActive(current.state)) return Effect.void
 					return publishStatus({...current, ...terminalTitleStatus(title)})
 				})
 			)
@@ -109,7 +116,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		function setProgress(state: TerminalStatus['state']) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current =>
-					TerminalStatus.active(current.state) ? publishStatus({...current, state}) : Effect.void
+					terminalStatusActive(current.state) ? publishStatus({...current, state}) : Effect.void
 				)
 			)
 		}

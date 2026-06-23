@@ -497,14 +497,18 @@ const isSchemaStructObject = (node: ESTree.ObjectExpression) =>
 		node.parent.callee.property.name === 'TaggedClass' ||
 		node.parent.callee.property.name === 'TaggedErrorClass')
 
-const isSchemaStructCall = (node: ESTree.Expression) =>
-	node.type === 'CallExpression' &&
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Schema' &&
-	node.callee.property.type === 'Identifier' &&
-	node.callee.property.name === 'Struct'
+function isSchemaClassCall(node: ESTree.Expression): boolean {
+	return (
+		node.type === 'CallExpression' &&
+		((node.callee.type === 'MemberExpression' &&
+			!node.callee.computed &&
+			node.callee.object.type === 'Identifier' &&
+			node.callee.object.name === 'Schema' &&
+			node.callee.property.type === 'Identifier' &&
+			(node.callee.property.name === 'Class' || node.callee.property.name === 'TaggedClass')) ||
+			(node.callee.type === 'CallExpression' && isSchemaClassCall(node.callee)))
+	)
+}
 
 function isSchemaExpression(node: ESTree.Expression): boolean {
 	return (
@@ -527,7 +531,6 @@ const isMatchingSchemaTypeAliasStatement = (
 	exported: boolean
 ) => {
 	if (
-		exported &&
 		statement?.type === 'ExportNamedDeclaration' &&
 		statement.declaration?.type === 'TSTypeAliasDeclaration' &&
 		isSchemaTypeAlias(statement.declaration)
@@ -694,21 +697,21 @@ export default definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (isDataConstructorCall(node)) {
-						context.report({message: 'Use Schema classes instead of Data classes.', node})
+						context.report({message: 'Use schema-backed data constructors.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Use Schema classes instead of Data classes.'}, type: 'problem'}
+			meta: {messages: {default: 'Use schema-backed data constructors.'}, type: 'problem'}
 		},
 		'no-declare-module-export': {
 			create: context => ({
 				ExportNamedDeclaration: node => {
 					if (isModuleAugmentationExport(node)) {
-						context.report({message: 'Do not export inside module augmentation.', node})
+						context.report({message: 'Keep module augmentation declarations local.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not export inside module augmentation.'}, type: 'problem'}
+			meta: {messages: {default: 'Keep module augmentation declarations local.'}, type: 'problem'}
 		},
 		'no-effect-returning-function': {
 			create: context => ({
@@ -740,11 +743,11 @@ export default definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (isEffectRunCall(node)) {
-						context.report({message: 'Use runtime or atom entrypoints instead of Effect.run.', node})
+						context.report({message: 'Use runtime or atom entrypoints.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Use runtime or atom entrypoints instead of Effect.run.'}, type: 'problem'}
+			meta: {messages: {default: 'Use runtime or atom entrypoints.'}, type: 'problem'}
 		},
 		'no-exported-local-type': {
 			create: context => ({
@@ -757,24 +760,21 @@ export default definePlugin({
 						!isPublicHandleName(node.declaration.id.name) &&
 						!isBoundaryTypeName(node.declaration.id.name)
 					) {
-						context.report({message: 'Do not export local implementation types.', node: node.declaration})
+						context.report({message: 'Keep local implementation types private.', node: node.declaration})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not export local implementation types.'}, type: 'problem'}
+			meta: {messages: {default: 'Keep local implementation types private.'}, type: 'problem'}
 		},
 		'no-fake-ref-state': {
 			create: context => ({
 				CallExpression: node => {
 					if (isUseStateCall(node) && isFakeRefStateInitializer(node.arguments[0])) {
-						context.report({message: 'Use a real ref or the lazy ref/value pattern instead of fake ref state.', node})
+						context.report({message: 'Use a real ref or the lazy ref/value pattern.', node})
 					}
 				}
 			}),
-			meta: {
-				messages: {default: 'Use a real ref or the lazy ref/value pattern instead of fake ref state.'},
-				type: 'problem'
-			}
+			meta: {messages: {default: 'Use a real ref or the lazy ref/value pattern.'}, type: 'problem'}
 		},
 		'no-floating-local-type': {
 			create: context => ({
@@ -822,17 +822,11 @@ export default definePlugin({
 			create: context => ({
 				FunctionDeclaration: node => {
 					if (isGenericStatePatchFunction(context, node)) {
-						context.report({
-							message: 'Use inline functional state updates instead of generic Partial<State> patch helpers.',
-							node
-						})
+						context.report({message: 'Use inline functional state updates.', node})
 					}
 				}
 			}),
-			meta: {
-				messages: {default: 'Use inline functional state updates instead of generic Partial<State> patch helpers.'},
-				type: 'problem'
-			}
+			meta: {messages: {default: 'Use inline functional state updates.'}, type: 'problem'}
 		},
 		'no-identity-callback': {
 			create: context => ({
@@ -854,21 +848,21 @@ export default definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (isIifeCallee(node.callee)) {
-						context.report({message: 'Do not use IIFEs.', node})
+						context.report({message: 'Use direct expressions.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not use IIFEs.'}, type: 'problem'}
+			meta: {messages: {default: 'Use direct expressions.'}, type: 'problem'}
 		},
 		'no-import-alias': {
 			create: context => ({
 				ImportSpecifier: node => {
 					if (node.imported.type === 'Identifier' && node.imported.name !== node.local.name) {
-						context.report({message: 'Do not alias named imports.', node})
+						context.report({message: 'Use imported names directly.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not alias named imports.'}, type: 'problem'}
+			meta: {messages: {default: 'Use imported names directly.'}, type: 'problem'}
 		},
 		'no-json-global': {
 			create: context => ({
@@ -891,21 +885,21 @@ export default definePlugin({
 			create: context => ({
 				VariableDeclaration: node => {
 					if (node.kind === 'let') {
-						context.report({message: 'Use expressions instead of let.', node})
+						context.report({message: 'Use expression-oriented values.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Use expressions instead of let.'}, type: 'problem'}
+			meta: {messages: {default: 'Use expression-oriented values.'}, type: 'problem'}
 		},
 		'no-local-mutable-holder': {
 			create: context => ({
 				VariableDeclarator: node => {
 					if (isMutableHolderDeclaration(context, node)) {
-						context.report({message: 'Do not use mutable holder objects.', node})
+						context.report({message: 'Use direct local state.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not use mutable holder objects.'}, type: 'problem'}
+			meta: {messages: {default: 'Use direct local state.'}, type: 'problem'}
 		},
 		'no-module-mutable-state': {
 			createOnce: context => ({
@@ -919,13 +913,13 @@ export default definePlugin({
 								isMutableModuleStateInit(declaration.init) &&
 								isMutatedModuleState(context, declaration.id.name)
 							) {
-								context.report({message: 'Do not keep mutable module state.', node: declaration})
+								context.report({message: 'Keep mutable state inside a runtime owner.', node: declaration})
 							}
 						}
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not keep mutable module state.'}, type: 'problem'}
+			meta: {messages: {default: 'Keep mutable state inside a runtime owner.'}, type: 'problem'}
 		},
 		'no-native-mutable-collection': {
 			create: context => ({
@@ -961,11 +955,11 @@ export default definePlugin({
 							node.arguments[0]?.type === 'ArrowFunctionExpression') &&
 						node.arguments[0].params.length === 0
 					) {
-						context.report({message: 'Nullary Effect.fn; use Effect.gen.', node})
+						context.report({message: 'Use Effect.gen for nullary work.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Nullary Effect.fn; use Effect.gen.'}, type: 'problem'}
+			meta: {messages: {default: 'Use Effect.gen for nullary work.'}, type: 'problem'}
 		},
 		'no-nullary-effect-wrapper': {
 			create: context => ({
@@ -1002,20 +996,20 @@ export default definePlugin({
 				ObjectPattern: node => {
 					if (isReactRefPropsParameter(node)) return
 
-					context.report({message: 'No object destructure; use property access.', node})
+					context.report({message: 'Use property access.', node})
 				}
 			}),
-			meta: {messages: {default: 'No object destructure; use property access.'}, type: 'problem'}
+			meta: {messages: {default: 'Use property access.'}, type: 'problem'}
 		},
 		'no-option-constructor': {
 			create: context => ({
 				CallExpression: node => {
 					if (isOptionConstructorCall(node)) {
-						context.report({message: 'Consume existing Options; do not construct local Options.', node})
+						context.report({message: 'Consume existing Options.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Consume existing Options; do not construct local Options.'}, type: 'problem'}
+			meta: {messages: {default: 'Consume existing Options.'}, type: 'problem'}
 		},
 		'no-optional-undefined-property': {
 			create: context => ({
@@ -1029,7 +1023,7 @@ export default definePlugin({
 					}
 				}
 			}),
-			meta: {messages: {default: 'Do not add undefined to optional properties.'}, type: 'problem'}
+			meta: {messages: {default: 'Use exact optional properties.'}, type: 'problem'}
 		},
 		'no-pass-through-wrapper': {
 			create: context => ({
@@ -1103,21 +1097,21 @@ export default definePlugin({
 						/^@deslop\/[^/]+\/(?:src|lib)(?:\/|$)/.test(node.source.value) ||
 						/^(?:\.\.\/)+[^/]+\/(?:src|lib)(?:\/|$)/.test(node.source.value)
 					) {
-						context.report({message: 'Private import; use public export.', node})
+						context.report({message: 'Use public package exports.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Private import; use public export.'}, type: 'problem'}
+			meta: {messages: {default: 'Use public package exports.'}, type: 'problem'}
 		},
 		'no-promise-callback': {
 			create: context => ({
 				CallExpression: node => {
 					if (isPromiseCallbackCall(node)) {
-						context.report({message: 'Use Effect or direct async flow instead of Promise callbacks.', node})
+						context.report({message: 'Use Effect or direct async flow.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Use Effect or direct async flow instead of Promise callbacks.'}, type: 'problem'}
+			meta: {messages: {default: 'Use Effect or direct async flow.'}, type: 'problem'}
 		},
 		'no-public-raw-domain-string': {
 			create: context => ({
@@ -1154,6 +1148,16 @@ export default definePlugin({
 			}),
 			meta: {messages: {default: 'Use schema constructors for tagged values.'}, type: 'problem'}
 		},
+		'no-schema-class': {
+			create: context => ({
+				CallExpression: node => {
+					if (isSchemaClassCall(node)) {
+						context.report({message: 'Use Schema.Struct or Schema.TaggedStruct for schema models.', node})
+					}
+				}
+			}),
+			meta: {messages: {default: 'Use Schema.Struct or Schema.TaggedStruct for schema models.'}, type: 'problem'}
+		},
 		'no-schema-decoder-alias': {
 			create: context => ({
 				VariableDeclarator: node => {
@@ -1163,19 +1167,6 @@ export default definePlugin({
 				}
 			}),
 			meta: {messages: {default: 'Inline schema decoding.'}, type: 'problem'}
-		},
-		'no-schema-struct-const': {
-			create: context => ({
-				ExportNamedDeclaration: node => {
-					if (node.declaration?.type !== 'VariableDeclaration') return
-					for (const declaration of node.declaration.declarations) {
-						if (Predicate.isNotNull(declaration.init) && isSchemaStructCall(declaration.init)) {
-							context.report({message: 'Use Schema.Class for exported struct schemas.', node: declaration})
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Schema.Class for exported struct schemas.'}, type: 'problem'}
 		},
 		'no-schema-without-type-export': {
 			createOnce: context => ({
@@ -1287,11 +1278,11 @@ export default definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (isUselessEffectWrapper(node)) {
-						context.report({message: 'Inline useless Effect wrapper.', node})
+						context.report({message: 'Inline Effect wrapper.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Inline useless Effect wrapper.'}, type: 'problem'}
+			meta: {messages: {default: 'Inline Effect wrapper.'}, type: 'problem'}
 		},
 		'no-variable-type-annotation': {
 			create: context => ({
@@ -1316,11 +1307,11 @@ export default definePlugin({
 							node.arguments[0]?.type === 'ArrowFunctionExpression') &&
 						node.arguments[0].params.length === 0
 					) {
-						context.report({message: 'Nullary Effect.fn; use Effect.gen.', node})
+						context.report({message: 'Use Effect.gen for nullary work.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Nullary Effect.fn; use Effect.gen.'}, type: 'problem'}
+			meta: {messages: {default: 'Use Effect.gen for nullary work.'}, type: 'problem'}
 		},
 		'prefer-match': {
 			create: context => ({

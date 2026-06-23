@@ -7,34 +7,34 @@ description: Use when editing AGENTS.md, SKILL.md files, custom oxlint rules, ru
 
 ## Surfaces
 
-- `AGENTS.md`: repo workflow and always-valid invariants.
+- `AGENTS.md`: repo-wide invariants.
 - Scoped `AGENTS.md`: local runtime or ownership invariants.
 - Skill: trigger-specific domain policy.
 - Oxlint config: static enforcement.
-- Custom rule: mechanically detectable fallback.
+- Custom rule: mechanically detectable policy.
 - Fixture: executable rule case.
 - One rule, one surface.
 
 ## Relationship
 
 - Agent instructions steer authoring.
-- Skills target root cause, not edge cases.
+- Skills describe the target authoring pattern.
 - Linter enforces static shapes.
 - Fixtures prove custom rules fire.
-- Disabled rules do not create repo policy.
+- Active rules, active config, and active instructions define repo policy.
 - Analysis requests are read-only.
 - Implementation starts after accepted inventory or explicit implementation request.
-- External rule adoption requires conflict review against `AGENTS.md`, skills, custom rules, and current config.
+- External rule adoption requires conflict check against `AGENTS.md`, skills, custom rules, and current config.
 - External rule config respects rule metadata and local repo policy.
-- Conflict review states: rule, source, conflicting instruction, decision.
-- Rule removal or disabling deletes corresponding skill or `AGENTS.md` instructions instead of restating them as advice.
-- Check removal deletes helper output, fixtures, and tests for that check unless another active check still uses them.
+- Conflict check records: rule, source, conflicting instruction, decision.
+- Rule replacement updates the active rule, config, fixture, test, and guidance as one change.
+- Retired checks leave current helper output, fixtures, and tests owned by active checks.
 
 ## Style
 
 - Directive bullets.
 - Technical terms over prose.
-- No motivation, filler, or regression notes.
+- Target patterns over history, motivation, and filler.
 - Examples only when terms stay ambiguous.
 - Frontmatter: `name`, `description` only.
 - Split only for distinct trigger.
@@ -42,17 +42,17 @@ description: Use when editing AGENTS.md, SKILL.md files, custom oxlint rules, ru
 
 ## Rule Authoring
 
-- Start from forbidden shape.
+- Start from accepted shape.
 - Prefer native/official Oxlint rule when it enforces the same shape.
 - Keep custom rules narrow.
-- Rule fixes remove the forbidden shape; do not add abstractions that only move it around.
-- Add custom rules only after the forbidden shape is accepted.
-- Removing or disabling a rule also removes its rule-specific authoring guidance.
+- Rule fixes produce the accepted target shape directly.
+- Add custom rules after accepting the enforced shape.
+- Rule replacement carries matching authoring guidance.
 - For newly written repo tooling, reshape the code before adding config exceptions.
-- If a rule fix makes code less direct, revisit the rule or scope before preserving the workaround.
+- If a rule fix makes code less direct, revisit the rule or scope.
 - Shared constants require stable repo policy or multiple real consumers.
 - Prefer duplicated literals over indirection when values are not a policy boundary.
 - Fixture violations use matching `oxlint-disable-next-line -- fixture`.
 - Unused disable means coverage failure.
 - If a lint fixture is discovered as a runtime test, add explicit skipped suite.
-- Existing violations are fixed by removing the forbidden shape unless explicitly out of scope.
+- Existing diagnostics are resolved into the accepted target shape unless explicitly out of scope.

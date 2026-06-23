@@ -33,30 +33,27 @@ import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
 import {GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
-import {TerminalError, TerminalStatus} from '@deslop/terminal/schema'
+import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 import {Usage} from '@deslop/usage/service'
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
-class ScriptSessionKey extends Schema.Class<ScriptSessionKey>('ScriptSessionKey')({
-	cwd: Schema.String,
-	sessionId: Schema.String
-}) {}
+type ScriptSessionKey = typeof ScriptSessionKey.Type
+const ScriptSessionKey = Schema.Struct({cwd: Schema.String, sessionId: Schema.String})
 
-class TerminalStatusKey extends Schema.Class<TerminalStatusKey>('TerminalStatusKey')({
-	cwd: Schema.String,
-	sessionId: Schema.optional(Schema.String)
-}) {}
+type TerminalStatusKey = typeof TerminalStatusKey.Type
+const TerminalStatusKey = Schema.Struct({cwd: Schema.String, sessionId: Schema.optional(Schema.String)})
 
-class TerminalSessionIdentity extends Schema.Class<TerminalSessionIdentity>('TerminalSessionIdentity')({
+type TerminalSessionIdentity = typeof TerminalSessionIdentity.Type
+const TerminalSessionIdentity = Schema.Struct({
 	command: Schema.optional(Schema.Any),
 	cwd: Schema.String,
 	sessionId: Schema.optional(Schema.String)
-}) {}
+})
 
 function terminalStatusDone(state: AgentSession['state']) {
-	return !TerminalStatus.active(state.state)
+	return !terminalStatusActive(state.state)
 }
 
 function replacePortlessScripts(
@@ -69,7 +66,7 @@ function replacePortlessScripts(
 		Array.reduce(
 			HashMap.filter(current, script => script.script.cwd !== cwd),
 			(next, script) =>
-				HashMap.set(next, new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId}), script)
+				HashMap.set(next, ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId}), script)
 		)
 	)
 }
@@ -80,7 +77,7 @@ function removePortlessScript(
 ) {
 	if (Predicate.isUndefined(input.sessionId)) return {current, script: undefined}
 
-	const key = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+	const key = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
 	return {current: HashMap.remove(current, key), script}
 }
@@ -105,7 +102,7 @@ function replacePackageScripts(
 		Array.reduce(
 			HashMap.filter(current, script => script.cwd !== cwd),
 			(next, script) =>
-				HashMap.set(next, new ScriptSessionKey({cwd, sessionId: script.sessionId}), {
+				HashMap.set(next, ScriptSessionKey.make({cwd, sessionId: script.sessionId}), {
 					...script,
 					cwd,
 					preparedCommand: packageScriptCommand(cwd, script)
@@ -315,7 +312,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 				return pipe(
 					scripts,
-					Array.map(route => new PortlessRun({origin: route.origin, script: route.script, status: route.status}))
+					Array.map(route => PortlessRun.make({origin: route.origin, script: route.script, status: route.status}))
 				)
 			})
 		})
@@ -336,7 +333,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const terminalSession = Effect.fnUntraced(function* (input: TerminalPayload) {
 			if (Predicate.isUndefined(input.sessionId) || Predicate.isNotUndefined(input.command)) return input
 
-			const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+			const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 			const portlessScript = yield* pipe(
 				Ref.get(portlessScripts),
 				Effect.map(current => pipe(current, HashMap.get(scriptKey), Option.getOrUndefined)),
@@ -385,7 +382,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const session = yield* pipe(terminalSession(input), Effect.map(terminalSessionInput))
 			yield* Ref.update(resolvedTerminals, current =>
-				HashMap.set(current, new TerminalStatusKey({cwd: input.cwd, sessionId: input.sessionId}), session)
+				HashMap.set(current, TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId}), session)
 			)
 			return yield* RcMap.get(terminals, session)
 		})
@@ -405,11 +402,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 			if (Predicate.isUndefined(input.sessionId)) return
 			const script = pipe(
 				yield* Ref.get(portlessScripts),
-				HashMap.get(new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})),
+				HashMap.get(ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})),
 				Option.getOrUndefined
 			)
 			if (Predicate.isUndefined(script)) return
-			const watcherKey = new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId})
+			const watcherKey = ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId})
 			const watching = yield* Ref.modify(portlessStatusWatchers, current => {
 				if (HashSet.has(current, watcherKey)) return [true, current] as const
 				return [false, HashSet.add(current, watcherKey)] as const
@@ -424,7 +421,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						SubscriptionRef.update(runStatuses, current =>
 							HashMap.set(
 								current,
-								new ScriptSessionKey({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+								ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId}),
 								state
 							)
 						),
@@ -492,7 +489,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 																sessionId,
 																pipe(
 																	statuses,
-																	HashMap.get(new ScriptSessionKey({cwd: worktree.root, sessionId})),
+																	HashMap.get(ScriptSessionKey.make({cwd: worktree.root, sessionId})),
 																	Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
 																)
 															] as const
@@ -535,7 +532,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 			yield* pipe(RcMap.invalidate(terminals, input), Effect.ignore)
 			yield* Ref.update(resolvedTerminals, current =>
-				HashMap.remove(current, new TerminalStatusKey({cwd: payload.cwd, sessionId: payload.uuid}))
+				HashMap.remove(current, TerminalStatusKey.make({cwd: payload.cwd, sessionId: payload.uuid}))
 			)
 		})
 
@@ -592,7 +589,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					})
 				).pipe(Effect.map(terminalSessionInput))
 				yield* Ref.update(resolvedTerminals, sessions =>
-					HashMap.set(sessions, new TerminalStatusKey({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
+					HashMap.set(sessions, TerminalStatusKey.make({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
 				)
 				const sessionTerminal = yield* RcMap.get(terminals, input)
 				yield* sessionTerminal.restart
@@ -622,7 +619,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 														Ref.update(resolvedTerminals, sessions =>
 															HashMap.remove(
 																sessions,
-																new TerminalStatusKey({cwd: agentSession.cwd, sessionId: agentSession.uuid})
+																TerminalStatusKey.make({cwd: agentSession.cwd, sessionId: agentSession.uuid})
 															)
 														)
 													)
@@ -670,7 +667,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return yield* Effect.scoped(
 					Effect.gen(function* () {
 						const review = yield* RcMap.get(gitReviews, payload.cwd)
-						const diffs = yield* review.reviewDiffs(new GitReviewChangesTarget({}))
+						const diffs = yield* review.reviewDiffs(GitReviewChangesTarget.make({}))
 						if (Array.isReadonlyArrayEmpty(diffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
@@ -774,7 +771,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				const sessionTerminal = yield* getTerminal(input)
 				const status = yield* sessionTerminal.restart
 				if (Predicate.isNotUndefined(input.sessionId)) {
-					const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
 				}
 				yield* watchPortlessRoute(input, sessionTerminal)
@@ -784,15 +781,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					Effect.gen(function* () {
 						const input = TerminalPayload.make(payload)
-						const statusKey = new TerminalStatusKey({cwd: input.cwd, sessionId: input.sessionId})
+						const statusKey = TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId})
 						const scriptKey = Predicate.isUndefined(input.sessionId)
 							? undefined
-							: new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+							: ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 						const session = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
 						const activeSession = Predicate.isUndefined(session)
 							? false
 							: Array.some(Array.fromIterable(yield* RcMap.keys(terminals)), current =>
-									Equal.equals(new TerminalSessionIdentity(current), new TerminalSessionIdentity(session))
+									Equal.equals(TerminalSessionIdentity.make(current), TerminalSessionIdentity.make(session))
 								)
 						if (!activeSession || Predicate.isUndefined(session)) {
 							const idle = Predicate.isUndefined(scriptKey)
@@ -834,7 +831,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.flatMap(sessionTerminal => sessionTerminal.stop)
 				)
 				if (Predicate.isNotUndefined(input.sessionId)) {
-					const scriptKey = new ScriptSessionKey({cwd: input.cwd, sessionId: input.sessionId})
+					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
 				}
 				yield* releasePortlessRoute(input)

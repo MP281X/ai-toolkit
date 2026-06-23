@@ -91,7 +91,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 				const after = cpuTimes()
 				const total = after.total - before.total
 				const idle = after.idle - before.idle
-				return new SystemUsage({
+				return SystemUsage.make({
 					cpuUtilization: total <= 0 ? 0 : ((total - idle) / total) * 100,
 					memoryUtilization: ((totalmem() - freemem()) / totalmem()) * 100
 				})
@@ -119,12 +119,12 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 						Match.orElse(status => new UsageError({message: `claude usage responded with status ${status}`}))
 					)
 					const usage = yield* Effect.flatMap(response.json, Schema.decodeUnknownEffect(ClaudeUsage))
-					return new UsageProvider({
-						fiveHour: new UsageWindow({
+					return UsageProvider.make({
+						fiveHour: UsageWindow.make({
 							resetsAt: usage.five_hour.resets_at ?? undefined,
 							utilization: usage.five_hour.utilization
 						}),
-						weekly: new UsageWindow({
+						weekly: UsageWindow.make({
 							resetsAt: usage.seven_day.resets_at ?? undefined,
 							utilization: usage.seven_day.utilization
 						})
@@ -150,14 +150,14 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 						Match.orElse(status => new UsageError({message: `codex usage responded with status ${status}`}))
 					)
 					const usage = yield* Effect.flatMap(response.json, Schema.decodeUnknownEffect(CodexUsage))
-					return new UsageProvider({
-						fiveHour: new UsageWindow({
+					return UsageProvider.make({
+						fiveHour: UsageWindow.make({
 							resetsAt: Predicate.isNumber(usage.rate_limit.primary_window.reset_at)
 								? new Date(usage.rate_limit.primary_window.reset_at * 1000).toISOString()
 								: undefined,
 							utilization: usage.rate_limit.primary_window.used_percent
 						}),
-						weekly: new UsageWindow({
+						weekly: UsageWindow.make({
 							resetsAt: Predicate.isNumber(usage.rate_limit.secondary_window.reset_at)
 								? new Date(usage.rate_limit.secondary_window.reset_at * 1000).toISOString()
 								: undefined,

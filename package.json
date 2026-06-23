@@ -19,7 +19,6 @@
 		"build": "vp run -r build",
 
 		"fix": "fallow fix --yes && vp check --fix",
-		"typecheck": "sh -c 'vp exec tsc -b apps/* packages/*'",
 		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
 		"test": "vp test",
 

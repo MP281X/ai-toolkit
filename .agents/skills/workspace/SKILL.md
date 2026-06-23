@@ -34,7 +34,7 @@ description: Use when changing package boundaries, public exports/imports, manif
 
 ## Scripts
 
-- Root owns check/fix/test/typecheck scripts.
+- Root owns check/fix/test scripts.
 - CLI packages expose commands through `bin`; package scripts require explicit behavior need.
 - Root scripts stay direct and readable.
 - Avoid shell control-flow wrappers in package scripts; use a named script when orchestration needs status merging.

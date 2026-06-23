@@ -52,9 +52,14 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/comp
 import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
 import {formatError} from '@deslop/components/utils'
-import {GitBranchesSnapshot} from '@deslop/git/schema'
+import {
+	GitBranchesSnapshot,
+	GitWorktreeLocalSource,
+	GitWorktreeNewSource,
+	GitWorktreeRemoteSource
+} from '@deslop/git/schema'
 import type {PortlessRun} from '@deslop/portless/schema'
-import {TerminalStatus} from '@deslop/terminal/schema'
+import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
@@ -67,9 +72,9 @@ const branchesAtom = Atom.family((cwd: string) =>
 			Effect.flatMap(RpcClient, client =>
 				String.isNonEmpty(cwd)
 					? client('projects.branches', {cwd})
-					: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
+					: Effect.succeed(GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'}))
 			),
-			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
+			{initialValue: GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'})}
 		)
 	)
 )
@@ -253,7 +258,7 @@ function ScriptRunRow(input: {
 
 		actionState[1](true)
 		try {
-			await (TerminalStatus.active(input.status.state) && input.status.state !== 'idle'
+			await (terminalStatusActive(input.status.state) && input.status.state !== 'idle'
 				? stop({payload: session})
 				: restart({payload: session}))
 		} catch (error) {
@@ -279,14 +284,14 @@ function ScriptRunRow(input: {
 								void toggleRun()
 							}}
 							title={
-								TerminalStatus.active(input.status.state) && input.status.state !== 'idle'
+								terminalStatusActive(input.status.state) && input.status.state !== 'idle'
 									? `Stop ${input.run.taskId}`
 									: `Start ${input.run.taskId}`
 							}
 						>
 							{pipe(
 								Match.value({
-									active: TerminalStatus.active(input.status.state) && input.status.state !== 'idle',
+									active: terminalStatusActive(input.status.state) && input.status.state !== 'idle',
 									pending: actionState[0]
 								}),
 								Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
@@ -354,7 +359,7 @@ function PortlessGroup(input: {
 					Array.some(
 						input.runs,
 						candidate =>
-							TerminalStatus.active(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
+							terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
 							input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
 					)
 				) {
@@ -388,7 +393,7 @@ function PortlessGroup(input: {
 							Array.some(
 								input.runs,
 								run =>
-									TerminalStatus.active(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
+									terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
 									input.runStatuses[run.script.sessionId]?.state !== 'idle'
 							)
 								? 'Stop deslop'
@@ -400,7 +405,7 @@ function PortlessGroup(input: {
 								active: Array.some(
 									input.runs,
 									run =>
-										TerminalStatus.active(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
+										terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
 										input.runStatuses[run.script.sessionId]?.state !== 'idle'
 								),
 								pending: actionState[0]
@@ -679,10 +684,10 @@ function WorktreeManager(input: {
 		}
 
 		const source = Predicate.isUndefined(candidate)
-			? {_tag: 'new' as const}
+			? GitWorktreeNewSource.make({})
 			: Match.value(candidate).pipe(
-					Match.when({type: 'local'}, () => ({_tag: 'local' as const})),
-					Match.orElse(remoteBranch => ({_tag: 'remote' as const, remote: remoteBranch.remote ?? 'origin'}))
+					Match.when({type: 'local'}, () => GitWorktreeLocalSource.make({})),
+					Match.orElse(remoteBranch => GitWorktreeRemoteSource.make({remote: remoteBranch.remote ?? 'origin'}))
 				)
 
 		setState(current => ({...current, creatingBranch: nextBranch}))

@@ -25,6 +25,22 @@ type FixtureSchemaWithType = typeof FixtureSchemaWithType.Type
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- fixture
 const FixtureSchemaWithType = Schema.String
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-schema-class -- fixture
+class FixtureSchemaClass extends Schema.Class<FixtureSchemaClass>('FixtureSchemaClass')({value: Schema.String}) {}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-schema-class -- fixture
+class FixtureSchemaTaggedClass extends Schema.TaggedClass<FixtureSchemaTaggedClass>()('FixtureSchemaTaggedClass', {
+	value: Schema.String
+}) {}
+
+class FixtureSchemaTaggedErrorClass extends Schema.TaggedErrorClass<FixtureSchemaTaggedErrorClass>()(
+	'FixtureSchemaTaggedErrorClass',
+	{value: Schema.String}
+) {}
+void FixtureSchemaClass
+void FixtureSchemaTaggedClass
+void FixtureSchemaTaggedErrorClass
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias, @deslop/oxlint-rules/no-schema-without-type-export -- fixture
 const FixtureSchemaTypeAfterValue = Schema.String
 type FixtureSchemaTypeAfterValue = typeof FixtureSchemaTypeAfterValue.Type

@@ -5,46 +5,41 @@ export class UsageError extends Schema.TaggedErrorClass<UsageError>()('UsageErro
 	message: Schema.optional(Schema.String)
 }) {}
 
-export class UsageWindow extends Schema.Class<UsageWindow>('UsageWindow')({
-	resetsAt: Schema.optional(Schema.String),
-	utilization: Schema.Number
-}) {}
+export type UsageWindow = typeof UsageWindow.Type
+export const UsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.String), utilization: Schema.Number})
 
-export class UsageProvider extends Schema.Class<UsageProvider>('UsageProvider')({
-	fiveHour: UsageWindow,
-	weekly: UsageWindow
-}) {}
+export type UsageProvider = typeof UsageProvider.Type
+export const UsageProvider = Schema.Struct({fiveHour: UsageWindow, weekly: UsageWindow})
 
-export class SystemUsage extends Schema.Class<SystemUsage>('SystemUsage')({
-	cpuUtilization: Schema.Number,
-	memoryUtilization: Schema.Number
-}) {}
+export type SystemUsage = typeof SystemUsage.Type
+export const SystemUsage = Schema.Struct({cpuUtilization: Schema.Number, memoryUtilization: Schema.Number})
 
 export type ClaudeCredentials = typeof ClaudeCredentials.Type
 export const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
-class ClaudeUsageWindow extends Schema.Class<ClaudeUsageWindow>('ClaudeUsageWindow')({
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
+const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
 	utilization: Schema.Number
-}) {}
+})
 
-export class ClaudeUsage extends Schema.Class<ClaudeUsage>('ClaudeUsage')({
-	five_hour: ClaudeUsageWindow,
-	seven_day: ClaudeUsageWindow
-}) {}
+export type ClaudeUsage = typeof ClaudeUsage.Type
+export const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 export type CodexCredentials = typeof CodexCredentials.Type
 export const CodexCredentials = Schema.fromJsonString(
 	Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})})
 )
 
-class CodexUsageWindow extends Schema.Class<CodexUsageWindow>('CodexUsageWindow')({
+type CodexUsageWindow = typeof CodexUsageWindow.Type
+const CodexUsageWindow = Schema.Struct({
 	reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
 	used_percent: Schema.Number
-}) {}
+})
 
-export class CodexUsage extends Schema.Class<CodexUsage>('CodexUsage')({
+export type CodexUsage = typeof CodexUsage.Type
+export const CodexUsage = Schema.Struct({
 	rate_limit: Schema.Struct({primary_window: CodexUsageWindow, secondary_window: CodexUsageWindow})
-}) {}
+})

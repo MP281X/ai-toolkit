@@ -36,51 +36,58 @@ const TerminalPayloadFields = {
 	sessionId: Schema.optional(Schema.String)
 }
 
-export class TerminalPayload extends Schema.Class<TerminalPayload>('TerminalPayload')(TerminalPayloadFields) {}
+export type TerminalPayload = typeof TerminalPayload.Type
+export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 
-export class AgentSession extends Schema.Class<AgentSession>('AgentSession')({
+const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
+
+export type AgentSession = typeof AgentSession.Type
+const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
 	icon: AgentCommandIcon,
 	label: Schema.String,
 	profileId: AgentCommandProfileId,
-	state: TerminalStatus,
+	state: TerminalStatusPayload,
 	uuid: Schema.String
-}) {}
+})
 
-export class ScriptRun extends Schema.Class<ScriptRun>('ScriptRun')({
+export type ScriptRun = typeof ScriptRun.Type
+export const ScriptRun = Schema.Struct({
 	command: Schema.String,
 	scriptName: Schema.String,
 	sessionId: Schema.String,
 	taskId: Schema.String
-}) {}
+})
 
-export class ScriptPackageJson extends Schema.Class<ScriptPackageJson>('ScriptPackageJson')({
+export const ScriptPackageJson = Schema.Struct({
 	scripts: Schema.Record(Schema.String, Schema.String).pipe(
 		Schema.optional,
 		Schema.withDecodingDefault(Effect.succeed({}))
 	)
-}) {}
+})
 
-export class SidebarWorktree extends Schema.Class<SidebarWorktree>('SidebarWorktree')({
+export type SidebarWorktree = typeof SidebarWorktree.Type
+const SidebarWorktree = Schema.Struct({
 	agents: Schema.Array(AgentSession),
 	branch: Schema.optional(Schema.String),
 	portlessRuns: Schema.Array(PortlessRun),
 	root: Schema.String,
-	runStatuses: Schema.Record(Schema.String, TerminalStatus),
+	runStatuses: Schema.Record(Schema.String, TerminalStatusPayload),
 	scriptRuns: Schema.Array(ScriptRun)
-}) {}
+})
 
-export class SidebarProject extends Schema.Class<SidebarProject>('SidebarProject')({
+export type SidebarProject = typeof SidebarProject.Type
+const SidebarProject = Schema.Struct({
 	repository: GitProject.fields.repository,
 	worktrees: Schema.Array(SidebarWorktree)
-}) {}
+})
 
-class HomeSidebar extends Schema.Class<HomeSidebar>('HomeSidebar')({
+const HomeSidebar = Schema.Struct({
 	agentProfiles: Schema.Array(AgentCommandProfile),
 	projects: Schema.Array(SidebarProject)
-}) {}
+})
 
 const PublishDraftError = Schema.Union([GitError, AiError])
 

@@ -353,8 +353,8 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				Effect.provide(discoveryContext),
 				Effect.map(discovered =>
 					Array.map(discovered, route => ({
-						...new PortlessRun({
-							origin: new PortlessOrigin({
+						...PortlessRun.make({
+							origin: PortlessOrigin.make({
 								base: route.script.baseOrigin,
 								host: route.host,
 								origin: route.script.origin,
@@ -362,7 +362,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 								sessionId: route.script.sessionId,
 								taskId: route.script.taskId
 							}),
-							script: new PortlessScript(route.script),
+							script: PortlessScript.make(route.script),
 							status: {state: 'prepared'}
 						}),
 						preparedCommand: command(route.script, route.port)

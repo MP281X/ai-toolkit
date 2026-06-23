@@ -21,7 +21,7 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
 	const sessionKey = terminalSessionKey(input.session)
 	const status = useAtomSuspense(
-		terminalStatusAtomFamily(new TerminalSessionAtomKey(terminalSessionInput(input.session)))
+		terminalStatusAtomFamily(TerminalSessionAtomKey.make(terminalSessionInput(input.session)))
 	)
 	const terminalRef = useRef<TerminalHandle>(null)
 	const nextAttachIdRef = useRef(0)
@@ -99,7 +99,7 @@ function TerminalAttachment(input: {
 	readonly terminalRef: React.RefObject<TerminalHandle | null>
 }) {
 	const framePull = terminalFramePullAtomFamily(
-		new TerminalAttachAtomKey({
+		TerminalAttachAtomKey.make({
 			attachId: input.attachId,
 			session: terminalSessionInput(input.session),
 			size: input.size

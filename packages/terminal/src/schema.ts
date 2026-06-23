@@ -5,19 +5,18 @@ export class TerminalError extends Schema.TaggedErrorClass<TerminalError>()('Ter
 	message: Schema.optional(Schema.String)
 }) {}
 
-export class TerminalStatus extends Schema.Class<TerminalStatus>('TerminalStatus')({
+export type TerminalStatus = typeof TerminalStatus.Type
+export const TerminalStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'starting', 'running', 'waiting', 'stopped', 'exited', 'failed']),
 	title: Schema.String
-}) {
-	public static active(state: TerminalStatus['state']) {
-		return state === 'idle' || state === 'starting' || state === 'running' || state === 'waiting'
-	}
+})
+
+export function terminalStatusActive(state: TerminalStatus['state']) {
+	return state === 'idle' || state === 'starting' || state === 'running' || state === 'waiting'
 }
 
-export class TerminalSize extends Schema.Class<TerminalSize>('TerminalSize')({
-	cols: Schema.Number,
-	rows: Schema.Number
-}) {}
+export type TerminalSize = typeof TerminalSize.Type
+const TerminalSize = Schema.Struct({cols: Schema.Number, rows: Schema.Number})
 
 export type TerminalInput = typeof TerminalInput.Type
 export const TerminalInput = Schema.Union([

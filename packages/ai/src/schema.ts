@@ -7,10 +7,11 @@ export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
 	message: Schema.String
 }) {}
 
-export class AgentStatus extends Schema.Class<AgentStatus>('AgentStatus')({
+export type AgentStatus = typeof AgentStatus.Type
+const AgentStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'running', 'retrying', 'stopping', 'awaiting_input', 'error']),
 	updatedAt: Schema.DateTimeUtc
-}) {}
+})
 
 type ThinkingLevel = typeof ThinkingLevel.Type
 const ThinkingLevel = Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const)
@@ -24,19 +25,21 @@ const ProviderId = Schema.Literals(['openai-codex'] as const)
 type ModelId = typeof ModelId.Type
 const ModelId = Schema.Literals(['gpt-5.5'] as const)
 
-export class AgentPrompt extends Schema.Class<AgentPrompt>('AgentPrompt')({
+export type AgentPrompt = typeof AgentPrompt.Type
+const AgentPrompt = Schema.Struct({
 	messages: Schema.Array(Prompt.Message),
 	model: ModelId,
 	provider: ProviderId,
 	thinkingLevel: Schema.optional(ThinkingLevel)
-}) {}
+})
 
-export class AgentLayerConfig extends Schema.Class<AgentLayerConfig>('AgentLayerConfig')({
+export type AgentLayerConfig = typeof AgentLayerConfig.Type
+const AgentLayerConfig = Schema.Struct({
 	agent: AgentId,
 	cwd: Schema.String,
 	systemPrompt: Prompt.SystemMessage,
 	tools: Schema.optional(Schema.Union([Schema.Literals(['all', 'none'] as const), Schema.Array(Schema.String)]))
-}) {}
+})
 
 export type AgentCommandProfileId = typeof AgentCommandProfileId.Type
 export const AgentCommandProfileId = Schema.Literals([
@@ -49,13 +52,12 @@ export const AgentCommandProfileId = Schema.Literals([
 export type AgentCommandIcon = typeof AgentCommandIcon.Type
 export const AgentCommandIcon = Schema.Literals(['opencode', 'codex', 'pi', 'claude'])
 
-export class AgentCommandProfile extends Schema.Class<AgentCommandProfile>('AgentCommandProfile')({
+export type AgentCommandProfile = typeof AgentCommandProfile.Type
+export const AgentCommandProfile = Schema.Struct({
 	icon: AgentCommandIcon,
 	id: AgentCommandProfileId,
 	label: Schema.String
-}) {}
+})
 
-export class AgentCommandRequest extends Schema.Class<AgentCommandRequest>('AgentCommandRequest')({
-	cwd: Schema.String,
-	profileId: AgentCommandProfileId
-}) {}
+export type AgentCommandRequest = typeof AgentCommandRequest.Type
+export const AgentCommandRequest = Schema.Struct({cwd: Schema.String, profileId: AgentCommandProfileId})

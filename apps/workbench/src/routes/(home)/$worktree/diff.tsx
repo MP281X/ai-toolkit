@@ -64,10 +64,10 @@ function targetKey(target: GitReviewTarget) {
 
 function targetFromKey(tag: string, hash = '') {
 	return Match.value(tag).pipe(
-		Match.when('commit', () => new GitReviewCommitTarget({hash})),
-		Match.when('local', () => new GitReviewLocalTarget({})),
-		Match.when('branch', () => new GitReviewBranchTarget({})),
-		Match.orElse(() => new GitReviewChangesTarget({}))
+		Match.when('commit', () => GitReviewCommitTarget.make({hash})),
+		Match.when('local', () => GitReviewLocalTarget.make({})),
+		Match.when('branch', () => GitReviewBranchTarget.make({})),
+		Match.orElse(() => GitReviewChangesTarget.make({}))
 	)
 }
 
@@ -95,7 +95,7 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const emptyReviewState = new GitReviewState({comments: Array.empty(), marks: Array.empty()})
+const emptyReviewState = GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
 
 const reviewStateValueAtom = Atom.family((cwd: string) =>
 	Atom.map(reviewStateAtom(cwd), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
@@ -149,7 +149,7 @@ const resolveCommentActionAtom = Atom.family((cwd: string) =>
 			})
 		),
 		reducer: (state, resolveInput) => ({
-			resolving: HashSet.add(state.resolving, new GitReviewComment(resolveInput.comment)),
+			resolving: HashSet.add(state.resolving, GitReviewComment.make(resolveInput.comment)),
 			resolvingAll: state.resolvingAll
 		})
 	})
@@ -182,7 +182,9 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 		reducer: (state, comments) => ({
 			resolving: pipe(
 				comments,
-				Array.reduce(state.resolving, (resolving, input) => HashSet.add(resolving, new GitReviewComment(input.comment)))
+				Array.reduce(state.resolving, (resolving, input) =>
+					HashSet.add(resolving, GitReviewComment.make(input.comment))
+				)
 			),
 			resolvingAll: true
 		})
@@ -232,7 +234,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const shortcutsOpenState = useState(false)
-	const selectedScopeState = useState<GitReviewTarget>(new GitReviewChangesTarget({}))
+	const selectedScopeState = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
 	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
 
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
@@ -244,7 +246,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		Array.findFirst(commit => commit.hash === search.commit),
 		Option.getOrUndefined
 	)
-	const reviewTarget = selectedCommit ? new GitReviewCommitTarget({hash: selectedCommit.hash}) : selectedScopeState[0]
+	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
 	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
@@ -420,7 +422,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										localCommits={localCommits}
 										selected={reviewTarget}
 										selectCommit={commit => {
-											selectTarget(new GitReviewCommitTarget({hash: commit.hash}))
+											selectTarget(GitReviewCommitTarget.make({hash: commit.hash}))
 										}}
 										selectScope={selectTarget}
 									/>
@@ -774,7 +776,7 @@ function CommitList(input: {
 					label="Changes"
 					selected={input.selected}
 					selectScope={input.selectScope}
-					target={new GitReviewChangesTarget({})}
+					target={GitReviewChangesTarget.make({})}
 				/>
 				{!Array.isReadonlyArrayEmpty(input.localCommits) && (
 					<CommitScopeRow
@@ -782,7 +784,7 @@ function CommitList(input: {
 						label="Local"
 						selected={input.selected}
 						selectScope={input.selectScope}
-						target={new GitReviewLocalTarget({})}
+						target={GitReviewLocalTarget.make({})}
 					/>
 				)}
 				{Array.map(input.localCommits, renderCommit)}
@@ -792,7 +794,7 @@ function CommitList(input: {
 						label="Branch"
 						selected={input.selected}
 						selectScope={input.selectScope}
-						target={new GitReviewBranchTarget({})}
+						target={GitReviewBranchTarget.make({})}
 					/>
 				)}
 				{Array.map(input.branchCommits, renderCommit)}

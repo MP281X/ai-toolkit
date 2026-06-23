@@ -30,8 +30,8 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 - Do not extract section arrays, wrapper components, or handler modules only to make diagnostics disappear.
 - Async command = visible loading state.
 - Disable unavailable UI actions; backend remains authority.
-- Group UI state by workflow.
+- Group UI state by user-facing interaction.
 - Use `useState` for local UI state that has direct setters or small inline functional updates.
-- Use a reducer when coupled state has named workflow transitions or shared transition logic.
+- Use a reducer when coupled state has named user or domain events with shared update logic.
 - Reducer actions describe user or domain events; avoid generic patch actions.
-- Revert reducer or component extractions that split simple local UI behavior without naming real workflow transitions.
+- Revert reducer or component extractions that split simple local UI behavior without naming real user or domain events.

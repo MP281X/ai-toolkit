@@ -28,10 +28,10 @@ export class Agent extends Context.Service<
 }
 
 const agentCommandProfiles = [
-	new AgentCommandProfile({icon: 'opencode', id: 'opencode-gpt-5.5', label: 'opencode'}),
-	new AgentCommandProfile({icon: 'codex', id: 'codex-gpt-5.5-low', label: 'codex'}),
-	new AgentCommandProfile({icon: 'pi', id: 'pi-gpt-5.5-low', label: 'pi'}),
-	new AgentCommandProfile({icon: 'claude', id: 'claude-code-opus-4.8-bypass', label: 'claude'})
+	AgentCommandProfile.make({icon: 'opencode', id: 'opencode-gpt-5.5', label: 'opencode'}),
+	AgentCommandProfile.make({icon: 'codex', id: 'codex-gpt-5.5-low', label: 'codex'}),
+	AgentCommandProfile.make({icon: 'pi', id: 'pi-gpt-5.5-low', label: 'pi'}),
+	AgentCommandProfile.make({icon: 'claude', id: 'claude-code-opus-4.8-bypass', label: 'claude'})
 ]
 
 function commandForProfile(id: AgentCommandProfileId, cwd: string) {

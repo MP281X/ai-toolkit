@@ -4,27 +4,30 @@ import {Atom} from 'effect/unstable/reactivity'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 
-export class TerminalSessionInput extends Schema.Class<TerminalSessionInput>('TerminalSessionInput')({
+export type TerminalSessionInput = typeof TerminalSessionInput.Type
+const TerminalSessionInput = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
-}) {}
+})
 
-export class TerminalSessionAtomKey extends Schema.Class<TerminalSessionAtomKey>('TerminalSessionAtomKey')({
+type TerminalSessionAtomKey = typeof TerminalSessionAtomKey.Type
+export const TerminalSessionAtomKey = Schema.Struct({
 	args: Schema.optional(Schema.Array(Schema.String)),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
 	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	sessionId: Schema.optional(Schema.String)
-}) {}
+})
 
-export class TerminalAttachAtomKey extends Schema.Class<TerminalAttachAtomKey>('TerminalAttachAtomKey')({
+type TerminalAttachAtomKey = typeof TerminalAttachAtomKey.Type
+export const TerminalAttachAtomKey = Schema.Struct({
 	attachId: Schema.Number,
 	session: TerminalSessionInput,
 	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number})
-}) {}
+})
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {
 	if (Predicate.isUndefined(env)) return

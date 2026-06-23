@@ -1,10 +1,12 @@
 import {Schema} from 'effect'
 
-class PortlessStatus extends Schema.Class<PortlessStatus>('PortlessStatus')({
+type PortlessStatus = typeof PortlessStatus.Type
+const PortlessStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'prepared', 'running', 'stopped', 'exited', 'failed'])
-}) {}
+})
 
-export class PortlessScript extends Schema.Class<PortlessScript>('PortlessScript')({
+export type PortlessScript = typeof PortlessScript.Type
+export const PortlessScript = Schema.Struct({
 	baseOrigin: Schema.optional(Schema.String),
 	command: Schema.optional(Schema.String),
 	cwd: Schema.String,
@@ -15,25 +17,24 @@ export class PortlessScript extends Schema.Class<PortlessScript>('PortlessScript
 	scriptName: Schema.optional(Schema.String),
 	sessionId: Schema.String,
 	taskId: Schema.String
-}) {}
+})
 
-export class PortlessOrigin extends Schema.Class<PortlessOrigin>('PortlessOrigin')({
+export type PortlessOrigin = typeof PortlessOrigin.Type
+export const PortlessOrigin = Schema.Struct({
 	base: Schema.optional(Schema.String),
 	host: Schema.String,
 	origin: Schema.String,
 	port: Schema.Number,
 	sessionId: Schema.String,
 	taskId: Schema.String
-}) {}
+})
 
-export class PortlessRun extends Schema.Class<PortlessRun>('PortlessRun')({
-	origin: PortlessOrigin,
-	script: PortlessScript,
-	status: PortlessStatus
-}) {}
+export type PortlessRun = typeof PortlessRun.Type
+export const PortlessRun = Schema.Struct({origin: PortlessOrigin, script: PortlessScript, status: PortlessStatus})
 
-export class PortlessPackageJson extends Schema.Class<PortlessPackageJson>('PortlessPackageJson')({
+export type PortlessPackageJson = typeof PortlessPackageJson.Type
+export const PortlessPackageJson = Schema.Struct({
 	deslop: Schema.optional(Schema.Struct({portless: Schema.optional(Schema.Array(Schema.String))})),
 	name: Schema.optional(Schema.String),
 	scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))
-}) {}
+})

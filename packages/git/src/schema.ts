@@ -8,30 +8,34 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 type GitDiffStatus = typeof GitDiffStatus.Type
 const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
-export class GitDiffSegment extends Schema.Class<GitDiffSegment>('GitDiffSegment')({
+export type GitDiffSegment = typeof GitDiffSegment.Type
+export const GitDiffSegment = Schema.Struct({
 	filePath: Schema.String,
 	fingerprint: Schema.String,
 	id: Schema.String,
 	type: Schema.Literals(['commit', 'worktree'])
-}) {}
+})
 
-export class GitDiff extends Schema.Class<GitDiff>('GitDiff')({
+export type GitDiff = typeof GitDiff.Type
+export const GitDiff = Schema.Struct({
 	fileContent: Schema.optional(Schema.String),
 	filePath: Schema.String,
 	patch: Schema.String,
 	segments: Schema.Array(GitDiffSegment),
 	status: GitDiffStatus
-}) {}
+})
 
-export class GitReviewChangesTarget extends Schema.TaggedClass<GitReviewChangesTarget>()('changes', {}) {}
+export type GitReviewChangesTarget = typeof GitReviewChangesTarget.Type
+export const GitReviewChangesTarget = Schema.TaggedStruct('changes', {})
 
-export class GitReviewLocalTarget extends Schema.TaggedClass<GitReviewLocalTarget>()('local', {}) {}
+export type GitReviewLocalTarget = typeof GitReviewLocalTarget.Type
+export const GitReviewLocalTarget = Schema.TaggedStruct('local', {})
 
-export class GitReviewBranchTarget extends Schema.TaggedClass<GitReviewBranchTarget>()('branch', {}) {}
+export type GitReviewBranchTarget = typeof GitReviewBranchTarget.Type
+export const GitReviewBranchTarget = Schema.TaggedStruct('branch', {})
 
-export class GitReviewCommitTarget extends Schema.TaggedClass<GitReviewCommitTarget>()('commit', {
-	hash: Schema.String
-}) {}
+export type GitReviewCommitTarget = typeof GitReviewCommitTarget.Type
+export const GitReviewCommitTarget = Schema.TaggedStruct('commit', {hash: Schema.String})
 
 export type GitReviewTarget = typeof GitReviewTarget.Type
 export const GitReviewTarget = Schema.Union([
@@ -41,30 +45,31 @@ export const GitReviewTarget = Schema.Union([
 	GitReviewCommitTarget
 ])
 
-export class GitCommit extends Schema.Class<GitCommit>('GitCommit')({
-	hash: Schema.String,
-	shortHash: Schema.String,
-	subject: Schema.String
-}) {}
+export type GitCommit = typeof GitCommit.Type
+export const GitCommit = Schema.Struct({hash: Schema.String, shortHash: Schema.String, subject: Schema.String})
 
-export class GitPullRequest extends Schema.Class<GitPullRequest>('GitPullRequest')({url: Schema.String}) {}
+export type GitPullRequest = typeof GitPullRequest.Type
+export const GitPullRequest = Schema.Struct({url: Schema.String})
 
-export class GitReviewMetadata extends Schema.Class<GitReviewMetadata>('GitReviewMetadata')({
+export type GitReviewMetadata = typeof GitReviewMetadata.Type
+export const GitReviewMetadata = Schema.Struct({
 	branchCommits: Schema.Array(GitCommit),
 	dirty: Schema.Boolean,
 	localCommits: Schema.Array(GitCommit),
 	prUrl: Schema.optional(Schema.String),
 	unpushedCommits: Schema.Boolean,
 	upstream: Schema.optional(Schema.Struct({ahead: Schema.Number, behind: Schema.Number}))
-}) {}
+})
 
-export class GitReviewMark extends Schema.Class<GitReviewMark>('GitReviewMark')({
+export type GitReviewMark = typeof GitReviewMark.Type
+export const GitReviewMark = Schema.Struct({
 	filePath: Schema.String,
 	fingerprint: Schema.String,
 	segmentId: Schema.String
-}) {}
+})
 
-export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewComment')({
+export type GitReviewComment = typeof GitReviewComment.Type
+export const GitReviewComment = Schema.Struct({
 	body: Schema.String,
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
@@ -73,58 +78,48 @@ export class GitReviewComment extends Schema.Class<GitReviewComment>('GitReviewC
 	source: Schema.optional(Schema.Literals(['local', 'github'])),
 	threadId: Schema.optional(Schema.String),
 	url: Schema.optional(Schema.String)
-}) {}
+})
 
-class GitReviewCommentIdentity extends Schema.Class<GitReviewCommentIdentity>('GitReviewCommentIdentity')({
-	filePath: Schema.String,
-	lineNumber: Schema.Number,
-	side: Schema.Literals(['additions', 'deletions']),
-	source: Schema.Literals(['local', 'github']),
-	threadId: Schema.String
-}) {}
-
-export class GitReviewState extends Schema.Class<GitReviewState>('GitReviewState')({
+export type GitReviewState = typeof GitReviewState.Type
+export const GitReviewState = Schema.Struct({
 	comments: Schema.Array(GitReviewComment),
 	marks: Schema.Array(GitReviewMark)
-}) {}
+})
 
-export class GitRepository extends Schema.Class<GitRepository>('GitRepository')({
-	gitDirectory: Schema.String,
-	root: Schema.String
-}) {}
+export type GitRepository = typeof GitRepository.Type
+export const GitRepository = Schema.Struct({gitDirectory: Schema.String, root: Schema.String})
 
-export class GitBranch extends Schema.Class<GitBranch>('GitBranch')({
+export type GitBranch = typeof GitBranch.Type
+export const GitBranch = Schema.Struct({
 	name: Schema.String,
 	remote: Schema.optional(Schema.String),
 	type: Schema.Literals(['local', 'remote'])
-}) {}
+})
 
-export class GitBranchesSnapshot extends Schema.Class<GitBranchesSnapshot>('GitBranchesSnapshot')({
-	branches: Schema.Array(GitBranch),
-	defaultBranch: Schema.String
-}) {}
+export type GitBranchesSnapshot = typeof GitBranchesSnapshot.Type
+export const GitBranchesSnapshot = Schema.Struct({branches: Schema.Array(GitBranch), defaultBranch: Schema.String})
+
+export type GitWorktreeLocalSource = typeof GitWorktreeLocalSource.Type
+export const GitWorktreeLocalSource = Schema.TaggedStruct('local', {})
+
+export type GitWorktreeRemoteSource = typeof GitWorktreeRemoteSource.Type
+export const GitWorktreeRemoteSource = Schema.TaggedStruct('remote', {remote: Schema.String})
+
+export type GitWorktreeNewSource = typeof GitWorktreeNewSource.Type
+export const GitWorktreeNewSource = Schema.TaggedStruct('new', {})
 
 export type GitWorktreeSource = typeof GitWorktreeSource.Type
-export const GitWorktreeSource = Schema.Union([
-	Schema.Struct({_tag: Schema.Literal('local')}),
-	Schema.Struct({_tag: Schema.Literal('remote'), remote: Schema.String}),
-	Schema.Struct({_tag: Schema.Literal('new')})
-])
+export const GitWorktreeSource = Schema.Union([GitWorktreeLocalSource, GitWorktreeRemoteSource, GitWorktreeNewSource])
 
-export class GitWorktree extends Schema.Class<GitWorktree>('GitWorktree')({
-	branch: Schema.optional(Schema.String),
-	root: Schema.String
-}) {}
+export type GitWorktree = typeof GitWorktree.Type
+export const GitWorktree = Schema.Struct({branch: Schema.optional(Schema.String), root: Schema.String})
 
-export class GitProject extends Schema.Class<GitProject>('GitProject')({
-	repository: GitRepository,
-	worktrees: Schema.Array(GitWorktree)
-}) {}
+export type GitProject = typeof GitProject.Type
+export const GitProject = Schema.Struct({repository: GitRepository, worktrees: Schema.Array(GitWorktree)})
 
 export function gitReviewMarksForDiff(diff: GitDiff) {
-	return Array.map(
-		diff.segments,
-		segment => new GitReviewMark({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
+	return Array.map(diff.segments, segment =>
+		GitReviewMark.make({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
 	)
 }
 
@@ -138,29 +133,29 @@ export function gitReviewStateForMarks(segments: readonly GitReviewMark[], revie
 }
 
 export function gitReviewStateSaveComment(state: GitReviewState, comment: GitReviewComment) {
-	return new GitReviewState({
+	return GitReviewState.make({
 		comments: Array.append(
 			Array.filter(
 				state.comments,
 				currentComment =>
 					!Equal.equals(
-						new GitReviewCommentIdentity({
+						{
 							filePath: currentComment.filePath,
 							lineNumber: currentComment.lineNumber,
 							side: currentComment.side ?? 'additions',
 							source: currentComment.source ?? 'local',
 							threadId: currentComment.threadId ?? ''
-						}),
-						new GitReviewCommentIdentity({
+						},
+						{
 							filePath: comment.filePath,
 							lineNumber: comment.lineNumber,
 							side: comment.side ?? 'additions',
 							source: comment.source ?? 'local',
 							threadId: comment.threadId ?? ''
-						})
+						}
 					)
 			),
-			new GitReviewComment({...comment, resolved: false, source: 'local', threadId: undefined, url: undefined})
+			GitReviewComment.make({...comment, resolved: false, source: 'local', threadId: undefined, url: undefined})
 		),
 		marks: state.marks
 	})
@@ -170,25 +165,25 @@ export function gitReviewStateResolveComment(
 	state: GitReviewState,
 	input: {readonly filePath: string; readonly lineNumber: number; readonly side?: 'additions' | 'deletions'}
 ) {
-	return new GitReviewState({
+	return GitReviewState.make({
 		comments: Array.map(state.comments, comment =>
 			Equal.equals(
-				new GitReviewCommentIdentity({
+				{
 					filePath: comment.filePath,
 					lineNumber: comment.lineNumber,
 					side: comment.side ?? 'additions',
 					source: comment.source ?? 'local',
 					threadId: comment.threadId ?? ''
-				}),
-				new GitReviewCommentIdentity({
+				},
+				{
 					filePath: input.filePath,
 					lineNumber: input.lineNumber,
 					side: input.side ?? 'additions',
 					source: 'local',
 					threadId: ''
-				})
+				}
 			)
-				? new GitReviewComment({...comment, resolved: true})
+				? GitReviewComment.make({...comment, resolved: true})
 				: comment
 		),
 		marks: state.marks
@@ -198,7 +193,7 @@ export function gitReviewStateResolveComment(
 export function gitReviewStateMark(state: GitReviewState, marks: readonly GitReviewMark[]) {
 	const reviewed = HashSet.fromIterable(marks)
 
-	return new GitReviewState({
+	return GitReviewState.make({
 		comments: state.comments,
 		marks: Array.appendAll(
 			Array.filter(state.marks, mark => !HashSet.has(reviewed, mark)),
@@ -210,7 +205,7 @@ export function gitReviewStateMark(state: GitReviewState, marks: readonly GitRev
 export function gitReviewStateUnmark(state: GitReviewState, marks: readonly GitReviewMark[]) {
 	const reviewed = HashSet.fromIterable(marks)
 
-	return new GitReviewState({
+	return GitReviewState.make({
 		comments: state.comments,
 		marks: Array.filter(state.marks, mark => !HashSet.has(reviewed, mark))
 	})

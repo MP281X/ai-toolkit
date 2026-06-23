@@ -25,7 +25,7 @@ description: Use when adding, rewriting, removing, or running tests, including p
 ## Boundaries
 
 - External command/API/CLI/network: fake, mock, layer, in-memory boundary.
-- Package public API/state transitions/pure transforms/perf-sensitive paths are valid test targets.
+- Package public API behavior, pure transforms, and perf-sensitive paths are valid test targets.
 - Mock at boundary, not inside implementation mechanics.
 
 ## Performance

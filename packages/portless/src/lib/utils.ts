@@ -23,7 +23,7 @@ function packageJson(source: string) {
 	const manifest = pipe(
 		source,
 		Schema.decodeUnknownOption(Schema.fromJsonString(PortlessPackageJson)),
-		Option.getOrElse(() => new PortlessPackageJson({}))
+		Option.getOrElse(() => PortlessPackageJson.make({}))
 	)
 
 	return {
