@@ -15,7 +15,10 @@ import {Textarea} from '#components/ui/textarea.tsx'
 import {cn, formatError, toSentenceCase} from '#lib/utils.ts'
 
 const formContexts = tanstackForm.createFormHookContexts()
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
 export const useFieldContext = formContexts.useFieldContext
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
 export const useFormContext = formContexts.useFormContext
 
 function FieldWrapper(props: {
@@ -312,7 +315,9 @@ const formHook = tanstackForm.createFormHook({
 	formContext: formContexts.formContext
 })
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
 export const useForm = formHook.useAppForm
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form validation boundary.
 export const revalidateLogic = tanstackForm.revalidateLogic
 
 export declare namespace Form {
@@ -328,20 +333,22 @@ export declare namespace Form {
 }
 
 export function Form(props: Form.Props) {
+	async function submit() {
+		try {
+			await props.form.handleSubmit()
+			props.form.reset()
+		} catch (error) {
+			toast.error(formatError(error))
+		}
+	}
+
 	return (
 		<props.form.AppForm>
 			<form
 				className={cn('flex flex-1 items-center justify-center', props.className)}
 				onSubmit={event => {
 					event.preventDefault()
-					void (async () => {
-						try {
-							await props.form.handleSubmit()
-							props.form.reset()
-						} catch (error) {
-							toast.error(formatError(error))
-						}
-					})()
+					void submit()
 				}}
 			>
 				{props.children}

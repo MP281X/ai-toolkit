@@ -5,29 +5,33 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 
 # React
 
-## Compiler
+## Composition
 
-- React Compiler on
-- Zero manual memo: no `memo`, `useMemo`, `useCallback`
-- Remove manual memo when touched
+- Components render; atoms own logic.
+- Synchronized backend state: `SubscriptionRef` atoms.
+- Incremental backend data: streams.
+- Reads that can fail/suspend: suspense atoms.
+- Mutations: action atoms or local action state.
 
-## State And RPC
+## Errors
 
-- Components render; atoms own logic
-- URL-owned state: router search params + existing schema pattern
-- Reads that can fail/suspend: suspense atoms
-- Mutations: action atoms or local action state
-- Incremental backend data: streams
-- Synchronized backend state: `SubscriptionRef` atoms
-- No component-only shape unless UI creates a real domain value
-- Load failure: route/layout error boundary
-- Action failure: toast when user can continue
+- Route/layout error boundaries for load failure.
+- Action failure: toast when user can continue.
+- No fake success UI.
+- Fallback UI requires real loading/error state or explicit request.
 
 ## Components
 
-- Inline prop types for structural service mirrors
-- No service-schema imports in reusable component packages
-- No bridge props inferable from existing props
-- Local obvious derivation stays at use site
-- Async command = visible loading state
-- Disable UI actions that cannot currently run instead of duplicating the validation in the backend
+- Keep component props close to the component that owns them.
+- Name prop types when they are public, reused, recursive, or necessary for a complex component contract.
+- No service-schema imports in reusable component packages.
+- Bridge props or adapters must own layout, lifecycle, state, domain policy, or a repeated interaction contract.
+- Obvious local derivation stays at use site.
+- Do not extract section arrays, wrapper components, or handler modules only to make diagnostics disappear.
+- Async command = visible loading state.
+- Disable unavailable UI actions; backend remains authority.
+- Group UI state by user-facing interaction.
+- Use `useState` for local UI state that has direct setters or small inline functional updates.
+- Use a reducer when coupled state has named user or domain events with shared update logic.
+- Reducer actions describe user or domain events; avoid generic patch actions.
+- Revert reducer or component extractions that split simple local UI behavior without naming real user or domain events.

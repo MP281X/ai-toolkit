@@ -54,15 +54,73 @@ export default defineConfig({
 			suspicious: 'off'
 		},
 		env: {browser: true, builtin: true, node: true},
-		ignorePatterns: ['**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**', '**/generated/**'],
-		jsPlugins: [{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'}],
+		ignorePatterns: ['.agents/repos/**', '**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
+		jsPlugins: [
+			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
+			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},
+			{name: 'react-doctor', specifier: 'oxlint-plugin-react-doctor'}
+		],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}},
+			{
+				files: ['packages/oxlint-rules/src/oxlint-plugin.ts'],
+				rules: {'func-style': 'off', 'import/no-default-export': 'off'}
+			},
 			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
 		],
 		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
+			// Deslop repo policy
+			'@deslop/oxlint-rules/no-access-alias': 'error',
+			'@deslop/oxlint-rules/no-access-helper': 'error',
+			'@deslop/oxlint-rules/no-atom-family-inferred-arg': 'error',
+			'@deslop/oxlint-rules/no-composed-identity-key': 'error',
+			'@deslop/oxlint-rules/no-condition-alias': 'error',
+			'@deslop/oxlint-rules/no-data-class': 'error',
+			'@deslop/oxlint-rules/no-declare-module-export': 'error',
+			'@deslop/oxlint-rules/no-effect-returning-function': 'error',
+			'@deslop/oxlint-rules/no-effect-run-entrypoint': 'error',
+			'@deslop/oxlint-rules/no-exported-local-type': 'error',
+			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
+			'@deslop/oxlint-rules/no-floating-local-type': 'error',
+			'@deslop/oxlint-rules/no-function-return-type': 'error',
+			'@deslop/oxlint-rules/no-generic-state-patch': 'error',
+			'@deslop/oxlint-rules/no-identity-callback': 'error',
+			'@deslop/oxlint-rules/no-iife': 'error',
+			'@deslop/oxlint-rules/no-import-alias': 'error',
+			'@deslop/oxlint-rules/no-json-global': 'error',
+			'@deslop/oxlint-rules/no-let': 'error',
+			'@deslop/oxlint-rules/no-local-mutable-holder': 'error',
+			'@deslop/oxlint-rules/no-module-mutable-state': 'error',
+			'@deslop/oxlint-rules/no-native-mutable-collection': 'error',
+			'@deslop/oxlint-rules/no-native-prototype-method': 'error',
+			'@deslop/oxlint-rules/no-nullary-effect-fn': 'error',
+			'@deslop/oxlint-rules/no-nullary-effect-wrapper': 'error',
+			'@deslop/oxlint-rules/no-nullish-comparison': 'error',
+			'@deslop/oxlint-rules/no-object-destructure': 'error',
+			'@deslop/oxlint-rules/no-option-constructor': 'error',
+			'@deslop/oxlint-rules/no-optional-undefined-property': 'error',
+			'@deslop/oxlint-rules/no-pass-through-wrapper': 'error',
+			'@deslop/oxlint-rules/no-primitive-const': 'error',
+			'@deslop/oxlint-rules/no-private-test-import': 'error',
+			'@deslop/oxlint-rules/no-private-workspace-import': 'error',
+			'@deslop/oxlint-rules/no-promise-callback': 'error',
+			'@deslop/oxlint-rules/no-public-raw-domain-string': 'error',
+			'@deslop/oxlint-rules/no-raw-tagged-object': 'error',
+			'@deslop/oxlint-rules/no-schema-class': 'error',
+			'@deslop/oxlint-rules/no-schema-decoder-alias': 'error',
+			'@deslop/oxlint-rules/no-schema-without-type-export': 'error',
+			'@deslop/oxlint-rules/no-single-use-guard': 'error',
+			'@deslop/oxlint-rules/no-single-use-helper': 'error',
+			'@deslop/oxlint-rules/no-static-return-function': 'error',
+			'@deslop/oxlint-rules/no-typed-callback-params': 'error',
+			'@deslop/oxlint-rules/no-useless-effect-wrapper': 'error',
+			'@deslop/oxlint-rules/no-variable-type-annotation': 'error',
+			'@deslop/oxlint-rules/no-zero-arg-effect-fn': 'error',
+			'@deslop/oxlint-rules/prefer-match': 'error',
+
+			// TypeScript type shape
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
 			'@typescript-eslint/consistent-type-assertions': [
 				'error',
@@ -74,8 +132,12 @@ export default defineConfig({
 				'error',
 				{fixStyle: 'separate-type-imports', prefer: 'type-imports'}
 			],
+
+			// TypeScript correctness
 			'@typescript-eslint/no-confusing-non-null-assertion': 'error',
+			'@typescript-eslint/no-confusing-void-expression': 'error',
 			'@typescript-eslint/no-duplicate-type-constituents': 'error',
+			'@typescript-eslint/no-empty-object-type': 'error',
 			'@typescript-eslint/no-explicit-any': 'error',
 			'@typescript-eslint/no-extra-non-null-assertion': 'error',
 			'@typescript-eslint/no-floating-promises': 'error',
@@ -100,22 +162,34 @@ export default defineConfig({
 			'@typescript-eslint/no-unsafe-type-assertion': 'error',
 			'@typescript-eslint/no-useless-empty-export': 'error',
 			'@typescript-eslint/non-nullable-type-assertion-style': 'error',
+
+			// TypeScript preferences
 			'@typescript-eslint/prefer-as-const': 'error',
 			'@typescript-eslint/prefer-nullish-coalescing': 'error',
 			'@typescript-eslint/prefer-optional-chain': 'error',
 			'@typescript-eslint/prefer-readonly': 'error',
+
+			// TypeScript expression boundaries
+			'@typescript-eslint/restrict-plus-operands': 'error',
+			'@typescript-eslint/restrict-template-expressions': 'error',
 			'@typescript-eslint/strict-boolean-expressions': 'error',
 			'@typescript-eslint/strict-void-return': 'error',
 			'@typescript-eslint/switch-exhaustiveness-check': 'error',
+
+			// JavaScript style
 			'arrow-body-style': ['error', 'as-needed'],
 			curly: ['error', 'multi-line', 'consistent'],
 			'func-names': ['error', 'as-needed', {generators: 'never'}],
 			'func-style': ['error', 'declaration'],
+
+			// Imports
 			'import/no-default-export': 'error',
 			'import/no-duplicates': 'error',
 			'import/no-empty-named-blocks': 'error',
 			'import/no-mutable-exports': 'error',
 			'import/no-self-import': 'error',
+
+			// JavaScript correctness
 			'no-console': 'error',
 			'no-else-return': 'error',
 			'no-empty-function': ['error', {allow: ['arrowFunctions']}],
@@ -128,19 +202,7 @@ export default defineConfig({
 			'no-object-constructor': 'error',
 			'no-param-reassign': ['error', {props: true}],
 			'no-prototype-builtins': 'error',
-			'no-restricted-globals': ['error', 'global', 'globalThis', 'String', 'Boolean', 'Array'],
-			'no-restricted-imports': [
-				'error',
-				{
-					paths: [
-						{
-							importNames: ['memo', 'useCallback', 'useMemo'],
-							message: 'React Compiler handles memoization. Remove manual memoization.',
-							name: 'react'
-						}
-					]
-				}
-			],
+			'no-restricted-globals': ['error', 'global', 'globalThis', 'String', 'Boolean', 'Array', 'Object', 'Reflect'],
 			'no-shadow': [
 				'error',
 				{allow: ['Array', 'Boolean', 'Console', 'Effect', 'HashMap', 'Number', 'Option', 'Schema', 'String']}
@@ -152,9 +214,13 @@ export default defineConfig({
 			'no-useless-rename': 'error',
 			'no-useless-return': 'error',
 			'object-shorthand': 'error',
+
+			// Oxc
 			'oxc/branches-sharing-code': 'error',
 			'oxc/no-accumulating-spread': 'error',
 			'oxc/no-map-spread': 'error',
+
+			// JavaScript preferences
 			'prefer-const': ['error', {destructuring: 'all'}],
 			'prefer-object-has-own': 'error',
 			'prefer-object-spread': 'error',
@@ -162,6 +228,74 @@ export default defineConfig({
 			'prefer-string-slice': 'error',
 			'prefer-string-trim-start-end': 'error',
 			'prefer-template': 'error',
+
+			// React Doctor JSX and component contracts
+			'react-doctor/checked-requires-onchange-or-readonly': 'error',
+			'react-doctor/jsx-no-undef': 'error',
+			'react-doctor/no-array-index-as-key': 'error',
+			'react-doctor/no-call-component-as-function': 'error',
+			'react-doctor/no-create-context-in-render': 'error',
+			'react-doctor/no-create-ref-in-function-component': 'error',
+			'react-doctor/no-inline-exhaustive-style': 'error',
+			'react-doctor/no-jsx-element-type': 'error',
+			'react-doctor/no-many-boolean-props': 'error',
+			'react-doctor/no-random-key': 'error',
+			'react-doctor/no-uncontrolled-input': 'error',
+			'react-doctor/no-unknown-property': 'error',
+			'react-doctor/prefer-module-scope-pure-function': 'error',
+			'react-doctor/require-render-return': 'error',
+
+			// React Doctor effects and state
+			'react-doctor/effect-needs-cleanup': 'error',
+			'react-doctor/no-async-effect-callback': 'error',
+			'react-doctor/no-cascading-set-state': 'error',
+			'react-doctor/no-derived-useState': 'error',
+			'react-doctor/no-effect-event-in-deps': 'error',
+			'react-doctor/no-effect-with-fresh-deps': 'error',
+			'react-doctor/no-fetch-in-effect': 'error',
+			'react-doctor/no-mutable-in-deps': 'error',
+			'react-doctor/no-mutating-reducer-state': 'error',
+			'react-doctor/no-self-updating-effect': 'error',
+			'react-doctor/no-set-state-in-render': 'error',
+			'react-doctor/prefer-use-effect-event': 'error',
+			'react-doctor/prefer-use-sync-external-store': 'error',
+			'react-doctor/prefer-useReducer': 'error',
+			'react-doctor/rerender-functional-setstate': 'error',
+			'react-doctor/rerender-lazy-ref-init': 'error',
+			'react-doctor/rerender-lazy-state-init': 'error',
+
+			// React Doctor browser and legacy APIs
+			'react-doctor/no-event-handler': 'error',
+			'react-doctor/no-find-dom-node': 'error',
+			'react-doctor/no-flush-sync': 'error',
+			'react-doctor/no-legacy-class-lifecycles': 'error',
+			'react-doctor/no-legacy-context-api': 'error',
+			'react-doctor/no-react-dom-deprecated-apis': 'error',
+			'react-doctor/no-react19-deprecated-apis': 'error',
+			'react-doctor/no-render-return-value': 'error',
+			'react-doctor/no-string-refs': 'error',
+
+			// React Doctor rendering and compiler
+			'react-doctor/no-render-in-render': 'error',
+			'react-doctor/react-compiler-no-manual-memoization': 'error',
+			'react-doctor/rendering-conditional-render': 'error',
+			'react-doctor/rendering-hydration-mismatch-time': 'error',
+
+			// React Doctor visual performance and accessibility
+			'react-doctor/no-global-css-variable-animation': 'error',
+			'react-doctor/no-gray-on-colored-background': 'error',
+			'react-doctor/no-inline-bounce-easing': 'error',
+			'react-doctor/no-large-animated-blur': 'error',
+			'react-doctor/no-layout-property-animation': 'error',
+			'react-doctor/no-layout-transition-inline': 'error',
+			'react-doctor/no-long-transition-duration': 'error',
+			'react-doctor/no-outline-none': 'error',
+			'react-doctor/no-permanent-will-change': 'error',
+			'react-doctor/no-scale-from-zero': 'error',
+			'react-doctor/no-tiny-text': 'error',
+			'react-doctor/no-transition-all': 'error',
+
+			// React
 			'react/exhaustive-deps': 'error',
 			'react/jsx-key': 'error',
 			'react/jsx-no-duplicate-props': 'error',
@@ -173,8 +307,15 @@ export default defineConfig({
 			'react/rules-of-hooks': 'error',
 			'react/style-prop-object': 'error',
 			'react/void-dom-elements-no-children': 'error',
+
+			// JavaScript async and object order
 			'require-await': 'error',
 			'sort-keys': ['error', 'asc', {allowLineSeparatedGroups: true, natural: true}],
+
+			// TypeScript syntax
+			'typescript/ban-ts-comment': ['error', {'ts-nocheck': true}],
+
+			// Unicorn
 			'unicorn/consistent-function-scoping': 'error',
 			'unicorn/no-array-reverse': 'error',
 			'unicorn/no-array-sort': 'error',
@@ -189,6 +330,8 @@ export default defineConfig({
 			'unicorn/no-useless-undefined': 'error',
 			'unicorn/prefer-logical-operator-over-ternary': 'error',
 			'unicorn/prefer-number-properties': 'error',
+
+			// JavaScript globals and Vite Plus
 			'use-isnan': 'error',
 			'vite-plus/prefer-vite-plus-imports': 'error'
 		},

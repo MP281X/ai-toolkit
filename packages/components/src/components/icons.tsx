@@ -1,6 +1,6 @@
-import {Function, Match, pipe} from 'effect'
+import {Match, pipe} from 'effect'
 
-import {Braces, CirclePauseIcon, CircleIcon, File, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
+import {Braces, CirclePauseIcon, CircleIcon, File} from 'lucide-react'
 
 import {BashDark} from './svgs/bashDark.tsx'
 import {ClaudeDark} from './svgs/claudeDark.tsx'
@@ -8,9 +8,7 @@ import {CodexDark} from './svgs/codexDark.tsx'
 import {EffectDark} from './svgs/effectDark.tsx'
 import {MarkdownDark} from './svgs/markdownDark.tsx'
 import {OpenaiDark} from './svgs/openaiDark.tsx'
-import {OpencodeDark} from './svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './svgs/openrouterDark.tsx'
-import {PiDark} from './svgs/pi.tsx'
 import {ReactDark} from './svgs/reactDark.tsx'
 import {Spinner} from './ui/spinner.tsx'
 
@@ -19,17 +17,12 @@ import {cn} from '#lib/utils.ts'
 
 export * from 'lucide-react'
 
-export function AgentIcon(props: {
-	readonly layer: 'claude' | 'codex' | 'effect' | 'opencode' | 'pi'
-	readonly className?: string
-}) {
+export function AgentIcon(props: {readonly layer: 'claude' | 'codex' | 'effect'; readonly className?: string}) {
 	return pipe(
 		Match.value(props.layer),
 		Match.when('claude', () => <ClaudeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('codex', () => <CodexDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('effect', () => <EffectDark className={cn('size-3 shrink-0', props.className)} />),
-		Match.when('opencode', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
-		Match.when('pi', () => <PiDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }
@@ -53,27 +46,10 @@ export function ProcessStateIcon(props: {
 	)
 }
 
-export function StatusIcon(props: {
-	readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
-	readonly className?: string
-}) {
-	return pipe(
-		Match.value(props.state),
-		Match.when('idle', Function.constUndefined),
-		Match.when('running', () => <Spinner className={cn('size-3 text-blue-500', props.className)} />),
-		Match.when('error', () => <OctagonXIcon className={cn('text-destructive size-3', props.className)} />),
-		Match.orElse(() => <TriangleAlertIcon className={cn('size-3 text-amber-500', props.className)} />)
-	)
-}
-
-export function ProviderIcon(props: {
-	readonly provider: 'openai' | 'opencode-go' | 'openrouter'
-	readonly className?: string
-}) {
+export function ProviderIcon(props: {readonly provider: 'openai' | 'openrouter'; readonly className?: string}) {
 	return pipe(
 		Match.value(props.provider),
 		Match.when('openai', () => <OpenaiDark className={cn('size-3 shrink-0', props.className)} />),
-		Match.when('opencode-go', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('openrouter', () => <OpenrouterDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)

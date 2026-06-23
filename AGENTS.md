@@ -2,46 +2,60 @@
 
 ## Role
 
-- Mode: implementation agent
-- Exit: requested change made, verified, reported
+- Production agent.
+- Own objective until implemented, verified, reported.
+- Use platform goal tracking when available.
 
 ## Context
 
-- Package manager: `vp`
-- Workspaces: `apps/*`, `packages/*`
-- External source refs: `.agents/repos/*`
-- Effect source ref: `.agents/repos/effect/LLMS.md`
-- No `node_modules` search
+- Package manager: `vp`.
+- Workspaces: `apps/*`, `packages/*`.
+- Effect is the application model; non-Effect code is boundary interop.
+- Search local source and listed `.agents/repos/*` first; use tooling APIs for installed packages.
+- External refs: list `.agents/repos/*` before selecting a clone path.
 
 ## Research
 
-- APIs/libraries/patterns: repo source or `.agents/repos/*`
-- Package boundary/public service change: read package source first
-- New behavior: search similar local code first
-- Local source > memory
+- Read repo source before acting.
+- Local source > `.agents/repos/*` > memory.
+- New behavior: search existing local pattern first.
+- Package boundary, public service, schema, config, test strategy: read package source first.
+- Interface first: public signatures, services, schemas stable; implementation disposable.
+
+## Requirements
+
+- Explore before asking; ask only for undiscoverable requirements, success criteria, public interfaces, or major tradeoffs.
+- Main agent orchestrates; subagents answer bounded unknowns.
+- Discuss requirements before interfaces; avoid implementation-detail questions.
+- Capture behavior, public interfaces, constraints, verification, and risks before broad edits.
 
 ## Implementation
 
-- Final shape first: direct, inferred, functional, composable, pipeable, Effect-native
-- Structure only from domain, Effect, React, or external boundary
-- Direct local code > helpers, wrappers, config objects, floating types, casts, assertions, fallbacks, duplicated state, compatibility paths
-- Optimize the actual method/workflow to be fast enough on demand; do not hide slow paths with preloading, broad caching, speculative warming, or background refresh unless explicitly requested
-- Treat caching/preloading as correctness-owned state with invalidation cost, not as a substitute for making the underlying operation efficient and observable
-- Inline simple types, props, helpers, expressions, and derived values
-- Repeated local code stays visible when extraction only hides
-- Delete/replace incidental complexity
-- Refactor = old implementation fully replaced
-- No legacy paths, compatibility wrappers, adapters, fallback branches, duplicate implementations
-- No backward compatibility unless explicitly requested
-- No speculative abstractions, single-use helpers, migration code, just-in-case code
-- Type system, schemas, UI state are boundaries; no impossible-state revalidation
-- Dead/unused code removed
-- Lockfile: no manual `pnpm-lock.yaml` edits; manifest change => `vp install`, commit generated output
-- Ask only for undiscoverable scope, success criteria, or major tradeoff
+- Preserve behavior and public boundaries.
+- Structure follows domain, framework, schema, or external boundary.
+- Failed checks point to a design or boundary question first.
+- If the same area fails twice, inspect the local pattern and reshape the implementation before continuing.
+- Active source, active rules, and active instructions define authoring policy.
+- Refactors leave one final implementation path.
+- Keep live code, live exports, current tests, and current prompts.
+- Compatibility, migration, caching, and background work start from behavior need.
+- Optimize actual operation; expose cost.
+- Type system, schemas, and UI state are boundaries.
+- Write final-shape code first; tooling is a backstop.
+
+## Subagents
+
+- Use risk inventory; spawn only focused agents that reduce current uncertainty.
+- Prompt states scope, read-only, no delegation, output shape.
+- Model: `gpt-5.5`; reasoning effort follows task complexity.
+- Main agent owns synthesis and edits.
 
 ## Verification
 
-- Commands: `vp run <script>`
-- Code change: `vp run check`
-- Behavior/test change: `vp run test`
-- Diagnostics = design feedback; rewrite instead of suppress/bypass
+- Commands through `vp run <script>`.
+- Run validation commands after finishing code, config, instruction, or manifest changes.
+- Code/config/instruction change: `vp run check`.
+- Behavior/test change: also `vp run test`.
+- Package-local change: targeted package scripts first.
+- Batch related verification failures and fix the root cause.
+- Refactors preserve accepted behavior.

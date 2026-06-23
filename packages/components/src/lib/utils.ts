@@ -1,4 +1,4 @@
-import {Array, Cause, DateTime, Match, Predicate, String, pipe} from 'effect'
+import {Array, Cause, DateTime, Match, Predicate, Schema, String, pipe} from 'effect'
 
 import type {ClassValue} from 'clsx'
 import {clsx} from 'clsx'
@@ -23,9 +23,9 @@ export const formatError = pipe(
 		)
 	),
 	Match.when(Predicate.hasProperty('message'), error => String.String(error.message)),
-	Match.when(Predicate.isString, string => string),
+	Match.when(Predicate.isString, value => String.String(value)),
 	Match.when(Predicate.isNullish, () => 'Error' as const),
-	Match.when(Predicate.isObjectOrArray, error => JSON.stringify(error, undefined, 2)),
+	Match.when(Predicate.isObjectOrArray, error => Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(error)),
 	Match.orElse(() => 'Unknown Error' as const)
 )
 
@@ -37,10 +37,6 @@ export const formatTimestamp = pipe(
 	),
 	Match.exhaustive
 )
-
-export function formatNumber(number: number) {
-	return new Intl.NumberFormat(undefined, {maximumFractionDigits: 1, notation: 'compact'}).format(number)
-}
 
 export function formatTimeUntil(date: DateTime.DateTime) {
 	const millis = DateTime.toEpochMillis(date) - DateTime.toEpochMillis(DateTime.nowUnsafe())

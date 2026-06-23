@@ -1,22 +1,15 @@
 import {createServer} from 'node:net'
 
 import type {FileSystem, Path} from 'effect'
-import {Array, Context, Effect, Layer, Option, Predicate, Semaphore, String, pipe} from 'effect'
+import {Array, Context, Effect, HashMap, HashSet, Layer, Option, Predicate, Semaphore, String, pipe} from 'effect'
 
-import type {PlatformError} from 'effect/PlatformError'
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
 import type {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
-import {PortlessOrigin, type PortlessPreparedRun, PortlessRun, PortlessScript} from './schema.ts'
+import {PortlessOrigin, PortlessRun, PortlessScript} from './schema.ts'
 
 import {command, discover} from '#lib/utils.ts'
-
-type PortlessMock = {
-	readonly clear?: (cwd: string) => Effect.Effect<void>
-	readonly remove?: (input: {readonly cwd: string; readonly sessionId: string}) => Effect.Effect<void>
-	readonly scripts?: (cwd: string) => Effect.Effect<PortlessPreparedRun[], PlatformError>
-}
 
 const INJECTED_HEAD = `<script>
 (() => {
@@ -25,7 +18,7 @@ const INJECTED_HEAD = `<script>
 
   const serialize = value => {
     if (typeof value === 'string') return value
-    try { return JSON.stringify(value) } catch { return String(value) }
+    return String(value)
   }
   const send = (level, message) => window.parent?.postMessage({deslopBrowserLog: true, level, message}, '*')
   const sendFavicon = () => {
@@ -78,22 +71,10 @@ const INJECTED_HEAD = `<script>
 <script crossorigin="anonymous" src="//unpkg.com/react-scan/dist/auto.global.js" onload="window.reactScan?.({allowInIframe: true, _debug: 'verbose'})"></script>
 <script src="https://unpkg.com/react-grab/dist/index.global.js"></script>`
 
-const portlessHopsHeader = 'x-portless-hops'
-const maxProxyHops = 5
-
 function injectScripts(html: string) {
 	return /<head[^>]*>/i.test(html)
 		? html.replace(/<head[^>]*>/i, match => `${match}\n${INJECTED_HEAD}`)
 		: `${INJECTED_HEAD}\n${html}`
-}
-
-function proxyHops(header: string | undefined | null) {
-	const hops = Number.parseInt(header ?? '', 10)
-	return Number.isFinite(hops) ? hops : 0
-}
-
-function loopDetected(hops: number) {
-	return hops >= maxProxyHops
 }
 
 function loopDetectedResponse(hops: number) {
@@ -107,13 +88,13 @@ function loopDetectedResponse(hops: number) {
 
 const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
-	const hops = proxyHops(webRequest.headers.get(portlessHopsHeader))
-	if (loopDetected(hops)) return loopDetectedResponse(hops)
+	const hops = Number.parseInt(webRequest.headers.get('x-portless-hops') ?? '', 10)
+	if ((Number.isFinite(hops) ? hops : 0) >= 5) return loopDetectedResponse(Number.isFinite(hops) ? hops : 0)
 
-	const [pathname = '/', search = ''] = request.url.split('?')
+	const [pathname = '/', search = ''] = String.split(request.url, '?')
 	const upstreamHeaders = new Headers(webRequest.headers)
 	upstreamHeaders.set('host', new URL(origin).host)
-	upstreamHeaders.set(portlessHopsHeader, `${hops + 1}`)
+	upstreamHeaders.set('x-portless-hops', `${(Number.isFinite(hops) ? hops : 0) + 1}`)
 	const upstreamRequest = new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, {
 		body: webRequest.body,
 		headers: upstreamHeaders,
@@ -125,10 +106,11 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	const headers = new Headers(upstreamResponse.headers)
 	headers.delete('content-length')
 	headers.delete('content-encoding')
-	const shouldRewriteHtml =
-		request.method === 'GET' && (upstreamResponse.headers.get('content-type') ?? '').includes('text/html')
-
-	if (!shouldRewriteHtml) {
+	if (
+		!(
+			request.method === 'GET' && pipe(upstreamResponse.headers.get('content-type') ?? '', String.includes('text/html'))
+		)
+	) {
 		return HttpServerResponse.fromWeb(
 			new Response(upstreamResponse.body, {
 				headers,
@@ -151,10 +133,10 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 })
 
 const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const hops = proxyHops(request.headers[portlessHopsHeader])
-	if (loopDetected(hops)) return loopDetectedResponse(hops)
+	const hops = Number.parseInt(request.headers['x-portless-hops'] ?? '', 10)
+	if ((Number.isFinite(hops) ? hops : 0) >= 5) return loopDetectedResponse(Number.isFinite(hops) ? hops : 0)
 
-	const [pathname = '/', search = ''] = request.url.split('?')
+	const [pathname = '/', search = ''] = String.split(request.url, '?')
 	const protocols = pipe(
 		Option.fromUndefinedOr(request.headers['sec-websocket-protocol']),
 		Option.map(header => pipe(header, String.split(','), Array.map(String.trim), Array.filter(String.isNonEmpty)))
@@ -199,16 +181,12 @@ function requestHostname(host: string | undefined) {
 	)
 }
 
-function isLocalHostname(hostname: string) {
-	return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
-}
-
-const browserBlockedPorts = new Set([
+const browserBlockedPorts = HashSet.fromIterable([
 	4000, 4045, 4111, 4190, 4279, 4333, 4559, 4567, 4661, 4662, 4663, 4664, 4665, 4666, 4667, 4668, 4669
 ])
 
-function portAvailable(port: number) {
-	return Effect.promise<boolean>(
+const portAvailable = Effect.fn('Portless.portAvailable')(function* (port: number) {
+	return yield* Effect.promise<boolean>(
 		() =>
 			new Promise(resolve => {
 				const server = createServer()
@@ -223,7 +201,7 @@ function portAvailable(port: number) {
 				server.listen({host: '127.0.0.1', port})
 			})
 	)
-}
+})
 
 export class Portless extends Context.Service<Portless>()('@deslop/portless/service/Portless', {
 	make: Effect.gen(function* () {
@@ -232,12 +210,14 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			server.address._tag === 'TcpAddress'
 				? server.address.port.toString()
 				: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
-		const ports = new Map<string, number>()
-		const routes = new Map<string, string>()
-		const cwdRoutes = new Map<string, Set<string>>()
-		const routeCwds = new Map<string, string>()
-		const routeSessionKeys = new Map<string, string>()
-		const sessionRoutes = new Map<string, string>()
+		const state = {
+			cwdRoutes: HashMap.empty<string, HashSet.HashSet<string>>(),
+			ports: HashMap.empty<string, number>(),
+			routeCwds: HashMap.empty<string, string>(),
+			routeSessionKeys: HashMap.empty<string, string>(),
+			routes: HashMap.empty<string, string>(),
+			sessionRoutes: HashMap.empty<string, string>()
+		}
 		const portLock = yield* Semaphore.make(1)
 		const discoveryContext = yield* Effect.context<
 			ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
@@ -252,12 +232,20 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 		) {
 			const request = yield* HttpServerRequest.HttpServerRequest
 			const hostname = requestHostname(request.headers['host'])
-			if (Option.isNone(hostname) || isLocalHostname(hostname.value)) return yield* app
-			if (!hostname.value.endsWith('.localhost')) return yield* app
+			if (
+				Option.isNone(hostname) ||
+				hostname.value === 'localhost' ||
+				hostname.value === '127.0.0.1' ||
+				hostname.value === '::1' ||
+				hostname.value === '[::1]'
+			) {
+				return yield* app
+			}
+			if (!pipe(hostname.value, String.endsWith('.localhost'))) return yield* app
 
 			const route = lookup(request.headers['host'])
 			if (Option.isNone(route)) return HttpServerResponse.empty({status: 404})
-			if (request.headers['upgrade']?.toLowerCase() === 'websocket') {
+			if (pipe(request.headers['upgrade'] ?? '', String.toLowerCase) === 'websocket') {
 				return yield* proxyWebSocket(request, route.value)
 			}
 
@@ -266,62 +254,89 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 		function lookup(host: string | undefined) {
 			return pipe(
 				requestHostname(host),
-				Option.flatMap(hostname => Option.fromUndefinedOr(routes.get(hostname)))
+				Option.flatMap(hostname => HashMap.get(state.routes, hostname))
 			)
 		}
 		function removeRoute(host: string | undefined) {
-			if (host === undefined) return
-			routes.delete(host)
-			const cwd = routeCwds.get(host)
-			if (cwd !== undefined) cwdRoutes.get(cwd)?.delete(host)
-			const sessionKey = routeSessionKeys.get(host)
-			if (sessionKey !== undefined) {
-				sessionRoutes.delete(sessionKey)
-				ports.delete(sessionKey)
-			}
-			routeCwds.delete(host)
-			routeSessionKeys.delete(host)
+			if (Predicate.isUndefined(host)) return
+			state.routes = HashMap.remove(state.routes, host)
+			pipe(
+				HashMap.get(state.routeCwds, host),
+				Option.map(cwd => {
+					state.cwdRoutes = HashMap.modify(state.cwdRoutes, cwd, hosts => HashSet.remove(hosts, host))
+				})
+			)
+			pipe(
+				HashMap.get(state.routeSessionKeys, host),
+				Option.map(sessionKey => {
+					state.sessionRoutes = HashMap.remove(state.sessionRoutes, sessionKey)
+					state.ports = HashMap.remove(state.ports, sessionKey)
+				})
+			)
+			state.routeCwds = HashMap.remove(state.routeCwds, host)
+			state.routeSessionKeys = HashMap.remove(state.routeSessionKeys, host)
 		}
-		function removeCwd(cwd: string, keepSessionKeys = new Set<string>()) {
-			for (const host of cwdRoutes.get(cwd) ?? []) {
-				routes.delete(host)
-				routeCwds.delete(host)
-				routeSessionKeys.delete(host)
-			}
-			cwdRoutes.delete(cwd)
-			for (const entry of sessionRoutes) {
-				if (String.startsWith(`${cwd}:`)(entry[0]) && !keepSessionKeys.has(entry[0])) sessionRoutes.delete(entry[0])
-			}
-			for (const entry of ports) {
-				if (String.startsWith(`${cwd}:`)(entry[0]) && !keepSessionKeys.has(entry[0])) ports.delete(entry[0])
-			}
+		function removeCwd(cwd: string, keepSessionKeys = HashSet.empty<string>()) {
+			pipe(
+				HashMap.get(state.cwdRoutes, cwd),
+				Option.map(hosts => {
+					for (const host of hosts) {
+						state.routes = HashMap.remove(state.routes, host)
+						state.routeCwds = HashMap.remove(state.routeCwds, host)
+						state.routeSessionKeys = HashMap.remove(state.routeSessionKeys, host)
+					}
+				})
+			)
+			state.cwdRoutes = HashMap.remove(state.cwdRoutes, cwd)
+			state.sessionRoutes = HashMap.filter(
+				state.sessionRoutes,
+				(_, sessionKey) => !String.startsWith(`${cwd}:`)(sessionKey) || HashSet.has(keepSessionKeys, sessionKey)
+			)
+			state.ports = HashMap.filter(
+				state.ports,
+				(_, sessionKey) => !String.startsWith(`${cwd}:`)(sessionKey) || HashSet.has(keepSessionKeys, sessionKey)
+			)
 		}
-		function replaceRoutes(cwd: string, discovered: readonly PortlessPreparedRun[]) {
-			const nextSessionKeys = new Set(discovered.map(route => `${cwd}:${route.script.sessionId}`))
+		function replaceRoutes(
+			cwd: string,
+			discovered: readonly (PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand})[]
+		) {
+			const nextSessionKeys = pipe(
+				discovered,
+				Array.map(route => `${cwd}:${route.script.sessionId}`),
+				HashSet.fromIterable
+			)
 			removeCwd(cwd, nextSessionKeys)
 
-			const hosts = new Set<string>()
+			const hosts = pipe(
+				discovered,
+				Array.map(route => route.origin.host),
+				HashSet.fromIterable
+			)
 			for (const route of discovered) {
 				const sessionKey = `${cwd}:${route.script.sessionId}`
-				hosts.add(route.origin.host)
-				routes.set(route.origin.host, `http://127.0.0.1:${route.origin.port}`)
-				routeCwds.set(route.origin.host, cwd)
-				routeSessionKeys.set(route.origin.host, sessionKey)
-				sessionRoutes.set(sessionKey, route.origin.host)
+				state.routes = HashMap.set(state.routes, route.origin.host, `http://127.0.0.1:${route.origin.port}`)
+				state.routeCwds = HashMap.set(state.routeCwds, route.origin.host, cwd)
+				state.routeSessionKeys = HashMap.set(state.routeSessionKeys, route.origin.host, sessionKey)
+				state.sessionRoutes = HashMap.set(state.sessionRoutes, sessionKey, route.origin.host)
 			}
-			cwdRoutes.set(cwd, hosts)
+			state.cwdRoutes = HashMap.set(state.cwdRoutes, cwd, hosts)
 		}
 		const port = Effect.fnUntraced(function* (key: string) {
 			return yield* pipe(
 				Effect.gen(function* () {
-					const existing = ports.get(key)
-					if (existing !== undefined) return existing
+					const existing = HashMap.get(state.ports, key)
+					if (Option.isSome(existing)) return existing.value
 
-					const reserved = new Set(ports.values())
-					for (let candidatePort = 4000; candidatePort <= 4999; candidatePort += 1) {
-						if (browserBlockedPorts.has(candidatePort) || reserved.has(candidatePort)) continue
+					for (const candidatePort of Array.range(4000, 4999)) {
+						if (
+							HashSet.has(browserBlockedPorts, candidatePort) ||
+							Array.contains(Array.fromIterable(HashMap.values(state.ports)), candidatePort)
+						) {
+							continue
+						}
 						if (yield* portAvailable(candidatePort)) {
-							ports.set(key, candidatePort)
+							state.ports = HashMap.set(state.ports, key, candidatePort)
 							return candidatePort
 						}
 					}
@@ -337,25 +352,27 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
 				Effect.provide(discoveryContext),
 				Effect.map(discovered =>
-					discovered.map(route =>
-						Object.assign(
-							new PortlessRun({
-								origin: new PortlessOrigin({
-									base: route.script.baseOrigin,
-									host: route.host,
-									origin: route.script.origin,
-									port: route.port,
-									sessionId: route.script.sessionId,
-									taskId: route.script.taskId
-								}),
-								script: new PortlessScript(route.script),
-								status: {state: 'prepared'}
+					Array.map(discovered, route => ({
+						...PortlessRun.make({
+							origin: PortlessOrigin.make({
+								base: route.script.baseOrigin,
+								host: route.host,
+								origin: route.script.origin,
+								port: route.port,
+								sessionId: route.script.sessionId,
+								taskId: route.script.taskId
 							}),
-							{preparedCommand: command(route.script, route.port)}
-						)
-					)
+							script: PortlessScript.make(route.script),
+							status: {state: 'prepared'}
+						}),
+						preparedCommand: command(route.script, route.port)
+					}))
 				),
-				Effect.tap(discovered => Effect.sync(() => replaceRoutes(cwd, discovered)))
+				Effect.tap(discovered =>
+					Effect.sync(() => {
+						replaceRoutes(cwd, discovered)
+					})
+				)
 			)
 		})
 
@@ -367,32 +384,13 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			middleware,
 			remove: Effect.fn('Portless.remove')(function* (input: {readonly cwd: string; readonly sessionId: string}) {
 				yield* Effect.annotateCurrentSpan({cwd: input.cwd, sessionId: input.sessionId})
-				removeRoute(sessionRoutes.get(`${input.cwd}:${input.sessionId}`))
+				removeRoute(Option.getOrUndefined(HashMap.get(state.sessionRoutes, `${input.cwd}:${input.sessionId}`)))
 			}),
 			scripts
 		}
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)
-	public static layerMock(input: PortlessMock = {}) {
-		return Layer.succeed(this, {
-			clear: Effect.fn('Portless.mock.clear')(function* (cwd: string) {
-				if (input.clear !== undefined) yield* input.clear(cwd)
-			}),
-			middleware: Effect.fnUntraced(function* <E, R>(app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) {
-				return yield* app
-			}),
-			remove: Effect.fn('Portless.mock.remove')(function* (payload: {
-				readonly cwd: string
-				readonly sessionId: string
-			}) {
-				if (input.remove !== undefined) yield* input.remove(payload)
-			}),
-			scripts: Effect.fn('Portless.mock.scripts')(function* (cwd: string) {
-				return input.scripts === undefined ? [] : yield* input.scripts(cwd)
-			})
-		})
-	}
 
 	public static middleware = Effect.fnUntraced(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>

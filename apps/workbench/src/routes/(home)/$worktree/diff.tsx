@@ -1,6 +1,6 @@
 import {useAtomRefresh, useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, HashMap, Match, Option, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, HashMap, HashSet, Match, Option, Predicate, Schema, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -23,7 +23,7 @@ import {
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
-import {Button} from '@deslop/components/ui/button'
+import {Button, buttonVariants} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
@@ -33,11 +33,13 @@ import {
 	GitReviewState,
 	type GitCommit,
 	type GitDiff,
-	type GitReviewComment,
+	GitReviewComment,
+	GitReviewBranchTarget,
+	GitReviewChangesTarget,
+	GitReviewCommitTarget,
+	GitReviewLocalTarget,
 	type GitReviewMark,
 	type GitReviewTarget,
-	gitReviewCommentKey,
-	gitReviewMarkKey,
 	gitReviewMarksForDiff,
 	gitReviewStateForMarks
 } from '@deslop/git/schema'
@@ -56,16 +58,17 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 		)
 	)
 )
-
 function targetKey(target: GitReviewTarget) {
 	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
 }
 
-function targetFromKey(tag: string, hash = ''): GitReviewTarget {
-	if (tag === 'commit') return {_tag: 'commit', hash}
-	if (tag === 'local') return {_tag: 'local'}
-	if (tag === 'branch') return {_tag: 'branch'}
-	return {_tag: 'changes'}
+function targetFromKey(tag: string, hash = '') {
+	return Match.value(tag).pipe(
+		Match.when('commit', () => GitReviewCommitTarget.make({hash})),
+		Match.when('local', () => GitReviewLocalTarget.make({})),
+		Match.when('branch', () => GitReviewBranchTarget.make({})),
+		Match.orElse(() => GitReviewChangesTarget.make({}))
+	)
 }
 
 const reviewDiffsAtom = Atom.family((key: string) => {
@@ -92,20 +95,10 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	)
 )
 
-type QueuedComment = typeof GitReviewComment.Type
-
-type DisplayComment = QueuedComment & {
-	readonly resolved: boolean
-	readonly resolving?: boolean
-	readonly source: 'github' | 'local'
-	readonly threadId?: string
-	readonly url?: string
-}
-
-const emptyReviewState = new GitReviewState({comments: Array.empty(), marks: Array.empty()})
+const emptyReviewState = GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
 
 const reviewStateValueAtom = Atom.family((cwd: string) =>
-	Atom.map(reviewStateAtom(cwd), result => (result._tag === 'Success' ? result.value : emptyReviewState))
+	Atom.map(reviewStateAtom(cwd), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
@@ -115,7 +108,7 @@ const reviewActionsStateAtom = Atom.family(() =>
 const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
 		fn: RpcClient.runtime.fn<null>()(
-			Effect.fn('DiffPage.generatePublishMessage')(function* () {
+			Effect.fn('DiffPage.generatePublishMessage')(function* (_) {
 				const client = yield* RpcClient
 				return yield* client('publish.message.generate', {cwd})
 			})
@@ -136,15 +129,13 @@ const approvePublishActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
-type ResolveCommentInput = {readonly comment: DisplayComment; readonly key: string}
-
 const commentResolutionStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => ({resolvingAll: false, resolvingKeys: new Set<string>()})))
+	Atom.optimistic(Atom.make(() => ({resolving: HashSet.empty<GitReviewComment>(), resolvingAll: false})))
 )
 
 const resolveCommentActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<ResolveCommentInput>()(
+		fn: RpcClient.runtime.fn<{readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}>()(
 			Effect.fn('DiffPage.resolveComment')(function* (resolveInput) {
 				const client = yield* RpcClient
 
@@ -158,22 +149,23 @@ const resolveCommentActionAtom = Atom.family((cwd: string) =>
 			})
 		),
 		reducer: (state, resolveInput) => ({
-			resolvingAll: state.resolvingAll,
-			resolvingKeys: new Set([...state.resolvingKeys, resolveInput.key])
+			resolving: HashSet.add(state.resolving, GitReviewComment.make(resolveInput.comment)),
+			resolvingAll: state.resolvingAll
 		})
 	})
 )
 
 const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<readonly ResolveCommentInput[]>()(
+		fn: RpcClient.runtime.fn<readonly {readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}[]>()(
 			Effect.fn('DiffPage.resolveComments')(function* (comments) {
 				const client = yield* RpcClient
 
 				yield* pipe(
 					comments,
 					Array.dedupeWith(
-						(left, right) => left.comment.threadId !== undefined && left.comment.threadId === right.comment.threadId
+						(left, right) =>
+							Predicate.isNotUndefined(left.comment.threadId) && left.comment.threadId === right.comment.threadId
 					),
 					Effect.forEach(resolveInput =>
 						client('review.comments.resolve', {
@@ -188,8 +180,13 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 			})
 		),
 		reducer: (state, comments) => ({
-			resolvingAll: true,
-			resolvingKeys: new Set([...state.resolvingKeys, ...Array.map(comments, comment => comment.key)])
+			resolving: pipe(
+				comments,
+				Array.reduce(state.resolving, (resolving, input) =>
+					HashSet.add(resolving, GitReviewComment.make(input.comment))
+				)
+			),
+			resolvingAll: true
 		})
 	})
 )
@@ -198,12 +195,13 @@ function groupCommentsByFile<Comment extends {readonly filePath: string}>(commen
 	return pipe(
 		comments,
 		Array.reduce(HashMap.empty<string, readonly Comment[]>(), (groups, comment) =>
-			HashMap.modifyAt(groups, comment.filePath, current =>
-				Option.some(
-					Array.append(
-						Option.getOrElse(current, () => Array.empty<Comment>()),
-						comment
-					)
+			HashMap.set(
+				groups,
+				comment.filePath,
+				pipe(
+					HashMap.get(groups, comment.filePath),
+					Option.getOrElse(() => Array.empty<Comment>()),
+					Array.append(comment)
 				)
 			)
 		),
@@ -212,7 +210,9 @@ function groupCommentsByFile<Comment extends {readonly filePath: string}>(commen
 	)
 }
 
-async function copyReviewComments(commentsToCopy: readonly DisplayComment[]) {
+async function copyReviewComments(
+	commentsToCopy: readonly (GitReviewComment & {readonly source: 'github' | 'local'})[]
+) {
 	try {
 		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
 	} catch {
@@ -233,9 +233,8 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
-	const comments = reviewStateValue.comments
 	const shortcutsOpenState = useState(false)
-	const selectedScopeState = useState<GitReviewTarget>({_tag: 'changes'})
+	const selectedScopeState = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
 	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
 
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
@@ -247,15 +246,11 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		Array.findFirst(commit => commit.hash === search.commit),
 		Option.getOrUndefined
 	)
-	const reviewTarget: GitReviewTarget = selectedCommit
-		? {_tag: 'commit', hash: selectedCommit.hash}
-		: selectedScopeState[0]
+	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
 	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
-	const reviewDiffsLoaded = reviewDiffsResult._tag === 'Success'
-	const reviewDiffsValue = reviewDiffsLoaded ? reviewDiffsResult.value : Array.empty<GitDiff>()
-	const hasReviewableChanges = reviewDiffsLoaded && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
+	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedFilePath =
 		String.isNonEmpty(selectedFilePathState[0]) &&
 		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
@@ -277,32 +272,20 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
 	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
 	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
-	const effectiveComments: readonly DisplayComment[] = Array.map(comments, comment => ({
+	const effectiveComments = Array.map(reviewStateValue.comments, comment => ({
 		...comment,
 		resolved: comment.resolved === true,
-		resolving: commentResolutionState.resolvingKeys.has(gitReviewCommentKey(comment)),
+		resolving: HashSet.has(commentResolutionState.resolving, comment),
 		source: comment.source ?? 'local'
 	}))
 	const unresolvedComments = Array.filter(effectiveComments, comment => !comment.resolved)
-	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({
-		comment,
-		key: gitReviewCommentKey(comment)
-	}))
+	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({comment}))
 	const commentsByFile = groupCommentsByFile(unresolvedComments)
 	const selectedEntryComments = selectedEntry
 		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
-	const visibleSegmentKeys = new Set(
-		pipe(
-			reviewDiffsValue,
-			Array.flatMap(diff =>
-				Array.map(diff.segments, segment =>
-					gitReviewMarkKey({filePath: segment.filePath, fingerprint: segment.fingerprint})
-				)
-			)
-		)
-	)
-	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => visibleSegmentKeys.has(gitReviewMarkKey(mark)))
+	const visibleSegmentKeys = pipe(reviewDiffsValue, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
+	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => HashSet.has(visibleSegmentKeys, mark))
 
 	async function markFileReviewed(marks: readonly GitReviewMark[]) {
 		try {
@@ -344,7 +327,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		refreshReviewState()
 	}
 
-	async function saveQueuedComment(comment: QueuedComment) {
+	async function saveQueuedComment(comment: typeof GitReviewComment.Type) {
 		try {
 			await saveComment({payload: {comment, cwd: input.cwd}})
 		} catch {
@@ -352,16 +335,18 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 	}
 
-	async function resolveReviewComment(comment: DisplayComment) {
+	async function resolveReviewComment(comment: GitReviewComment & {readonly source: 'github' | 'local'}) {
 		try {
-			await resolveComment({comment, key: gitReviewCommentKey(comment)})
+			await resolveComment({comment})
 			if (comment.source === 'github') refreshReviewState()
 		} catch {
 			toast.error(comment.source === 'github' ? 'Failed to resolve GitHub thread.' : 'Failed to resolve comment.')
 		}
 	}
 
-	async function resolveReviewComments(commentsToResolve: readonly ResolveCommentInput[]) {
+	async function resolveReviewComments(
+		commentsToResolve: readonly {readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}[]
+	) {
 		try {
 			await resolveComments(commentsToResolve)
 			refreshReviewState()
@@ -395,7 +380,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						<CommitActionForm
 							cwd={input.cwd}
 							dirty={suggestedMetadataLoaded && suggestedMetadata.value.dirty}
-							hasReviewableChanges={hasReviewableChanges}
+							hasReviewableChanges={
+								AsyncResult.isSuccess(reviewDiffsResult) && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
+							}
 							loading={!suggestedMetadataLoaded}
 							prUrl={suggestedMetadataLoaded ? suggestedMetadata.value.prUrl : undefined}
 							refreshReview={refreshReview}
@@ -406,7 +393,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 						<ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
 							<ResizablePanel defaultSize="55%" minSize="15%">
 								<div className="h-full min-h-0">
-									{reviewDiffsLoaded ? (
+									{AsyncResult.isSuccess(reviewDiffsResult) ? (
 										<DiffList
 											diffs={reviewDiffsValue}
 											marks={validReviewMarks}
@@ -435,7 +422,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										localCommits={localCommits}
 										selected={reviewTarget}
 										selectCommit={commit => {
-											selectTarget({_tag: 'commit', hash: commit.hash})
+											selectTarget(GitReviewCommitTarget.make({hash: commit.hash}))
 										}}
 										selectScope={selectTarget}
 									/>
@@ -448,17 +435,17 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 				<ResizablePanel defaultSize="66%" minSize="54%">
 					<div className="bg-background flex h-full min-w-0 flex-col overflow-hidden">
 						<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-							{!reviewDiffsLoaded && (
+							{!AsyncResult.isSuccess(reviewDiffsResult) && (
 								<div className="flex h-full min-h-0">
 									<Loading />
 								</div>
 							)}
-							{reviewDiffsLoaded && Array.isReadonlyArrayEmpty(reviewDiffsValue) && (
+							{AsyncResult.isSuccess(reviewDiffsResult) && Array.isReadonlyArrayEmpty(reviewDiffsValue) && (
 								<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
 									No changed files.
 								</div>
 							)}
-							{reviewDiffsLoaded && selectedEntry && (
+							{AsyncResult.isSuccess(reviewDiffsResult) && selectedEntry && (
 								<div className="h-full min-h-0 min-w-0">
 									<PatchDiff
 										filePath={selectedEntry.filePath}
@@ -570,32 +557,32 @@ function CommitActionForm(input: {
 	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
 	const approvePublish = useAtomSet(approvePublishActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const missingMessage = input.dirty && String.isEmpty(trimmedCommitMessage)
-	const publishDisabled =
-		input.loading ||
-		actionState.publishing ||
-		(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
-		missingMessage
-	const generateDisabled =
-		input.loading ||
-		actionState.generatingMessage ||
-		actionState.publishing ||
-		!input.dirty ||
-		!input.hasReviewableChanges
-	let commitMessagePlaceholder = 'No changes'
-	if (input.loading) commitMessagePlaceholder = 'Loading'
-	else if (input.dirty) commitMessagePlaceholder = 'Generate commit message'
+	const commitMessagePlaceholder = Match.value({dirty: input.dirty, loading: input.loading}).pipe(
+		Match.when({loading: true}, () => 'Loading'),
+		Match.when({dirty: true}, () => 'Generate commit message'),
+		Match.orElse(() => 'No changes')
+	)
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
 	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
-	let subjectContent = commitMessagePlaceholder
-	if (String.isNonEmpty(messageSubject)) subjectContent = messageSubject
-	if (actionState.generatingMessage) subjectContent = 'Generating commit message'
-	const subjectMuted = String.isEmpty(messageSubject) || actionState.generatingMessage
-	const showBody = String.isNonEmpty(messageBody) && !actionState.generatingMessage
+	const subjectContent = Match.value({
+		generating: actionState.generatingMessage,
+		hasSubject: String.isNonEmpty(messageSubject)
+	}).pipe(
+		Match.when({generating: true}, () => 'Generating commit message'),
+		Match.when({hasSubject: true}, () => messageSubject),
+		Match.orElse(() => commitMessagePlaceholder)
+	)
 
 	async function submitPublish() {
-		if (publishDisabled) return
+		if (
+			input.loading ||
+			actionState.publishing ||
+			(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
+			(input.dirty && String.isEmpty(trimmedCommitMessage))
+		) {
+			return
+		}
 
 		try {
 			await approvePublish(trimmedCommitMessage)
@@ -607,7 +594,15 @@ function CommitActionForm(input: {
 	}
 
 	async function generateMessage() {
-		if (generateDisabled) return
+		if (
+			input.loading ||
+			actionState.generatingMessage ||
+			actionState.publishing ||
+			!input.dirty ||
+			!input.hasReviewableChanges
+		) {
+			return
+		}
 
 		try {
 			commitMessageState[1](await generatePublishMessage(null))
@@ -618,7 +613,7 @@ function CommitActionForm(input: {
 
 	const commitActions = (
 		<div className="flex shrink-0 items-center gap-1">
-			{input.upstream !== undefined && (input.upstream.ahead > 0 || input.upstream.behind > 0) ? (
+			{Predicate.isNotUndefined(input.upstream) && (input.upstream.ahead > 0 || input.upstream.behind > 0) ? (
 				<span
 					className="text-muted-foreground px-0.5 text-xs"
 					title={`${input.upstream.ahead} ahead, ${input.upstream.behind} behind upstream`}
@@ -646,7 +641,13 @@ function CommitActionForm(input: {
 				className="size-4"
 				aria-label="Generate commit message"
 				title="Generate commit message"
-				disabled={generateDisabled}
+				disabled={
+					input.loading ||
+					actionState.generatingMessage ||
+					actionState.publishing ||
+					!input.dirty ||
+					!input.hasReviewableChanges
+				}
 				onClick={() => {
 					void generateMessage()
 				}}
@@ -660,7 +661,12 @@ function CommitActionForm(input: {
 				className="size-4"
 				aria-label="Publish"
 				title="Commit, push, and open a draft PR"
-				disabled={publishDisabled}
+				disabled={
+					input.loading ||
+					actionState.publishing ||
+					(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
+					(input.dirty && String.isEmpty(trimmedCommitMessage))
+				}
 			>
 				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
 			</Button>
@@ -670,19 +676,22 @@ function CommitActionForm(input: {
 				</span>
 			) : (
 				String.isNonEmpty(input.prUrl ?? '') && (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="size-4"
+					<a
+						className={cn(buttonVariants({size: 'icon-xs', variant: 'ghost'}), 'size-4')}
+						href={pipe(
+							URL.parse(input.prUrl ?? ''),
+							Option.fromNullishOr,
+							Option.filter(parsed => parsed.protocol === 'https:' && parsed.hostname === 'github.com'),
+							Option.map(parsed => parsed.href),
+							Option.getOrUndefined
+						)}
+						target="_blank"
+						rel="noopener noreferrer"
 						aria-label="Open pull request"
 						title="Open pull request"
-						onClick={() => {
-							window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-						}}
 					>
 						<ExternalLinkIcon />
-					</Button>
+					</a>
 				)
 			)}
 		</div>
@@ -699,13 +708,16 @@ function CommitActionForm(input: {
 				<div className="flex min-w-0 items-stretch">
 					<span
 						title={subjectContent}
-						className={cn('min-w-0 flex-1 truncate px-2 py-1.5', subjectMuted && 'text-muted-foreground')}
+						className={cn(
+							'min-w-0 flex-1 truncate px-2 py-1.5',
+							(String.isEmpty(messageSubject) || actionState.generatingMessage) && 'text-muted-foreground'
+						)}
 					>
 						{subjectContent}
 					</span>
 					<div className="border-input flex shrink-0 items-center border-l px-1.5">{commitActions}</div>
 				</div>
-				{showBody && (
+				{String.isNonEmpty(messageBody) && !actionState.generatingMessage && (
 					<div className="bg-muted/30 text-muted-foreground border-t px-2 py-1.5">
 						<div className="max-h-32 overflow-y-auto">
 							<span className="whitespace-pre-wrap">{messageBody}</span>
@@ -725,9 +737,6 @@ function CommitList(input: {
 	readonly selectCommit: (commit: GitCommit) => void
 	readonly selectScope: (target: GitReviewTarget) => void
 }) {
-	const showLocal = !Array.isReadonlyArrayEmpty(input.localCommits)
-	const showBranch = !Array.isReadonlyArrayEmpty(input.branchCommits)
-
 	if (input.loading) {
 		return (
 			<div className="flex h-full min-h-0 items-center justify-center">
@@ -736,43 +745,18 @@ function CommitList(input: {
 		)
 	}
 
-	function renderScope(target: Exclude<GitReviewTarget, {_tag: 'commit'}>, label: string, detail: string) {
-		const selected = input.selected._tag === target._tag
-
-		return (
-			<li className="w-full min-w-0">
-				<button
-					type="button"
-					aria-current={selected ? 'page' : undefined}
-					onClick={() => {
-						input.selectScope(target)
-					}}
-					className={cn(
-						'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-						selected && 'bg-primary/15 text-primary'
-					)}
-				>
-					<span className="min-w-0 truncate">{label}</span>
-					<span className="min-w-0 truncate text-right opacity-70">{detail}</span>
-				</button>
-			</li>
-		)
-	}
-
 	function renderCommit(commit: GitCommit) {
-		const selected = input.selected._tag === 'commit' && input.selected.hash === commit.hash
-
 		return (
 			<li key={commit.hash} className="w-full min-w-0">
 				<button
 					type="button"
-					aria-current={selected ? 'page' : undefined}
+					aria-current={input.selected._tag === 'commit' && input.selected.hash === commit.hash ? 'page' : undefined}
 					onClick={() => {
 						input.selectCommit(commit)
 					}}
 					className={cn(
 						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-						selected && 'bg-primary/15 text-primary'
+						input.selected._tag === 'commit' && input.selected.hash === commit.hash && 'bg-primary/15 text-primary'
 					)}
 				>
 					<span className="min-w-0 truncate">
@@ -787,13 +771,62 @@ function CommitList(input: {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<ul className="min-h-0 flex-1 overflow-y-auto py-1">
-				{renderScope({_tag: 'changes'}, 'Changes', 'worktree')}
-				{showLocal && renderScope({_tag: 'local'}, 'Local', `${Array.length(input.localCommits)}`)}
+				<CommitScopeRow
+					detail="worktree"
+					label="Changes"
+					selected={input.selected}
+					selectScope={input.selectScope}
+					target={GitReviewChangesTarget.make({})}
+				/>
+				{!Array.isReadonlyArrayEmpty(input.localCommits) && (
+					<CommitScopeRow
+						detail={`${Array.length(input.localCommits)}`}
+						label="Local"
+						selected={input.selected}
+						selectScope={input.selectScope}
+						target={GitReviewLocalTarget.make({})}
+					/>
+				)}
 				{Array.map(input.localCommits, renderCommit)}
-				{showBranch && renderScope({_tag: 'branch'}, 'Branch', `${Array.length(input.branchCommits)}`)}
+				{!Array.isReadonlyArrayEmpty(input.branchCommits) && (
+					<CommitScopeRow
+						detail={`${Array.length(input.branchCommits)}`}
+						label="Branch"
+						selected={input.selected}
+						selectScope={input.selectScope}
+						target={GitReviewBranchTarget.make({})}
+					/>
+				)}
 				{Array.map(input.branchCommits, renderCommit)}
 			</ul>
 		</div>
+	)
+}
+
+function CommitScopeRow(input: {
+	readonly detail: string
+	readonly label: string
+	readonly selected: GitReviewTarget
+	readonly selectScope: (target: GitReviewTarget) => void
+	readonly target: GitReviewTarget
+}) {
+	return (
+		<li className="w-full min-w-0">
+			<button
+				type="button"
+				aria-current={input.selected._tag === input.target._tag ? 'page' : undefined}
+				onClick={() => {
+					input.selectScope(input.target)
+				}}
+				className={cn(
+					'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
+					input.selected._tag === input.target._tag && 'bg-primary/15 text-primary'
+				)}
+			>
+				<span className="min-w-0 truncate">{input.label}</span>
+				<span className="min-w-0 truncate text-right opacity-70">{input.detail}</span>
+			</button>
+		</li>
 	)
 }
 
@@ -804,28 +837,39 @@ type FileTreeNode =
 function buildFileTree(diffs: readonly GitDiff[]) {
 	const root = {children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory' as const}
 
-	for (const diff of diffs) {
-		const parts = diff.filePath.split('/')
-		let directory = root
-
-		for (const part of Array.dropRight(parts, 1)) {
-			const path = directory.path ? `${directory.path}/${part}` : part
-			const current = pipe(
-				directory.children,
-				Array.findFirst(child => child.name === part),
-				Option.getOrUndefined
-			)
-
-			if (current?.type === 'directory') {
-				directory = current
-			} else {
-				const next = {children: Array.empty<FileTreeNode>(), name: part, path, type: 'directory' as const}
-				directory.children.push(next)
-				directory = next
-			}
+	function insert(
+		directory: Extract<FileTreeNode, {readonly type: 'directory'}>,
+		parts: readonly string[],
+		diff: GitDiff
+	) {
+		if (Predicate.isUndefined(parts[0])) {
+			directory.children.push({diff, name: diff.filePath, path: diff.filePath, type: 'file'})
+			return
+		}
+		if (Array.length(parts) === 1) {
+			directory.children.push({diff, name: parts[0], path: diff.filePath, type: 'file'})
+			return
 		}
 
-		directory.children.push({diff, name: parts.at(-1) ?? diff.filePath, path: diff.filePath, type: 'file'})
+		const path = directory.path ? `${directory.path}/${parts[0]}` : parts[0]
+		const directoryChild = pipe(
+			directory.children,
+			Array.findFirst(child => child.name === parts[0]),
+			Option.getOrUndefined
+		)
+
+		if (directoryChild?.type === 'directory') {
+			insert(directoryChild, Array.drop(parts, 1), diff)
+			return
+		}
+
+		const next = {children: Array.empty<FileTreeNode>(), name: parts[0], path, type: 'directory' as const}
+		directory.children.push(next)
+		insert(next, Array.drop(parts, 1), diff)
+	}
+
+	for (const diff of diffs) {
+		insert(root, String.split('/')(diff.filePath), diff)
 	}
 
 	return pipe(
@@ -857,7 +901,7 @@ function DiffList(input: {
 	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
-	const collapsedFoldersState = useState<ReadonlySet<string>>(new Set())
+	const collapsedFoldersState = useState(() => HashSet.empty<string>())
 	const fileTree = buildFileTree(input.diffs)
 	const marksByDiff = pipe(
 		input.diffs,
@@ -865,36 +909,24 @@ function DiffList(input: {
 			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
 		)
 	)
-	const reviewedKeys = new Set(Array.map(input.marks, gitReviewMarkKey))
-
-	function toggleFolder(path: string) {
-		collapsedFoldersState[1](current => {
-			const next = new Set(current)
-			if (next.has(path)) {
-				next.delete(path)
-			} else {
-				next.add(path)
-			}
-			return next
-		})
-	}
+	const reviewed = HashSet.fromIterable(input.marks)
 
 	function renderNode(node: FileTreeNode) {
 		if (node.type === 'directory') {
-			const collapsed = collapsedFoldersState[0].has(node.path)
-
 			return (
 				<li key={node.path} className="w-full min-w-0">
 					<TreeExplorerRow
 						icon={<FolderIcon />}
 						onClick={() => {
-							toggleFolder(node.path)
+							collapsedFoldersState[1](current =>
+								HashSet.has(current, node.path) ? HashSet.remove(current, node.path) : HashSet.add(current, node.path)
+							)
 						}}
 						actions={<span className="text-muted-foreground">{Array.length(node.children)}</span>}
 					>
 						{node.name}
 					</TreeExplorerRow>
-					{!collapsed && (
+					{!HashSet.has(collapsedFoldersState[0], node.path) && (
 						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 							{Array.map(node.children, renderNode)}
 						</ul>
@@ -908,7 +940,7 @@ function DiffList(input: {
 			HashMap.get(node.diff.filePath),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
-		const state = gitReviewStateForMarks(marks, reviewedKeys)
+		const state = gitReviewStateForMarks(marks, reviewed)
 
 		return (
 			<li key={node.path} className="w-full min-w-0">
