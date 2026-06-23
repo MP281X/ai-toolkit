@@ -15,6 +15,7 @@
 # tools
 .opencode/resources
 .agents/repos/*
+.fallow
 .motel-data
 
 # nix

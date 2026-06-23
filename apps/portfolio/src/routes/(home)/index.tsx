@@ -749,7 +749,7 @@ function RealtimeLayer(input: {
 
 function PortfolioRoute() {
 	const viewport = useViewport()
-	const sectionRefs = useRef<(HTMLElement | null)[]>(Array.makeBy(6, () => null))
+	const sectionRefs = useRef<(HTMLElement | null)[] | null>(null)
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
@@ -759,8 +759,13 @@ function PortfolioRoute() {
 	const [localPointer, setLocalPointer] = useState<{readonly x: number; readonly y: number} | null>(null)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
+	function getSectionRefs() {
+		sectionRefs.current ??= Array.makeBy(6, () => null)
+		return sectionRefs.current
+	}
+
 	function registerSection(id: number, node: HTMLElement | null) {
-		sectionRefs.current[id] = node
+		getSectionRefs()[id] = node
 	}
 
 	useEffect(
@@ -771,7 +776,7 @@ function PortfolioRoute() {
 	)
 
 	function scrollTo(index: number) {
-		const target = sectionRefs.current[index]
+		const target = getSectionRefs()[index]
 		if (!target) return
 
 		target.scrollIntoView({behavior: 'smooth', block: 'start'})
@@ -787,6 +792,48 @@ function PortfolioRoute() {
 		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
 
 		moveRpc({payload: {color: nextColor, id: identity.id, x: currentPointer.x, y: currentPointer.y}})
+	}
+
+	function updatePointer(clientX: number, clientY: number) {
+		if (viewport.width === 0 || viewport.height === 0) return
+
+		const nextPointer = {
+			x: Math.max(0, Math.min(0.999_999, clientX / viewport.width)),
+			y: Math.max(0, Math.min(0.999_999, clientY / viewport.height))
+		}
+
+		setLocalPointer(nextPointer)
+		queuedPointerRef.current = nextPointer
+
+		if (pointerFrameRef.current !== 0) return
+
+		pointerFrameRef.current = requestAnimationFrame(() => {
+			pointerFrameRef.current = 0
+
+			if (Predicate.isNull(queuedPointerRef.current)) return
+
+			const now = performance.now()
+
+			if (Predicate.isNotNull(lastSentPointerRef.current)) {
+				const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
+				const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
+
+				if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
+					queuedPointerRef.current = null
+					return
+				}
+			}
+
+			if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
+
+			lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
+
+			moveRpc({
+				payload: {color: identityColor, id: identity.id, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
+			})
+
+			queuedPointerRef.current = null
+		})
 	}
 
 	useHotkey('J', () => {
@@ -829,50 +876,7 @@ function PortfolioRoute() {
 		<div
 			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
 			onPointerMove={event => {
-				if (viewport.width === 0 || viewport.height === 0) return
-
-				const nextPointer = {
-					x: Math.max(0, Math.min(0.999_999, event.clientX / viewport.width)),
-					y: Math.max(0, Math.min(0.999_999, event.clientY / viewport.height))
-				}
-
-				setLocalPointer(nextPointer)
-				queuedPointerRef.current = nextPointer
-
-				if (pointerFrameRef.current !== 0) return
-
-				pointerFrameRef.current = requestAnimationFrame(() => {
-					pointerFrameRef.current = 0
-
-					if (Predicate.isNull(queuedPointerRef.current)) return
-
-					const now = performance.now()
-
-					if (Predicate.isNotNull(lastSentPointerRef.current)) {
-						const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
-						const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
-
-						if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-							queuedPointerRef.current = null
-							return
-						}
-					}
-
-					if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
-
-					lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
-
-					moveRpc({
-						payload: {
-							color: identityColor,
-							id: identity.id,
-							x: queuedPointerRef.current.x,
-							y: queuedPointerRef.current.y
-						}
-					})
-
-					queuedPointerRef.current = null
-				})
+				updatePointer(event.clientX, event.clientY)
 			}}
 			onScroll={event => {
 				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)

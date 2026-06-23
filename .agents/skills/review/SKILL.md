@@ -1,27 +1,21 @@
 ---
 name: review
-description: Use after implementation for read-only review passes over interfaces, correctness, simplification, dead code, and signature reduction.
+description: Use for read-only review passes over implemented changes, especially interfaces, correctness, regressions, missing tests, dead code, and signature bloat.
 ---
 
 # Review
 
 ## Mode
 
-- Read-only.
-- No file edits.
-- Main agent owns synthesis.
+- Read-only; no edits; no delegation.
 - Findings first; severity ordered; file/line grounded.
 
-## Passes
+## Findings
 
-- Interface stability: public signatures, services, schemas, exports.
-- Correctness: behavior, state, errors, concurrency, boundaries.
-- Simplification: direct code, fewer helpers, less duplicated state.
-- Dead code: unused exports, obsolete tests, compatibility paths.
-- Signature reduction: one semantic input, inferred locals, no config bags.
-
-## Output
-
-- High-signal findings only.
-- State no findings explicitly.
-- Include residual test/verification risk.
+- Interface or boundary break.
+- Behavior regression.
+- State, error, concurrency, or resource lifetime bug.
+- Missing or weak test for changed behavior.
+- Dead code, obsolete branch, stale test, compatibility layer.
+- Signature bloat, unnecessary public export, or indirection that obscures behavior.
+- Diagnostic workaround: helper, wrapper, broad reducer, local type, or config array with no domain ownership.

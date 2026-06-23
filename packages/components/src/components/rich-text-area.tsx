@@ -258,14 +258,12 @@ function closeXmlTag(event: KeyboardEvent) {
 }
 
 function EditorPlugin<TValue extends RichTextArea.Value>(props: {
-	readonly tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
-	readonly initialSnapshot?: Readonly<RichTextArea.Snapshot<TValue>>
+	readonly tokensMap: Map<string, RichTextArea.Token<TValue>>
 	readonly isMenuOpen: () => boolean
 	readonly onSubmit?: (snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void
 	readonly setEditor: (editor: Lexical.LexicalEditor | null) => void
 }) {
 	const [editor] = useLexicalComposerContext()
-	const initializedRef = useRef(false)
 
 	useEffect(() => {
 		props.setEditor(editor)
@@ -274,13 +272,6 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 			props.setEditor(null)
 		}
 	}, [editor, props])
-
-	useEffect(() => {
-		if (initializedRef.current) return
-		initializedRef.current = true
-
-		if (Predicate.isNotUndefined(props.initialSnapshot)) restore(editor, props.initialSnapshot, props.tokensRef.current)
-	}, [editor, props.initialSnapshot, props.tokensRef])
 
 	useEffect(
 		() =>
@@ -291,7 +282,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 					if (event?.shiftKey === true || props.isMenuOpen() || Predicate.isUndefined(props.onSubmit)) return false
 
 					event?.preventDefault()
-					props.onSubmit(editorSnapshot(editor, props.tokensRef.current))
+					props.onSubmit(editorSnapshot(editor, props.tokensMap))
 					return true
 				},
 				Lexical.COMMAND_PRIORITY_LOW
@@ -327,7 +318,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 
 						for (const file of files) {
 							const id = crypto.randomUUID()
-							props.tokensRef.current.set(id, {color: '#f59e0b', file, id, kind: 'file'})
+							props.tokensMap.set(id, {color: '#f59e0b', file, id, kind: 'file'})
 
 							selection.insertNodes([
 								Lexical.$applyNodeReplacement(new TokenNode(file.name, id, 'file'))
@@ -342,7 +333,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 				},
 				Lexical.COMMAND_PRIORITY_HIGH
 			),
-		[editor, props.tokensRef]
+		[editor, props.tokensMap]
 	)
 
 	return <HistoryPlugin />
@@ -353,10 +344,11 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
 	readonly onClose: () => void
 	readonly onOpen: () => void
-	readonly tokensRef: {current: Map<string, RichTextArea.Token<TValue>>}
+	readonly tokensMap: Map<string, RichTextArea.Token<TValue>>
 	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
 }) {
 	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>()
+	const tokenIdRef = useRef(0)
 
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
@@ -391,8 +383,8 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 					: null
 			}}
 			onSelectOption={(option, node, close) => {
-				const id = crypto.randomUUID()
-				props.tokensRef.current.set(id, {id, kind: 'entry', ...option.entry})
+				const id = `entry:${tokenIdRef.current++}`
+				props.tokensMap.set(id, {id, kind: 'entry', ...option.entry})
 
 				const token = Lexical.$applyNodeReplacement(
 					new TokenNode(`${option.entry.trigger}${option.entry.value.label}`, id, 'entry')
@@ -507,7 +499,8 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	const editorRef = useRef<Lexical.LexicalEditor | null>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
-	const tokensRef = useRef(new TokenRegistry<TValue>())
+	const initialSnapshotRestoredRef = useRef(false)
+	const [tokensMap] = useState(() => new TokenRegistry<TValue>())
 
 	useImperativeHandle(
 		ref,
@@ -515,7 +508,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 			clear() {
 				if (!editorRef.current) return
 				menuRef.current = false
-				tokensRef.current.clear()
+				tokensMap.clear()
 				editorRef.current.update(
 					() => {
 						const root = Lexical.$getRoot()
@@ -529,13 +522,13 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				editorRef.current?.focus()
 			},
 			getSnapshot() {
-				return editorSnapshot(editorRef.current ?? undefined, tokensRef.current)
+				return editorSnapshot(editorRef.current ?? undefined, tokensMap)
 			},
 			restore(nextSnapshot: Readonly<RichTextArea.Snapshot<TValue>>) {
-				restore(editorRef.current ?? undefined, nextSnapshot, tokensRef.current)
+				restore(editorRef.current ?? undefined, nextSnapshot, tokensMap)
 			}
 		}),
-		[]
+		[tokensMap]
 	)
 
 	return (
@@ -569,13 +562,18 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				</div>
 
 				<EditorPlugin
-					initialSnapshot={input.initialSnapshot}
 					isMenuOpen={() => menuRef.current}
 					onSubmit={input.onSubmit}
 					setEditor={editor => {
 						editorRef.current = editor
+						if (editor && !initialSnapshotRestoredRef.current) {
+							initialSnapshotRestoredRef.current = true
+							if (Predicate.isNotUndefined(input.initialSnapshot)) {
+								restore(editor, input.initialSnapshot, tokensMap)
+							}
+						}
 					}}
-					tokensRef={tokensRef}
+					tokensMap={tokensMap}
 				/>
 				<TypeaheadPlugin
 					menuBoxRef={menuBoxRef}
@@ -586,7 +584,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 						menuRef.current = true
 					}}
 					options={input.options}
-					tokensRef={tokensRef}
+					tokensMap={tokensMap}
 				>
 					{input.children}
 				</TypeaheadPlugin>

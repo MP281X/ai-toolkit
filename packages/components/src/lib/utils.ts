@@ -38,10 +38,6 @@ export const formatTimestamp = pipe(
 	Match.exhaustive
 )
 
-export function formatNumber(number: number) {
-	return new Intl.NumberFormat(undefined, {maximumFractionDigits: 1, notation: 'compact'}).format(number)
-}
-
 export function formatTimeUntil(date: DateTime.DateTime) {
 	const millis = DateTime.toEpochMillis(date) - DateTime.toEpochMillis(DateTime.nowUnsafe())
 	if (millis <= 0) return 'now'

@@ -39,7 +39,7 @@ export class PortfolioTrailAdded extends Schema.TaggedClass<PortfolioTrailAdded>
 	trail: PortfolioTrail
 }) {}
 
-export const PortfolioEvent = Schema.Union([
+const PortfolioEvent = Schema.Union([
 	PortfolioSnapshot,
 	PortfolioVisitorUpserted,
 	PortfolioVisitorRemoved,

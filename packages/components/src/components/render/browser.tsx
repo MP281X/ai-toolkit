@@ -73,16 +73,19 @@ export function Browser(props: {readonly className?: string; readonly origin?: s
 function BrowserInstance(props: {readonly className?: string; readonly origin: string}) {
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const logIdRef = useRef(0)
-	const [currentUrl, setCurrentUrl] = useState(() =>
-		String.isNonEmpty(props.origin) ? browserUrl(props.origin, '/') : ''
-	)
-	const [frameKey, setFrameKey] = useState(0)
-	const [address, setAddress] = useState('/')
-	const [faviconUrl, setFaviconUrl] = useState<string>()
-	const [isLoading, setIsLoading] = useState(() => String.isNonEmpty(props.origin))
-	const [logs, setLogs] = useState<
-		readonly {readonly id: number; readonly level: string; readonly message: string; readonly time: DateTime.Utc}[]
-	>([])
+	const [state, setState] = useState(() => ({
+		address: '/',
+		currentUrl: String.isNonEmpty(props.origin) ? browserUrl(props.origin, '/') : '',
+		faviconUrl: undefined as string | undefined,
+		frameKey: 0,
+		isLoading: String.isNonEmpty(props.origin),
+		logs: Array.empty<{
+			readonly id: number
+			readonly level: string
+			readonly message: string
+			readonly time: DateTime.Utc
+		}>()
+	}))
 
 	useLayoutEffect(() => {
 		function onMessage(event: MessageEvent) {
@@ -93,31 +96,24 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 				Option.match({
 					onNone: () => {},
 					onSome: data => {
-						if ('deslopBrowserFavicon' in data) {
-							setFaviconUrl(data.href)
-							return
-						}
+						setState(current => {
+							if ('deslopBrowserFavicon' in data) return {...current, faviconUrl: data.href}
+							if ('deslopBrowserLocation' in data) return {...current, address: data.path ?? '/'}
 
-						if ('deslopBrowserLocation' in data) {
-							setAddress(data.path ?? '/')
-							return
-						}
+							const lowerMessage = String.toLowerCase(data.message)
+							if (
+								String.startsWith('[vite]')(data.message) ||
+								String.includes('react scan')(lowerMessage) ||
+								String.includes('react-scan')(lowerMessage) ||
+								String.includes('react grab')(lowerMessage) ||
+								String.includes('react-grab')(lowerMessage)
+							) {
+								return current
+							}
 
-						const lowerMessage = String.toLowerCase(data.message)
-						if (
-							String.startsWith('[vite]')(data.message) ||
-							String.includes('react scan')(lowerMessage) ||
-							String.includes('react-scan')(lowerMessage) ||
-							String.includes('react grab')(lowerMessage) ||
-							String.includes('react-grab')(lowerMessage)
-						) {
-							return
-						}
-
-						setLogs(current => [
-							...Array.takeRight(current, 199),
-							{id: logIdRef.current++, level: data.level, message: data.message, time: DateTime.nowUnsafe()}
-						])
+							const log = {id: logIdRef.current++, level: data.level, message: data.message, time: DateTime.nowUnsafe()}
+							return {...current, logs: [...Array.takeRight(current.logs, 199), log]}
+						})
 					}
 				})
 			)
@@ -133,24 +129,15 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 	function navigate() {
 		if (String.isEmpty(props.origin)) return
 
-		const nextUrl = browserUrl(props.origin, String.trim(address) || '/')
+		const nextUrl = browserUrl(props.origin, String.trim(state.address) || '/')
 
-		setLogs([])
-		setCurrentUrl(nextUrl)
-		setFaviconUrl(undefined)
-		setIsLoading(true)
-	}
-
-	function reload() {
-		setLogs([])
-		setIsLoading(true)
-		setFrameKey(key => key + 1)
+		setState(current => ({...current, currentUrl: nextUrl, faviconUrl: undefined, isLoading: true, logs: []}))
 	}
 
 	function clearCookies() {
 		if (String.isEmpty(props.origin)) return
 
-		setLogs([])
+		setState(current => ({...current, logs: []}))
 		iframeRef.current?.contentWindow?.postMessage({deslopBrowserClear: true}, props.origin)
 	}
 
@@ -186,22 +173,31 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 				<Button type="button" variant="outline" size="icon" aria-label="Forward" onClick={goForward}>
 					<ArrowRightIcon className="size-3.5" />
 				</Button>
-				<Button type="button" variant="outline" size="icon" aria-label="Reload" onClick={reload}>
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					aria-label="Reload"
+					onClick={() => {
+						setState(current => ({...current, frameKey: current.frameKey + 1, isLoading: true, logs: []}))
+					}}
+				>
 					<RotateCwIcon className="size-3.5" />
 				</Button>
 				<div className="border-border flex h-8 w-8 shrink-0 items-center justify-center border">
-					{Predicate.isNotUndefined(faviconUrl) && <img src={faviconUrl} alt="" className="size-4" />}
+					{Predicate.isNotUndefined(state.faviconUrl) && <img src={state.faviconUrl} alt="" className="size-4" />}
 				</div>
 				<div className="flex min-w-0 flex-1 items-center gap-1">
 					<div className="border-input bg-secondary text-secondary-foreground/70 flex h-8 min-w-0 shrink items-center border px-2 text-xs">
 						<span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{originLabel(props.origin)}</span>
 					</div>
 					<Input
-						value={String.startsWith('/')(address) ? String.slice(1)(address) : address}
+						value={String.startsWith('/')(state.address) ? String.slice(1)(state.address) : state.address}
 						placeholder=""
 						className="min-w-[7rem] flex-1 text-xs"
 						onChange={event => {
-							setAddress(`/${pipe(event.currentTarget.value, String.replace(/^\/+/u, ''))}`)
+							const address = `/${pipe(event.currentTarget.value, String.replace(/^\/+/u, ''))}`
+							setState(current => ({...current, address}))
 						}}
 					/>
 				</div>
@@ -211,7 +207,9 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 					size="icon"
 					aria-label="Open top-level preview"
 					onClick={() => {
-						if (String.isNonEmpty(currentUrl)) window.open(currentUrl, '_blank', 'noopener,noreferrer')
+						if (String.isNonEmpty(state.currentUrl)) {
+							window.open(state.currentUrl, '_blank', 'noopener,noreferrer')
+						}
 					}}
 				>
 					<ExternalLinkIcon className="size-3.5" />
@@ -231,15 +229,15 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 							<div className="relative h-full min-h-0 w-full">
 								<iframe
 									ref={iframeRef}
-									key={frameKey}
-									title={currentUrl}
-									src={currentUrl}
+									key={state.frameKey}
+									title={state.currentUrl}
+									src={state.currentUrl}
 									className="bg-background h-full min-h-0 w-full border-0"
 									onLoad={() => {
-										setIsLoading(false)
+										setState(current => ({...current, isLoading: false}))
 									}}
 								/>
-								{isLoading && (
+								{state.isLoading && (
 									<div className="bg-background absolute inset-0 flex">
 										<Loading />
 									</div>
@@ -249,8 +247,10 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 						<ResizableHandle />
 						<ResizablePanel collapsible collapsedSize={0} defaultSize={0} minSize={0} maxSize="50%">
 							<div className="flex h-full min-h-0 flex-col overflow-hidden">
-								<div className={cn('min-h-0 flex-1 overflow-auto font-mono text-xs', logs.length === 0 && 'hidden')}>
-									{Array.map(logs, log => (
+								<div
+									className={cn('min-h-0 flex-1 overflow-auto font-mono text-xs', state.logs.length === 0 && 'hidden')}
+								>
+									{Array.map(state.logs, log => (
 										<div key={log.id} className="grid grid-cols-[8rem_1rem_minmax(0,1fr)] gap-3 px-2 py-1">
 											<span className="overflow-hidden whitespace-nowrap select-none">{formatTimestamp(log.time)}</span>
 											<span
@@ -270,7 +270,7 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 				<div className="flex h-8 shrink-0 items-center justify-between border-b px-2">
 					<div className="flex items-center gap-2 font-mono text-xs">
 						<FileClockIcon className="size-3.5" />
-						<span>{logs.length}</span>
+						<span>{state.logs.length}</span>
 					</div>
 					<Button
 						type="button"
@@ -278,7 +278,7 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 						size="icon-xs"
 						aria-label="Clear browser logs"
 						onClick={() => {
-							setLogs([])
+							setState(current => ({...current, logs: []}))
 						}}
 					>
 						<Trash2Icon className="size-3.5" />

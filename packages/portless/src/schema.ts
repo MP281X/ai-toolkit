@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-export class PortlessStatus extends Schema.Class<PortlessStatus>('PortlessStatus')({
+class PortlessStatus extends Schema.Class<PortlessStatus>('PortlessStatus')({
 	state: Schema.Literals(['idle', 'prepared', 'running', 'stopped', 'exited', 'failed'])
 }) {}
 

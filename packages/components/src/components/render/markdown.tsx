@@ -17,20 +17,25 @@ export function Markdown(props: {readonly children: string; readonly className?:
 					Match.value(token),
 					Match.when({type: 'html'}, () => null),
 					Match.when({lang: 'mermaid', type: 'code'}, code => (
-						<Mermaid key={index} className="border-border border">
+						<Mermaid key={`${token.type}:${index}:${code.text}`} className="border-border border">
 							{code.text}
 						</Mermaid>
 					)),
 					Match.when({type: 'code'}, code => (
 						<Code
-							key={index}
+							key={`${token.type}:${index}:${code.lang ?? ''}:${code.text}`}
 							className="border-border border"
 							lang={Predicate.isString(code.lang) ? code.lang : undefined}
 						>
 							{code.text}
 						</Code>
 					)),
-					Match.orElse(other => <div key={index} dangerouslySetInnerHTML={{__html: marked.parse(other.raw)}} />)
+					Match.orElse(other => (
+						<div
+							key={`${other.type}:${index}:${other.raw}`}
+							dangerouslySetInnerHTML={{__html: marked.parse(other.raw)}}
+						/>
+					))
 				)
 			)}
 		</div>

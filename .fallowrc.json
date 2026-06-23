@@ -1,0 +1,8 @@
+{
+	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+	"includeEntryExports": true,
+	"ignoreDependencies": ["@deslop/oxlint-rules", "@effect/atom-react", "@effect/platform-node", "effect", "vite-plus"],
+	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
+	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
+	"publicPackages": ["@deslop/components"]
+}

@@ -35,7 +35,7 @@ export function terminalTitleStatus(title: string) {
 	return {state: 'running' as const, title: trimmed}
 }
 
-export function terminalProgressStatus(value: string) {
+function terminalProgressStatus(value: string) {
 	const progressState = Number.parseInt(value, 10)
 	return Match.value(progressState).pipe(
 		Match.when(0, () => 'idle' as const),

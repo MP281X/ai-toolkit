@@ -20,6 +20,7 @@ export class SystemUsage extends Schema.Class<SystemUsage>('SystemUsage')({
 	memoryUtilization: Schema.Number
 }) {}
 
+export type ClaudeCredentials = typeof ClaudeCredentials.Type
 export const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
@@ -34,11 +35,12 @@ export class ClaudeUsage extends Schema.Class<ClaudeUsage>('ClaudeUsage')({
 	seven_day: ClaudeUsageWindow
 }) {}
 
+export type CodexCredentials = typeof CodexCredentials.Type
 export const CodexCredentials = Schema.fromJsonString(
 	Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})})
 )
 
-export class CodexUsageWindow extends Schema.Class<CodexUsageWindow>('CodexUsageWindow')({
+class CodexUsageWindow extends Schema.Class<CodexUsageWindow>('CodexUsageWindow')({
 	reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
 	used_percent: Schema.Number
 }) {}

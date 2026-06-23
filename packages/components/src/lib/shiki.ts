@@ -3,7 +3,7 @@ import {Array, Match, Option, String, pipe} from 'effect'
 import {getSharedHighlighter} from '@pierre/diffs'
 
 export const HIGHLIGHT_THEMES = {dark: 'github-dark-default', light: 'github-light-default'} as const
-export const HIGHLIGHT_LANGS = ['tsx', 'shell', 'markdown', 'diff', 'jsonc'] as const
+const HIGHLIGHT_LANGS = ['tsx', 'shell', 'markdown', 'diff', 'jsonc'] as const
 
 const highlighter = await getSharedHighlighter({
 	langs: [...HIGHLIGHT_LANGS],

@@ -61,7 +61,7 @@ const isNamedFunctionRecursive = (context: Context, node: ESTree.Function) =>
 	node.type === 'FunctionDeclaration' && Predicate.isNotNull(node.id) && sourceReferenceCount(context, node) > 0
 
 const isBoundaryTypeName = (name: string) =>
-	/(?:Schema|Contract|Request|Response|Error|Props|State|Event|Command|Config|Id|Options|Params|Result|Payload|Handle)$/u.test(
+	/(?:Schema|Contract|Request|Response|Error|Props|Event|Command|Config|Id|Options|Params|Result|Payload|Handle)$/u.test(
 		name
 	)
 
@@ -83,6 +83,26 @@ const isRecursiveFunction = (context: Context, node: ESTree.Function) =>
 
 const typeReferenceCount = (context: Context, name: string) =>
 	[...context.sourceCode.text.matchAll(new RegExp(`\\b${name}\\b`, 'gu'))].length
+
+const isFloatingLocalType = (context: Context, node: ESTree.TSInterfaceDeclaration | ESTree.TSTypeAliasDeclaration) =>
+	node.parent.type !== 'ExportNamedDeclaration' &&
+	node.parent.type !== 'TSModuleBlock' &&
+	(node.type !== 'TSTypeAliasDeclaration' || !isSchemaTypeAlias(node)) &&
+	!isBoundaryTypeName(node.id.name) &&
+	typeReferenceCount(context, node.id.name) <= 2
+
+const reportFloatingLocalType = (
+	context: Context,
+	node: ESTree.TSInterfaceDeclaration | ESTree.TSTypeAliasDeclaration
+) => {
+	if (isFloatingLocalType(context, node)) {
+		context.report({
+			message:
+				'Inline local implementation type; keep a named type only for public boundaries or multiple real consumers.',
+			node
+		})
+	}
+}
 
 const isSimpleSingleUseFunction = (node: ESTree.Function) =>
 	Predicate.isNotNull(node.body) &&
@@ -206,6 +226,49 @@ const isReactLocalCollection = (node: ESTree.NewExpression) =>
 	node.parent.type === 'CallExpression' &&
 	node.parent.callee.type === 'Identifier' &&
 	(node.parent.callee.name === 'useRef' || node.parent.callee.name === 'useState')
+
+const isUseStateCall = (node: ESTree.CallExpression) =>
+	node.callee.type === 'Identifier' && node.callee.name === 'useState'
+
+function functionObjectExpression(node: ESTree.ArrowFunctionExpression | ESTree.Function) {
+	if (node.type === 'ArrowFunctionExpression' && node.body.type === 'ObjectExpression') return [node.body]
+	if (
+		node.body?.type === 'BlockStatement' &&
+		node.body.body.length === 1 &&
+		node.body.body[0]?.type === 'ReturnStatement' &&
+		node.body.body[0].argument?.type === 'ObjectExpression'
+	) {
+		return [node.body.body[0].argument]
+	}
+	return []
+}
+
+const isFakeRefStateInitializer = (node: ESTree.Expression | ESTree.SpreadElement | null | undefined) => {
+	if (Predicate.isNullish(node)) return false
+	if (!(node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression')) return false
+
+	const object = functionObjectExpression(node)
+	return (
+		Predicate.isNotUndefined(object[0]) &&
+		Array.some(
+			object[0].properties,
+			property =>
+				property.type === 'Property' &&
+				!property.computed &&
+				((property.key.type === 'Identifier' && property.key.name === 'current') ||
+					(property.key.type === 'Literal' && property.key.value === 'current'))
+		)
+	)
+}
+
+const hasPartialStateParameter = (context: Context, node: ESTree.Function) =>
+	/\bPartial\s*<\s*\w*State\b/u.test(pipe(context.sourceCode.text, String.slice(node.start, node.end)))
+
+const isGenericStatePatchFunction = (context: Context, node: ESTree.Function) =>
+	node.params.length === 1 &&
+	hasPartialStateParameter(context, node) &&
+	Predicate.isNotNull(node.body) &&
+	/patch|update|merge/u.test(node.id?.name ?? '')
 
 const isNativePrototypeMethodCall = (node: ESTree.CallExpression) =>
 	node.callee.type === 'MemberExpression' &&
@@ -383,15 +446,6 @@ const isPrimitiveConstDeclaration = (node: ESTree.VariableDeclarator) =>
 const isComputedStringAccess = (node: ESTree.MemberExpression) =>
 	node.computed && node.property.type === 'Literal' && Predicate.isString(node.property.value)
 
-const isForwardRefCall = (node: ESTree.CallExpression) =>
-	(node.callee.type === 'Identifier' && node.callee.name === 'forwardRef') ||
-	(node.callee.type === 'MemberExpression' &&
-		!node.callee.computed &&
-		node.callee.object.type === 'Identifier' &&
-		node.callee.object.name === 'React' &&
-		node.callee.property.type === 'Identifier' &&
-		node.callee.property.name === 'forwardRef')
-
 const isAccessExpression = (node: ESTree.Expression) =>
 	node.type === 'MemberExpression' || (node.type === 'ChainExpression' && node.expression.type === 'MemberExpression')
 
@@ -451,6 +505,54 @@ const isSchemaStructCall = (node: ESTree.Expression) =>
 	node.callee.object.name === 'Schema' &&
 	node.callee.property.type === 'Identifier' &&
 	node.callee.property.name === 'Struct'
+
+function isSchemaExpression(node: ESTree.Expression): boolean {
+	return (
+		(node.type === 'CallExpression' &&
+			((node.callee.type === 'MemberExpression' &&
+				!node.callee.computed &&
+				node.callee.object.type === 'Identifier' &&
+				node.callee.object.name === 'Schema') ||
+				(node.callee.type === 'CallExpression' && isSchemaExpression(node.callee)))) ||
+		(node.type === 'MemberExpression' &&
+			!node.computed &&
+			node.object.type === 'Identifier' &&
+			node.object.name === 'Schema')
+	)
+}
+
+const isMatchingSchemaTypeAliasStatement = (
+	statement: ESTree.Statement | undefined,
+	name: string,
+	exported: boolean
+) => {
+	if (
+		exported &&
+		statement?.type === 'ExportNamedDeclaration' &&
+		statement.declaration?.type === 'TSTypeAliasDeclaration' &&
+		isSchemaTypeAlias(statement.declaration)
+	) {
+		return statement.declaration.id.name === name
+	}
+	if (!exported && statement?.type === 'TSTypeAliasDeclaration' && isSchemaTypeAlias(statement)) {
+		return statement.id.name === name
+	}
+	return false
+}
+
+const precedingStatement = (body: readonly ESTree.Statement[], statement: ESTree.Statement) =>
+	body[body.indexOf(statement) - 1]
+
+const statementVariableDeclarations = (statement: ESTree.Statement) => {
+	if (statement.type === 'VariableDeclaration') return statement.declarations
+	if (statement.type === 'ExportNamedDeclaration' && statement.declaration?.type === 'VariableDeclaration') {
+		return statement.declaration.declarations
+	}
+	return []
+}
+
+const isSchemaModule = (path: string) =>
+	/(?:^|\/)schema\.ts$/u.test(path) || /(?:^|\/)oxlint-plugin\.test\.ts$/u.test(path)
 
 const hasRawTagProperty = (node: ESTree.ObjectExpression) =>
 	Array.some(
@@ -661,32 +763,35 @@ export default definePlugin({
 			}),
 			meta: {messages: {default: 'Do not export local implementation types.'}, type: 'problem'}
 		},
-		'no-floating-local-type': {
-			createOnce: context => ({
-				Program: node => {
-					for (const statement of node.body) {
-						if (
-							(statement.type === 'TSInterfaceDeclaration' || statement.type === 'TSTypeAliasDeclaration') &&
-							(statement.type !== 'TSTypeAliasDeclaration' || !isSchemaTypeAlias(statement)) &&
-							!isBoundaryTypeName(statement.id.name) &&
-							typeReferenceCount(context, statement.id.name) <= 2
-						) {
-							context.report({message: 'Inline type.', node: statement})
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline type.'}, type: 'problem'}
-		},
-		'no-forward-ref': {
+		'no-fake-ref-state': {
 			create: context => ({
 				CallExpression: node => {
-					if (isForwardRefCall(node)) {
-						context.report({message: 'Use React 19 ref props instead of forwardRef.', node})
+					if (isUseStateCall(node) && isFakeRefStateInitializer(node.arguments[0])) {
+						context.report({message: 'Use a real ref or the lazy ref/value pattern instead of fake ref state.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Use React 19 ref props instead of forwardRef.'}, type: 'problem'}
+			meta: {
+				messages: {default: 'Use a real ref or the lazy ref/value pattern instead of fake ref state.'},
+				type: 'problem'
+			}
+		},
+		'no-floating-local-type': {
+			create: context => ({
+				TSInterfaceDeclaration: node => {
+					reportFloatingLocalType(context, node)
+				},
+				TSTypeAliasDeclaration: node => {
+					reportFloatingLocalType(context, node)
+				}
+			}),
+			meta: {
+				messages: {
+					default:
+						'Inline local implementation type; keep a named type only for public boundaries or multiple real consumers.'
+				},
+				type: 'problem'
+			}
 		},
 		'no-function-return-type': {
 			create: context => ({
@@ -712,6 +817,22 @@ export default definePlugin({
 				}
 			}),
 			meta: {messages: {default: 'Infer function return type.'}, type: 'problem'}
+		},
+		'no-generic-state-patch': {
+			create: context => ({
+				FunctionDeclaration: node => {
+					if (isGenericStatePatchFunction(context, node)) {
+						context.report({
+							message: 'Use inline functional state updates instead of generic Partial<State> patch helpers.',
+							node
+						})
+					}
+				}
+			}),
+			meta: {
+				messages: {default: 'Use inline functional state updates instead of generic Partial<State> patch helpers.'},
+				type: 'problem'
+			}
 		},
 		'no-identity-callback': {
 			create: context => ({
@@ -926,7 +1047,7 @@ export default definePlugin({
 							node.body.body[0].argument?.type === 'Identifier' &&
 							node.body.body[0].argument.name === node.params[0].name)
 					) {
-						context.report({message: 'Inline wrapper.', node})
+						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
 					}
 				},
 				FunctionDeclaration: node => {
@@ -938,17 +1059,17 @@ export default definePlugin({
 						node.body.body[0].argument?.type === 'Identifier' &&
 						node.body.body[0].argument.name === node.params[0].name
 					) {
-						context.report({message: 'Inline wrapper.', node})
+						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
 					}
 					if (isTrivialHandlerFunction(context, node)) {
-						context.report({message: 'Inline wrapper.', node})
+						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
 					}
 					if (isAtomFamilyReturnWrapper(node)) {
-						context.report({message: 'Inline wrapper.', node})
+						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
 					}
 				}
 			}),
-			meta: {messages: {default: 'Inline wrapper.'}, type: 'problem'}
+			meta: {messages: {default: 'Inline single-use wrapper unless it owns policy or lifecycle.'}, type: 'problem'}
 		},
 		'no-primitive-const': {
 			create: context => ({
@@ -1055,6 +1176,37 @@ export default definePlugin({
 				}
 			}),
 			meta: {messages: {default: 'Use Schema.Class for exported struct schemas.'}, type: 'problem'}
+		},
+		'no-schema-without-type-export': {
+			createOnce: context => ({
+				Program: node => {
+					if (!isSchemaModule(context.filename)) return
+					for (const statement of node.body) {
+						for (const declaration of statementVariableDeclarations(statement)) {
+							if (
+								declaration.id.type === 'Identifier' &&
+								isUppercaseName(declaration.id.name) &&
+								Predicate.isNotNull(declaration.init) &&
+								isSchemaExpression(declaration.init) &&
+								!isMatchingSchemaTypeAliasStatement(
+									precedingStatement(node.body, statement),
+									declaration.id.name,
+									statement.type === 'ExportNamedDeclaration'
+								)
+							) {
+								context.report({
+									message: 'Place the matching schema type alias immediately before the schema value.',
+									node: declaration
+								})
+							}
+						}
+					}
+				}
+			}),
+			meta: {
+				messages: {default: 'Place the matching schema type alias immediately before the schema value.'},
+				type: 'problem'
+			}
 		},
 		'no-single-use-guard': {
 			createOnce: context => ({

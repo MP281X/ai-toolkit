@@ -77,7 +77,7 @@ export class SidebarProject extends Schema.Class<SidebarProject>('SidebarProject
 	worktrees: Schema.Array(SidebarWorktree)
 }) {}
 
-export class HomeSidebar extends Schema.Class<HomeSidebar>('HomeSidebar')({
+class HomeSidebar extends Schema.Class<HomeSidebar>('HomeSidebar')({
 	agentProfiles: Schema.Array(AgentCommandProfile),
 	projects: Schema.Array(SidebarProject)
 }) {}

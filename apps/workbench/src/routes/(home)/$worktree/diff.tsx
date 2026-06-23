@@ -740,27 +740,6 @@ function CommitList(input: {
 		)
 	}
 
-	function renderScope(target: GitReviewTarget, label: string, detail: string) {
-		return (
-			<li className="w-full min-w-0">
-				<button
-					type="button"
-					aria-current={input.selected._tag === target._tag ? 'page' : undefined}
-					onClick={() => {
-						input.selectScope(target)
-					}}
-					className={cn(
-						'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-						input.selected._tag === target._tag && 'bg-primary/15 text-primary'
-					)}
-				>
-					<span className="min-w-0 truncate">{label}</span>
-					<span className="min-w-0 truncate text-right opacity-70">{detail}</span>
-				</button>
-			</li>
-		)
-	}
-
 	function renderCommit(commit: GitCommit) {
 		return (
 			<li key={commit.hash} className="w-full min-w-0">
@@ -787,15 +766,62 @@ function CommitList(input: {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<ul className="min-h-0 flex-1 overflow-y-auto py-1">
-				{renderScope(new GitReviewChangesTarget({}), 'Changes', 'worktree')}
-				{!Array.isReadonlyArrayEmpty(input.localCommits) &&
-					renderScope(new GitReviewLocalTarget({}), 'Local', `${Array.length(input.localCommits)}`)}
+				<CommitScopeRow
+					detail="worktree"
+					label="Changes"
+					selected={input.selected}
+					selectScope={input.selectScope}
+					target={new GitReviewChangesTarget({})}
+				/>
+				{!Array.isReadonlyArrayEmpty(input.localCommits) && (
+					<CommitScopeRow
+						detail={`${Array.length(input.localCommits)}`}
+						label="Local"
+						selected={input.selected}
+						selectScope={input.selectScope}
+						target={new GitReviewLocalTarget({})}
+					/>
+				)}
 				{Array.map(input.localCommits, renderCommit)}
-				{!Array.isReadonlyArrayEmpty(input.branchCommits) &&
-					renderScope(new GitReviewBranchTarget({}), 'Branch', `${Array.length(input.branchCommits)}`)}
+				{!Array.isReadonlyArrayEmpty(input.branchCommits) && (
+					<CommitScopeRow
+						detail={`${Array.length(input.branchCommits)}`}
+						label="Branch"
+						selected={input.selected}
+						selectScope={input.selectScope}
+						target={new GitReviewBranchTarget({})}
+					/>
+				)}
 				{Array.map(input.branchCommits, renderCommit)}
 			</ul>
 		</div>
+	)
+}
+
+function CommitScopeRow(input: {
+	readonly detail: string
+	readonly label: string
+	readonly selected: GitReviewTarget
+	readonly selectScope: (target: GitReviewTarget) => void
+	readonly target: GitReviewTarget
+}) {
+	return (
+		<li className="w-full min-w-0">
+			<button
+				type="button"
+				aria-current={input.selected._tag === input.target._tag ? 'page' : undefined}
+				onClick={() => {
+					input.selectScope(input.target)
+				}}
+				className={cn(
+					'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
+					input.selected._tag === input.target._tag && 'bg-primary/15 text-primary'
+				)}
+			>
+				<span className="min-w-0 truncate">{input.label}</span>
+				<span className="min-w-0 truncate text-right opacity-70">{input.detail}</span>
+			</button>
+		</li>
 	)
 }
 
@@ -870,7 +896,7 @@ function DiffList(input: {
 	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
-	const collapsedFoldersState = useState(HashSet.empty<string>())
+	const collapsedFoldersState = useState(() => HashSet.empty<string>())
 	const fileTree = buildFileTree(input.diffs)
 	const marksByDiff = pipe(
 		input.diffs,

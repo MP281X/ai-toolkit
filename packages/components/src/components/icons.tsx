@@ -1,6 +1,6 @@
-import {Function, Match, pipe} from 'effect'
+import {Match, pipe} from 'effect'
 
-import {Braces, CirclePauseIcon, CircleIcon, File, OctagonXIcon, TriangleAlertIcon} from 'lucide-react'
+import {Braces, CirclePauseIcon, CircleIcon, File} from 'lucide-react'
 
 import {BashDark} from './svgs/bashDark.tsx'
 import {ClaudeDark} from './svgs/claudeDark.tsx'
@@ -50,19 +50,6 @@ export function ProcessStateIcon(props: {
 			<CircleIcon className={cn('size-2.5 fill-emerald-500 text-emerald-500', props.className)} />
 		)),
 		Match.orElse(() => <CircleIcon className={cn('text-muted-foreground/70 size-2.5', props.className)} />)
-	)
-}
-
-export function StatusIcon(props: {
-	readonly state: 'idle' | 'running' | 'retrying' | 'stopping' | 'awaiting_input' | 'error'
-	readonly className?: string
-}) {
-	return pipe(
-		Match.value(props.state),
-		Match.when('idle', Function.constUndefined),
-		Match.when('running', () => <Spinner className={cn('size-3 text-blue-500', props.className)} />),
-		Match.when('error', () => <OctagonXIcon className={cn('text-destructive size-3', props.className)} />),
-		Match.orElse(() => <TriangleAlertIcon className={cn('size-3 text-amber-500', props.className)} />)
 	)
 }
 

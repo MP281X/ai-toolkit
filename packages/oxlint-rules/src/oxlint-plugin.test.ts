@@ -1,5 +1,6 @@
 // oxlint-disable-next-line @deslop/oxlint-rules/no-import-alias -- fixture
-import {Effect, Option, Record as EffectRecord, Schema} from 'effect'
+import {Effect, Option, Record as EffectRecord, Schema, String} from 'effect'
+import type {FixtureRegister} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 import {describe} from 'vite-plus/test'
@@ -11,12 +12,25 @@ import oxlintPlugin from '../src/oxlint-plugin.ts'
 
 describe.skip('oxlint plugin fixture', () => {})
 
+declare function useState<Value>(
+	initial: Value | (() => Value)
+): readonly [Value, (update: (current: Value) => Value) => void]
+
 const source = {prefix: 'fixture', value: 'value'} as const
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-single-use-helper -- fixture
-function forwardRef(callback: () => boolean) {
-	return callback
-}
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias, @deslop/oxlint-rules/no-schema-without-type-export -- fixture
+const FixtureSchemaWithoutType = Schema.String
+
+type FixtureSchemaWithType = typeof FixtureSchemaWithType.Type
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- fixture
+const FixtureSchemaWithType = Schema.String
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias, @deslop/oxlint-rules/no-schema-without-type-export -- fixture
+const FixtureSchemaTypeAfterValue = Schema.String
+type FixtureSchemaTypeAfterValue = typeof FixtureSchemaTypeAfterValue.Type
+declare function acceptsFixtureSchemaTypeAfterValue(value: FixtureSchemaTypeAfterValue): void
+void FixtureSchemaTypeAfterValue
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const values: readonly (string | null)[] = [source.value]
 
@@ -96,11 +110,6 @@ function reusedLocalTwo(value: ReusedLocal) {
 	return `${value.value} two`
 }
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-exported-local-type -- fixture
-export type LocalImplementation = {value: string}
-
-export type FixtureSchema = {value: string}
-
 // oxlint-disable-next-line @deslop/oxlint-rules/no-function-return-type, @deslop/oxlint-rules/no-single-use-helper, @deslop/oxlint-rules/no-static-return-function -- fixture
 function explicitReturn(): string {
 	return 'explicit'
@@ -166,6 +175,27 @@ const constructedOption = Option.some(source.value)
 // oxlint-disable-next-line @deslop/oxlint-rules/no-native-mutable-collection -- fixture
 const nativeMutableCollection = new Map<string, string>()
 
+function FakeRefStateFixture() {
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-fake-ref-state, @deslop/oxlint-rules/no-native-mutable-collection -- fixture
+	const fakeRefState = useState(() => ({current: new Map<string, string>()}))
+	return fakeRefState
+}
+
+function StatePatchFixture() {
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
+	type PatchState = {readonly value: string}
+	const state = useState({value: 'initial'})
+
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-generic-state-patch -- fixture
+	function patchState(patch: Partial<PatchState>) {
+		if (String.isEmpty(state[0].value)) return
+		state[1](current => ({...current, ...patch}))
+	}
+
+	patchState({value: 'next'})
+	return state[0]
+}
+
 function mutableHolder(value: string) {
 	// oxlint-disable-next-line @deslop/oxlint-rules/no-local-mutable-holder -- fixture
 	const holder = {value}
@@ -178,17 +208,8 @@ function staticReturn() {
 	return {value: 'static'}
 }
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-forward-ref -- fixture
-const ForwardRefFixture = forwardRef(() => false)
-
 // oxlint-disable-next-line @deslop/oxlint-rules/no-identity-callback, @deslop/oxlint-rules/no-pass-through-wrapper, @deslop/oxlint-rules/no-promise-callback -- fixture
 const promiseCallback = Promise.resolve(source.value).then(value => value)
-
-// oxlint-disable-next-line @deslop/oxlint-rules/no-composed-identity-key -- fixture
-export const composedIdentity = source.prefix + source.value
-
-// oxlint-disable-next-line @deslop/oxlint-rules/no-public-raw-domain-string, @deslop/oxlint-rules/no-access-alias -- fixture
-export const RawName = Schema.String
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-single-use-guard -- fixture
 function isFixture(value: string) {
@@ -209,9 +230,12 @@ function accessField(value: {readonly field?: string}) {
 const familyAtom = Atom.family(value => Atom.make(value))
 
 declare module 'effect' {
+	/** @expected-unused */
 	// oxlint-disable-next-line @deslop/oxlint-rules/no-declare-module-export -- fixture
 	export type FixtureRegister = {readonly value: string}
 }
+
+const fixtureRegister = {value: 'fixture'} satisfies FixtureRegister
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-iife -- fixture
 const iifeValue = (() => source.value)()
@@ -236,9 +260,12 @@ function trivialHandler() {
 	Effect.runSync(Effect.void)
 }
 
-export const fixture = {
-	ForwardRefFixture,
+void {
+	FakeRefStateFixture,
+	FixtureSchemaWithType,
+	FixtureSchemaWithoutType,
 	GitWorkspace,
+	StatePatchFixture,
 	accessAlias,
 	accessField,
 	compare,
@@ -249,6 +276,7 @@ export const fixture = {
 	emptyRecord,
 	explicitReturn,
 	familyAtom,
+	fixtureRegister,
 	hasValue,
 	identityCallback,
 	iifeValue,

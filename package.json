@@ -19,7 +19,8 @@
 		"build": "vp run -r build",
 
 		"fix": "vp check --fix",
-		"check": "vp check",
+		"typecheck": "sh -c 'vp exec tsc -b apps/* packages/*'",
+		"check": "vp check && fallow dead-code --summary",
 		"test": "vp test",
 
 		"shadcn": "cd packages/components && vp dlx shadcn@latest",
@@ -30,8 +31,7 @@
 	"dependencies": {
 		"effect": "^4.0.0-beta",
 		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta",
-		"@effect/openapi-generator": "^4.0.0-beta"
+		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
 		"typescript": "rc",
@@ -39,6 +39,8 @@
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 
+		"fallow": "latest",
+		"oxlint-plugin-react-doctor": "latest",
 		"@deslop/oxlint-rules": "workspace:*",
 
 		"vite": "catalog:",

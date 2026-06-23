@@ -82,7 +82,7 @@ function Variants(props: {readonly children: readonly React.ReactNode[]}) {
 				<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5">
 					{Array.map(props.children, (_child, index) => (
 						<Button
-							key={index}
+							key={`variant-${index + 1}`}
 							type="button"
 							variant="ghost"
 							size="icon-xs"

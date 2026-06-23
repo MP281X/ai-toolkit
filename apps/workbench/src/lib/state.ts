@@ -91,22 +91,11 @@ export const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomK
 	)
 )
 
-export const portlessRunsAtom = Atom.family((cwd: string) =>
+const portlessRunsAtom = Atom.family((cwd: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
 			Effect.flatMap(RpcClient, client =>
 				String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
-
-export const scriptRunsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.scripts', {cwd}) : Effect.succeed([])
 			),
 			{initialValue: []}
 		)
@@ -129,7 +118,7 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 	)
 )
 
-export const projectsAtom = Atom.keepAlive(
+const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
@@ -139,7 +128,7 @@ export const projectsAtom = Atom.keepAlive(
 	)
 )
 
-export const homeSidebarAtom = Atom.keepAlive(
+const homeSidebarAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
@@ -211,13 +200,6 @@ export const agentsAtom = Atom.family((cwd: string) =>
 			Effect.map(client => client('agents', {cwd})),
 			Stream.unwrap
 		)
-	)
-)
-
-export const agentProfilesAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		Effect.flatMap(RpcClient, client => client('agents.profiles', void 0)),
-		{initialValue: []}
 	)
 )
 

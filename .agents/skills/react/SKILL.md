@@ -7,10 +7,7 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 
 ## Composition
 
-- Apps compose services.
-- Packages expose service boundaries.
 - Components render; atoms own logic.
-- UI observes reactive state.
 - Synchronized backend state: `SubscriptionRef` atoms.
 - Incremental backend data: streams.
 - Reads that can fail/suspend: suspense atoms.
@@ -21,21 +18,20 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 - Route/layout error boundaries for load failure.
 - Action failure: toast when user can continue.
 - No fake success UI.
-- No fallback UI unless requested or real loading/error state.
-
-## Compiler
-
-- React Compiler on.
-- React 19 ref props.
-- No `memo`, `useMemo`, `useCallback`.
-- No `forwardRef`.
-- Remove manual memo when touched.
+- Fallback UI requires real loading/error state or explicit request.
 
 ## Components
 
-- Inline prop types for structural service mirrors.
+- Keep component props close to the component that owns them.
+- Name prop types when they are public, reused, recursive, or necessary for a complex component contract.
 - No service-schema imports in reusable component packages.
-- No bridge props inferable from existing props.
-- Local obvious derivation stays at use site.
+- Bridge props or adapters must own layout, lifecycle, state, domain policy, or a repeated interaction contract.
+- Obvious local derivation stays at use site.
+- Do not extract section arrays, wrapper components, or handler modules only to make diagnostics disappear.
 - Async command = visible loading state.
 - Disable unavailable UI actions; backend remains authority.
+- Group UI state by workflow.
+- Use `useState` for local UI state that has direct setters or small inline functional updates.
+- Use a reducer when coupled state has named workflow transitions or shared transition logic.
+- Reducer actions describe user or domain events; avoid generic patch actions.
+- Revert reducer or component extractions that split simple local UI behavior without naming real workflow transitions.

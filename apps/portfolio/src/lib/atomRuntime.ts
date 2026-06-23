@@ -8,7 +8,7 @@ import {Socket} from 'effect/unstable/socket'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import {OtelLayer} from '@deslop/opentelemetry/client'
 
-export const LiveLayers = pipe(
+const LiveLayers = pipe(
 	Layer.empty,
 	// Base layers
 	Layer.provideMerge(OtelLayer('portfolio-client')),

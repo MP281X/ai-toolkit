@@ -12,17 +12,17 @@ export class AgentStatus extends Schema.Class<AgentStatus>('AgentStatus')({
 	updatedAt: Schema.DateTimeUtc
 }) {}
 
-export type ThinkingLevel = typeof ThinkingLevel.Type
-export const ThinkingLevel = Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const)
+type ThinkingLevel = typeof ThinkingLevel.Type
+const ThinkingLevel = Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const)
 
-export type AgentId = typeof AgentId.Type
-export const AgentId = Schema.Literals(['pi'] as const)
+type AgentId = typeof AgentId.Type
+const AgentId = Schema.Literals(['pi'] as const)
 
-export type ProviderId = typeof ProviderId.Type
-export const ProviderId = Schema.Literals(['openai-codex'] as const)
+type ProviderId = typeof ProviderId.Type
+const ProviderId = Schema.Literals(['openai-codex'] as const)
 
-export type ModelId = typeof ModelId.Type
-export const ModelId = Schema.Literals(['gpt-5.5'] as const)
+type ModelId = typeof ModelId.Type
+const ModelId = Schema.Literals(['gpt-5.5'] as const)
 
 export class AgentPrompt extends Schema.Class<AgentPrompt>('AgentPrompt')({
 	messages: Schema.Array(Prompt.Message),
