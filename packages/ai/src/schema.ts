@@ -42,15 +42,10 @@ const AgentLayerConfig = Schema.Struct({
 })
 
 export type AgentCommandProfileId = typeof AgentCommandProfileId.Type
-export const AgentCommandProfileId = Schema.Literals([
-	'opencode-gpt-5.5',
-	'codex-gpt-5.5-low',
-	'pi-gpt-5.5-low',
-	'claude-code-opus-4.8-bypass'
-])
+export const AgentCommandProfileId = Schema.Literals(['codex-gpt-5.5', 'claude-code-opus-4.8'])
 
 export type AgentCommandIcon = typeof AgentCommandIcon.Type
-export const AgentCommandIcon = Schema.Literals(['opencode', 'codex', 'pi', 'claude'])
+export const AgentCommandIcon = Schema.Literals(['codex', 'claude'])
 
 export type AgentCommandProfile = typeof AgentCommandProfile.Type
 export const AgentCommandProfile = Schema.Struct({

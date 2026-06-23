@@ -386,6 +386,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 			return yield* RcMap.get(terminals, session)
 		})
+		const invalidateTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
+			if (Predicate.isUndefined(input.sessionId)) return
+
+			const statusKey = TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId})
+			const session = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
+			yield* Ref.update(resolvedTerminals, current => HashMap.remove(current, statusKey))
+			if (Predicate.isNotUndefined(session)) yield* pipe(RcMap.invalidate(terminals, session), Effect.ignore)
+		})
 		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
 			if (Predicate.isUndefined(removed.script)) return
@@ -434,6 +442,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 										),
 										Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
 										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
+										Effect.andThen(invalidateTerminal(input)),
 										Effect.andThen(Ref.update(portlessStatusWatchers, current => HashSet.remove(current, watcherKey)))
 									)
 								: Effect.void
@@ -835,6 +844,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
 				}
 				yield* releasePortlessRoute(input)
+				yield* invalidateTerminal(input)
 				return status
 			}),
 			'terminal.write': payload =>

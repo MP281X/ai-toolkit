@@ -19,11 +19,9 @@ import {
 
 import * as nodePty from '@lydell/node-pty'
 import type {IPty} from '@lydell/node-pty'
-import {SerializeAddon} from '@xterm/addon-serialize'
-import HeadlessModule from '@xterm/headless'
 import type {ChildProcess} from 'effect/unstable/process'
 
-import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
+import {terminalChunks, terminalOscUpdates, terminalScreenStore, terminalTitleStatus} from './model.ts'
 import {
 	TerminalError,
 	terminalStatusActive,
@@ -64,17 +62,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const oscRef = yield* Ref.make('')
 		const attachedRef = yield* Ref.make<readonly Queue.Queue<TerminalFrame, Cause.Done>[]>([])
 		const sequenceRef = yield* Ref.make(0)
-		const screen = new HeadlessModule.Terminal({allowProposedApi: true, cols: 120, rows: 32, scrollback: 20_000})
-		const serialize = new SerializeAddon()
-		screen.loadAddon({
-			activate: terminal => {
-				// @ts-expect-error SerializeAddon supports headless terminals at runtime, but its type targets the DOM terminal.
-				serialize.activate(terminal)
-			},
-			dispose: () => {
-				serialize.dispose()
-			}
-		})
+		const screen = terminalScreenStore()
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const status = yield* SubscriptionRef.make<TerminalStatus>({state: 'idle', title: ''})
 
@@ -84,7 +72,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const dropQueues = Effect.fnUntraced(function* (dropped: readonly Queue.Queue<TerminalFrame, Cause.Done>[]) {
 			if (!Array.isReadonlyArrayNonEmpty(dropped)) return
-			yield* Ref.update(attachedRef, current => Array.filter(current, queue => !dropped.includes(queue)))
+			yield* Ref.update(attachedRef, current => Array.filter(current, queue => !Array.contains(dropped, queue)))
 			yield* Effect.forEach(dropped, Queue.shutdown, {discard: true})
 		})
 
@@ -121,14 +109,6 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		const parseScreen = Effect.fnUntraced(function* (chunk: string) {
-			yield* Effect.callback<true>(resume => {
-				screen.write(chunk, () => {
-					resume(Effect.succeed(true))
-				})
-			})
-		})
-
 		const writeOutput = Effect.fnUntraced(function* (chunk: string) {
 			const updates = yield* Ref.modify(oscRef, carry => {
 				const parsed = terminalOscUpdates(chunk, carry)
@@ -137,7 +117,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			for (const update of updates) {
 				yield* update.type === 'title' ? setTitle(update.title) : setProgress(update.state)
 			}
-			yield* parseScreen(chunk)
+			yield* Effect.promise(() => screen.write(chunk))
 			yield* publishFrame({data: chunk, sequence: yield* nextSequence(), type: 'output'})
 		})
 
@@ -157,7 +137,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* Effect.try({
 				catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
 				try: () => {
-					screen.resize(nextSize.cols, nextSize.rows)
+					screen.resize(nextSize)
 					if (process) process.process.resize(nextSize.cols, nextSize.rows)
 				}
 			})
@@ -354,8 +334,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						const snapshot = yield* pipe(
 							Effect.gen(function* () {
 								const reset = {sequence: yield* nextSequence(), type: 'reset'} satisfies TerminalFrame
+								const chunks = yield* Effect.sync(() => screen.snapshot())
 								const frames = pipe(
-									yield* Effect.forEach(terminalChunks(serialize.serialize({scrollback: 20_000})), data =>
+									yield* Effect.forEach(chunks, data =>
 										Effect.gen(function* () {
 											return {data, sequence: yield* nextSequence(), type: 'output'} satisfies TerminalFrame
 										})

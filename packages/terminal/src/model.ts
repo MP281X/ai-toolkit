@@ -1,6 +1,9 @@
 import {Array, Match, Option, String, pipe} from 'effect'
 
-import type {TerminalStatus} from './schema.ts'
+import {SerializeAddon} from '@xterm/addon-serialize'
+import HeadlessModule from '@xterm/headless'
+
+import type {TerminalSize, TerminalStatus} from './schema.ts'
 
 export function terminalChunks(data: string, chunkSize = 65536) {
 	if (data === '') return Array.empty<string>()
@@ -22,6 +25,50 @@ export function terminalChunks(data: string, chunkSize = 65536) {
 	}
 
 	return collect(0)
+}
+
+export function terminalScreenStore(size?: TerminalSize) {
+	const screen = new HeadlessModule.Terminal({
+		allowProposedApi: true,
+		cols: size?.cols ?? 120,
+		rows: size?.rows ?? 32,
+		scrollback: 1_000
+	})
+	const serialize = new SerializeAddon()
+	screen.loadAddon({
+		activate: terminal => {
+			// @ts-expect-error SerializeAddon supports headless terminals at runtime, but its type targets the DOM terminal.
+			serialize.activate(terminal)
+		},
+		dispose: () => {
+			serialize.dispose()
+		}
+	})
+
+	return {
+		dispose() {
+			screen.dispose()
+		},
+		reset() {
+			screen.reset()
+		},
+		resize(nextSize: TerminalSize) {
+			if (screen.cols === nextSize.cols && screen.rows === nextSize.rows) return
+			screen.resize(nextSize.cols, nextSize.rows)
+		},
+		snapshot() {
+			return terminalChunks(serialize.serialize({scrollback: 1_000}))
+		},
+		write(data: string) {
+			if (data === '') return Promise.resolve()
+
+			return new Promise<void>(resolve => {
+				screen.write(data, () => {
+					resolve()
+				})
+			})
+		}
+	}
 }
 
 export function terminalTitleStatus(title: string) {

@@ -47,8 +47,6 @@ export function Terminal({
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<xterm.Terminal>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
-	const inputBufferRef = useRef('')
-	const inputFlushRef = useRef<ReturnType<typeof setTimeout>>(null)
 	const animationFrameRef = useRef<number | null>(null)
 	const disposedRef = useRef(false)
 	const lastSizeRef = useRef<{readonly cols: number; readonly rows: number} | null>(null)
@@ -81,21 +79,6 @@ export function Terminal({
 		disposedRef.current = false
 		const timeouts = Array.empty<ReturnType<typeof setTimeout>>()
 
-		function flushInput() {
-			inputFlushRef.current = null
-			if (String.isEmpty(inputBufferRef.current)) return
-
-			callbacksRef.current.onData(inputBufferRef.current)
-			inputBufferRef.current = ''
-		}
-
-		function pushInput(data: string) {
-			inputBufferRef.current += data
-			if (inputFlushRef.current) return
-
-			inputFlushRef.current = setTimeout(flushInput, 4)
-		}
-
 		const style = getComputedStyle(elementRef.current)
 		const rootStyle = getComputedStyle(elementRef.current.ownerDocument.documentElement)
 		const fontSize = Number.parseFloat(style.fontSize)
@@ -113,7 +96,7 @@ export function Terminal({
 			letterSpacing: 0,
 			lineHeight: 1,
 			scrollSensitivity: 2,
-			scrollback: 20_000,
+			scrollback: 1_000,
 			smoothScrollDuration: 0,
 			theme: {background, selectionBackground, selectionInactiveBackground: selectionBackground}
 		})
@@ -182,7 +165,9 @@ export function Terminal({
 		} catch {
 			// Canvas renderer fallback.
 		}
-		terminal.onData(pushInput)
+		terminal.onData(data => {
+			callbacksRef.current.onData(data)
+		})
 
 		resize()
 		for (const delay of [16, 50, 100, 250, 500]) {
@@ -211,9 +196,6 @@ export function Terminal({
 		return () => {
 			disposedRef.current = true
 			terminalRef.current = null
-			inputBufferRef.current = ''
-			if (inputFlushRef.current) clearTimeout(inputFlushRef.current)
-			inputFlushRef.current = null
 			for (const timeout of timeouts) clearTimeout(timeout)
 			if (Predicate.isNotNull(animationFrameRef.current)) cancelAnimationFrame(animationFrameRef.current)
 			animationFrameRef.current = null
