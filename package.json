@@ -18,8 +18,8 @@
 	"scripts": {
 		"build": "vp run -r build",
 
-		"fix": "vp check --fix",
-		"check": "vp check",
+		"fix": "fallow fix --yes && vp check --fix",
+		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
 		"test": "vp test",
 
 		"shadcn": "cd packages/components && vp dlx shadcn@latest",
@@ -30,14 +30,17 @@
 	"dependencies": {
 		"effect": "^4.0.0-beta",
 		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta",
-		"@effect/openapi-generator": "^4.0.0-beta"
+		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
 		"typescript": "rc",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
+
+		"fallow": "latest",
+		"oxlint-plugin-react-doctor": "latest",
+		"@deslop/oxlint-rules": "workspace:*",
 
 		"vite": "catalog:",
 		"vite-plus": "catalog:"

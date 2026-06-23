@@ -11,8 +11,7 @@ Workbench is the local control surface for active development work:
 
 ## Runtime Ownership
 
-- Terminal sessions represent user-owned runtime processes and may legitimately run for hours without direct interaction
-- Do not put a TTL on terminal sessions or evict them because the UI is idle
-- Runtime cleanup must follow explicit lifecycle events such as user stop, process exit, command failure, route/script removal, agent removal, or worktree deletion
-- Passive observation paths must stay lightweight and must not create, start, preload, or resolve heavyweight runtime services for unknown idle sessions
-- Sidebar and status surfaces should read lightweight backend registry state rather than creating one subscription or service per visible row
+- Terminal sessions are user-owned runtime processes and may run for hours without direct interaction
+- Runtime cleanup follows explicit lifecycle events: user stop, process exit, command failure, route/script removal, agent removal, or worktree deletion
+- Passive observation paths stay lightweight
+- Sidebar and status surfaces read lightweight backend registry state

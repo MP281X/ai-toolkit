@@ -1,4 +1,4 @@
-import {Schema} from 'effect'
+import {Effect, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
@@ -26,8 +26,7 @@ import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
 import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
 
-const CwdPayloadFields = {cwd: Schema.String}
-const CwdPayload = Schema.Struct(CwdPayloadFields)
+const CwdPayload = Schema.Struct({cwd: Schema.String})
 
 const TerminalPayloadFields = {
 	args: Schema.optional(Schema.Array(Schema.String)),
@@ -37,50 +36,58 @@ const TerminalPayloadFields = {
 	sessionId: Schema.optional(Schema.String)
 }
 
-export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 export type TerminalPayload = typeof TerminalPayload.Type
+export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 
-export const AgentSession = Schema.Struct({
+const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
+
+export type AgentSession = typeof AgentSession.Type
+const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
 	icon: AgentCommandIcon,
 	label: Schema.String,
 	profileId: AgentCommandProfileId,
-	state: TerminalStatus,
+	state: TerminalStatusPayload,
 	uuid: Schema.String
 })
-export type AgentSession = typeof AgentSession.Type
 
+export type ScriptRun = typeof ScriptRun.Type
 export const ScriptRun = Schema.Struct({
 	command: Schema.String,
 	scriptName: Schema.String,
 	sessionId: Schema.String,
 	taskId: Schema.String
 })
-export type ScriptRun = typeof ScriptRun.Type
 
-export const SidebarWorktree = Schema.Struct({
+export const ScriptPackageJson = Schema.Struct({
+	scripts: Schema.Record(Schema.String, Schema.String).pipe(
+		Schema.optional,
+		Schema.withDecodingDefault(Effect.succeed({}))
+	)
+})
+
+export type SidebarWorktree = typeof SidebarWorktree.Type
+const SidebarWorktree = Schema.Struct({
 	agents: Schema.Array(AgentSession),
 	branch: Schema.optional(Schema.String),
 	portlessRuns: Schema.Array(PortlessRun),
 	root: Schema.String,
-	runStatuses: Schema.Record(Schema.String, TerminalStatus),
+	runStatuses: Schema.Record(Schema.String, TerminalStatusPayload),
 	scriptRuns: Schema.Array(ScriptRun)
 })
-export type SidebarWorktree = typeof SidebarWorktree.Type
 
-export const SidebarProject = Schema.Struct({
+export type SidebarProject = typeof SidebarProject.Type
+const SidebarProject = Schema.Struct({
 	repository: GitProject.fields.repository,
 	worktrees: Schema.Array(SidebarWorktree)
 })
-export type SidebarProject = typeof SidebarProject.Type
 
-export const HomeSidebar = Schema.Struct({
+const HomeSidebar = Schema.Struct({
 	agentProfiles: Schema.Array(AgentCommandProfile),
 	projects: Schema.Array(SidebarProject)
 })
-export type HomeSidebar = typeof HomeSidebar.Type
 
 const PublishDraftError = Schema.Union([GitError, AiError])
 
@@ -99,27 +106,27 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
 	Rpc.make('review.diffs', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, target: GitReviewTarget}),
+		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget}),
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),
 	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, marks: Schema.Array(GitReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.state.unmark', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, marks: Schema.Array(GitReviewMark)})
+		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, comment: GitReviewComment})
+		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
 	}),
 	Rpc.make('review.comments.resolve', {
 		error: GitError,
 		payload: Schema.Struct({
-			...CwdPayloadFields,
+			cwd: Schema.String,
 			filePath: Schema.String,
 			lineNumber: Schema.Number,
 			side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
@@ -128,13 +135,13 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('publish.approve', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, message: Schema.String}),
+		payload: Schema.Struct({cwd: Schema.String, message: Schema.String}),
 		success: Schema.optional(GitPullRequest)
 	}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
-		payload: Schema.Struct({...CwdPayloadFields, branch: Schema.String, source: GitWorktreeSource}),
+		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String, source: GitWorktreeSource}),
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),

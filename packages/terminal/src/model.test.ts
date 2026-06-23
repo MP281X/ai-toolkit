@@ -1,47 +1,69 @@
-import {Array, pipe} from 'effect'
+import {Array, String, pipe} from 'effect'
 
 import {describe, expect, it} from 'vite-plus/test'
 
-import {terminalChunks, terminalOscUpdates, terminalTitleStatus} from './model.ts'
+import {terminalScreenStore} from './model.ts'
 
-describe('@deslop/terminal model', () => {
-	it('chunks terminal output without dropping or reordering data', () => {
-		const data = `${'a'.repeat(5)}${'b'.repeat(5)}${'c'.repeat(5)}`
-		const chunks = terminalChunks(data, 6)
+function snapshotText(screen: ReturnType<typeof terminalScreenStore>) {
+	return Array.join('')(screen.snapshot())
+}
 
-		expect(chunks).toEqual(['aaaaab', 'bbbbcc', 'ccc'])
-		expect(pipe(chunks, Array.join(''))).toBe(data)
+describe('terminalScreenStore', () => {
+	it('keeps static alt-screen regions after later partial repaint output', async () => {
+		const screen = terminalScreenStore({cols: 24, rows: 5})
+		try {
+			await screen.write('\u001b[?1049h\u001b[HHEADER\u001b[5;1HINPUT> ')
+			await screen.write('\u001b[3;1Hworking')
+
+			const snapshot = snapshotText(screen)
+
+			expect(snapshot).toContain('\u001b[?1049h')
+			expect(snapshot).toContain('HEADER')
+			expect(snapshot).toContain('working')
+			expect(snapshot).toContain('INPUT> ')
+		} finally {
+			screen.dispose()
+		}
 	})
 
-	it('keeps surrogate pairs in the same output chunk', () => {
-		const data = `abc🙂def`
-		const chunks = terminalChunks(data, 4)
+	it('caps normal scrollback at the backend snapshot limit', async () => {
+		const screen = terminalScreenStore({cols: 16, rows: 5})
+		try {
+			await screen.write(
+				pipe(
+					Array.range(0, 1_019),
+					Array.map(index => `line-${index}`),
+					Array.join('\r\n')
+				)
+			)
 
-		expect(chunks).toEqual(['abc', '🙂de', 'f'])
-		expect(pipe(chunks, Array.join(''))).toBe(data)
-		expect(chunks.every(chunk => !/[\ud800-\udbff]$|^[\udc00-\udfff]/u.test(chunk))).toBe(true)
+			const snapshot = snapshotText(screen)
+
+			expect(snapshot).not.toContain('line-0')
+			expect(snapshot).toContain('line-1019')
+			expect(String.split('\r\n')(snapshot).length).toBeLessThanOrEqual(1_005)
+		} finally {
+			screen.dispose()
+		}
 	})
 
-	it('parses exact OSC title and progress signals', () => {
-		expect(terminalOscUpdates('\u001b]2;build ready\u0007').updates).toEqual([{title: 'build ready', type: 'title'}])
-		expect(terminalOscUpdates('\u001b]0;Action\u001b\\').updates).toEqual([{title: 'Action', type: 'title'}])
-		expect(terminalOscUpdates('\u001b]9;4;4\u0007').updates).toEqual([{state: 'waiting', type: 'progress'}])
-		expect(terminalOscUpdates('\u001b]9;4;0\u0007').updates).toEqual([{state: 'idle', type: 'progress'}])
-		expect(terminalOscUpdates('\u001b]1;ignored\u0007').updates).toEqual([])
-		expect(terminalOscUpdates('2;build ready\u0007', terminalOscUpdates('\u001b]').carry).updates).toEqual([
-			{title: 'build ready', type: 'title'}
-		])
-		expect(terminalOscUpdates('\\', terminalOscUpdates('\u001b]9;4;4\u001b').carry).updates).toEqual([
-			{state: 'waiting', type: 'progress'}
-		])
-	})
+	it('restores serialized cursor, modes, and alt buffer into a fresh screen', async () => {
+		const source = terminalScreenStore({cols: 20, rows: 4})
+		const restored = terminalScreenStore({cols: 20, rows: 4})
+		try {
+			await source.write('normal\u001b[?1h\u001b[?1049h\u001b[Halt\u001b[2;3Hcursor')
+			await restored.write(snapshotText(source))
 
-	it('maps title text to terminal status without legacy title parsing', () => {
-		expect(terminalTitleStatus('  [!] Action Required approve  ')).toEqual({
-			state: 'waiting',
-			title: 'Action Required approve'
-		})
-		expect(terminalTitleStatus('Working | compiling')).toEqual({state: 'running', title: 'Working | compiling'})
-		expect(terminalTitleStatus('')).toEqual({state: 'idle', title: ''})
+			const snapshot = snapshotText(restored)
+
+			expect(snapshot).toContain('\u001b[?1h')
+			expect(snapshot).toContain('\u001b[?1049h')
+			expect(snapshot).toContain('alt')
+			expect(snapshot).toContain('cursor')
+			expect(snapshot).toBe(snapshotText(source))
+		} finally {
+			source.dispose()
+			restored.dispose()
+		}
 	})
 })

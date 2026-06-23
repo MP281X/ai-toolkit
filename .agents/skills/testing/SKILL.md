@@ -7,23 +7,28 @@ description: Use when adding, rewriting, removing, or running tests, including p
 
 ## Tooling
 
-- Vitest, `vite-plus/test`
-- Existing Vite Plus config pattern; no standalone test configs
-- Colocated tests: `name.test.ts` / `name.test.tsx`
+- Vitest through `vite-plus/test`.
+- Tooling fixes happen in root Vite Plus config.
+- Colocated tests: `name.test.ts` / `name.test.tsx`.
+- Apps no tests by default; app tests allowed for real behavior.
 
 ## Scope
 
-- Breakable behavior only: public API, state transitions, pure transforms, perf-sensitive paths
-- No type/schema/library/implementation-shape tests
-- External command/API/CLI/network: fake, mock, layer, or in-memory boundary
+- Test breakable public behavior.
+- Test real boundary first.
+- No private implementation tests.
+- No fake AST/context harness when lint/tool boundary exists.
+- No RPC contract tests.
+- No type/schema/library-shape tests.
+- Delete low-value tests for removed private behavior.
+
+## Boundaries
+
+- External command/API/CLI/network: fake, mock, layer, in-memory boundary.
+- Package public API behavior, pure transforms, and perf-sensitive paths are valid test targets.
+- Mock at boundary, not inside implementation mechanics.
 
 ## Performance
 
-- Add perf tests for long sessions, high-frequency streams, large buffers, repeated UI updates
-- Structural/asymptotic assertions > timing-only assertions
-- Representative fixtures
-
-## Rewrites
-
-- Rewrite stale tests when public interfaces change
-- Delete tests for removed behavior
+- Add perf tests for long sessions, high-frequency streams, large buffers, repeated UI updates.
+- Structural/asymptotic assertions > timing-only assertions.

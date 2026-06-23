@@ -19,8 +19,7 @@ catalogMode: prefer
 catalog:
   vite-plus: latest
   vite: npm:@voidzero-dev/vite-plus-core@latest
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-overrides: {vite: 'catalog:', vitest: 'catalog:'}
+overrides: {vite: 'catalog:', vitest: 'npm:@voidzero-dev/vite-plus-test@latest'}
 peerDependencyRules:
   allowAny: [vite, vitest]
   allowedVersions: {vite: '*', vitest: '*'}

@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Effect, HashSet, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
@@ -52,8 +52,12 @@ import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/comp
 import {toast} from '@deslop/components/ui/sonner'
 import {Spinner} from '@deslop/components/ui/spinner'
 import {formatError} from '@deslop/components/utils'
-import type {GitBranch as GitBranchSchema} from '@deslop/git/schema'
-import {GitBranchesSnapshot} from '@deslop/git/schema'
+import {
+	GitBranchesSnapshot,
+	GitWorktreeLocalSource,
+	GitWorktreeNewSource,
+	GitWorktreeRemoteSource
+} from '@deslop/git/schema'
 import type {PortlessRun} from '@deslop/portless/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
 
@@ -68,9 +72,9 @@ const branchesAtom = Atom.family((cwd: string) =>
 			Effect.flatMap(RpcClient, client =>
 				String.isNonEmpty(cwd)
 					? client('projects.branches', {cwd})
-					: Effect.succeed(new GitBranchesSnapshot({branches: [], defaultBranch: 'main'}))
+					: Effect.succeed(GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'}))
 			),
-			{initialValue: new GitBranchesSnapshot({branches: [], defaultBranch: 'main'})}
+			{initialValue: GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'})}
 		)
 	)
 )
@@ -249,17 +253,14 @@ function ScriptRunRow(input: {
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
 
-	const active = terminalStatusActive(input.status.state) && input.status.state !== 'idle'
-	let actionIcon = <PlayIcon className="size-3" />
-	if (active) actionIcon = <Square className="size-3" />
-	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
-
 	async function toggleRun() {
 		if (actionState[0]) return
 
 		actionState[1](true)
 		try {
-			await (active ? stop({payload: session}) : restart({payload: session}))
+			await (terminalStatusActive(input.status.state) && input.status.state !== 'idle'
+				? stop({payload: session})
+				: restart({payload: session}))
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
@@ -282,9 +283,21 @@ function ScriptRunRow(input: {
 								event.stopPropagation()
 								void toggleRun()
 							}}
-							title={active ? `Stop ${input.run.taskId}` : `Start ${input.run.taskId}`}
+							title={
+								terminalStatusActive(input.status.state) && input.status.state !== 'idle'
+									? `Stop ${input.run.taskId}`
+									: `Start ${input.run.taskId}`
+							}
 						>
-							{actionIcon}
+							{pipe(
+								Match.value({
+									active: terminalStatusActive(input.status.state) && input.status.state !== 'idle',
+									pending: actionState[0]
+								}),
+								Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
+								Match.when({active: true}, () => <Square className="size-3" />),
+								Match.orElse(() => <PlayIcon className="size-3" />)
+							)}
 						</Button>
 					</span>
 				}
@@ -331,19 +344,9 @@ function PortlessGroup(input: {
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const expandedState = useState(true)
-	const active = Array.some(
-		input.runs,
-		run =>
-			terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
-			input.runStatuses[run.script.sessionId]?.state !== 'idle'
-	)
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
-
-	let actionIcon = <PlayIcon className="size-3" />
-	if (active) actionIcon = <Square className="size-3" />
-	if (actionState[0]) actionIcon = <Spinner className="size-2.5 border opacity-60" />
 
 	async function toggleRuns() {
 		if (actionState[0]) return
@@ -352,8 +355,18 @@ function PortlessGroup(input: {
 		try {
 			for (const run of input.runs) {
 				const session = portlessSession(run)
-				if (active) await stop({payload: session})
-				else await restart({payload: session})
+				if (
+					Array.some(
+						input.runs,
+						candidate =>
+							terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
+							input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
+					)
+				) {
+					await stop({payload: session})
+				} else {
+					await restart({payload: session})
+				}
 			}
 		} catch (error) {
 			toast.error(formatError(error))
@@ -376,9 +389,31 @@ function PortlessGroup(input: {
 							event.stopPropagation()
 							void toggleRuns()
 						}}
-						title={active ? 'Stop deslop' : 'Start deslop'}
+						title={
+							Array.some(
+								input.runs,
+								run =>
+									terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
+									input.runStatuses[run.script.sessionId]?.state !== 'idle'
+							)
+								? 'Stop deslop'
+								: 'Start deslop'
+						}
 					>
-						{actionIcon}
+						{pipe(
+							Match.value({
+								active: Array.some(
+									input.runs,
+									run =>
+										terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
+										input.runStatuses[run.script.sessionId]?.state !== 'idle'
+								),
+								pending: actionState[0]
+							}),
+							Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
+							Match.when({active: true}, () => <Square className="size-3" />),
+							Match.orElse(() => <PlayIcon className="size-3" />)
+						)}
 					</Button>
 				}
 				icon={<GlobeIcon />}
@@ -391,7 +426,7 @@ function PortlessGroup(input: {
 			</TreeExplorerRow>
 			{expandedState[0] && (
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{input.runs.map(run => (
+					{Array.map(input.runs, run => (
 						<Suspense key={run.script.sessionId} fallback={<Loading />}>
 							<PortlessRunRow
 								run={run}
@@ -488,41 +523,33 @@ function WorktreeAgents(input: {
 }) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
-	const startingProfilesState = useState<ReadonlySet<string>>(new Set())
-	const stoppingSessionsState = useState<ReadonlySet<string>>(new Set())
+	const startingProfilesState = useState(() => HashSet.empty<string>())
+	const stoppingSessionsState = useState(() => HashSet.empty<string>())
 
 	async function startAgent(profile: (typeof input.profiles)[number]) {
-		if (startingProfilesState[0].has(profile.id)) return
+		if (HashSet.has(startingProfilesState[0], profile.id)) return
 
-		startingProfilesState[1](current => new Set([...current, profile.id]))
+		startingProfilesState[1](current => HashSet.add(current, profile.id))
 		try {
 			const session = await create({payload: {cwd: input.cwd, profileId: profile.id}})
 			input.selectAgent(input.cwd, session.uuid)
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			startingProfilesState[1](current => {
-				const next = new Set(current)
-				next.delete(profile.id)
-				return next
-			})
+			startingProfilesState[1](current => HashSet.remove(current, profile.id))
 		}
 	}
 
 	async function stopAgent(session: AgentSession) {
-		if (stoppingSessionsState[0].has(session.uuid)) return
+		if (HashSet.has(stoppingSessionsState[0], session.uuid)) return
 
-		stoppingSessionsState[1](current => new Set([...current, session.uuid]))
+		stoppingSessionsState[1](current => HashSet.add(current, session.uuid))
 		try {
 			await remove({payload: {cwd: input.cwd, uuid: session.uuid}})
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			stoppingSessionsState[1](current => {
-				const next = new Set(current)
-				next.delete(session.uuid)
-				return next
-			})
+			stoppingSessionsState[1](current => HashSet.remove(current, session.uuid))
 		}
 	}
 
@@ -532,7 +559,7 @@ function WorktreeAgents(input: {
 				agents
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-				{input.profiles.map(profile => {
+				{Array.map(input.profiles, profile => {
 					const profileSessions = pipe(
 						input.sessions,
 						Array.filter(session => session.profileId === profile.id)
@@ -546,14 +573,14 @@ function WorktreeAgents(input: {
 										variant="ghost"
 										size="icon-xs"
 										className="text-muted-foreground hover:text-foreground"
-										disabled={startingProfilesState[0].has(profile.id)}
+										disabled={HashSet.has(startingProfilesState[0], profile.id)}
 										onClick={event => {
 											event.stopPropagation()
 											void startAgent(profile)
 										}}
 										title={`Start ${profile.label}`}
 									>
-										{startingProfilesState[0].has(profile.id) ? (
+										{HashSet.has(startingProfilesState[0], profile.id) ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											<PlayIcon className="size-3" />
@@ -567,7 +594,7 @@ function WorktreeAgents(input: {
 							</TreeExplorerRow>
 							{profileSessions.length > 0 && (
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-									{profileSessions.map(session => (
+									{Array.map(profileSessions, session => (
 										<AgentSessionRow
 											key={session.uuid}
 											session={session}
@@ -577,7 +604,7 @@ function WorktreeAgents(input: {
 											onStop={() => {
 												void stopAgent(session)
 											}}
-											stopping={stoppingSessionsState[0].has(session.uuid)}
+											stopping={HashSet.has(stoppingSessionsState[0], session.uuid)}
 										/>
 									))}
 								</ul>
@@ -605,17 +632,19 @@ function WorktreeManager(input: {
 	const fixProject = useAtomSet(RpcClient.mutation('projects.fix'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
-	const branchState = useState('')
-	const actionsOpenState = useState(false)
-	const createWorktreeProjectRootState = useState(input.activeProject?.repository.root)
-	const creatingBranchState = useState('')
-	const deletingWorktreeState = useState(false)
-	const deleteDialogOpenState = useState(false)
-	const fixingProjectState = useState('')
+	const [state, setState] = useState(() => ({
+		actionsOpen: false,
+		branch: '',
+		createWorktreeProjectRoot: input.activeProject?.repository.root,
+		creatingBranch: '',
+		deleteDialogOpen: false,
+		deletingWorktree: false,
+		fixingProject: ''
+	}))
 	const createWorktreeProject =
 		pipe(
 			input.projects,
-			Array.findFirst(project => project.repository.root === createWorktreeProjectRootState[0]),
+			Array.findFirst(project => project.repository.root === state.createWorktreeProjectRoot),
 			Option.getOrUndefined
 		) ?? input.activeProject
 	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
@@ -641,29 +670,27 @@ function WorktreeManager(input: {
 				)
 		)
 	)
-	const newBranch = String.trim(branchState[0])
+	const newBranch = String.trim(state.branch)
 	const branchAvailable = pipe(
 		availableBranches,
 		Array.some(candidate => candidate.name === newBranch)
 	)
-	const canCreateNewBranch = String.isNonEmpty(newBranch) && validNewWorktreeBranch(newBranch) && !branchAvailable
-	async function createFastWorktree(candidate?: GitBranchSchema) {
+	async function createFastWorktree(candidate?: (typeof availableBranches)[number]) {
 		const nextBranch = candidate?.name ?? newBranch
-		if (String.isEmpty(nextBranch) || String.isNonEmpty(creatingBranchState[0])) return
-		if (candidate === undefined && !validNewWorktreeBranch(nextBranch)) {
+		if (String.isEmpty(nextBranch) || String.isNonEmpty(state.creatingBranch)) return
+		if (Predicate.isUndefined(candidate) && !validNewWorktreeBranch(nextBranch)) {
 			toast.error('Branch names cannot contain spaces.')
 			return
 		}
 
-		const source =
-			candidate === undefined
-				? {_tag: 'new' as const}
-				: Match.value(candidate).pipe(
-						Match.when({type: 'local'}, () => ({_tag: 'local' as const})),
-						Match.orElse(remoteBranch => ({_tag: 'remote' as const, remote: remoteBranch.remote ?? 'origin'}))
-					)
+		const source = Predicate.isUndefined(candidate)
+			? GitWorktreeNewSource.make({})
+			: Match.value(candidate).pipe(
+					Match.when({type: 'local'}, () => GitWorktreeLocalSource.make({})),
+					Match.orElse(remoteBranch => GitWorktreeRemoteSource.make({remote: remoteBranch.remote ?? 'origin'}))
+				)
 
-		creatingBranchState[1](nextBranch)
+		setState(current => ({...current, creatingBranch: nextBranch}))
 		try {
 			const worktreeRoot = await createWorktree({
 				payload: {
@@ -672,26 +699,35 @@ function WorktreeManager(input: {
 					source
 				}
 			})
-			actionsOpenState[1](false)
-			branchState[1]('')
+			setState(current => ({...current, actionsOpen: false, branch: ''}))
 			input.selectWorktree(worktreeRoot)
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			creatingBranchState[1]('')
+			setState(current => ({...current, creatingBranch: ''}))
 		}
 	}
 	async function deleteActiveWorktree() {
-		if (!input.activeWorktree || deletingWorktreeState[0]) return
+		if (!input.activeWorktree || state.deletingWorktree) return
 
-		deletingWorktreeState[1](true)
+		setState(current => ({...current, deletingWorktree: true}))
 		try {
 			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
-			deleteDialogOpenState[1](false)
+			setState(current => ({...current, deleteDialogOpen: false}))
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			deletingWorktreeState[1](false)
+			setState(current => ({...current, deletingWorktree: false}))
+		}
+	}
+	async function fixRepository(cwd: string) {
+		setState(current => ({...current, fixingProject: cwd}))
+		try {
+			await fixProject({payload: {cwd}})
+		} catch (error) {
+			toast.error(formatError(error))
+		} finally {
+			setState(current => ({...current, fixingProject: ''}))
 		}
 	}
 
@@ -717,23 +753,24 @@ function WorktreeManager(input: {
 						variant="destructive"
 						size="icon"
 						className="h-8 w-8"
-						disabled={deletingWorktreeState[0]}
+						disabled={state.deletingWorktree}
 						onClick={() => {
-							deleteDialogOpenState[1](true)
+							setState(current => ({...current, deleteDialogOpen: true}))
 						}}
 						title="Delete worktree"
 					>
-						{deletingWorktreeState[0] ? (
-							<Spinner className="size-2.5 border opacity-60" />
-						) : (
-							<Trash className="size-3" />
-						)}
+						{state.deletingWorktree ? <Spinner className="size-2.5 border opacity-60" /> : <Trash className="size-3" />}
 					</Button>
 				)}
 			</div>
 
-			<Dialog open={deleteDialogOpenState[0]} onOpenChange={deleteDialogOpenState[1]}>
-				<DialogContent showCloseButton={!deletingWorktreeState[0]}>
+			<Dialog
+				open={state.deleteDialogOpen}
+				onOpenChange={deleteDialogOpen => {
+					setState(current => ({...current, deleteDialogOpen}))
+				}}
+			>
+				<DialogContent showCloseButton={!state.deletingWorktree}>
 					<DialogHeader>
 						<DialogTitle>Delete worktree</DialogTitle>
 						<DialogDescription>
@@ -746,9 +783,9 @@ function WorktreeManager(input: {
 						<Button
 							type="button"
 							variant="outline"
-							disabled={deletingWorktreeState[0]}
+							disabled={state.deletingWorktree}
 							onClick={() => {
-								deleteDialogOpenState[1](false)
+								setState(current => ({...current, deleteDialogOpen: false}))
 							}}
 						>
 							Cancel
@@ -756,13 +793,13 @@ function WorktreeManager(input: {
 						<Button
 							type="button"
 							variant="destructive"
-							disabled={!input.activeWorktree || deletingWorktreeState[0]}
+							disabled={!input.activeWorktree || state.deletingWorktree}
 							onClick={() => {
 								void deleteActiveWorktree()
-								actionsOpenState[1](false)
+								setState(current => ({...current, actionsOpen: false}))
 							}}
 						>
-							{deletingWorktreeState[0] ? (
+							{state.deletingWorktree ? (
 								<Spinner className="size-2.5 border opacity-60" />
 							) : (
 								<Trash className="size-3" />
@@ -774,8 +811,10 @@ function WorktreeManager(input: {
 			</Dialog>
 
 			<CommandDialog
-				open={actionsOpenState[0]}
-				onOpenChange={actionsOpenState[1]}
+				open={state.actionsOpen}
+				onOpenChange={actionsOpen => {
+					setState(current => ({...current, actionsOpen}))
+				}}
 				title="Create worktree"
 				description="Create or open a worktree branch."
 				className="sm:max-w-2xl"
@@ -783,13 +822,15 @@ function WorktreeManager(input: {
 				<Command
 					onKeyDown={event => {
 						event.stopPropagation()
-						if (event.key === 'Escape') actionsOpenState[1](false)
+						if (event.key === 'Escape') setState(current => ({...current, actionsOpen: false}))
 					}}
 				>
 					<CommandInput
 						placeholder={`Find or create branch in ${createWorktreeProject ? pathLabel(createWorktreeProject.repository.root) : 'workspace'}...`}
-						value={branchState[0]}
-						onValueChange={branchState[1]}
+						value={state.branch}
+						onValueChange={branch => {
+							setState(current => ({...current, branch}))
+						}}
 						onKeyDown={event => {
 							if (event.key === 'Enter' && String.isNonEmpty(newBranch) && createWorktreeProject) {
 								event.preventDefault()
@@ -811,15 +852,15 @@ function WorktreeManager(input: {
 						</CommandEmpty>
 						{createWorktreeProject && (
 							<CommandGroup>
-								{canCreateNewBranch && (
+								{String.isNonEmpty(newBranch) && validNewWorktreeBranch(newBranch) && !branchAvailable && (
 									<CommandItem
 										value={newBranch}
-										disabled={String.isNonEmpty(creatingBranchState[0])}
+										disabled={String.isNonEmpty(state.creatingBranch)}
 										onSelect={() => {
 											void createFastWorktree()
 										}}
 									>
-										{creatingBranchState[0] === newBranch ? (
+										{state.creatingBranch === newBranch ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											<GitBranchPlus />
@@ -830,7 +871,7 @@ function WorktreeManager(input: {
 								)}
 								{Array.map(availableBranches, candidate => {
 									const icon =
-										creatingBranchState[0] === candidate.name ? (
+										state.creatingBranch === candidate.name ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											Match.value(candidate.type).pipe(
@@ -844,7 +885,7 @@ function WorktreeManager(input: {
 											key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
 											value={candidate.name}
 											onSelect={() => {
-												branchState[1](candidate.name)
+												setState(current => ({...current, branch: candidate.name}))
 												void createFastWorktree(candidate)
 											}}
 										>
@@ -892,21 +933,14 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											disabled={fixingProjectState[0] === project.repository.root}
+											disabled={state.fixingProject === project.repository.root}
 											onClick={event => {
 												event.stopPropagation()
-												fixingProjectState[1](project.repository.root)
-												void fixProject({payload: {cwd: project.repository.root}})
-													.catch(error => {
-														toast.error(formatError(error))
-													})
-													.finally(() => {
-														fixingProjectState[1]('')
-													})
+												void fixRepository(project.repository.root)
 											}}
 											title="Fix repo state"
 										>
-											{fixingProjectState[0] === project.repository.root ? (
+											{state.fixingProject === project.repository.root ? (
 												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />
@@ -918,9 +952,12 @@ function WorktreeManager(input: {
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
 											onClick={event => {
 												event.stopPropagation()
-												createWorktreeProjectRootState[1](project.repository.root)
-												branchState[1]('')
-												actionsOpenState[1](true)
+												setState(current => ({
+													...current,
+													actionsOpen: true,
+													branch: '',
+													createWorktreeProjectRoot: project.repository.root
+												}))
 											}}
 											title="Create worktree"
 										>

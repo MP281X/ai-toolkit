@@ -1,77 +1,50 @@
-import {Array, Effect, FileSystem, Hash, Option, Order, Path, Schema, String, pipe} from 'effect'
+import {
+	Array,
+	Effect,
+	FileSystem,
+	Function,
+	Hash,
+	HashMap,
+	Option,
+	Order,
+	Path,
+	Predicate,
+	Record,
+	Schema,
+	String,
+	pipe
+} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
-type PackageJson = {
-	readonly deslop: {readonly portless: readonly string[]}
-	readonly name?: string
-	readonly scripts: Readonly<Record<string, string>>
-}
+import {PortlessPackageJson} from '../schema.ts'
 
-type PackageManifest = {readonly packageJson: PackageJson; readonly packagePath: string}
-
-type PackageScript = {
-	readonly command: string
-	readonly packageName: string
-	readonly scriptName: string
-	readonly taskId: string
-}
-
-const JsonRecord = Schema.Record(Schema.String, Schema.Unknown)
-const ScriptRecord = Schema.Record(Schema.String, Schema.String)
-const JsonArray = Schema.Array(Schema.Unknown)
-
-function emptyJsonRecord(): Readonly<Record<string, unknown>> {
-	return {}
-}
-
-function emptyScriptRecord(): Readonly<Record<string, string>> {
-	return {}
-}
-
-function emptyStringArray(): readonly string[] {
-	return []
-}
-
-function packageJson(source: string): PackageJson {
-	const value = JSON.parse(source) as unknown
-	const record: Readonly<Record<string, unknown>> = pipe(
-		value,
-		Schema.decodeUnknownOption(JsonRecord),
-		Option.getOrElse(emptyJsonRecord)
+function packageJson(source: string) {
+	const manifest = pipe(
+		source,
+		Schema.decodeUnknownOption(Schema.fromJsonString(PortlessPackageJson)),
+		Option.getOrElse(() => PortlessPackageJson.make({}))
 	)
-	const deslop: Readonly<Record<string, unknown>> = pipe(
-		record['deslop'],
-		Schema.decodeUnknownOption(JsonRecord),
-		Option.getOrElse(emptyJsonRecord)
-	)
-	const portless = pipe(
-		deslop['portless'],
-		Schema.decodeUnknownOption(JsonArray),
-		Option.map(values => values.filter((item): item is string => typeof item === 'string')),
-		Option.getOrElse(emptyStringArray)
-	)
-	const scripts = pipe(record['scripts'], Schema.decodeUnknownOption(ScriptRecord), Option.getOrElse(emptyScriptRecord))
-	const nameValue = record['name']
-	const name = typeof nameValue === 'string' && String.isNonEmpty(nameValue) ? nameValue : undefined
 
-	return {deslop: {portless}, name, scripts}
+	return {
+		deslop: {portless: manifest.deslop?.portless ?? Array.empty<string>()},
+		name: Predicate.isNotUndefined(manifest.name) && String.isNonEmpty(manifest.name) ? manifest.name : undefined,
+		scripts: manifest.scripts ?? {}
+	}
 }
 
 function hostSegment(value: string) {
-	const segment = value
-		.toLowerCase()
-		.replace(/[^a-z0-9-]+/gu, '-')
-		.replace(/^-+|-+$/gu, '')
+	const segment = pipe(
+		value,
+		String.toLowerCase,
+		String.replaceAll(/[^a-z0-9-]+/gu, '-'),
+		String.replace(/^-+|-+$/gu, '')
+	)
 	return String.isEmpty(segment) ? 'app' : segment
 }
 
 function scriptHostSegment(value: string) {
-	return hostSegment(value.startsWith('dev:') ? value.slice(4) : value)
-}
-
-function worktreeHostSegment(cwd: string, path: Path.Path) {
-	return `${hostSegment(path.basename(cwd))}-${Math.abs(Hash.string(cwd)).toString(16).padStart(8, '0').slice(0, 8)}`
+	return hostSegment(String.startsWith('dev:')(value) ? String.slice(4)(value) : value)
 }
 
 const frameworkFlags = {
@@ -84,53 +57,56 @@ const frameworkFlags = {
 	vite: {host: '127.0.0.1', strictPort: true},
 	vp: {host: '127.0.0.1', strictPort: true}
 } as const
+const FrameworkCommand = Schema.Literals([
+	'astro',
+	'expo',
+	'ng',
+	'react-native',
+	'react-router',
+	'rsbuild',
+	'vite',
+	'vp'
+])
 
-const packageRunners = new Set(['bunx', 'npx', 'pnpm', 'pnpx', 'yarn'])
-const packageRunnerSubcommands = new Set(['dlx', 'exec'])
+const packageRunners = ['bunx', 'npx', 'pnpm', 'pnpx', 'yarn'] as const
+const packageRunnerSubcommands = ['dlx', 'exec'] as const
+
+function commandAt(
+	words: readonly string[],
+	index: number
+): {readonly command: string; readonly index: number} | undefined {
+	const current = words[index]
+	if (Predicate.isUndefined(current)) return
+	return String.startsWith('-')(current) ? commandAt(words, index + 1) : {command: current, index}
+}
 
 function frameworkCommand(source: string) {
 	const words = pipe(String.split(/\s+/u)(source), Array.filter(String.isNonEmpty))
 	if (Array.isReadonlyArrayEmpty(words)) return
 
 	const first = words[0]
-	if (!packageRunners.has(first)) return first
+	if (Predicate.isUndefined(first)) return
+	if (!pipe(packageRunners, Array.contains(first))) return first
 
-	let index = 1
-	while (words[index]?.startsWith('-')) index += 1
-	if (packageRunnerSubcommands.has(words[index] ?? '')) index += 1
-	while (words[index]?.startsWith('-')) index += 1
-	return words[index]
+	const resolved = commandAt(words, 1)
+	if (Predicate.isUndefined(resolved)) return
+	const subcommand = pipe(packageRunnerSubcommands, Array.contains(resolved.command))
+	return subcommand ? commandAt(words, resolved.index + 1)?.command : resolved.command
 }
 
 function frameworkFlagConfig(source: string) {
-	const framework = frameworkCommand(source)
-	if (framework === undefined) return
-
-	switch (framework) {
-		case 'astro':
-			return frameworkFlags.astro
-		case 'expo':
-			return frameworkFlags.expo
-		case 'ng':
-			return frameworkFlags.ng
-		case 'react-native':
-			return frameworkFlags['react-native']
-		case 'react-router':
-			return frameworkFlags['react-router']
-		case 'rsbuild':
-			return frameworkFlags.rsbuild
-		case 'vite':
-			return frameworkFlags.vite
-		case 'vp':
-			return frameworkFlags.vp
-		default:
-	}
+	return pipe(
+		frameworkCommand(source),
+		Schema.decodeUnknownOption(FrameworkCommand),
+		Option.map(framework => frameworkFlags[framework]),
+		Option.getOrUndefined
+	)
 }
 
 function commandFlags(source: string | undefined, port: number) {
-	if (source === undefined) return []
+	if (Predicate.isUndefined(source)) return []
 	const framework = frameworkFlagConfig(source)
-	if (framework === undefined) return []
+	if (Predicate.isUndefined(framework)) return []
 
 	return ['--port', port.toString(), ...(framework.strictPort ? ['--strictPort'] : []), '--host', framework.host]
 }
@@ -145,25 +121,46 @@ export function command(
 function taskIdParts(taskId: string) {
 	const index = taskId.indexOf('#')
 	if (index <= 0) return {packageName: undefined, scriptName: undefined}
-	const packageName = taskId.slice(0, index)
-	const scriptName = taskId.slice(index + 1)
+	const packageName = String.slice(0, index)(taskId)
+	const scriptName = String.slice(index + 1)(taskId)
 	return {
 		packageName: String.isNonEmpty(packageName) ? packageName : undefined,
 		scriptName: String.isNonEmpty(scriptName) ? scriptName : undefined
 	}
 }
 
-function packageScripts(manifests: readonly PackageManifest[]) {
-	const scripts = new Map<string, PackageScript>()
-	for (const manifest of manifests) {
-		const packageName = manifest.packageJson.name
-		if (packageName === undefined) continue
-		for (const [scriptName, scriptCommand] of Object.entries(manifest.packageJson.scripts)) {
+function addPackageScripts(
+	scripts: HashMap.HashMap<
+		string,
+		{readonly command: string; readonly packageName: string; readonly scriptName: string; readonly taskId: string}
+	>,
+	packageName: string,
+	source: {readonly [key: string]: string}
+) {
+	return pipe(
+		source,
+		Record.toEntries,
+		Array.reduce(scripts, (current, [scriptName, scriptCommand]) => {
 			const taskId = `${packageName}#${scriptName}`
-			scripts.set(taskId, {command: scriptCommand, packageName, scriptName, taskId})
+			return HashMap.set(current, taskId, {command: scriptCommand, packageName, scriptName, taskId})
+		})
+	)
+}
+
+function packageScripts(
+	manifests: readonly {readonly packageJson: ReturnType<typeof packageJson>; readonly packagePath: string}[]
+) {
+	return Array.reduce(
+		manifests,
+		HashMap.empty<
+			string,
+			{readonly command: string; readonly packageName: string; readonly scriptName: string; readonly taskId: string}
+		>(),
+		(scripts, manifest) => {
+			if (Predicate.isUndefined(manifest.packageJson.name)) return scripts
+			return addPackageScripts(scripts, manifest.packageJson.name, manifest.packageJson.scripts)
 		}
-	}
-	return scripts
+	)
 }
 
 export const discover = Effect.fnUntraced(function* (
@@ -180,39 +177,45 @@ export const discover = Effect.fnUntraced(function* (
 		String.split('\n')(output),
 		Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
 	)
-	const packageManifests: readonly PackageManifest[] = yield* pipe(
+	const packageManifests = yield* pipe(
 		packagePaths,
 		Effect.forEach(
 			packagePath =>
 				pipe(
 					fs.readFileString(path.join(cwd, packagePath)),
-					Effect.flatMap(source => Effect.try({catch: error => error, try: () => packageJson(source)})),
-					Effect.map(manifest => Option.some(manifest)),
-					Effect.catch(() => Effect.succeed(Option.none<PackageJson>())),
-					Effect.map(Option.match({onNone: () => [], onSome: manifest => [{packageJson: manifest, packagePath}]}))
+					Effect.flatMap(source => Effect.try({catch: Function.identity, try: () => packageJson(source)})),
+					Effect.match({onFailure: () => [], onSuccess: manifest => [{packageJson: manifest, packagePath}]})
 				),
 			{concurrency: 16}
 		),
 		Effect.map(Array.flatten)
 	)
-	const configuredTaskIds =
-		packageManifests.find(manifest => manifest.packagePath === 'package.json')?.packageJson.deslop.portless ?? []
+	const configuredTaskIds = pipe(
+		packageManifests,
+		Array.findFirst(manifest => manifest.packagePath === 'package.json'),
+		Option.map(manifest => manifest.packageJson.deslop.portless),
+		Option.getOrElse(() => Array.empty<string>())
+	)
 	const scripts = packageScripts(packageManifests)
 
 	return yield* pipe(
 		configuredTaskIds,
 		Effect.forEach(taskId => {
-			const script = scripts.get(taskId)
+			const script = pipe(scripts, HashMap.get(taskId), Option.getOrUndefined)
 			const parts = taskIdParts(taskId)
 			const packageName = script?.packageName ?? parts.packageName
 			const scriptName = script?.scriptName ?? parts.scriptName
 			const packageSegment = hostSegment(packageName ?? taskId)
 			const scriptSegment = scriptHostSegment(scriptName ?? taskId)
-			const worktree = worktreeHostSegment(cwd, path)
-			const packageOrigin = input.origin([packageSegment, worktree, 'localhost'].join('.'))
+			const worktree = `${hostSegment(path.basename(cwd))}-${pipe(
+				Math.abs(Hash.string(cwd)).toString(16),
+				String.padStart(8, '0'),
+				String.slice(0, 8)
+			)}`
+			const packageOrigin = input.origin(pipe([packageSegment, worktree, 'localhost'], Array.join('.')))
 
 			return Effect.map(input.port(taskId), port => {
-				const host = [scriptSegment, packageSegment, worktree, 'localhost'].join('.')
+				const host = pipe([scriptSegment, packageSegment, worktree, 'localhost'], Array.join('.'))
 				const origin = input.origin(host)
 
 				return {
@@ -220,7 +223,7 @@ export const discover = Effect.fnUntraced(function* (
 					port,
 					script: {
 						baseOrigin: packageOrigin,
-						...(script?.command === undefined ? {} : {command: script.command}),
+						...(Predicate.isUndefined(script?.command) ? {} : {command: script.command}),
 						cwd,
 						env: {
 							HOST: '127.0.0.1',
@@ -233,9 +236,9 @@ export const discover = Effect.fnUntraced(function* (
 							VITE_PORTLESS_URL: origin
 						},
 						origin,
-						...(packageName === undefined ? {} : {packageName}),
+						...(Predicate.isUndefined(packageName) ? {} : {packageName}),
 						portless: true,
-						...(scriptName === undefined ? {} : {scriptName}),
+						...(Predicate.isUndefined(scriptName) ? {} : {scriptName}),
 						sessionId: taskId,
 						taskId
 					}
