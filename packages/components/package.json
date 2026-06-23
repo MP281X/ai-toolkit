@@ -33,6 +33,7 @@
 
 		"marked": "latest",
 		"mermaid": "latest",
+		"dompurify": "latest",
 		"@pierre/diffs": "latest",
 
 		"@xterm/xterm": "latest",

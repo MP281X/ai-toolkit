@@ -23,7 +23,7 @@ import {
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
-import {Button} from '@deslop/components/ui/button'
+import {Button, buttonVariants} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
@@ -674,19 +674,22 @@ function CommitActionForm(input: {
 				</span>
 			) : (
 				String.isNonEmpty(input.prUrl ?? '') && (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="size-4"
+					<a
+						className={cn(buttonVariants({size: 'icon-xs', variant: 'ghost'}), 'size-4')}
+						href={pipe(
+							URL.parse(input.prUrl ?? ''),
+							Option.fromNullishOr,
+							Option.filter(parsed => parsed.protocol === 'https:' && parsed.hostname === 'github.com'),
+							Option.map(parsed => parsed.href),
+							Option.getOrUndefined
+						)}
+						target="_blank"
+						rel="noopener noreferrer"
 						aria-label="Open pull request"
 						title="Open pull request"
-						onClick={() => {
-							window.open(input.prUrl, '_blank', 'noopener,noreferrer')
-						}}
 					>
 						<ExternalLinkIcon />
-					</Button>
+					</a>
 				)
 			)}
 		</div>

@@ -1,5 +1,6 @@
 import {Array, Match, Predicate, pipe} from 'effect'
 
+import DOMPurify from 'dompurify'
 import {Marked} from 'marked'
 
 import {Code} from './code.tsx'
@@ -33,7 +34,7 @@ export function Markdown(props: {readonly children: string; readonly className?:
 					Match.orElse(other => (
 						<div
 							key={`${other.type}:${index}:${other.raw}`}
-							dangerouslySetInnerHTML={{__html: marked.parse(other.raw)}}
+							dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(marked.parse(other.raw, {async: false}))}}
 						/>
 					))
 				)

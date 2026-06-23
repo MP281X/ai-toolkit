@@ -230,7 +230,7 @@ function accessField(value: {readonly field?: string}) {
 const familyAtom = Atom.family(value => Atom.make(value))
 
 declare module 'effect' {
-	/** @expected-unused */
+	/** @expected-unused -- module augmentation fixture */
 	// oxlint-disable-next-line @deslop/oxlint-rules/no-declare-module-export -- fixture
 	export type FixtureRegister = {readonly value: string}
 }

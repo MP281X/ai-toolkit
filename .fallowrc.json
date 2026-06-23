@@ -1,8 +1,90 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
 	"includeEntryExports": true,
+	"duplicates": {"minLines": 10, "ignore": ["apps/*/src/lib/atomRuntime.ts"]},
+	"boundaries": {
+		"zones": [
+			{"name": "app-portfolio", "patterns": ["apps/portfolio/**"]},
+			{"name": "app-workbench", "patterns": ["apps/workbench/**"]},
+			{"name": "package-ai", "patterns": ["packages/ai/**"]},
+			{"name": "package-components", "patterns": ["packages/components/**"]},
+			{"name": "package-git", "patterns": ["packages/git/**"]},
+			{"name": "package-opentelemetry", "patterns": ["packages/opentelemetry/**"]},
+			{"name": "package-oxlint-rules", "patterns": ["packages/oxlint-rules/src/oxlint-plugin.ts"]},
+			{"name": "package-portless", "patterns": ["packages/portless/**"]},
+			{"name": "package-terminal", "patterns": ["packages/terminal/**"]},
+			{"name": "package-usage", "patterns": ["packages/usage/**"]}
+		],
+		"rules": [
+			{
+				"from": "app-portfolio",
+				"allow": [
+					"app-portfolio",
+					"package-ai",
+					"package-components",
+					"package-git",
+					"package-opentelemetry",
+					"package-oxlint-rules",
+					"package-portless",
+					"package-terminal",
+					"package-usage"
+				]
+			},
+			{
+				"from": "app-workbench",
+				"allow": [
+					"app-workbench",
+					"package-ai",
+					"package-components",
+					"package-git",
+					"package-opentelemetry",
+					"package-oxlint-rules",
+					"package-portless",
+					"package-terminal",
+					"package-usage"
+				]
+			},
+			{"from": "package-ai", "allow": ["package-ai"]},
+			{"from": "package-components", "allow": ["package-components"]},
+			{"from": "package-git", "allow": ["package-git"]},
+			{"from": "package-opentelemetry", "allow": ["package-opentelemetry"]},
+			{"from": "package-oxlint-rules", "allow": ["package-oxlint-rules"]},
+			{"from": "package-portless", "allow": ["package-portless"]},
+			{"from": "package-terminal", "allow": ["package-terminal"]},
+			{"from": "package-usage", "allow": ["package-usage"]}
+		],
+		"coverage": {
+			"requireAllFiles": true,
+			"allowUnmatched": [
+				"**/routeTree.gen.ts",
+				"packages/oxlint-rules/src/oxlint-plugin.test.ts",
+				"scripts/**",
+				"vite.config.ts"
+			]
+		}
+	},
 	"ignoreDependencies": ["@deslop/oxlint-rules", "@effect/atom-react", "@effect/platform-node", "effect", "vite-plus"],
 	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
 	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
-	"publicPackages": ["@deslop/components"]
+	"publicPackages": ["@deslop/components"],
+	"security": {
+		"categories": {"exclude": ["dynamic-regex", "header-injection", "path-traversal", "prototype-pollution", "ssrf"]}
+	},
+	"rules": {
+		"private-type-leaks": "error",
+		"unused-dev-dependencies": "error",
+		"unused-optional-dependencies": "error",
+		"unused-component-props": "error",
+		"type-only-dependencies": "error",
+		"test-only-dependencies": "error",
+		"re-export-cycle": "error",
+		"stale-suppressions": "error",
+		"require-suppression-reason": "error",
+		"coverage-gaps": "off",
+		"unused-catalog-entries": "error",
+		"empty-catalog-groups": "error",
+		"unused-dependency-overrides": "error",
+		"policy-violation": "error",
+		"security-sink": "error"
+	}
 }

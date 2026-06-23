@@ -18,9 +18,9 @@
 	"scripts": {
 		"build": "vp run -r build",
 
-		"fix": "vp check --fix",
+		"fix": "fallow fix --yes && vp check --fix",
 		"typecheck": "sh -c 'vp exec tsc -b apps/* packages/*'",
-		"check": "vp check && fallow dead-code --summary",
+		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
 		"test": "vp test",
 
 		"shadcn": "cd packages/components && vp dlx shadcn@latest",

@@ -16,7 +16,7 @@ import {
 import {useLayoutEffect, useRef, useState} from 'react'
 
 import {Fallback, Loading} from '#components/fallbacks.tsx'
-import {Button} from '#components/ui/button.tsx'
+import {Button, buttonVariants} from '#components/ui/button.tsx'
 import {Input} from '#components/ui/input.tsx'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '#components/ui/resizable.tsx'
 import {cn, formatTimestamp} from '#lib/utils.ts'
@@ -201,19 +201,15 @@ function BrowserInstance(props: {readonly className?: string; readonly origin: s
 						}}
 					/>
 				</div>
-				<Button
-					type="button"
-					variant="outline"
-					size="icon"
+				<a
+					className={buttonVariants({size: 'icon', variant: 'outline'})}
 					aria-label="Open top-level preview"
-					onClick={() => {
-						if (String.isNonEmpty(state.currentUrl)) {
-							window.open(state.currentUrl, '_blank', 'noopener,noreferrer')
-						}
-					}}
+					href={String.isNonEmpty(state.currentUrl) ? state.currentUrl : undefined}
+					target="_blank"
+					rel="noopener noreferrer"
 				>
 					<ExternalLinkIcon className="size-3.5" />
-				</Button>
+				</a>
 				{String.isNonEmpty(props.origin) && (
 					<Button type="button" variant="outline" size="icon" aria-label="Clear cookies" onClick={clearCookies}>
 						<Trash2Icon className="size-3.5" />
