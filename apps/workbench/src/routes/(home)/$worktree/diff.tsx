@@ -16,11 +16,13 @@ import {
 	CopyIcon,
 	ExternalLinkIcon,
 	FileIcon,
+	FolderIcon,
 	MinusIcon,
 	SparklesIcon,
 	UploadIcon
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
+import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
 import {Button, buttonVariants} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
@@ -241,6 +243,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
 	const localCommits = suggestedMetadataLoaded ? suggestedMetadata.value.localCommits : Array.empty<GitCommit>()
 	const branchCommits = suggestedMetadataLoaded ? suggestedMetadata.value.branchCommits : Array.empty<GitCommit>()
+	const checkpointCommits = Array.takeWhile(localCommits, commit => commit.checkpoint)
 	const allCommits = Array.appendAll(localCommits, branchCommits)
 	const selectedCommit = pipe(
 		allCommits,
@@ -249,9 +252,14 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	)
 	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
 	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
+	const changesReviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(GitReviewChangesTarget.make({}))}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
+	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
 	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
+	const changesReviewDiffsValue = AsyncResult.isSuccess(changesReviewDiffsResult)
+		? changesReviewDiffsResult.value
+		: Array.empty<GitDiff>()
 	const selectedFilePath =
 		String.isNonEmpty(selectedFilePathState[0]) &&
 		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
@@ -265,7 +273,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					Option.getOrUndefined
 				)
 			: undefined) ?? reviewDiffsValue[0]
+	const refreshMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
+	const refreshChangesDiffs = useAtomRefresh(changesReviewDiffs)
 	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
 	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
@@ -321,7 +331,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	function refreshReview() {
+		refreshMetadata()
 		refreshDiffs()
+		refreshChangesDiffs()
 		refreshReviewState()
 	}
 
@@ -381,6 +393,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 							hasReviewableChanges={
 								AsyncResult.isSuccess(reviewDiffsResult) && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
 							}
+							hasReviewableWorktreeChanges={
+								AsyncResult.isSuccess(changesReviewDiffsResult) && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue)
+							}
+							hasCheckpointCommits={!Array.isReadonlyArrayEmpty(checkpointCommits)}
 							loading={!suggestedMetadataLoaded}
 							prUrl={AsyncResult.isSuccess(pullRequest) ? pullRequest.value?.url : undefined}
 							refreshReview={refreshReview}
@@ -537,7 +553,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 function CommitActionForm(input: {
 	readonly cwd: string
 	readonly dirty: boolean
+	readonly hasCheckpointCommits: boolean
 	readonly hasReviewableChanges: boolean
+	readonly hasReviewableWorktreeChanges: boolean
 	readonly loading: boolean
 	readonly prUrl?: string
 	readonly refreshReview: () => void
@@ -551,9 +569,14 @@ function CommitActionForm(input: {
 	const checkpoint = useAtomSet(checkpointActionAtom(input.cwd), {mode: 'promise'})
 	const publish = useAtomSet(publishActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const commitMessagePlaceholder = Match.value({dirty: input.dirty, loading: input.loading}).pipe(
+	const commitMessagePlaceholder = Match.value({
+		checkpoints: input.hasCheckpointCommits,
+		dirty: input.dirty,
+		loading: input.loading
+	}).pipe(
 		Match.when({loading: true}, () => 'Loading'),
 		Match.when({dirty: true}, () => 'Generate commit message'),
+		Match.when({checkpoints: true}, () => 'Generate squash message'),
 		Match.orElse(() => 'No changes')
 	)
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
@@ -568,13 +591,37 @@ function CommitActionForm(input: {
 		Match.orElse(() => commitMessagePlaceholder)
 	)
 
+	function canPublishDirtyChanges() {
+		return input.dirty && input.hasReviewableWorktreeChanges
+	}
+
+	function canPublishCheckpoints() {
+		return !input.dirty && input.hasCheckpointCommits
+	}
+
+	function canPublishExistingCommits() {
+		return !input.dirty && !input.hasCheckpointCommits && input.unpushedCommits
+	}
+
+	function publishRequiresMessage() {
+		return canPublishDirtyChanges() || canPublishCheckpoints()
+	}
+
+	function canGenerateMessage() {
+		return canPublishDirtyChanges() || canPublishCheckpoints()
+	}
+
+	function canSubmitPublish() {
+		return canPublishDirtyChanges() || canPublishCheckpoints() || canPublishExistingCommits()
+	}
+
 	async function submitPublish() {
 		if (
 			input.loading ||
 			actionState.publishing ||
 			actionState.checkpointing ||
-			(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
-			(input.dirty && String.isEmpty(trimmedCommitMessage))
+			!canSubmitPublish() ||
+			(publishRequiresMessage() && String.isEmpty(trimmedCommitMessage))
 		) {
 			return
 		}
@@ -594,8 +641,7 @@ function CommitActionForm(input: {
 			actionState.generatingMessage ||
 			actionState.publishing ||
 			actionState.checkpointing ||
-			!input.dirty ||
-			!input.hasReviewableChanges
+			!canGenerateMessage()
 		) {
 			return
 		}
@@ -613,7 +659,7 @@ function CommitActionForm(input: {
 			actionState.checkpointing ||
 			actionState.publishing ||
 			!input.dirty ||
-			!input.hasReviewableChanges
+			!input.hasReviewableWorktreeChanges
 		) {
 			return
 		}
@@ -661,8 +707,7 @@ function CommitActionForm(input: {
 					actionState.generatingMessage ||
 					actionState.checkpointing ||
 					actionState.publishing ||
-					!input.dirty ||
-					!input.hasReviewableChanges
+					!canGenerateMessage()
 				}
 				onClick={() => {
 					void generateMessage()
@@ -682,7 +727,7 @@ function CommitActionForm(input: {
 					actionState.checkpointing ||
 					actionState.publishing ||
 					!input.dirty ||
-					!input.hasReviewableChanges
+					!input.hasReviewableWorktreeChanges
 				}
 				onClick={() => {
 					void createCheckpoint()
@@ -701,8 +746,8 @@ function CommitActionForm(input: {
 					input.loading ||
 					actionState.publishing ||
 					actionState.checkpointing ||
-					(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
-					(input.dirty && String.isEmpty(trimmedCommitMessage))
+					!canSubmitPublish() ||
+					(publishRequiresMessage() && String.isEmpty(trimmedCommitMessage))
 				}
 			>
 				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
@@ -867,6 +912,69 @@ function CommitScopeRow(input: {
 	)
 }
 
+type FileTreeNode =
+	| {readonly children: FileTreeNode[]; readonly name: string; readonly path: string; readonly type: 'directory'}
+	| {readonly diff: GitDiff; readonly name: string; readonly path: string; readonly type: 'file'}
+
+function buildFileTree(diffs: readonly GitDiff[]) {
+	const root = {children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory' as const}
+
+	function insert(
+		directory: Extract<FileTreeNode, {readonly type: 'directory'}>,
+		parts: readonly string[],
+		diff: GitDiff
+	) {
+		if (Predicate.isUndefined(parts[0])) {
+			directory.children.push({diff, name: diff.filePath, path: diff.filePath, type: 'file'})
+			return
+		}
+		if (Array.length(parts) === 1) {
+			directory.children.push({diff, name: parts[0], path: diff.filePath, type: 'file'})
+			return
+		}
+
+		const path = directory.path ? `${directory.path}/${parts[0]}` : parts[0]
+		const directoryChild = pipe(
+			directory.children,
+			Array.findFirst(child => child.name === parts[0]),
+			Option.getOrUndefined
+		)
+
+		if (directoryChild?.type === 'directory') {
+			insert(directoryChild, Array.drop(parts, 1), diff)
+			return
+		}
+
+		const next = {children: Array.empty<FileTreeNode>(), name: parts[0], path, type: 'directory' as const}
+		directory.children.push(next)
+		insert(next, Array.drop(parts, 1), diff)
+	}
+
+	for (const diff of diffs) {
+		insert(root, String.split('/')(diff.filePath), diff)
+	}
+
+	return pipe(
+		root.children,
+		Array.map(node => (node.type === 'directory' ? collapseSingleChildDirectory(node) : node))
+	)
+}
+
+function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly type: 'directory'}>) {
+	const child = directory.children[0]
+
+	if (Array.length(directory.children) === 1 && child?.type === 'directory') {
+		return collapseSingleChildDirectory({
+			children: child.children,
+			name: `${directory.name}/${child.name}`,
+			path: child.path,
+			type: 'directory'
+		})
+	}
+
+	return directory
+}
+
 function DiffList(input: {
 	readonly diffs: readonly GitDiff[]
 	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
@@ -875,6 +983,8 @@ function DiffList(input: {
 	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
+	const collapsedFoldersState = useState(() => HashSet.empty<string>())
+	const fileTree = buildFileTree(input.diffs)
 	const marksByDiff = pipe(
 		input.diffs,
 		Array.reduce(HashMap.empty<string, readonly GitReviewMark[]>(), (marks, diff) =>
@@ -883,65 +993,79 @@ function DiffList(input: {
 	)
 	const reviewed = HashSet.fromIterable(input.marks)
 
-	function renderDiff(diff: GitDiff) {
+	function renderNode(node: FileTreeNode) {
+		if (node.type === 'directory') {
+			return (
+				<li key={node.path} className="w-full min-w-0">
+					<TreeExplorerRow
+						icon={<FolderIcon />}
+						onClick={() => {
+							collapsedFoldersState[1](current =>
+								HashSet.has(current, node.path) ? HashSet.remove(current, node.path) : HashSet.add(current, node.path)
+							)
+						}}
+						actions={<span className="text-muted-foreground">{Array.length(node.children)}</span>}
+					>
+						{node.name}
+					</TreeExplorerRow>
+					{!HashSet.has(collapsedFoldersState[0], node.path) && (
+						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+							{Array.map(node.children, renderNode)}
+						</ul>
+					)}
+				</li>
+			)
+		}
+
 		const marks = pipe(
 			marksByDiff,
-			HashMap.get(diff.filePath),
+			HashMap.get(node.diff.filePath),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
 		const state = gitReviewStateForMarks(marks, reviewed)
-		const name = pipe(
-			String.split('/')(diff.filePath),
-			Array.last,
-			Option.getOrElse(() => diff.filePath)
-		)
 
 		return (
-			<li key={diff.filePath} className="w-full min-w-0">
-				<button
-					type="button"
-					className={cn(
-						'hover:bg-muted grid h-7 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-2 text-left text-xs',
-						input.selectedEntry?.filePath === diff.filePath && 'bg-primary/15 text-primary'
-					)}
+			<li key={node.path} className="w-full min-w-0">
+				<TreeExplorerRow
+					selected={input.selectedEntry?.filePath === node.diff.filePath}
+					icon={<FileIcon filePath={node.diff.filePath} className="size-3" />}
+					actions={
+						<div className="flex items-center gap-2">
+							<ReviewCheckbox
+								state={state}
+								onClick={event => {
+									event.stopPropagation()
+									if (Array.isReadonlyArrayEmpty(marks)) return
+									if (state === 'checked') {
+										input.unmarkReviewed(marks)
+									} else {
+										input.markReviewed(marks)
+									}
+								}}
+							/>
+							<DiffStatus status={node.diff.status} />
+						</div>
+					}
 					onClick={() => {
-						input.openReviewEntry(diff.filePath)
+						input.openReviewEntry(node.diff.filePath)
 					}}
 				>
-					<FileIcon filePath={diff.filePath} className="size-3" />
-					<span className="min-w-0 truncate" title={diff.filePath}>
-						{name}
-					</span>
-					<span className="flex items-center gap-2">
-						<ReviewCheckbox
-							state={state}
-							onClick={event => {
-								event.stopPropagation()
-								if (Array.isReadonlyArrayEmpty(marks)) return
-								if (state === 'checked') {
-									input.unmarkReviewed(marks)
-								} else {
-									input.markReviewed(marks)
-								}
-							}}
-						/>
-						<DiffStatus status={diff.status} />
-					</span>
-				</button>
+					{node.name}
+				</TreeExplorerRow>
 			</li>
 		)
 	}
 
 	return (
-		<ul className="h-full min-h-0 overflow-y-auto py-1">
-			{Array.isReadonlyArrayEmpty(input.diffs) ? (
-				<li className="text-muted-foreground flex h-full items-center justify-center px-2 py-2 text-sm">
-					No changed files.
-				</li>
-			) : (
-				Array.map(input.diffs, renderDiff)
-			)}
-		</ul>
+		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
+			<TreeExplorerSection className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
+				{Array.isReadonlyArrayEmpty(input.diffs) ? (
+					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2">No changed files.</li>
+				) : (
+					Array.map(fileTree, renderNode)
+				)}
+			</TreeExplorerSection>
+		</TreeExplorer>
 	)
 }
 

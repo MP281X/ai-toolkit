@@ -1,4 +1,4 @@
-import {Array, Equal, HashSet, Schema} from 'effect'
+import {Array, Equal, HashSet, Predicate, Schema, pipe} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
@@ -140,9 +140,18 @@ export function gitReviewStateSaveComment(state: GitReviewState, draft: GitRevie
 }
 
 export function gitReviewStateDeleteComments(state: GitReviewState, comments: readonly GitReviewComment[]) {
+	const deletedThreadIds = pipe(
+		comments,
+		Array.filter(comment => comment.source === 'github' && Predicate.isString(comment.threadId)),
+		Array.map(comment => comment.threadId ?? ''),
+		HashSet.fromIterable
+	)
+
 	return GitReviewState.make({
 		comments: Array.filter(state.comments, comment =>
-			Array.every(comments, deletedComment => !sameCommentIdentity(comment, deletedComment))
+			comment.source === 'github' && HashSet.has(deletedThreadIds, comment.threadId ?? '')
+				? false
+				: Array.every(comments, deletedComment => !sameCommentIdentity(comment, deletedComment))
 		),
 		marks: state.marks
 	})

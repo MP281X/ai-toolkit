@@ -29,7 +29,7 @@ import {RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.
 import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
 import {AiError, type AgentCommandProfile, type AgentCommandRequest} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
-import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
+import {GitError, GitReviewChangesTarget, GitReviewLocalTarget} from '@deslop/git/schema'
 import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
@@ -678,7 +678,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'publish.checkpoint': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),
-					Effect.flatMap(publish => publish.checkpoint)
+					Effect.flatMap(publish => publish.checkpoint),
+					Effect.andThen(RcMap.invalidate(gitChanges, payload.cwd))
 				),
 			'publish.message.generate': Effect.fn('WorkbenchRpc.publish.message.generate')(function* (payload: {
 				readonly cwd: string
@@ -686,8 +687,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return yield* Effect.scoped(
 					Effect.gen(function* () {
 						const changes = yield* RcMap.get(gitChanges, payload.cwd)
-						const diffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
-						const diffs = yield* SubscriptionRef.get(diffsRef)
+						const changesDiffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
+						const changesDiffs = yield* SubscriptionRef.get(changesDiffsRef)
+						const metadata = yield* SubscriptionRef.get(changes.metadata)
+						const checkpointCommits = Array.takeWhile(metadata.localCommits, commit => commit.checkpoint)
+						const diffs = yield* Effect.gen(function* () {
+							if (!Array.isReadonlyArrayEmpty(changesDiffs)) return changesDiffs
+							if (Array.isReadonlyArrayEmpty(checkpointCommits)) return changesDiffs
+							const localDiffsRef = yield* changes.diffs(GitReviewLocalTarget.make({}))
+							return yield* SubscriptionRef.get(localDiffsRef)
+						})
 						const promptDiffs = Array.map(diffs, diff => ({
 							filePath: diff.filePath,
 							patch: diff.patch ?? '',
@@ -696,7 +705,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (Array.isReadonlyArrayEmpty(promptDiffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
-						const metadata = yield* SubscriptionRef.get(changes.metadata)
 						const recentSubjects = pipe(
 							Array.appendAll(metadata.localCommits, metadata.branchCommits),
 							Array.take(10),
@@ -729,7 +737,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'publish.publish': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),
-					Effect.flatMap(publish => publish.publish({message: payload.message}))
+					Effect.flatMap(publish => publish.publish({message: payload.message})),
+					Effect.tap(() => RcMap.invalidate(gitChanges, payload.cwd))
 				),
 			'publish.pullRequest': payload =>
 				Stream.unwrap(

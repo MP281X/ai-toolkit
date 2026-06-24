@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process'
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
+import {chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
@@ -9,7 +9,14 @@ import {Array, Context, Effect, String, SubscriptionRef, pipe} from 'effect'
 
 import {afterEach, describe, expect, it} from 'vite-plus/test'
 
-import {GitReviewChangesTarget, GitReviewCommitTarget, GitReviewMark} from './schema.ts'
+import {
+	GitReviewChangesTarget,
+	GitReviewComment,
+	GitReviewCommitTarget,
+	GitReviewMark,
+	GitReviewState,
+	gitReviewStateDeleteComments
+} from './schema.ts'
 import {GitChanges, GitPublish, GitReview} from './service.ts'
 
 const repositories = Array.empty<string>()
@@ -32,6 +39,13 @@ function repository() {
 	return cwd
 }
 
+function bareRepository() {
+	const cwd = mkdtempSync(join(tmpdir(), 'deslop-git-review-origin-'))
+	repositories.push(cwd)
+	git(cwd, ['init', '--bare', '--initial-branch=main'])
+	return cwd
+}
+
 function commit(cwd: string, subject: string) {
 	git(cwd, ['add', '.'])
 	git(cwd, ['commit', '-m', subject])
@@ -41,6 +55,16 @@ function commit(cwd: string, subject: string) {
 function runChanges<A>(cwd: string, effect: Effect.Effect<A, unknown, GitChanges>) {
 	return Effect.runPromiseWith(Context.empty())(
 		pipe(effect, Effect.provide(GitChanges.layer({cwd})), Effect.provide(NodeServices.layer))
+	)
+}
+
+function metadata(cwd: string) {
+	return runChanges(
+		cwd,
+		Effect.gen(function* () {
+			const changes = yield* GitChanges
+			return yield* SubscriptionRef.get(changes.metadata)
+		})
 	)
 }
 
@@ -198,6 +222,41 @@ describe('GitChanges', () => {
 
 		expect(Array.map(diffs, diff => diff.filePath)).toEqual(['conflict.txt'])
 	}, 10_000)
+
+	it('keeps default branch review history on the first-parent path', async () => {
+		const cwd = repository()
+		write(cwd, 'base.txt', 'base\n')
+		commit(cwd, 'base')
+
+		git(cwd, ['checkout', '-b', 'feature'])
+		write(cwd, 'feature.txt', 'feature\n')
+		commit(cwd, 'feature side')
+
+		git(cwd, ['checkout', 'main'])
+		write(cwd, 'main.txt', 'main\n')
+		commit(cwd, 'main line')
+		git(cwd, ['merge', '--no-ff', 'feature', '-m', 'merge feature'])
+
+		const snapshot = await metadata(cwd)
+		const subjects = Array.map(snapshot.branchCommits, entry => entry.subject)
+
+		expect(subjects).toContain('merge feature')
+		expect(subjects).toContain('main line')
+		expect(subjects).not.toContain('feature side')
+	}, 10_000)
+
+	it('does not expose blank commit rows from log record separators', async () => {
+		const cwd = repository()
+		write(cwd, 'file.txt', 'base\n')
+		commit(cwd, 'base')
+		write(cwd, 'file.txt', 'changed\n')
+		commit(cwd, 'changed')
+
+		const snapshot = await metadata(cwd)
+		const commits = Array.appendAll(snapshot.localCommits, snapshot.branchCommits)
+
+		expect(Array.every(commits, entry => String.isNonEmpty(entry.hash) && String.isNonEmpty(entry.subject))).toBe(true)
+	}, 10_000)
 })
 
 describe('GitReview', () => {
@@ -220,6 +279,36 @@ describe('GitReview', () => {
 		expect(state.comments).toEqual([])
 		expect(state.marks).toEqual([mark])
 	}, 10_000)
+
+	it('deletes all local GitHub comments for a resolved thread', () => {
+		const first = GitReviewComment.make({
+			body: 'first',
+			filePath: 'file.ts',
+			lineNumber: 1,
+			source: 'github',
+			threadId: 'thread'
+		})
+		const second = GitReviewComment.make({
+			body: 'second',
+			filePath: 'file.ts',
+			lineNumber: 2,
+			source: 'github',
+			threadId: 'thread'
+		})
+		const other = GitReviewComment.make({
+			body: 'other',
+			filePath: 'other.ts',
+			lineNumber: 1,
+			source: 'github',
+			threadId: 'other-thread'
+		})
+
+		const state = gitReviewStateDeleteComments(GitReviewState.make({comments: [first, second, other], marks: []}), [
+			first
+		])
+
+		expect(state.comments).toEqual([other])
+	})
 })
 
 describe('GitPublish', () => {
@@ -256,5 +345,57 @@ describe('GitPublish', () => {
 		expect(String.trim(git(cwd, ['log', '--format=%s', '--max-count=1']))).toBe('Final title')
 		expect(git(cwd, ['log', '--format=%s', '--max-count=3'])).not.toContain('checkpoint')
 		expect(String.trim(git(cwd, ['show', '--format=', '--name-only', 'HEAD']))).toBe('file.txt')
+	}, 10_000)
+
+	it('pushes existing commits without requiring a publish message', async () => {
+		const origin = bareRepository()
+		const cwd = repository()
+		git(cwd, ['remote', 'add', 'origin', origin])
+		write(cwd, 'file.txt', 'base\n')
+		commit(cwd, 'base')
+		git(cwd, ['push', '-u', 'origin', 'main'])
+		write(cwd, 'file.txt', 'changed\n')
+		const local = commit(cwd, 'existing work')
+
+		await runPublish(
+			cwd,
+			Effect.gen(function* () {
+				const publish = yield* GitPublish
+				return yield* publish.publish({message: ''})
+			})
+		)
+
+		expect(String.trim(git(cwd, ['rev-parse', 'origin/main']))).toBe(local)
+	}, 10_000)
+
+	it('restores checkpoint commits when squashed publish commit fails', async () => {
+		const cwd = repository()
+		write(cwd, 'file.txt', 'base\n')
+		commit(cwd, 'base')
+		write(cwd, 'file.txt', 'checkpoint\n')
+		await runPublish(
+			cwd,
+			Effect.gen(function* () {
+				const publish = yield* GitPublish
+				yield* publish.checkpoint
+			})
+		)
+		const checkpointHead = pipe(git(cwd, ['rev-parse', 'HEAD']), String.trim)
+		const hook = join(cwd, '.git', 'hooks', 'pre-commit')
+		writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+		chmodSync(hook, 0o755)
+
+		await expect(
+			runPublish(
+				cwd,
+				Effect.gen(function* () {
+					const publish = yield* GitPublish
+					return yield* publish.publish({message: 'Final title'})
+				})
+			)
+		).rejects.toBeTruthy()
+
+		expect(String.trim(git(cwd, ['rev-parse', 'HEAD']))).toBe(checkpointHead)
+		expect(String.trim(git(cwd, ['status', '--porcelain']))).toBe('')
 	}, 10_000)
 })

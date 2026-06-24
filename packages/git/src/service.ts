@@ -393,6 +393,16 @@ function commitFromRecord(record: string) {
 		subject: parts[2] ?? ''
 	})
 }
+function commitsFromRecords(output: string) {
+	return pipe(
+		output,
+		String.split('\u001e'),
+		Array.map(String.trim),
+		Array.filter(String.isNonEmpty),
+		Array.map(commitFromRecord),
+		Array.filter(commit => String.isNonEmpty(commit.hash))
+	)
+}
 function publishTitleAndBody(message: string) {
 	const lines = String.split(/\r?\n/)(String.trim(message))
 	return {body: pipe(Array.drop(lines, 1), Array.join('\n'), String.trim), title: String.trim(lines[0])}
@@ -1076,7 +1086,17 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 				'--format=%H%x00%h%x00%s%x00%B%x1e',
 				range
 			])
-			return pipe(output, String.split('\u001e'), Array.filter(String.isNonEmpty), Array.map(commitFromRecord))
+			return commitsFromRecords(output)
+		})
+		const firstParentCommits = Effect.gen(function* () {
+			const output = yield* git.string(config.cwd, [
+				'log',
+				'--first-parent',
+				'--max-count=80',
+				'--format=%H%x00%h%x00%s%x00%B%x1e',
+				'HEAD'
+			])
+			return commitsFromRecords(output)
 		})
 		const commitsBetween = Effect.fn('GitChanges.commitsBetween')(function* (from: string, to: string) {
 			return yield* commitRecords(`${from}..${to}`)
@@ -1089,7 +1109,6 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			)
 			return yield* commitsBetween(from, 'HEAD')
 		})
-		const firstParentCommits = commitRecords('HEAD')
 		const pushableCommitCount = Effect.gen(function* () {
 			const upstream = yield* pipe(
 				git.string(config.cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']),
@@ -1312,7 +1331,6 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			mark: (marks: readonly GitReviewMark[]) =>
 				SubscriptionRef.update(state, current => gitReviewStateMark(current, marks)),
 			resolveComments: Effect.fn('GitReview.resolveComments')(function* (comments: readonly GitReviewComment[]) {
-				yield* SubscriptionRef.update(state, current => gitReviewStateDeleteComments(current, comments))
 				const threadIds = pipe(
 					comments,
 					Array.filter(comment => comment.source === 'github' && Predicate.isString(comment.threadId)),
@@ -1320,8 +1338,10 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 					Array.filter(String.isNonEmpty),
 					Array.dedupe
 				)
-				if (Array.isReadonlyArrayEmpty(threadIds)) return
-				yield* Ref.update(suppressedThreadIds, current => HashSet.union(current, HashSet.fromIterable(threadIds)))
+				if (Array.isReadonlyArrayEmpty(threadIds)) {
+					yield* SubscriptionRef.update(state, current => gitReviewStateDeleteComments(current, comments))
+					return
+				}
 				const query = `mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { id } } }`
 				const failures = yield* pipe(
 					threadIds,
@@ -1337,10 +1357,10 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 					Effect.map(Array.flatten)
 				)
 				if (!Array.isReadonlyArrayEmpty(failures)) {
-					return yield* new GitError({
-						message: 'Comments were hidden locally, but one or more GitHub threads failed to resolve.'
-					})
+					return yield* new GitError({message: 'One or more GitHub threads failed to resolve.'})
 				}
+				yield* Ref.update(suppressedThreadIds, current => HashSet.union(current, HashSet.fromIterable(threadIds)))
+				yield* SubscriptionRef.update(state, current => gitReviewStateDeleteComments(current, comments))
 			}),
 			saveComment: Effect.fn('GitReview.saveComment')(function* (comment: GitReviewCommentDraft) {
 				if (isReviewExcludedPath(comment.filePath)) return
@@ -1450,9 +1470,14 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 				git.string(config.cwd, ['log', '--format=%H%x00%h%x00%s%x00%B%x1e', 'HEAD']),
 				Effect.catchTag('GitError', () => Effect.succeed(''))
 			)
-			const commits = pipe(output, String.split('\u001e'), Array.filter(String.isNonEmpty), Array.map(commitFromRecord))
+			const commits = commitsFromRecords(output)
 			return Array.takeWhile(commits, commit => commit.checkpoint)
 		})
+		const headCommitMessage = pipe(
+			git.string(config.cwd, ['log', '-1', '--format=%B', 'HEAD']),
+			Effect.map(String.trim),
+			Effect.catchTag('GitError', () => Effect.succeed(''))
+		)
 		const commitAll = Effect.fn('GitPublish.commitAll')(function* (message: string) {
 			yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
 			yield* pipe(git.stringWithInput(config.cwd, ['commit', '-F', '-'], message), Effect.asVoid)
@@ -1490,10 +1515,13 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 				)
 			}),
 			publish: Effect.fn('GitPublish.publish')(function* (input: {readonly message: string}) {
-				const message = String.trim(input.message)
-				if (String.isEmpty(message)) return yield* new GitError({message: 'Publish message required.'})
 				const checkpoints = yield* headCheckpointCommits
 				const dirty = yield* hasWorktreeChanges
+				const inputMessage = String.trim(input.message)
+				if (String.isEmpty(inputMessage) && (dirty || !Array.isReadonlyArrayEmpty(checkpoints))) {
+					return yield* new GitError({message: 'Publish message required.'})
+				}
+				const message = String.isNonEmpty(inputMessage) ? inputMessage : yield* headCommitMessage
 				const committed = yield* Effect.gen(function* () {
 					if (Array.isReadonlyArrayEmpty(checkpoints)) {
 						if (!dirty) return false
@@ -1505,7 +1533,16 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 					const backupRef = `refs/deslop/backups/${Date.now()}-${randomUUID()}`
 					yield* pipe(git.string(config.cwd, ['update-ref', backupRef, 'HEAD']), Effect.asVoid)
 					yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldest.hash}^`]), Effect.asVoid)
-					yield* commitAll(message)
+					yield* pipe(
+						commitAll(message),
+						Effect.catchTag('GitError', error =>
+							pipe(
+								git.string(config.cwd, ['reset', '--hard', backupRef]),
+								Effect.ignore,
+								Effect.andThen(Effect.fail(error))
+							)
+						)
+					)
 					return true
 				})
 				const pushed = yield* pipe(
