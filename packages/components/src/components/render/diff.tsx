@@ -78,7 +78,6 @@ export declare namespace PatchDiff {
 		readonly lineNumber: number
 		readonly side?: AnnotationSide
 		readonly body: string
-		readonly resolved?: boolean
 		readonly resolving?: boolean
 		readonly source?: 'github' | 'local'
 		readonly threadId?: string
@@ -226,22 +225,6 @@ function CommentAnnotation(props: {
 						}}
 					/>
 				</div>
-				<div />
-			</div>
-		)
-	}
-
-	if (props.comment.resolved === true) {
-		return (
-			<div className="text-muted-foreground bg-muted/70 border-border/60 box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-y px-2 py-1 opacity-75">
-				<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
-					{props.comment.source === 'github' ? (
-						<GithubLight className="size-3 shrink-0" />
-					) : (
-						<MessageSquareTextIcon className="size-3 shrink-0" />
-					)}
-				</div>
-				<span className="decoration-muted-foreground/60 min-w-0 truncate line-through">{props.comment.body}</span>
 				<div />
 			</div>
 		)

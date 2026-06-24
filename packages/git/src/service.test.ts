@@ -5,19 +5,12 @@ import {join} from 'node:path'
 
 import {NodeServices} from '@effect/platform-node'
 
-import {Array, Context, Effect, String, pipe} from 'effect'
+import {Array, Context, Effect, String, SubscriptionRef, pipe} from 'effect'
 
 import {afterEach, describe, expect, it} from 'vite-plus/test'
 
-import {
-	GitReviewComment,
-	GitReviewMark,
-	GitReviewStagedTarget,
-	GitReviewUnstagedTarget,
-	GitReviewChangesTarget,
-	GitReviewCommitTarget
-} from './schema.ts'
-import {GitReview} from './service.ts'
+import {GitReviewChangesTarget, GitReviewCommitTarget, GitReviewMark} from './schema.ts'
+import {GitChanges, GitPublish, GitReview} from './service.ts'
 
 const repositories = Array.empty<string>()
 
@@ -45,9 +38,32 @@ function commit(cwd: string, subject: string) {
 	return pipe(git(cwd, ['rev-parse', 'HEAD']), String.trim)
 }
 
-function reviewEffect<A>(cwd: string, effect: Effect.Effect<A, unknown, GitReview>) {
+function runChanges<A>(cwd: string, effect: Effect.Effect<A, unknown, GitChanges>) {
+	return Effect.runPromiseWith(Context.empty())(
+		pipe(effect, Effect.provide(GitChanges.layer({cwd})), Effect.provide(NodeServices.layer))
+	)
+}
+
+function runReview<A>(cwd: string, effect: Effect.Effect<A, unknown, GitReview>) {
 	return Effect.runPromiseWith(Context.empty())(
 		pipe(effect, Effect.provide(GitReview.layer({cwd})), Effect.provide(NodeServices.layer))
+	)
+}
+
+function runPublish<A>(cwd: string, effect: Effect.Effect<A, unknown, GitPublish>) {
+	return Effect.runPromiseWith(Context.empty())(
+		pipe(effect, Effect.provide(GitPublish.layer({cwd})), Effect.provide(NodeServices.layer))
+	)
+}
+
+function changesDiffs(cwd: string) {
+	return runChanges(
+		cwd,
+		Effect.gen(function* () {
+			const changes = yield* GitChanges
+			const ref = yield* changes.diffs(GitReviewChangesTarget.make({}))
+			return yield* SubscriptionRef.get(ref)
+		})
 	)
 }
 
@@ -57,8 +73,8 @@ afterEach(() => {
 	}
 })
 
-describe('GitReview', () => {
-	it('splits staged and unstaged working changes', async () => {
+describe('GitChanges', () => {
+	it('returns one combined ready diff snapshot for working changes', async () => {
 		const cwd = repository()
 		write(cwd, 'staged.txt', 'base\n')
 		write(cwd, 'unstaged.txt', 'base\n')
@@ -69,223 +85,84 @@ describe('GitReview', () => {
 		write(cwd, 'unstaged.txt', 'unstaged\n')
 		write(cwd, 'new.txt', 'new\n')
 
-		const staged = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({target: GitReviewStagedTarget.make({}), viewMode: 'filtered'})
-			})
-		)
-		const unstaged = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({target: GitReviewUnstagedTarget.make({}), viewMode: 'filtered'})
-			})
-		)
+		const diffs = await changesDiffs(cwd)
 
-		expect(Array.map(staged, entry => entry.filePath)).toEqual(['staged.txt'])
-		expect(Array.map(unstaged, entry => entry.filePath)).toEqual(['new.txt', 'unstaged.txt'])
-	})
+		expect(Array.map(diffs, diff => diff.filePath)).toEqual(['staged.txt', 'unstaged.txt', 'new.txt'])
+		expect(Array.every(diffs, diff => String.isString(diff.patch) && String.isString(diff.fileContent))).toBe(true)
+	}, 10_000)
 
-	it('applies review exclusions only in filtered mode', async () => {
+	it('excludes ignored review files from the ready snapshot', async () => {
 		const cwd = repository()
 		write(cwd, 'keep.ts', 'base\n')
-		write(cwd, 'drop.ts', 'base\n')
 		write(cwd, 'plans/review.md', 'base\n')
 		commit(cwd, 'base')
 
 		write(cwd, 'keep.ts', 'changed\n')
 		write(cwd, 'plans/review.md', 'changed\n')
-		git(cwd, ['rm', 'drop.ts'])
 
-		const entries = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				const filtered = yield* review.reviewFileEntries({
-					target: GitReviewChangesTarget.make({}),
-					viewMode: 'filtered'
-				})
-				const unfiltered = yield* review.reviewFileEntries({
-					target: GitReviewChangesTarget.make({}),
-					viewMode: 'unfiltered'
-				})
-				return {filtered, unfiltered}
-			})
-		)
+		const diffs = await changesDiffs(cwd)
 
-		expect(Array.map(entries.filtered, entry => entry.filePath)).toEqual(['drop.ts', 'keep.ts'])
-		expect(Array.map(entries.unfiltered, entry => entry.filePath)).toEqual(['drop.ts', 'keep.ts', 'plans/review.md'])
-	})
+		expect(Array.map(diffs, diff => diff.filePath)).toEqual(['keep.ts'])
+	}, 10_000)
 
-	it('updates untracked entry revisions when same-size content changes', async () => {
+	it('updates untracked change hashes when same-size content changes', async () => {
 		const cwd = repository()
 		write(cwd, 'tracked.txt', 'base\n')
 		commit(cwd, 'base')
 		write(cwd, 'new.txt', 'ab\n')
 
-		const first = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
-			})
-		)
+		const first = await changesDiffs(cwd)
 		write(cwd, 'new.txt', 'cd\n')
-		const second = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
-			})
-		)
+		const second = await changesDiffs(cwd)
 
-		expect(first[0]?.revision).toContain('+ab')
-		expect(second[0]?.revision).toContain('+cd')
-		expect(first[0]?.revision).not.toBe(second[0]?.revision)
-	})
+		expect(first[0]?.patch).toContain('+ab')
+		expect(second[0]?.patch).toContain('+cd')
+		expect(first[0]?.changeHash).not.toBe(second[0]?.changeHash)
+	}, 10_000)
 
-	it('preserves staged rename patches when loading one file', async () => {
+	it('includes full file content and rename patch data', async () => {
 		const cwd = repository()
 		write(cwd, 'old.txt', 'content\n')
 		commit(cwd, 'base')
 		git(cwd, ['mv', 'old.txt', 'new.txt'])
 
-		const content = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileContent({
-					filePath: 'new.txt',
-					target: GitReviewStagedTarget.make({}),
-					viewMode: 'filtered'
-				})
-			})
-		)
+		const diffs = await changesDiffs(cwd)
 
-		expect(content.status).toBe('renamed')
-		expect(content.patch).toContain('rename from old.txt')
-		expect(content.patch).toContain('rename to new.txt')
-	})
+		expect(diffs[0]?.status).toBe('renamed')
+		expect(diffs[0]?.fileContent).toBe('content\n')
+		expect(diffs[0]?.patch).toContain('rename from old.txt')
+		expect(diffs[0]?.patch).toContain('rename to new.txt')
+	}, 10_000)
 
-	it('rejects file content for ignored files outside review entries', async () => {
-		const cwd = repository()
-		write(cwd, '.gitignore', '.env\n')
-		commit(cwd, 'base')
-		write(cwd, '.env', 'SECRET=value\n')
-
-		await expect(
-			reviewEffect(
-				cwd,
-				Effect.gen(function* () {
-					const review = yield* GitReview
-					return yield* review.reviewFileContent({
-						filePath: '.env',
-						target: GitReviewChangesTarget.make({}),
-						viewMode: 'unfiltered'
-					})
-				})
-			)
-		).rejects.toThrow('File is not part of the current review.')
-	})
-
-	it('shows excluded review state only in unfiltered mode', async () => {
-		const cwd = repository()
-		const comment = GitReviewComment.make({
-			body: 'check lockfile',
-			filePath: 'pnpm-lock.yaml',
-			lineNumber: 1,
-			resolved: false
-		})
-		const mark = GitReviewMark.make({filePath: 'pnpm-lock.yaml', fingerprint: 'patch', segmentId: 'HEAD->worktree'})
-
-		const states = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				yield* review.saveComment(comment)
-				yield* review.mark([mark])
-				const filtered = yield* review.reviewState('filtered')
-				const unfiltered = yield* review.reviewState('unfiltered')
-				return {filtered, unfiltered}
-			})
-		)
-
-		expect(states.filtered.comments).toHaveLength(0)
-		expect(states.filtered.marks).toHaveLength(0)
-		expect(Array.map(states.unfiltered.comments, current => current.filePath)).toEqual(['pnpm-lock.yaml'])
-		expect(Array.map(states.unfiltered.marks, current => current.filePath)).toEqual(['pnpm-lock.yaml'])
-	})
-
-	it('includes patch revisions for commit file entries', async () => {
+	it('includes patch revisions for commit targets', async () => {
 		const cwd = repository()
 		write(cwd, 'changed.txt', 'base\n')
 		commit(cwd, 'base')
 		write(cwd, 'changed.txt', 'changed\n')
 		const changed = commit(cwd, 'changed')
 
-		const entries = await reviewEffect(
+		const diffs = await runChanges(
 			cwd,
 			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({
-					target: GitReviewCommitTarget.make({hash: changed}),
-					viewMode: 'filtered'
-				})
+				const changes = yield* GitChanges
+				const ref = yield* changes.diffs(GitReviewCommitTarget.make({hash: changed}))
+				return yield* SubscriptionRef.get(ref)
 			})
 		)
 
-		expect(entries[0]?.revision).toContain('-base')
-		expect(entries[0]?.revision).toContain('+changed')
-	})
+		expect(diffs[0]?.patch).toContain('-base')
+		expect(diffs[0]?.patch).toContain('+changed')
+		expect(diffs[0]?.fileContent).toBe('changed\n')
+	}, 10_000)
 
-	it('filters whitespace-only file entries like patch loading', async () => {
+	it('filters whitespace-only diffs', async () => {
 		const cwd = repository()
 		write(cwd, 'space.txt', 'const value = 1\n')
 		commit(cwd, 'base')
 		write(cwd, 'space.txt', 'const   value   =   1\n')
 
-		const entries = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
-			})
-		)
-
-		expect(Array.map(entries, entry => entry.filePath)).toEqual([])
-	})
-
-	it('lists unchanged tracked and untracked files in unfiltered mode and loads unchanged content without a patch', async () => {
-		const cwd = repository()
-		write(cwd, '.gitignore', 'ignored.txt\n')
-		write(cwd, 'unchanged.txt', 'unchanged\n')
-		commit(cwd, 'base')
-		write(cwd, 'new.txt', 'new\n')
-		write(cwd, 'ignored.txt', 'ignored\n')
-
-		const result = await reviewEffect(
-			cwd,
-			Effect.gen(function* () {
-				const review = yield* GitReview
-				const entries = yield* review.reviewFileEntries({
-					target: GitReviewChangesTarget.make({}),
-					viewMode: 'unfiltered'
-				})
-				const content = yield* review.reviewFileContent({
-					filePath: 'unchanged.txt',
-					target: GitReviewChangesTarget.make({}),
-					viewMode: 'unfiltered'
-				})
-				return {content, entries}
-			})
-		)
-
-		expect(Array.map(result.entries, entry => entry.filePath)).toEqual(['.gitignore', 'new.txt', 'unchanged.txt'])
-		expect(result.content.fileContent).toBe('unchanged\n')
-		expect(result.content.patch).toBeUndefined()
-	})
+		expect(await changesDiffs(cwd)).toEqual([])
+	}, 10_000)
 
 	it('shows only merge resolution diffs for merge commits', async () => {
 		const cwd = repository()
@@ -310,17 +187,74 @@ describe('GitReview', () => {
 		}
 		const merge = pipe(git(cwd, ['rev-parse', 'HEAD']), String.trim)
 
-		const entries = await reviewEffect(
+		const diffs = await runChanges(
 			cwd,
 			Effect.gen(function* () {
-				const review = yield* GitReview
-				return yield* review.reviewFileEntries({
-					target: GitReviewCommitTarget.make({hash: merge}),
-					viewMode: 'filtered'
-				})
+				const changes = yield* GitChanges
+				const ref = yield* changes.diffs(GitReviewCommitTarget.make({hash: merge}))
+				return yield* SubscriptionRef.get(ref)
 			})
 		)
 
-		expect(Array.map(entries, entry => entry.filePath)).toEqual(['conflict.txt'])
-	})
+		expect(Array.map(diffs, diff => diff.filePath)).toEqual(['conflict.txt'])
+	}, 10_000)
+})
+
+describe('GitReview', () => {
+	it('keeps only live local comments and marks', async () => {
+		const cwd = repository()
+		const mark = GitReviewMark.make({changeHash: 'hash', filePath: 'keep.ts'})
+
+		const state = await runReview(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				yield* review.saveComment({body: 'check this', filePath: 'keep.ts', lineNumber: 1})
+				const current = yield* SubscriptionRef.get(review.state)
+				yield* review.resolveComments(current.comments)
+				yield* review.mark([mark])
+				return yield* SubscriptionRef.get(review.state)
+			})
+		)
+
+		expect(state.comments).toEqual([])
+		expect(state.marks).toEqual([mark])
+	}, 10_000)
+})
+
+describe('GitPublish', () => {
+	it('squashes contiguous head checkpoints into the publish commit', async () => {
+		const cwd = repository()
+		write(cwd, 'file.txt', 'base\n')
+		commit(cwd, 'base')
+
+		write(cwd, 'file.txt', 'one\n')
+		await runPublish(
+			cwd,
+			Effect.gen(function* () {
+				const publish = yield* GitPublish
+				yield* publish.checkpoint
+			})
+		)
+		write(cwd, 'file.txt', 'two\n')
+		await runPublish(
+			cwd,
+			Effect.gen(function* () {
+				const publish = yield* GitPublish
+				yield* publish.checkpoint
+			})
+		)
+
+		await runPublish(
+			cwd,
+			Effect.gen(function* () {
+				const publish = yield* GitPublish
+				return yield* publish.publish({message: 'Final title\n\nFinal body'})
+			})
+		)
+
+		expect(String.trim(git(cwd, ['log', '--format=%s', '--max-count=1']))).toBe('Final title')
+		expect(git(cwd, ['log', '--format=%s', '--max-count=3'])).not.toContain('checkpoint')
+		expect(String.trim(git(cwd, ['show', '--format=', '--name-only', 'HEAD']))).toBe('file.txt')
+	}, 10_000)
 })

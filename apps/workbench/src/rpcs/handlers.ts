@@ -30,7 +30,7 @@ import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/sc
 import {AiError, type AgentCommandProfile, type AgentCommandRequest} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
 import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
-import {GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
+import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
@@ -187,8 +187,17 @@ const TerminalSessions = RcMap.make({
 	})
 })
 
+const GitChangesSessions = RcMap.make({
+	idleTimeToLive: Duration.seconds(30),
+	lookup: Effect.fnUntraced(function* (cwd: string) {
+		const context = yield* Layer.buildWithScope(GitChanges.layer({cwd}), yield* Effect.scope)
+
+		return Context.get(context, GitChanges)
+	})
+})
+
 const GitReviewSessions = RcMap.make({
-	idleTimeToLive: Duration.minutes(10),
+	idleTimeToLive: Duration.infinity,
 	lookup: Effect.fnUntraced(function* (cwd: string) {
 		const context = yield* Layer.buildWithScope(GitReview.layer({cwd}), yield* Effect.scope)
 
@@ -269,6 +278,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 	Effect.gen(function* () {
 		const git = yield* GitWorkspace
 		const terminals = yield* TerminalSessions
+		const gitChanges = yield* GitChangesSessions
 		const gitReviews = yield* GitReviewSessions
 		const gitPublishes = yield* GitPublishSessions
 		const publishAgents = yield* PublishAgentSessions
@@ -664,19 +674,20 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
-			'projects.fix': payload => git.fix(payload.cwd),
-			'publish.approve': payload =>
+			'projects.maintenance': payload => git.maintenance(payload.cwd),
+			'publish.checkpoint': payload =>
 				pipe(
 					RcMap.get(gitPublishes, payload.cwd),
-					Effect.flatMap(publish => publish.approve({message: payload.message}))
+					Effect.flatMap(publish => publish.checkpoint)
 				),
 			'publish.message.generate': Effect.fn('WorkbenchRpc.publish.message.generate')(function* (payload: {
 				readonly cwd: string
 			}) {
 				return yield* Effect.scoped(
 					Effect.gen(function* () {
-						const review = yield* RcMap.get(gitReviews, payload.cwd)
-						const diffs = yield* review.reviewDiffs(GitReviewChangesTarget.make({}))
+						const changes = yield* RcMap.get(gitChanges, payload.cwd)
+						const diffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
+						const diffs = yield* SubscriptionRef.get(diffsRef)
 						const promptDiffs = Array.map(diffs, diff => ({
 							filePath: diff.filePath,
 							patch: diff.patch ?? '',
@@ -685,7 +696,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						if (Array.isReadonlyArrayEmpty(promptDiffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
-						const metadata = yield* review.metadata
+						const metadata = yield* SubscriptionRef.get(changes.metadata)
 						const recentSubjects = pipe(
 							Array.appendAll(metadata.localCommits, metadata.branchCommits),
 							Array.take(10),
@@ -715,14 +726,22 @@ export const RpcHandlers = RpcContracts.toLayer(
 					})
 				)
 			}),
+			'publish.publish': payload =>
+				pipe(
+					RcMap.get(gitPublishes, payload.cwd),
+					Effect.flatMap(publish => publish.publish({message: payload.message}))
+				),
+			'publish.pullRequest': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitPublishes, payload.cwd),
+						Effect.map(publish => pipe(SubscriptionRef.changes(publish.pullRequest), Stream.map(Option.getOrUndefined)))
+					)
+				),
 			'review.comments.resolve': payload =>
 				pipe(
 					RcMap.get(gitReviews, payload.cwd),
-					Effect.flatMap(review =>
-						Predicate.isUndefined(payload.threadId)
-							? review.resolveComment({filePath: payload.filePath, lineNumber: payload.lineNumber, side: payload.side})
-							: review.resolveReviewThread(payload.threadId)
-					)
+					Effect.flatMap(review => review.resolveComments(payload.comments))
 				),
 			'review.comments.save': payload =>
 				pipe(
@@ -732,41 +751,23 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'review.diffs': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewDiffs(payload.target))
-					)
-				),
-			'review.fileContent': payload =>
-				pipe(
-					RcMap.get(gitReviews, payload.cwd),
-					Effect.flatMap(review =>
-						review.reviewFileContent({filePath: payload.filePath, target: payload.target, viewMode: payload.viewMode})
-					)
-				),
-			'review.fileEntries': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewFileEntries({target: payload.target, viewMode: payload.viewMode}))
+						RcMap.get(gitChanges, payload.cwd),
+						Effect.flatMap(changes => changes.diffs(payload.target)),
+						Effect.map(SubscriptionRef.changes)
 					)
 				),
 			'review.metadata': payload =>
 				Stream.unwrap(
 					pipe(
-						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewMetadata())
+						RcMap.get(gitChanges, payload.cwd),
+						Effect.map(changes => SubscriptionRef.changes(changes.metadata))
 					)
-				),
-			'review.stageAll': payload =>
-				pipe(
-					RcMap.get(gitReviews, payload.cwd),
-					Effect.flatMap(review => review.stageAll)
 				),
 			'review.state': payload =>
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewState(payload.viewMode))
+						Effect.map(review => SubscriptionRef.changes(review.state))
 					)
 				),
 			'review.state.mark': payload =>
