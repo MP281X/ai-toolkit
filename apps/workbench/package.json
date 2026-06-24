@@ -17,7 +17,7 @@
 
 	"scripts": {
 		"dev:client": "vp dev",
-		"dev:server": "node --inspect=127.0.0.1:0 --watch ./src/main.server.ts",
+		"dev:server": "node --watch ./src/main.server.ts",
 
 		"build": "rm -rf dist && vp build && vp pack",
 

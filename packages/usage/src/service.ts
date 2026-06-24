@@ -1,6 +1,6 @@
-import {cpus, freemem, homedir, totalmem} from 'node:os'
+import {homedir} from 'node:os'
 
-import {Array, Config, Context, Effect, FileSystem, Layer, Match, Predicate, Schema, Stream, pipe} from 'effect'
+import {Config, Context, Effect, FileSystem, Layer, Match, Predicate, Schema, Stream, pipe} from 'effect'
 
 import {HttpClient} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
@@ -10,18 +10,13 @@ import {
 	ClaudeUsage,
 	CodexCredentials,
 	CodexUsage,
+	NodeProcessUsage,
 	SystemUsage,
 	UsageError,
 	UsageProvider,
 	UsageWindow
 } from './schema.ts'
-
-function cpuTimes() {
-	return Array.reduce(cpus(), {idle: 0, total: 0}, (total, cpu) => ({
-		idle: total.idle + cpu.times.idle,
-		total: total.total + cpu.times.idle + cpu.times.irq + cpu.times.nice + cpu.times.sys + cpu.times.user
-	}))
-}
+import {cpuTimes, cpuUtilization, darwinMemoryUtilization, nodeProcessUsage, osMemoryUtilization} from './system.ts'
 
 export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage', {
 	make: Effect.gen(function* () {
@@ -84,16 +79,30 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.catch(() => new UsageError({message: 'not signed in'}))
 		)
 
+		const memoryUtilization =
+			process.platform === 'darwin'
+				? pipe(
+						Effect.all(
+							{
+								memsizeOutput: commandOutput('sysctl', ['-n', 'hw.memsize']),
+								vmStatOutput: commandOutput('vm_stat', [])
+							},
+							{concurrency: 2}
+						),
+						Effect.map(darwinMemoryUtilization),
+						Effect.catch(() => Effect.sync(osMemoryUtilization))
+					)
+				: Effect.sync(osMemoryUtilization)
+
 		const system = pipe(
 			Effect.gen(function* () {
 				const before = cpuTimes()
 				yield* Effect.sleep('250 millis')
 				const after = cpuTimes()
-				const total = after.total - before.total
-				const idle = after.idle - before.idle
 				return SystemUsage.make({
-					cpuUtilization: total <= 0 ? 0 : ((total - idle) / total) * 100,
-					memoryUtilization: ((totalmem() - freemem()) / totalmem()) * 100
+					cpuUtilization: cpuUtilization({after, before}),
+					memoryUtilization: yield* memoryUtilization,
+					nodeProcess: NodeProcessUsage.make(nodeProcessUsage())
 				})
 			}),
 			Effect.withSpan('Usage.system')

@@ -13,13 +13,10 @@ description: Use when editing TypeScript or JavaScript implementation code, Effe
 
 ## Shape
 
-- Inference and contextual typing first.
 - Prefer direct code at the use site.
 - Add a helper when it names domain policy, owns lifecycle, isolates an external boundary, handles recursion, or centralizes repeated behavior that should change together.
-- Do not add indirection when direct code is clearer.
 - Prefer Effect modules, `pipe`, `Match`, early return.
 - Diagnostic cleanup removes the unclear shape; it does not introduce helper scaffolding, config objects, or local wrappers that only hide it.
-- If a cleanup attempt adds indirection without improving the code, restore the direct shape and choose a smaller change.
 
 ## Types
 

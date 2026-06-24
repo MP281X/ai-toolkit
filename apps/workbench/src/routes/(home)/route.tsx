@@ -20,6 +20,7 @@ import {
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
+	ListTree,
 	PanelTop,
 	PlayIcon,
 	ProcessStateIcon,
@@ -617,6 +618,13 @@ function WorktreeAgents(input: {
 	)
 }
 
+function worktreeHasActiveAgent(worktree: SidebarWorktree) {
+	return pipe(
+		worktree.agents,
+		Array.some(session => terminalStatusActive(session.state.state) && session.state.state !== 'idle')
+	)
+}
+
 function WorktreeManager(input: {
 	readonly activeProject?: SidebarProject
 	readonly activeWorktree?: SidebarWorktree
@@ -639,6 +647,7 @@ function WorktreeManager(input: {
 		creatingBranch: '',
 		deleteDialogOpen: false,
 		deletingWorktree: false,
+		filterActiveAgents: false,
 		maintainingProject: ''
 	}))
 	const createWorktreeProject =
@@ -730,7 +739,6 @@ function WorktreeManager(input: {
 			setState(current => ({...current, maintainingProject: ''}))
 		}
 	}
-
 	return (
 		<div className="flex h-full flex-col border-r">
 			<div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center border-b">
@@ -747,21 +755,41 @@ function WorktreeManager(input: {
 						{input.activeWorktree ? shortPath(input.activeWorktree.root) : 'No worktree selected'}
 					</span>
 				</Button>
-				{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
+				<span className="flex items-center">
 					<Button
 						type="button"
-						variant="destructive"
+						variant="ghost"
 						size="icon"
-						className="h-8 w-8"
-						disabled={state.deletingWorktree}
+						aria-pressed={state.filterActiveAgents}
+						aria-label={state.filterActiveAgents ? 'Showing active agent worktrees' : 'Showing all worktrees'}
+						className={state.filterActiveAgents ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
 						onClick={() => {
-							setState(current => ({...current, deleteDialogOpen: true}))
+							setState(current => ({...current, filterActiveAgents: !current.filterActiveAgents}))
 						}}
-						title="Delete worktree"
+						title={state.filterActiveAgents ? 'Show all worktrees' : 'Show active agent worktrees'}
 					>
-						{state.deletingWorktree ? <Spinner className="size-2.5 border opacity-60" /> : <Trash className="size-3" />}
+						{state.filterActiveAgents ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
 					</Button>
-				)}
+					{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
+						<Button
+							type="button"
+							variant="destructive"
+							size="icon"
+							className="h-8 w-8"
+							disabled={state.deletingWorktree}
+							onClick={() => {
+								setState(current => ({...current, deleteDialogOpen: true}))
+							}}
+							title="Delete worktree"
+						>
+							{state.deletingWorktree ? (
+								<Spinner className="size-2.5 border opacity-60" />
+							) : (
+								<Trash className="size-3" />
+							)}
+						</Button>
+					)}
+				</span>
 			</div>
 
 			<Dialog
@@ -904,10 +932,16 @@ function WorktreeManager(input: {
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
 					{Array.map(input.projects, project => {
+						const worktrees = state.filterActiveAgents
+							? pipe(project.worktrees, Array.filter(worktreeHasActiveAgent))
+							: project.worktrees
+
+						if (worktrees.length === 0) return null
+
 						const projectWorktree =
 							Option.getOrUndefined(
-								Array.findFirst(project.worktrees, candidate => candidate.root === project.repository.root)
-							) ?? project.worktrees[0]
+								Array.findFirst(worktrees, candidate => candidate.root === project.repository.root)
+							) ?? worktrees[0]
 
 						return (
 							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
@@ -966,7 +1000,7 @@ function WorktreeManager(input: {
 									</span>
 								</div>
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-									{Array.map(project.worktrees, worktree => (
+									{Array.map(worktrees, worktree => (
 										<li key={worktree.root} className="w-full min-w-0">
 											<TreeExplorerRow
 												key={worktree.root}
