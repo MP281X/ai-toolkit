@@ -66,11 +66,11 @@ const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 })
 
 function claudeUsageTokens(input: typeof ClaudeTokenUsage.Type) {
-	return AgentUsageTokens.make({
+	return {
 		cached: input.cache_read_input_tokens ?? input.cached_input_tokens ?? 0,
 		input: input.input_tokens ?? 0,
 		output: input.output_tokens ?? 0
-	})
+	}
 }
 
 function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
@@ -179,7 +179,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		)
 	}
 
-	const subscription = pipe(
+	const subscription = retryAuth(
 		pipe(
 			status,
 			Effect.flatMap(input =>
@@ -195,24 +195,6 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 					? Effect.succeed(AgentSubscription.make(label))
 					: new AgentError({message: 'subscription unavailable'})
 			})
-		),
-		Effect.catch(() =>
-			pipe(
-				status,
-				Effect.flatMap(input =>
-					pipe(
-						Schema.decodeEffect(ClaudeAuthStatus)(input),
-						Effect.mapError(cause => new AgentError({cause}))
-					)
-				),
-				Effect.flatMap(input => {
-					if (!input.loggedIn) return new AgentError({message: 'not signed in'})
-					const label = claudeSubscriptionLabel(input.subscriptionType ?? input.authMethod)
-					return Predicate.isString(label)
-						? Effect.succeed(AgentSubscription.make(label))
-						: new AgentError({message: 'subscription unavailable'})
-				})
-			)
 		)
 	)
 	const remoteUsage = remoteClaudeUsage(client, claudeToken, claudeVersion)
