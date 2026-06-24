@@ -37,9 +37,10 @@
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/ai": "workspace:*",
+		"@deslop/agent": "workspace:*",
 		"@deslop/git": "workspace:*",
 		"@deslop/portless": "workspace:*",
-		"@deslop/usage": "workspace:*",
+		"@deslop/os": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 

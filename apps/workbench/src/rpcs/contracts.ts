@@ -2,13 +2,8 @@ import {Effect, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {
-	AgentCommandIcon,
-	AgentCommandProfile,
-	AgentCommandProfileId,
-	AgentCommandRequest,
-	AiError
-} from '@deslop/ai/schema'
+import {AgentError, AgentProvider, AgentUsageData, AgentSubscription} from '@deslop/agent/schema'
+import {AiError} from '@deslop/ai/schema'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
@@ -23,9 +18,9 @@ import {
 	GitReviewTarget,
 	GitWorktreeSource
 } from '@deslop/git/schema'
+import {OsError, Resources} from '@deslop/os/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
-import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
 
 const CwdPayload = Schema.Struct({cwd: Schema.String})
 
@@ -47,12 +42,15 @@ const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
-	icon: AgentCommandIcon,
+	icon: AgentProvider,
 	label: Schema.String,
-	profileId: AgentCommandProfileId,
+	profileId: AgentProvider,
 	state: TerminalStatusPayload,
 	uuid: Schema.String
 })
+
+export type AgentProfile = typeof AgentProfile.Type
+const AgentProfile = Schema.Struct({icon: AgentProvider, id: AgentProvider, label: Schema.String})
 
 export type ScriptRun = typeof ScriptRun.Type
 export const ScriptRun = Schema.Struct({
@@ -85,16 +83,17 @@ const SidebarProject = Schema.Struct({
 	worktrees: Schema.Array(SidebarWorktree)
 })
 
-const HomeSidebar = Schema.Struct({
-	agentProfiles: Schema.Array(AgentCommandProfile),
-	projects: Schema.Array(SidebarProject)
-})
+const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
 
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
-	Rpc.make('agents.create', {error: TerminalError, payload: AgentCommandRequest, success: AgentSession}),
-	Rpc.make('agents.profiles', {error: AiError, success: Schema.Array(AgentCommandProfile)}),
+	Rpc.make('agents.create', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String, provider: AgentProvider}),
+		success: AgentSession
+	}),
+	Rpc.make('agents.profiles', {error: AgentError, success: Schema.Array(AgentProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
 	Rpc.make('home.sidebar', {
@@ -172,10 +171,15 @@ export class RpcContracts extends RpcGroup.make(
 		success: TerminalFrame
 	}),
 	Rpc.make('usage', {
-		error: UsageError,
-		payload: Schema.Struct({provider: Schema.Literals(['claude', 'codex'])}),
+		error: AgentError,
+		payload: Schema.Struct({provider: AgentProvider}),
 		stream: true,
-		success: UsageProvider
+		success: AgentUsageData
 	}),
-	Rpc.make('usage.system', {error: UsageError, stream: true, success: SystemUsage})
+	Rpc.make('usage.subscription', {
+		error: AgentError,
+		payload: Schema.Struct({provider: AgentProvider}),
+		success: AgentSubscription
+	}),
+	Rpc.make('usage.system', {error: OsError, stream: true, success: Resources})
 ) {}
