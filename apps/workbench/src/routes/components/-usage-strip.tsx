@@ -1,15 +1,28 @@
 import {useAtomValue} from '@effect/atom-react'
 
-import {DateTime, Option, pipe} from 'effect'
+import {Array, DateTime, Option, Predicate, pipe} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 
-import {systemUsageAtom, usageAtom} from '#lib/state.ts'
-import {Activity, AgentIcon, CalendarDays, Clock, Cpu, MemoryStick, Server} from '@deslop/components/icons'
-import {formatBytes, formatError, formatTimestamp, formatTimeUntil} from '@deslop/components/utils'
-import type {UsageWindow} from '@deslop/usage/schema'
+import {systemUsageAtom, usageAtom, usageTokensAtom} from '#lib/state.ts'
+import {priceModelUsages} from '@deslop/ai/catalog'
+import {
+	Activity,
+	AgentIcon,
+	ArrowDown,
+	ArrowUp,
+	BadgeCheck,
+	CalendarDays,
+	Clock,
+	Cpu,
+	DollarSign,
+	MemoryStick,
+	Server
+} from '@deslop/components/icons'
+import {formatBytes, formatError, formatNumber, formatTimestamp, formatTimeUntil} from '@deslop/components/utils'
+import type {UsageProvider, UsageWindow} from '@deslop/usage/schema'
 
-const providers = ['claude', 'codex'] as const
+const providers = ['codex', 'claude'] as const
 
 function utilizationClass(utilization: number) {
 	if (utilization >= 90) return 'text-destructive'
@@ -31,6 +44,22 @@ function WindowValue(input: {readonly icon: React.ReactNode; readonly window: Us
 					{formatTimeUntil(resets.value)}
 				</span>
 			)}
+		</span>
+	)
+}
+
+function SubscriptionValue(input: {readonly subscription: UsageProvider['subscription']}) {
+	return (
+		<span
+			className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2.5"
+			title={input.subscription?.details}
+		>
+			<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">
+				<BadgeCheck />
+			</span>
+			<span className={Predicate.isUndefined(input.subscription) ? 'text-muted-foreground' : 'min-w-0 truncate'}>
+				{input.subscription?.label ?? '—'}
+			</span>
 		</span>
 	)
 }
@@ -118,6 +147,62 @@ function ProviderWindows(input: {readonly layer: 'claude' | 'codex'}) {
 		<>
 			<WindowValue icon={<Clock />} window={usage.value.fiveHour} />
 			<WindowValue icon={<CalendarDays />} window={usage.value.weekly} />
+			<SubscriptionValue subscription={usage.value.subscription} />
+		</>
+	)
+}
+
+function formatUsd(value: number) {
+	if (value < 0.01 && value > 0) return '<$0.01'
+	return `$${formatNumber(value)}`
+}
+
+function TokenMetricValue(input: {readonly icon?: React.ReactNode; readonly value: string}) {
+	return (
+		<span className="flex min-w-0 flex-1 items-center justify-center gap-1 px-2.5">
+			{Predicate.isNotUndefined(input.icon) && (
+				<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">{input.icon}</span>
+			)}
+			<span className="min-w-0 truncate">{input.value}</span>
+		</span>
+	)
+}
+
+function TokenWindows(input: {readonly layer: 'claude' | 'codex'}) {
+	const usage = useAtomValue(usageTokensAtom)
+
+	if (AsyncResult.isFailure(usage)) {
+		return (
+			<span
+				className="text-muted-foreground flex min-w-0 flex-1 items-center truncate px-2.5"
+				title={formatError(usage.cause)}
+			>
+				{formatError(usage.cause)}
+			</span>
+		)
+	}
+	if (!AsyncResult.isSuccess(usage)) {
+		return <span className="text-muted-foreground flex flex-1 items-center px-2.5">…</span>
+	}
+
+	const provider = pipe(
+		usage.value.providers,
+		Array.findFirst(item => item.provider === input.layer),
+		Option.getOrUndefined
+	)
+
+	if (Predicate.isUndefined(provider)) {
+		return <span className="text-muted-foreground flex min-w-0 flex-1 items-center truncate px-2.5">—</span>
+	}
+
+	return (
+		<>
+			<TokenMetricValue icon={<ArrowDown />} value={formatNumber(provider.total.usage.inputTokens.total ?? 0)} />
+			<TokenMetricValue icon={<ArrowUp />} value={formatNumber(provider.total.usage.outputTokens.total ?? 0)} />
+			<TokenMetricValue
+				icon={<DollarSign />}
+				value={formatUsd(priceModelUsages(provider.total.modelUsages).totalUsd)}
+			/>
 		</>
 	)
 }
@@ -132,11 +217,18 @@ export function UsageStrip() {
 				<SystemWindows />
 			</div>
 			{providers.map(layer => (
-				<div key={layer} className="flex h-7 min-w-0 items-stretch divide-x">
+				<div key={layer} className="flex h-14 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
 					</span>
-					<ProviderWindows layer={layer} />
+					<span className="flex min-w-0 flex-1 flex-col divide-y">
+						<span className="flex h-7 min-w-0 items-stretch divide-x">
+							<ProviderWindows layer={layer} />
+						</span>
+						<span className="flex h-7 min-w-0 items-stretch divide-x">
+							<TokenWindows layer={layer} />
+						</span>
+					</span>
 				</div>
 			))}
 		</div>

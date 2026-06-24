@@ -16,7 +16,9 @@ import {
 	UsageProvider,
 	UsageWindow
 } from './schema.ts'
+import {claudeSubscriptionFromCacheJson, codexSubscriptionLabel} from './subscription.ts'
 import {cpuTimes, cpuUtilization, darwinMemoryUtilization, nodeProcessUsage, osMemoryUtilization} from './system.ts'
+import {makeUsageTokenLoader} from './tokens.ts'
 
 export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage', {
 	make: Effect.gen(function* () {
@@ -25,6 +27,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 		const home = yield* pipe(Config.string('HOME'), Config.withDefault(homedir()))
 		const codexHome = yield* pipe(Config.string('CODEX_HOME'), Config.withDefault(`${home}/.codex`))
+		const loadUsageTokens = makeUsageTokenLoader()
 
 		const commandOutput = Effect.fn('Usage.commandOutput')(function* (command: string, args: readonly string[]) {
 			return yield* Effect.scoped(
@@ -72,6 +75,13 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.catch(() => new UsageError({message: 'not signed in'}))
 		)
 
+		const noSubscription = undefined
+		const claudeSubscription = pipe(
+			fs.readFileString(`${home}/.claude.json`),
+			Effect.map(claudeSubscriptionFromCacheJson),
+			Effect.orElseSucceed(() => noSubscription)
+		)
+
 		const codexToken = pipe(
 			fs.readFileString(`${codexHome}/auth.json`),
 			Effect.flatMap(Schema.decodeEffect(CodexCredentials)),
@@ -108,6 +118,12 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.withSpan('Usage.system')
 		)
 
+		const tokens = pipe(
+			Effect.sync(() => loadUsageTokens({env: process.env, home})),
+			Effect.mapError(cause => new UsageError({cause})),
+			Effect.withSpan('Usage.tokens')
+		)
+
 		const claude = pipe(
 			Effect.all({token: claudeToken, version: claudeVersion}, {concurrency: 2}),
 			Effect.flatMap(credentials =>
@@ -133,6 +149,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 							resetsAt: usage.five_hour.resets_at ?? undefined,
 							utilization: usage.five_hour.utilization
 						}),
+						subscription: yield* claudeSubscription,
 						weekly: UsageWindow.make({
 							resetsAt: usage.seven_day.resets_at ?? undefined,
 							utilization: usage.seven_day.utilization
@@ -166,6 +183,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 								: undefined,
 							utilization: usage.rate_limit.primary_window.used_percent
 						}),
+						subscription: codexSubscriptionLabel(usage.plan_type),
 						weekly: UsageWindow.make({
 							resetsAt: Predicate.isNumber(usage.rate_limit.secondary_window.reset_at)
 								? new Date(usage.rate_limit.secondary_window.reset_at * 1000).toISOString()
@@ -180,7 +198,7 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 			Effect.withSpan('Usage.codex')
 		)
 
-		return {claude, codex, system}
+		return {claude, codex, system, tokens}
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)

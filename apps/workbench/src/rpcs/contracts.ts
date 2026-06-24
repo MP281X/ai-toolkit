@@ -2,13 +2,8 @@ import {Effect, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {
-	AgentCommandIcon,
-	AgentCommandProfile,
-	AgentCommandProfileId,
-	AgentCommandRequest,
-	AiError
-} from '@deslop/ai/schema'
+import {AgentCommandIcon, AgentCommandProfileId} from '@deslop/ai/catalog'
+import {AgentCommandProfile, AgentCommandRequest, AiError} from '@deslop/ai/schema'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
@@ -24,7 +19,7 @@ import {
 } from '@deslop/git/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
-import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
+import {SystemUsage, UsageError, UsageProvider, UsageTokens} from '@deslop/usage/schema'
 
 const CwdPayload = Schema.Struct({cwd: Schema.String})
 
@@ -175,5 +170,6 @@ export class RpcContracts extends RpcGroup.make(
 		stream: true,
 		success: UsageProvider
 	}),
-	Rpc.make('usage.system', {error: UsageError, stream: true, success: SystemUsage})
+	Rpc.make('usage.system', {error: UsageError, stream: true, success: SystemUsage}),
+	Rpc.make('usage.tokens', {error: UsageError, stream: true, success: UsageTokens})
 ) {}

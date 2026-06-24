@@ -2,11 +2,12 @@ import {Array, Context, Effect, Layer, Match, Option, flow, pipe} from 'effect'
 import type {Stream, SubscriptionRef} from 'effect'
 
 import type {Prompt, Response, Toolkit} from 'effect/unstable/ai'
-import {ChildProcess} from 'effect/unstable/process'
+import type {ChildProcess} from 'effect/unstable/process'
 
 import {makeLayerPi} from './agents/pi.ts'
-import type {AgentCommandProfileId, AgentCommandRequest, AgentLayerConfig, AgentPrompt, AgentStatus} from './schema.ts'
-import {AgentCommandProfile, AiError} from './schema.ts'
+import {agentCommandProfiles} from './catalog.ts'
+import type {AgentCommandProfile, AgentCommandRequest, AgentLayerConfig, AgentPrompt, AgentStatus} from './schema.ts'
+import {AiError, agentCommandProfileValues} from './schema.ts'
 
 export class Agent extends Context.Service<
 	Agent,
@@ -27,28 +28,6 @@ export class Agent extends Context.Service<
 	public static layerPi = flow(makeLayerPi, Effect.map(Agent.of), Layer.effect(this))
 }
 
-const agentCommandProfiles = [
-	AgentCommandProfile.make({icon: 'codex', id: 'codex-gpt-5.5', label: 'codex'}),
-	AgentCommandProfile.make({icon: 'claude', id: 'claude-code-opus-4.8', label: 'claude'})
-]
-
-function commandForProfile(id: AgentCommandProfileId, cwd: string) {
-	const commands = {
-		'claude-code-opus-4.8': ChildProcess.make(
-			'claude',
-			['--model', 'claude-opus-4-8', '--permission-mode', 'bypassPermissions', '--effort', 'high'],
-			{cwd, env: {CLAUDE_CODE_NO_FLICKER: '1'}, extendEnv: true}
-		),
-		'codex-gpt-5.5': ChildProcess.make(
-			'codex',
-			['--model', 'gpt-5.5', '-c', 'model_reasoning_effort=medium', '--dangerously-bypass-approvals-and-sandbox'],
-			{cwd}
-		)
-	} satisfies Record<AgentCommandProfileId, ChildProcess.StandardCommand>
-
-	return commands[id]
-}
-
 export class AgentCommand extends Context.Service<
 	AgentCommand,
 	{
@@ -64,9 +43,9 @@ export class AgentCommand extends Context.Service<
 					return Effect.fail(new AiError({message: `Unknown agent command profile: ${input.profileId}`}))
 				}
 
-				return Effect.succeed(commandForProfile(profile.value.id, input.cwd))
+				return Effect.succeed(profile.value.command(input.cwd))
 			},
-			profiles: Effect.succeed<readonly AgentCommandProfile[]>(agentCommandProfiles)
+			profiles: Effect.succeed<readonly AgentCommandProfile[]>(agentCommandProfileValues)
 		}
 	})
 }) {

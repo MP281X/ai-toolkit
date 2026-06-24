@@ -1,6 +1,8 @@
-import {Schema} from 'effect'
+import {Array, Schema, pipe} from 'effect'
 
 import {Prompt} from 'effect/unstable/ai'
+
+import * as Catalog from './catalog.ts'
 
 export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
 	cause: Schema.optional(Schema.Defect),
@@ -22,13 +24,13 @@ const AgentId = Schema.Literals(['pi'] as const)
 type ProviderId = typeof ProviderId.Type
 const ProviderId = Schema.Literals(['openai-codex'] as const)
 
-type ModelId = typeof ModelId.Type
-const ModelId = Schema.Literals(['gpt-5.5'] as const)
+type AgentPromptModelId = typeof AgentPromptModelId.Type
+const AgentPromptModelId = Schema.Literals(['gpt-5.5'] as const)
 
 export type AgentPrompt = typeof AgentPrompt.Type
 const AgentPrompt = Schema.Struct({
 	messages: Schema.Array(Prompt.Message),
-	model: ModelId,
+	model: AgentPromptModelId,
 	provider: ProviderId,
 	thinkingLevel: Schema.optional(ThinkingLevel)
 })
@@ -41,18 +43,27 @@ const AgentLayerConfig = Schema.Struct({
 	tools: Schema.optional(Schema.Union([Schema.Literals(['all', 'none'] as const), Schema.Array(Schema.String)]))
 })
 
-export type AgentCommandProfileId = typeof AgentCommandProfileId.Type
-export const AgentCommandProfileId = Schema.Literals(['codex-gpt-5.5', 'claude-code-opus-4.8'])
-
-export type AgentCommandIcon = typeof AgentCommandIcon.Type
-export const AgentCommandIcon = Schema.Literals(['codex', 'claude'])
-
 export type AgentCommandProfile = typeof AgentCommandProfile.Type
 export const AgentCommandProfile = Schema.Struct({
-	icon: AgentCommandIcon,
-	id: AgentCommandProfileId,
-	label: Schema.String
+	icon: Catalog.AgentCommandIcon,
+	id: Catalog.AgentCommandProfileId,
+	label: Schema.String,
+	model: Catalog.ModelId,
+	usageProvider: Catalog.UsageProviderId
 })
 
+export const agentCommandProfileValues = pipe(
+	Catalog.agentCommandProfiles,
+	Array.map(profile =>
+		AgentCommandProfile.make({
+			icon: profile.icon,
+			id: profile.id,
+			label: profile.label,
+			model: profile.model,
+			usageProvider: profile.usageProvider
+		})
+	)
+)
+
 export type AgentCommandRequest = typeof AgentCommandRequest.Type
-export const AgentCommandRequest = Schema.Struct({cwd: Schema.String, profileId: AgentCommandProfileId})
+export const AgentCommandRequest = Schema.Struct({cwd: Schema.String, profileId: Catalog.AgentCommandProfileId})

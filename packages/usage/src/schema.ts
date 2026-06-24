@@ -1,5 +1,7 @@
 import {Schema} from 'effect'
 
+import {Response} from 'effect/unstable/ai'
+
 export class UsageError extends Schema.TaggedErrorClass<UsageError>()('UsageError', {
 	cause: Schema.optional(Schema.Defect),
 	message: Schema.optional(Schema.String)
@@ -8,8 +10,15 @@ export class UsageError extends Schema.TaggedErrorClass<UsageError>()('UsageErro
 export type UsageWindow = typeof UsageWindow.Type
 export const UsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.String), utilization: Schema.Number})
 
+type UsageSubscription = typeof UsageSubscription.Type
+const UsageSubscription = Schema.Struct({details: Schema.optional(Schema.String), label: Schema.String})
+
 export type UsageProvider = typeof UsageProvider.Type
-export const UsageProvider = Schema.Struct({fiveHour: UsageWindow, weekly: UsageWindow})
+export const UsageProvider = Schema.Struct({
+	fiveHour: UsageWindow,
+	subscription: Schema.optional(UsageSubscription),
+	weekly: UsageWindow
+})
 
 export type NodeProcessUsage = typeof NodeProcessUsage.Type
 export const NodeProcessUsage = Schema.Struct({
@@ -24,6 +33,23 @@ export const SystemUsage = Schema.Struct({
 	memoryUtilization: Schema.Number,
 	nodeProcess: NodeProcessUsage
 })
+
+type UsageModelUsage = typeof UsageModelUsage.Type
+const UsageModelUsage = Schema.Struct({model: Schema.optional(Schema.String), usage: Response.Usage})
+
+type UsageTokenBucket = typeof UsageTokenBucket.Type
+const UsageTokenBucket = Schema.Struct({modelUsages: Schema.Array(UsageModelUsage), usage: Response.Usage})
+
+export type UsageTokenProvider = typeof UsageTokenProvider.Type
+export const UsageTokenProvider = Schema.Struct({
+	month: UsageTokenBucket,
+	provider: Schema.Literals(['claude', 'codex']),
+	today: UsageTokenBucket,
+	total: UsageTokenBucket
+})
+
+export type UsageTokens = typeof UsageTokens.Type
+export const UsageTokens = Schema.Struct({providers: Schema.Array(UsageTokenProvider), updatedAt: Schema.String})
 
 export type ClaudeCredentials = typeof ClaudeCredentials.Type
 export const ClaudeCredentials = Schema.fromJsonString(
@@ -52,5 +78,6 @@ const CodexUsageWindow = Schema.Struct({
 
 export type CodexUsage = typeof CodexUsage.Type
 export const CodexUsage = Schema.Struct({
+	plan_type: Schema.optional(Schema.NullOr(Schema.String)),
 	rate_limit: Schema.Struct({primary_window: CodexUsageWindow, secondary_window: CodexUsageWindow})
 })

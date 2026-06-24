@@ -857,7 +857,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Stream.fromEffect(payload.provider === 'claude' ? usage.claude : usage.codex),
 					Stream.repeat(Schedule.spaced('30 seconds'))
 				),
-			'usage.system': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds')))
+			'usage.system': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds'))),
+			'usage.tokens': () => pipe(Stream.fromEffect(usage.tokens), Stream.repeat(Schedule.spaced('30 seconds')))
 		})
 	})
 )

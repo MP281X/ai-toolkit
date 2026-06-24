@@ -227,3 +227,13 @@ export const systemUsageAtom = Atom.keepAlive(
 		)
 	)
 )
+
+export const usageTokensAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('usage.tokens', void 0)),
+			Stream.unwrap
+		)
+	)
+)
