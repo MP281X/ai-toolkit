@@ -1,4 +1,5 @@
 import {cpus, freemem, totalmem} from 'node:os'
+import {getHeapStatistics} from 'node:v8'
 
 import {Array} from 'effect'
 
@@ -23,8 +24,15 @@ export function cpuUtilization(input: {
 	return percentage({total, used: total - idle})
 }
 
-export function nodeMemoryUtilization() {
+export function osMemoryUtilization() {
 	return percentage({total: totalmem(), used: totalmem() - freemem()})
+}
+
+export function nodeProcessUsage(input?: {readonly heapLimitBytes: number; readonly heapUsedBytes: number}) {
+	const heapUsedBytes = input?.heapUsedBytes ?? process.memoryUsage().heapUsed
+	const heapLimitBytes = input?.heapLimitBytes ?? getHeapStatistics().heap_size_limit
+
+	return {heapLimitBytes, heapUsedBytes, heapUtilization: percentage({total: heapLimitBytes, used: heapUsedBytes})}
 }
 
 function darwinPageCount(input: {readonly label: string; readonly vmStatOutput: string}) {

@@ -172,6 +172,18 @@ function CommentAnnotation(props: {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
 	const [editing, setEditing] = useState(() => String.isEmpty(props.comment.body))
 
+	useEffect(() => {
+		if (!editing) return
+
+		const animationFrame = window.requestAnimationFrame(() => {
+			inputRef.current?.focus()
+		})
+
+		return () => {
+			window.cancelAnimationFrame(animationFrame)
+		}
+	}, [editing])
+
 	function saveDraft() {
 		const body = inputRef.current?.value ?? props.comment.body
 		if (String.isEmpty(String.trim(body))) {
@@ -204,7 +216,6 @@ function CommentAnnotation(props: {
 				<div className="min-w-0">
 					<textarea
 						ref={inputRef}
-						autoFocus
 						defaultValue={props.comment.body}
 						placeholder="Add comment"
 						className="font-inherit block min-h-16 w-full resize-y border-0 bg-transparent p-0 text-inherit outline-none"

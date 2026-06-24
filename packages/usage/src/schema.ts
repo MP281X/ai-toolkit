@@ -11,8 +11,19 @@ export const UsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.Strin
 export type UsageProvider = typeof UsageProvider.Type
 export const UsageProvider = Schema.Struct({fiveHour: UsageWindow, weekly: UsageWindow})
 
+export type NodeProcessUsage = typeof NodeProcessUsage.Type
+export const NodeProcessUsage = Schema.Struct({
+	heapLimitBytes: Schema.Number,
+	heapUsedBytes: Schema.Number,
+	heapUtilization: Schema.Number
+})
+
 export type SystemUsage = typeof SystemUsage.Type
-export const SystemUsage = Schema.Struct({cpuUtilization: Schema.Number, memoryUtilization: Schema.Number})
+export const SystemUsage = Schema.Struct({
+	cpuUtilization: Schema.Number,
+	memoryUtilization: Schema.Number,
+	nodeProcess: NodeProcessUsage
+})
 
 export type ClaudeCredentials = typeof ClaudeCredentials.Type
 export const ClaudeCredentials = Schema.fromJsonString(

@@ -48,6 +48,18 @@ export function formatTimeUntil(date: DateTime.DateTime) {
 	return `${Math.round(hours / 24)}d`
 }
 
+export function formatBytes(bytes: number) {
+	if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+	const value = bytes / 1024 ** exponent
+	if (value >= 100 || exponent === 0) return `${value.toFixed(0)} ${units[exponent]}`
+	if (value >= 10) return `${value.toFixed(1)} ${units[exponent]}`
+
+	return `${value.toFixed(2)} ${units[exponent]}`
+}
+
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,
