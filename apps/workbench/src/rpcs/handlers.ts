@@ -27,6 +27,7 @@ import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
 import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
+import {AgentBrowser, agentBrowserSessionNameForAgent} from '@deslop/agent-browser/service'
 import {AiError, type AgentCommandProfile, type AgentCommandRequest} from '@deslop/ai/schema'
 import {Agent, AgentCommand} from '@deslop/ai/service'
 import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
@@ -272,6 +273,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitReviews = yield* GitReviewSessions
 		const gitPublishes = yield* GitPublishSessions
 		const publishAgents = yield* PublishAgentSessions
+		const agentBrowser = yield* AgentBrowser
 		const agentCommand = yield* AgentCommand
 		const portless = yield* Portless
 		const usage = yield* Usage
@@ -352,7 +354,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return {
 					command: ChildProcess.make(portlessScript.preparedCommand.command, portlessScript.preparedCommand.args, {
 						...portlessScript.preparedCommand.options,
-						env: portlessScript.script.env
+						env: {...portlessScript.preparedCommand.options.env, ...portlessScript.script.env}
 					}),
 					cwd: portlessScript.script.cwd,
 					sessionId: portlessScript.script.sessionId
@@ -546,6 +548,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 
 		return RpcContracts.of({
+			'agentBrowser.close': payload => agentBrowser.close(payload),
+			'agentBrowser.health': () => agentBrowser.health,
+			'agentBrowser.open': payload => agentBrowser.open(payload),
+			'agentBrowser.sessions': () => agentBrowser.sessions,
 			agents: payload =>
 				Stream.unwrap(
 					pipe(
@@ -589,11 +595,22 @@ export const RpcHandlers = RpcContracts.toLayer(
 				yield* SubscriptionRef.update(agents, sessions =>
 					HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
 				)
+				const browserEnv = yield* pipe(
+					agentBrowser.browserEnv({session: agentBrowserSessionNameForAgent(agentSession.uuid)}),
+					Effect.mapError(
+						cause =>
+							new TerminalError({
+								cause,
+								message: cause instanceof Error ? cause.message : 'failed to prepare agent-browser environment'
+							})
+					)
+				)
 				const input = yield* terminalSession(
 					TerminalPayload.make({
 						args: agentSession.args,
 						command: agentSession.command,
 						cwd: agentSession.cwd,
+						env: browserEnv,
 						sessionId: agentSession.uuid
 					})
 				).pipe(Effect.map(terminalSessionInput))

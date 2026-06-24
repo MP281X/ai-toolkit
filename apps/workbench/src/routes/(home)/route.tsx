@@ -7,9 +7,10 @@ import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
+import {activeSidebarAtom, agentBrowserSessionsAtom, worktreeRouteId} from '#lib/state.ts'
 import {UsageStrip} from '#routes/components/-usage-strip.tsx'
 import type {AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import type {AgentBrowserSession} from '@deslop/agent-browser/schema'
 import type {AgentCommandProfile} from '@deslop/ai/schema'
 import {Loading} from '@deslop/components/fallbacks'
 import {
@@ -20,6 +21,7 @@ import {
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
+	MonitorIcon,
 	PanelTop,
 	PlayIcon,
 	ProcessStateIcon,
@@ -83,10 +85,16 @@ function HomeLayout() {
 	const navigate = Route.useNavigate()
 	const homeRouteState = useRouterState({
 		select: state => ({
+			activeAgentBrowserSession: pipe(
+				Schema.decodeUnknownOption(Schema.Struct({session: Schema.optional(Schema.String)}))(state.location.search),
+				Option.map(search => search.session),
+				Option.getOrUndefined
+			),
 			activeView: pipe(
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
 				Match.when(String.endsWith('/portless'), () => 'portless' as const),
+				Match.when(String.endsWith('/agent-browser'), () => 'agent-browser' as const),
 				Match.when(String.endsWith('/run'), () => 'run' as const),
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
@@ -95,6 +103,7 @@ function HomeLayout() {
 		})
 	})
 	const activeHome = useAtomSuspense(activeSidebarAtom(homeRouteState.activeWorktreeId))
+	const agentBrowserSessions = useAtomSuspense(agentBrowserSessionsAtom)
 
 	return (
 		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
@@ -102,9 +111,15 @@ function HomeLayout() {
 				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
 					<WorktreeManager
 						activeProject={activeHome.value.activeProject}
+						activeAgentBrowserSession={
+							homeRouteState.activeView === 'agent-browser'
+								? (homeRouteState.activeAgentBrowserSession ?? agentBrowserSessions.value[0]?.name)
+								: homeRouteState.activeAgentBrowserSession
+						}
 						activeWorktree={activeHome.value.activeWorktree}
 						activeView={homeRouteState.activeView}
 						agentProfiles={activeHome.value.agentProfiles}
+						agentBrowserSessions={agentBrowserSessions.value}
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
 							startTransition(() => {
@@ -122,6 +137,15 @@ function HomeLayout() {
 									params: {worktree: worktreeRouteId(worktreeRoot)},
 									search: {origin},
 									to: '/$worktree/portless'
+								})
+							})
+						}}
+						selectAgentBrowser={(worktreeRoot, session) => {
+							startTransition(() => {
+								void navigate({
+									params: {worktree: worktreeRouteId(worktreeRoot)},
+									search: Predicate.isUndefined(session) ? {} : {session},
+									to: '/$worktree/agent-browser'
 								})
 							})
 						}}
@@ -617,15 +641,94 @@ function WorktreeAgents(input: {
 	)
 }
 
+function WorktreeAgentBrowser(input: {
+	readonly active: boolean
+	readonly activeSession?: string
+	readonly cwd: string
+	readonly sessions: readonly AgentBrowserSession[]
+	readonly selectAgentBrowser: (worktreeRoot: string, session?: string) => void
+}) {
+	const close = useAtomSet(RpcClient.mutation('agentBrowser.close'), {mode: 'promise'})
+	const closingSessionsState = useState(() => HashSet.empty<string>())
+
+	async function closeSession(session: AgentBrowserSession) {
+		if (HashSet.has(closingSessionsState[0], session.name)) return
+
+		closingSessionsState[1](current => HashSet.add(current, session.name))
+		try {
+			await close({payload: {session: session.name}})
+		} catch (error) {
+			toast.error(formatError(error))
+		} finally {
+			closingSessionsState[1](current => HashSet.remove(current, session.name))
+		}
+	}
+
+	return (
+		<li className="w-full min-w-0">
+			<TreeExplorerRow
+				icon={<MonitorIcon />}
+				selected={input.active && Predicate.isUndefined(input.activeSession)}
+				onClick={() => {
+					input.selectAgentBrowser(input.cwd)
+				}}
+			>
+				agent-browser
+			</TreeExplorerRow>
+			{input.sessions.length > 0 && (
+				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+					{Array.map(input.sessions, session => (
+						<li key={`${session.socketDir}:${session.name}`} className="w-full min-w-0">
+							<TreeExplorerRow
+								actions={
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="text-muted-foreground hover:text-foreground"
+										disabled={HashSet.has(closingSessionsState[0], session.name)}
+										onClick={event => {
+											event.stopPropagation()
+											void closeSession(session)
+										}}
+										title={`Close ${session.name}`}
+									>
+										{HashSet.has(closingSessionsState[0], session.name) ? (
+											<Spinner className="size-2.5 border opacity-60" />
+										) : (
+											<Trash className="size-3" />
+										)}
+									</Button>
+								}
+								icon={<Square />}
+								selected={input.active && input.activeSession === session.name}
+								title={`Stream port ${session.streamPort}`}
+								onClick={() => {
+									input.selectAgentBrowser(input.cwd, session.name)
+								}}
+							>
+								{session.name}
+							</TreeExplorerRow>
+						</li>
+					))}
+				</ul>
+			)}
+		</li>
+	)
+}
+
 function WorktreeManager(input: {
 	readonly activeProject?: SidebarProject
+	readonly activeAgentBrowserSession?: string
 	readonly activeWorktree?: SidebarWorktree
-	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
+	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
 	readonly agentProfiles: readonly AgentCommandProfile[]
+	readonly agentBrowserSessions: readonly AgentBrowserSession[]
 	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectAgentBrowser: (worktreeRoot: string, session?: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
@@ -998,6 +1101,13 @@ function WorktreeManager(input: {
 														terminal
 													</TreeExplorerRow>
 												</li>
+												<WorktreeAgentBrowser
+													active={input.activeView === 'agent-browser' && input.activeWorktree?.root === worktree.root}
+													activeSession={input.activeAgentBrowserSession}
+													cwd={worktree.root}
+													sessions={input.activeWorktree?.root === worktree.root ? input.agentBrowserSessions : []}
+													selectAgentBrowser={input.selectAgentBrowser}
+												/>
 												<Suspense fallback={<Loading />}>
 													<WorktreePortless
 														cwd={worktree.root}

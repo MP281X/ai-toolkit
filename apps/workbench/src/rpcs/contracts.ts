@@ -3,6 +3,13 @@ import {Effect, Schema} from 'effect'
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
 import {
+	AgentBrowserError,
+	AgentBrowserHealth,
+	AgentBrowserOpenRequest,
+	AgentBrowserSession,
+	AgentBrowserSessionRequest
+} from '@deslop/agent-browser/schema'
+import {
 	AgentCommandIcon,
 	AgentCommandProfile,
 	AgentCommandProfileId,
@@ -96,6 +103,14 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agents.profiles', {error: AiError, success: Schema.Array(AgentCommandProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
+	Rpc.make('agentBrowser.health', {error: AgentBrowserError, success: AgentBrowserHealth}),
+	Rpc.make('agentBrowser.sessions', {
+		error: AgentBrowserError,
+		stream: true,
+		success: Schema.Array(AgentBrowserSession)
+	}),
+	Rpc.make('agentBrowser.open', {error: AgentBrowserError, payload: AgentBrowserOpenRequest}),
+	Rpc.make('agentBrowser.close', {error: AgentBrowserError, payload: AgentBrowserSessionRequest}),
 	Rpc.make('home.sidebar', {
 		error: Schema.Union([GitError, TerminalError, AiError]),
 		stream: true,

@@ -206,6 +206,17 @@ export const agentsAtom = Atom.family((cwd: string) =>
 	)
 )
 
+export const agentBrowserSessionsAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('agentBrowser.sessions', void 0)),
+			Stream.unwrap
+		),
+		{initialValue: []}
+	)
+)
+
 export const usageAtom = Atom.family((provider: 'claude' | 'codex') =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(

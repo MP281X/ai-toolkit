@@ -8,6 +8,7 @@ import {KeyValueStore} from 'effect/unstable/persistence'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
+import {AgentBrowser} from '@deslop/agent-browser/service'
 import {AgentCommand} from '@deslop/ai/service'
 import {GitWorkspace} from '@deslop/git/service'
 import {OtelLayer} from '@deslop/opentelemetry/server'
@@ -18,6 +19,7 @@ export const LiveLayers = pipe(
 	// Rpc handlers
 	Layer.provideMerge(RpcHandlers),
 	// Application layers
+	Layer.provideMerge(AgentBrowser.layer),
 	Layer.provideMerge(AgentCommand.layer),
 	Layer.provideMerge(GitWorkspace.layer),
 	Layer.provideMerge(Usage.layer),

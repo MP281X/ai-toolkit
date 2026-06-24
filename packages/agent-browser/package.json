@@ -1,0 +1,14 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/agent-browser",
+
+	"exports": {
+		"./schema": "./src/schema.ts",
+		"./service": "./src/service.ts"
+	},
+
+	"dependencies": {
+		"agent-browser": "latest"
+	}
+}

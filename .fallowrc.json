@@ -6,6 +6,7 @@
 		"zones": [
 			{"name": "app-portfolio", "patterns": ["apps/portfolio/**"]},
 			{"name": "app-workbench", "patterns": ["apps/workbench/**"]},
+			{"name": "package-agent-browser", "patterns": ["packages/agent-browser/**"]},
 			{"name": "package-ai", "patterns": ["packages/ai/**"]},
 			{"name": "package-components", "patterns": ["packages/components/**"]},
 			{"name": "package-git", "patterns": ["packages/git/**"]},
@@ -20,6 +21,7 @@
 				"from": "app-portfolio",
 				"allow": [
 					"app-portfolio",
+					"package-agent-browser",
 					"package-ai",
 					"package-components",
 					"package-git",
@@ -34,6 +36,7 @@
 				"from": "app-workbench",
 				"allow": [
 					"app-workbench",
+					"package-agent-browser",
 					"package-ai",
 					"package-components",
 					"package-git",
@@ -44,6 +47,7 @@
 					"package-usage"
 				]
 			},
+			{"from": "package-agent-browser", "allow": ["package-agent-browser"]},
 			{"from": "package-ai", "allow": ["package-ai"]},
 			{"from": "package-components", "allow": ["package-components"]},
 			{"from": "package-git", "allow": ["package-git"]},
@@ -63,7 +67,14 @@
 			]
 		}
 	},
-	"ignoreDependencies": ["@deslop/oxlint-rules", "@effect/atom-react", "@effect/platform-node", "effect", "vite-plus"],
+	"ignoreDependencies": [
+		"@deslop/oxlint-rules",
+		"@effect/atom-react",
+		"@effect/platform-node",
+		"agent-browser",
+		"effect",
+		"vite-plus"
+	],
 	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
 	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
 	"publicPackages": ["@deslop/components"],
