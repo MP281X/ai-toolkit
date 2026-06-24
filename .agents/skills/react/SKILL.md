@@ -26,7 +26,7 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 - Name prop types when they are public, reused, recursive, or necessary for a complex component contract.
 - No service-schema imports in reusable component packages.
 - Bridge props or adapters must own layout, lifecycle, state, domain policy, or a repeated interaction contract.
-- Obvious local derivation stays at use site.
+- Keep simple derived values where they are used.
 - Do not extract section arrays, wrapper components, or handler modules only to make diagnostics disappear.
 - Async command = visible loading state.
 - Disable unavailable UI actions; backend remains authority.
@@ -34,4 +34,3 @@ description: Use when editing React routes, atoms, RPC clients, async UI state, 
 - Use `useState` for local UI state that has direct setters or small inline functional updates.
 - Use a reducer when coupled state has named user or domain events with shared update logic.
 - Reducer actions describe user or domain events; avoid generic patch actions.
-- Revert reducer or component extractions that split simple local UI behavior without naming real user or domain events.
