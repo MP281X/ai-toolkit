@@ -10,12 +10,13 @@ import {
 	ClaudeUsage,
 	CodexCredentials,
 	CodexUsage,
+	NodeProcessUsage,
 	SystemUsage,
 	UsageError,
 	UsageProvider,
 	UsageWindow
 } from './schema.ts'
-import {cpuTimes, cpuUtilization, darwinMemoryUtilization, nodeMemoryUtilization} from './system.ts'
+import {cpuTimes, cpuUtilization, darwinMemoryUtilization, nodeProcessUsage, osMemoryUtilization} from './system.ts'
 
 export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage', {
 	make: Effect.gen(function* () {
@@ -88,10 +89,10 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 							},
 							{concurrency: 2}
 						),
-						Effect.map(output => darwinMemoryUtilization(output)),
-						Effect.catch(() => Effect.sync(nodeMemoryUtilization))
+						Effect.map(darwinMemoryUtilization),
+						Effect.catch(() => Effect.sync(osMemoryUtilization))
 					)
-				: Effect.sync(nodeMemoryUtilization)
+				: Effect.sync(osMemoryUtilization)
 
 		const system = pipe(
 			Effect.gen(function* () {
@@ -100,7 +101,8 @@ export class Usage extends Context.Service<Usage>()('@deslop/usage/service/Usage
 				const after = cpuTimes()
 				return SystemUsage.make({
 					cpuUtilization: cpuUtilization({after, before}),
-					memoryUtilization: yield* memoryUtilization
+					memoryUtilization: yield* memoryUtilization,
+					nodeProcess: NodeProcessUsage.make(nodeProcessUsage())
 				})
 			}),
 			Effect.withSpan('Usage.system')

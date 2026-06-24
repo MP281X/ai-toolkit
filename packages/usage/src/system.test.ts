@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vite-plus/test'
 
-import {cpuUtilization, darwinMemoryUtilization} from './system.ts'
+import {cpuUtilization, darwinMemoryUtilization, nodeProcessUsage} from './system.ts'
 
 describe('cpuUtilization', () => {
 	it('calculates busy CPU from cumulative idle and total deltas', () => {
@@ -44,5 +44,28 @@ Pages occupied by compressor:              0.
 `
 			})
 		).toBe(30)
+	})
+})
+
+describe('nodeProcessUsage', () => {
+	it('calculates heap utilization from used and limit bytes', () => {
+		expect(nodeProcessUsage({heapLimitBytes: 200, heapUsedBytes: 50})).toEqual({
+			heapLimitBytes: 200,
+			heapUsedBytes: 50,
+			heapUtilization: 25
+		})
+	})
+
+	it('clamps heap utilization to one hundred percent', () => {
+		expect(nodeProcessUsage({heapLimitBytes: 100, heapUsedBytes: 150}).heapUtilization).toBe(100)
+	})
+
+	it('clamps negative heap utilization to zero', () => {
+		expect(nodeProcessUsage({heapLimitBytes: 100, heapUsedBytes: -1}).heapUtilization).toBe(0)
+	})
+
+	it('returns zero utilization when the heap limit is zero or invalid', () => {
+		expect(nodeProcessUsage({heapLimitBytes: 0, heapUsedBytes: 50}).heapUtilization).toBe(0)
+		expect(nodeProcessUsage({heapLimitBytes: -1, heapUsedBytes: 50}).heapUtilization).toBe(0)
 	})
 })
