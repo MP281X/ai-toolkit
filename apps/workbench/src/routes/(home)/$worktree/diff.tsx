@@ -277,9 +277,12 @@ function DiffPage() {
 	return <ReviewViewPanel key={activeHome.value.activeWorktree.root} cwd={activeHome.value.activeWorktree.root} />
 }
 
-function loadedDiffsReducer(current: HashMap.HashMap<string, GitDiff>, diff: GitDiff | null) {
-	if (Predicate.isNull(diff)) return HashMap.empty<string, GitDiff>()
-	return HashMap.set(current, diff.filePath, diff)
+function loadedDiffsReducer(
+	current: HashMap.HashMap<string, GitDiff>,
+	input: {readonly diff: GitDiff; readonly key: string} | null
+) {
+	if (Predicate.isNull(input)) return HashMap.empty<string, GitDiff>()
+	return HashMap.set(current, input.key, input.diff)
 }
 
 function explicitOpenedFilesReducer(
@@ -390,7 +393,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		if (selectedListEntry) {
 			return pipe(
 				loadedDiffs,
-				HashMap.get(selectedListEntry.filePath),
+				HashMap.get(selectedContentKey),
 				Option.getOrElse(() =>
 					GitDiff.make({
 						filePath: selectedListEntry.filePath,
@@ -473,10 +476,18 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	async function markReviewFile(filePath: string) {
 		try {
+			const entry = pipe(
+				reviewEntriesValue,
+				Array.findFirst(currentEntry => currentEntry.filePath === filePath),
+				Option.getOrUndefined
+			)
+			const key = Predicate.isUndefined(entry)
+				? ''
+				: `${input.cwd}\u0000${targetKey(reviewTarget)}\u0000${viewModeState[0]}\u0000${entry.revision ?? ''}\u0000${entry.filePath}`
 			const diff = await loadReviewFileContent({
 				payload: {cwd: input.cwd, filePath, target: reviewTarget, viewMode: viewModeState[0]}
 			})
-			updateLoadedDiffs(diff)
+			if (String.isNonEmpty(key)) updateLoadedDiffs({diff, key})
 			const marks = gitReviewMarksForDiff(diff)
 			if (!Array.isReadonlyArrayEmpty(marks)) await markReviewed({payload: {cwd: input.cwd, marks}})
 		} catch {
@@ -485,12 +496,19 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	async function preloadReviewFile(filePath: string) {
-		if (HashMap.has(loadedDiffs, filePath)) return
+		const entry = pipe(
+			reviewEntriesValue,
+			Array.findFirst(currentEntry => currentEntry.filePath === filePath),
+			Option.getOrUndefined
+		)
+		if (Predicate.isUndefined(entry)) return
+		const key = `${input.cwd}\u0000${targetKey(reviewTarget)}\u0000${viewModeState[0]}\u0000${entry.revision ?? ''}\u0000${entry.filePath}`
+		if (HashMap.has(loadedDiffs, key)) return
 		try {
 			const diff = await loadReviewFileContent({
 				payload: {cwd: input.cwd, filePath, target: reviewTarget, viewMode: viewModeState[0]}
 			})
-			updateLoadedDiffs(diff)
+			updateLoadedDiffs({diff, key})
 		} catch {
 			// Selection loads the file through the normal atom path and owns user-facing errors.
 		}
@@ -500,7 +518,17 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		selectedFilePathState[1](filePath)
 		const marks = pipe(
 			loadedDiffs,
-			HashMap.get(filePath),
+			HashMap.get(
+				pipe(
+					reviewEntriesValue,
+					Array.findFirst(currentEntry => currentEntry.filePath === filePath),
+					Option.map(
+						currentEntry =>
+							`${input.cwd}\u0000${targetKey(reviewTarget)}\u0000${viewModeState[0]}\u0000${currentEntry.revision ?? ''}\u0000${currentEntry.filePath}`
+					),
+					Option.getOrElse(() => '')
+				)
+			),
 			Option.match({onNone: () => Array.empty<GitDiff>(), onSome: diff => [diff]}),
 			Array.findFirst(diff => diff.filePath === filePath),
 			Option.map(gitReviewMarksForDiff),
@@ -572,7 +600,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	useEffect(() => {
 		if (!AsyncResult.isSuccess(selectedContentResult)) return
-		updateLoadedDiffs(selectedContentResult.value)
+		updateLoadedDiffs({diff: selectedContentResult.value, key: selectedContentKey})
 		if (!HashSet.has(explicitOpenedFiles, selectedContentResult.value.filePath)) return
 		updateExplicitOpenedFiles(['remove', selectedContentResult.value.filePath])
 		const marks = gitReviewMarksForDiff(selectedContentResult.value)
@@ -587,7 +615,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 
 		void markLoadedFileReviewed()
-	}, [explicitOpenedFiles, input.cwd, markReviewed, selectedContentResult])
+	}, [explicitOpenedFiles, input.cwd, markReviewed, selectedContentKey, selectedContentResult])
 
 	return (
 		<>

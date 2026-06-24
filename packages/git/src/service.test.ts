@@ -218,6 +218,45 @@ describe('GitReview', () => {
 		expect(Array.map(states.unfiltered.marks, current => current.filePath)).toEqual(['pnpm-lock.yaml'])
 	})
 
+	it('includes patch revisions for commit file entries', async () => {
+		const cwd = repository()
+		write(cwd, 'changed.txt', 'base\n')
+		commit(cwd, 'base')
+		write(cwd, 'changed.txt', 'changed\n')
+		const changed = commit(cwd, 'changed')
+
+		const entries = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				return yield* review.reviewFileEntries({
+					target: GitReviewCommitTarget.make({hash: changed}),
+					viewMode: 'filtered'
+				})
+			})
+		)
+
+		expect(entries[0]?.revision).toContain('-base')
+		expect(entries[0]?.revision).toContain('+changed')
+	})
+
+	it('filters whitespace-only file entries like patch loading', async () => {
+		const cwd = repository()
+		write(cwd, 'space.txt', 'const value = 1\n')
+		commit(cwd, 'base')
+		write(cwd, 'space.txt', 'const   value   =   1\n')
+
+		const entries = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
+			})
+		)
+
+		expect(Array.map(entries, entry => entry.filePath)).toEqual([])
+	})
+
 	it('lists unchanged tracked and untracked files in unfiltered mode and loads unchanged content without a patch', async () => {
 		const cwd = repository()
 		write(cwd, '.gitignore', 'ignored.txt\n')

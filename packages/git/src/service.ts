@@ -19,6 +19,7 @@ import {
 	Path,
 	Predicate,
 	Ref,
+	Schedule,
 	Schema,
 	Stream,
 	String,
@@ -191,6 +192,7 @@ const reviewExclusionPathspecs = [
 	':(exclude)plans/*.md',
 	':(exclude)**/plans/*.md'
 ]
+const reviewDiffFlags = ['--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol'] as const
 
 function isReviewExcludedPath(filePath: string) {
 	const parts = String.split('/')(filePath)
@@ -959,9 +961,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const patch = yield* git.string(config.cwd, [
 				'diff',
 				...input.args,
-				'--ignore-all-space',
-				'--ignore-blank-lines',
-				'--ignore-cr-at-eol',
+				...reviewDiffFlags,
 				'--patch',
 				'--find-renames',
 				'--no-ext-diff',
@@ -981,27 +981,19 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			viewMode: GitReviewViewMode = 'filtered'
 		) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
-			const args = [
-				'--root',
-				'--patch',
-				'--ignore-all-space',
-				'--ignore-blank-lines',
-				'--ignore-cr-at-eol',
-				'--find-renames',
-				'--no-ext-diff'
-			]
+			const args = ['--root', '--patch', ...reviewDiffFlags, '--find-renames', '--no-ext-diff']
 			const pathspec = reviewPathspec(viewMode)
 			const parents = yield* pipe(
 				git.string(config.cwd, ['rev-list', '--parents', '-n', '1', hash]),
 				Effect.map(flow(String.trim, String.split(/\s+/u)))
 			)
 			const patch = yield* pipe(
-				Array.length(parents) > 2
+				Array.length(parents) === 3
 					? git.string(config.cwd, ['show', '--remerge-diff', '--format=', ...Array.drop(args, 1), hash, ...pathspec])
 					: git.string(config.cwd, ['diff-tree', ...args, hash, ...pathspec]),
 				Effect.flatMap(output => {
 					if (/^diff --git /mu.test(output)) return Effect.succeed(output)
-					if (Array.length(parents) > 2) return Effect.succeed(output)
+					if (Array.length(parents) === 3) return Effect.succeed(output)
 
 					const parent = parents[1]
 					if (Predicate.isUndefined(parent)) return Effect.succeed(output)
@@ -1183,12 +1175,23 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			viewMode: GitReviewViewMode
 		) {
 			const entries = yield* pipe(
-				git.lines(config.cwd, ['diff', '--name-status', '--find-renames', ...args, ...reviewPathspec(viewMode)]),
+				git.lines(config.cwd, [
+					'diff',
+					'--name-status',
+					...reviewDiffFlags,
+					'--find-renames',
+					...args,
+					...reviewPathspec(viewMode)
+				]),
 				Effect.map(lines => changedEntriesFromNameStatus(lines, viewMode))
 			)
 			const revisions = yield* patchRevisionByFile(args, viewMode)
-			return Array.map(entries, entry =>
-				GitReviewFileEntry.make({...entry, revision: Option.getOrUndefined(HashMap.get(revisions, entry.filePath))})
+			return pipe(
+				entries,
+				Array.filter(entry => HashMap.has(revisions, entry.filePath)),
+				Array.map(entry =>
+					GitReviewFileEntry.make({...entry, revision: Option.getOrUndefined(HashMap.get(revisions, entry.filePath))})
+				)
 			)
 		})
 
@@ -1198,7 +1201,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			filePath: string
 		) {
 			const pathEntries = yield* pipe(
-				git.lines(config.cwd, ['diff', '--name-status', '--find-renames', ...args, '--', filePath]),
+				git.lines(config.cwd, ['diff', '--name-status', ...reviewDiffFlags, '--find-renames', ...args, '--', filePath]),
 				Effect.map(lines => changedEntriesFromNameStatus(lines, viewMode))
 			)
 			const pathEntry = pipe(
@@ -1219,6 +1222,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 						)
 					)
 				)
+				if (Predicate.isUndefined(revision)) return
 				return GitReviewFileEntry.make({...pathEntry, revision})
 			}
 
@@ -1557,7 +1561,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 		) {
 			return pipe(
 				yield* commitDiffs(hash, viewMode),
-				Array.map(diff => GitReviewFileEntry.make({filePath: diff.filePath, status: diff.status}))
+				Array.map(diff => GitReviewFileEntry.make({filePath: diff.filePath, revision: diff.patch, status: diff.status}))
 			)
 		})
 
@@ -1902,6 +1906,11 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			Stream.map(() => void 0),
 			Stream.share({capacity: 16, idleTimeToLive: Duration.seconds(30), replay: 0, strategy: 'sliding'})
 		)
+		const statusChanges = pipe(
+			Stream.fromEffectSchedule(git.string(config.cwd, ['status', '--porcelain']), Schedule.fixed(Duration.seconds(1))),
+			Stream.changes,
+			Stream.map(() => void 0)
+		)
 
 		const metadata = Effect.gen(function* () {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
@@ -2012,7 +2021,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				return Stream.fromEffect(entries).pipe(
 					Stream.concat(
 						pipe(
-							worktreeChanges,
+							statusChanges,
 							Stream.mapEffect(() => entries)
 						)
 					),
