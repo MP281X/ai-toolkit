@@ -644,7 +644,7 @@ function WorktreeManager(input: {
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const fixProject = useAtomSet(RpcClient.mutation('projects.fix'), {mode: 'promise'})
+	const maintenanceProject = useAtomSet(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const [state, setState] = useState(() => ({
@@ -655,7 +655,7 @@ function WorktreeManager(input: {
 		deleteDialogOpen: false,
 		deletingWorktree: false,
 		filterActiveAgents: false,
-		fixingProject: ''
+		maintainingProject: ''
 	}))
 	const createWorktreeProject =
 		pipe(
@@ -736,14 +736,14 @@ function WorktreeManager(input: {
 			setState(current => ({...current, deletingWorktree: false}))
 		}
 	}
-	async function fixRepository(cwd: string) {
-		setState(current => ({...current, fixingProject: cwd}))
+	async function maintainRepository(cwd: string) {
+		setState(current => ({...current, maintainingProject: cwd}))
 		try {
-			await fixProject({payload: {cwd}})
+			await maintenanceProject({payload: {cwd}})
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			setState(current => ({...current, fixingProject: ''}))
+			setState(current => ({...current, maintainingProject: ''}))
 		}
 	}
 	return (
@@ -974,14 +974,14 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											disabled={state.fixingProject === project.repository.root}
+											disabled={state.maintainingProject === project.repository.root}
 											onClick={event => {
 												event.stopPropagation()
-												void fixRepository(project.repository.root)
+												void maintainRepository(project.repository.root)
 											}}
-											title="Fix repo state"
+											title="Repository maintenance"
 										>
-											{state.fixingProject === project.repository.root ? (
+											{state.maintainingProject === project.repository.root ? (
 												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />

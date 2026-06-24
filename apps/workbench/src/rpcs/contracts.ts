@@ -11,6 +11,7 @@ import {
 	GitProject,
 	GitPullRequest,
 	GitReviewComment,
+	GitReviewCommentDraft,
 	GitReviewMark,
 	GitReviewMetadata,
 	GitReviewState,
@@ -102,6 +103,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('projects', {error: GitError, stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {error: GitError, payload: CwdPayload, success: GitBranchesSnapshot}),
+	Rpc.make('projects.maintenance', {error: GitError, payload: CwdPayload}),
 	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
 	Rpc.make('review.diffs', {
 		error: GitError,
@@ -120,21 +122,22 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
-		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
+		payload: Schema.Struct({comment: GitReviewCommentDraft, cwd: Schema.String})
 	}),
 	Rpc.make('review.comments.resolve', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			filePath: Schema.String,
-			lineNumber: Schema.Number,
-			side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
-			threadId: Schema.optional(Schema.String)
-		})
+		payload: Schema.Struct({comments: Schema.Array(GitReviewComment), cwd: Schema.String})
 	}),
-	Rpc.make('publish.approve', {
+	Rpc.make('publish.checkpoint', {error: GitError, payload: CwdPayload}),
+	Rpc.make('publish.publish', {
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, message: Schema.String}),
+		success: Schema.optional(GitPullRequest)
+	}),
+	Rpc.make('publish.pullRequest', {
+		error: GitError,
+		payload: CwdPayload,
+		stream: true,
 		success: Schema.optional(GitPullRequest)
 	}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
@@ -144,7 +147,6 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
-	Rpc.make('projects.fix', {error: GitError, payload: CwdPayload}),
 	Rpc.make('runs.portless', {error: TerminalError, payload: CwdPayload, success: Schema.Array(PortlessRun)}),
 	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
 	Rpc.make('terminal.write', {
