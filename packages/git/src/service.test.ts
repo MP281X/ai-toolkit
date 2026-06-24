@@ -2,6 +2,7 @@ import {execFileSync} from 'node:child_process'
 import {chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
+import {setTimeout} from 'node:timers/promises'
 
 import {NodeServices} from '@effect/platform-node'
 
@@ -186,6 +187,34 @@ describe('GitChanges', () => {
 		write(cwd, 'space.txt', 'const   value   =   1\n')
 
 		expect(await changesDiffs(cwd)).toEqual([])
+	}, 10_000)
+
+	it('refreshes file content when ignored whitespace edits keep the same patch', async () => {
+		const cwd = repository()
+		write(cwd, 'space.txt', 'const value = 1\n')
+		commit(cwd, 'base')
+		write(cwd, 'space.txt', 'const value = 2\n')
+
+		const content = await runChanges(
+			cwd,
+			Effect.gen(function* () {
+				const changes = yield* GitChanges
+				const ref = yield* changes.diffs(GitReviewChangesTarget.make({}))
+				expect((yield* SubscriptionRef.get(ref))[0]?.fileContent).toBe('const value = 2\n')
+				yield* Effect.promise(() => setTimeout(100))
+				write(cwd, 'space.txt', 'const   value   =   2\n')
+
+				for (const _ of Array.range(0, 20)) {
+					const current = yield* SubscriptionRef.get(ref)
+					if (current[0]?.fileContent === 'const   value   =   2\n') return current[0].fileContent
+					yield* Effect.promise(() => setTimeout(50))
+				}
+
+				return (yield* SubscriptionRef.get(ref))[0]?.fileContent
+			})
+		)
+
+		expect(content).toBe('const   value   =   2\n')
 	}, 10_000)
 
 	it('shows only merge resolution diffs for merge commits', async () => {

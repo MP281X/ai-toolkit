@@ -1032,6 +1032,12 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			return yield* Effect.forEach(
 				input.diffs,
 				diff => {
+					if (input.target._tag !== 'commit') {
+						return pipe(
+							fileContent({diff, target: input.target}),
+							Effect.map(content => GitDiff.make({...diff, fileContent: content}))
+						)
+					}
 					const key = `${targetKey(input.target)}\u0000${diff.filePath}\u0000${diff.changeHash}`
 					return pipe(
 						Ref.get(fileContentCache),
