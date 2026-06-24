@@ -8,9 +8,8 @@ import {Suspense, startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
-import {UsageStrip} from '#routes/components/-usage-strip.tsx'
-import type {AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
-import type {AgentCommandProfile} from '@deslop/ai/schema'
+import {UsageStrip, UsageStripFallback} from '#routes/components/-usage-strip.tsx'
+import type {AgentProfile, AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
@@ -92,7 +91,7 @@ function HomeLayout() {
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
 			),
-			activeWorktreeId: String.split('/')(state.location.pathname)[1]
+			activeWorktreeId: String.split('/')(state.location.pathname)[1] ?? ''
 		})
 	})
 	const activeHome = useAtomSuspense(activeSidebarAtom(homeRouteState.activeWorktreeId))
@@ -100,7 +99,7 @@ function HomeLayout() {
 	return (
 		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
-				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
+				<ResizablePanel defaultSize="26%" minSize="20%" maxSize="38%">
 					<WorktreeManager
 						activeProject={activeHome.value.activeProject}
 						activeWorktree={activeHome.value.activeWorktree}
@@ -156,6 +155,14 @@ function HomeLayout() {
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>
+	)
+}
+
+function UsageStripBoundary() {
+	return (
+		<Suspense fallback={<UsageStripFallback />}>
+			<UsageStrip />
+		</Suspense>
 	)
 }
 
@@ -518,7 +525,7 @@ function AgentSessionRow(input: {
 
 function WorktreeAgents(input: {
 	readonly cwd: string
-	readonly profiles: readonly AgentCommandProfile[]
+	readonly profiles: readonly AgentProfile[]
 	readonly sessions: readonly AgentSession[]
 	readonly selectAgent: (cwd: string, agentId: string) => void
 }) {
@@ -532,7 +539,7 @@ function WorktreeAgents(input: {
 
 		startingProfilesState[1](current => HashSet.add(current, profile.id))
 		try {
-			const session = await create({payload: {cwd: input.cwd, profileId: profile.id}})
+			const session = await create({payload: {cwd: input.cwd, provider: profile.id}})
 			input.selectAgent(input.cwd, session.uuid)
 		} catch (error) {
 			toast.error(formatError(error))
@@ -629,7 +636,7 @@ function WorktreeManager(input: {
 	readonly activeProject?: SidebarProject
 	readonly activeWorktree?: SidebarWorktree
 	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
-	readonly agentProfiles: readonly AgentCommandProfile[]
+	readonly agentProfiles: readonly AgentProfile[]
 	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
@@ -1059,7 +1066,7 @@ function WorktreeManager(input: {
 				</TreeExplorerSection>
 			</TreeExplorer>
 
-			<UsageStrip />
+			<UsageStripBoundary />
 		</div>
 	)
 }

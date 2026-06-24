@@ -60,6 +60,19 @@ export function formatBytes(bytes: number) {
 	return `${value.toFixed(2)} ${units[exponent]}`
 }
 
+export function formatNumber(value: number) {
+	const absolute = Math.abs(value)
+	if (absolute >= 1_000_000_000_000) return formatNumberUnit(value, 1_000_000_000_000, 'T')
+	if (absolute >= 1_000_000_000) return formatNumberUnit(value, 1_000_000_000, 'B')
+	if (absolute >= 1_000_000) return formatNumberUnit(value, 1_000_000, 'M')
+	if (absolute >= 1_000) return formatNumberUnit(value, 1_000, 'K')
+	return Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(value)
+}
+
+function formatNumberUnit(value: number, divisor: number, suffix: string) {
+	return `${Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(value / divisor)}${suffix}`
+}
+
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,

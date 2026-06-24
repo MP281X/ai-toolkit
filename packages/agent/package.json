@@ -1,0 +1,10 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/agent",
+
+	"exports": {
+		"./schema": "./src/schema.ts",
+		"./service": "./src/service.ts"
+	}
+}
