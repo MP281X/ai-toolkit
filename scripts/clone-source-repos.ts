@@ -28,25 +28,48 @@ const repositories = [
 ] as const
 
 const program = Effect.gen(function* () {
-	const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
 	const fs = yield* FileSystem.FileSystem
+	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+	const git = Effect.fnUntraced(function* (name: string, phase: string, args: readonly string[]) {
+		yield* Effect.log(`${phase} ${name}`)
+
+		const exitCode = yield* spawner.exitCode(ChildProcess.make('git', args, {stderr: 'inherit', stdout: 'inherit'}))
+
+		if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+			return yield* Effect.fail(new Error(`git ${args.join(' ')} failed for ${name}`))
+		}
+	})
 
 	yield* fs.makeDirectory('.agents/repos', {recursive: true})
 	yield* Effect.forEach(
 		repositories,
 		Effect.fnUntraced(function* (repository) {
 			const directory = `.agents/repos/${repository.name}`
-			const exists = yield* fs.exists(directory)
 
-			if (exists) {
-				yield* Effect.log(`updating ${repository.name}`)
-				yield* execString(ChildProcess.make('git', ['-C', directory, 'pull', '--ff-only']))
+			if (yield* fs.exists(directory)) {
+				yield* git(repository.name, 'fetching', [
+					'-C',
+					directory,
+					'fetch',
+					'--progress',
+					'--depth',
+					'1',
+					'origin',
+					'HEAD'
+				])
+				yield* git(repository.name, 'resetting', ['-C', directory, 'reset', '--hard', 'FETCH_HEAD'])
 			} else {
-				yield* Effect.log(`cloning ${repository.name}`)
-				yield* execString(
-					ChildProcess.make('git', ['clone', '--depth', '1', '--single-branch', repository.url, directory])
-				)
+				yield* git(repository.name, 'cloning', [
+					'clone',
+					'--progress',
+					'--depth',
+					'1',
+					'--single-branch',
+					repository.url,
+					directory
+				])
 			}
+
 			yield* Effect.log(`ready ${repository.name}`)
 		}),
 		{concurrency: 4}

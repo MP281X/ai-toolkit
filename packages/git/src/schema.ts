@@ -1,4 +1,4 @@
-import {Array, Equal, HashSet, Schema} from 'effect'
+import {Array, Equal, HashSet, Predicate, Schema, pipe} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect),
@@ -8,20 +8,12 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 type GitDiffStatus = typeof GitDiffStatus.Type
 const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
-export type GitDiffSegment = typeof GitDiffSegment.Type
-export const GitDiffSegment = Schema.Struct({
-	filePath: Schema.String,
-	fingerprint: Schema.String,
-	id: Schema.String,
-	type: Schema.Literals(['commit', 'worktree'])
-})
-
 export type GitDiff = typeof GitDiff.Type
 export const GitDiff = Schema.Struct({
+	changeHash: Schema.String,
 	fileContent: Schema.optional(Schema.String),
 	filePath: Schema.String,
-	patch: Schema.String,
-	segments: Schema.Array(GitDiffSegment),
+	patch: Schema.optional(Schema.String),
 	status: GitDiffStatus
 })
 
@@ -46,7 +38,12 @@ export const GitReviewTarget = Schema.Union([
 ])
 
 export type GitCommit = typeof GitCommit.Type
-export const GitCommit = Schema.Struct({hash: Schema.String, shortHash: Schema.String, subject: Schema.String})
+export const GitCommit = Schema.Struct({
+	checkpoint: Schema.Boolean,
+	hash: Schema.String,
+	shortHash: Schema.String,
+	subject: Schema.String
+})
 
 export type GitPullRequest = typeof GitPullRequest.Type
 export const GitPullRequest = Schema.Struct({url: Schema.String})
@@ -56,16 +53,19 @@ export const GitReviewMetadata = Schema.Struct({
 	branchCommits: Schema.Array(GitCommit),
 	dirty: Schema.Boolean,
 	localCommits: Schema.Array(GitCommit),
-	prUrl: Schema.optional(Schema.String),
 	unpushedCommits: Schema.Boolean,
 	upstream: Schema.optional(Schema.Struct({ahead: Schema.Number, behind: Schema.Number}))
 })
 
 export type GitReviewMark = typeof GitReviewMark.Type
-export const GitReviewMark = Schema.Struct({
+export const GitReviewMark = Schema.Struct({changeHash: Schema.String, filePath: Schema.String})
+
+export type GitReviewCommentDraft = typeof GitReviewCommentDraft.Type
+export const GitReviewCommentDraft = Schema.Struct({
+	body: Schema.String,
 	filePath: Schema.String,
-	fingerprint: Schema.String,
-	segmentId: Schema.String
+	lineNumber: Schema.Number,
+	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 })
 
 export type GitReviewComment = typeof GitReviewComment.Type
@@ -73,9 +73,8 @@ export const GitReviewComment = Schema.Struct({
 	body: Schema.String,
 	filePath: Schema.String,
 	lineNumber: Schema.Number,
-	resolved: Schema.Boolean,
 	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
-	source: Schema.optional(Schema.Literals(['local', 'github'])),
+	source: Schema.Literals(['local', 'github']),
 	threadId: Schema.optional(Schema.String),
 	url: Schema.optional(Schema.String)
 })
@@ -118,73 +117,41 @@ export type GitProject = typeof GitProject.Type
 export const GitProject = Schema.Struct({repository: GitRepository, worktrees: Schema.Array(GitWorktree)})
 
 export function gitReviewMarksForDiff(diff: GitDiff) {
-	return Array.map(diff.segments, segment =>
-		GitReviewMark.make({filePath: segment.filePath, fingerprint: segment.fingerprint, segmentId: segment.id})
-	)
+	return [GitReviewMark.make({changeHash: diff.changeHash, filePath: diff.filePath})]
 }
 
-export function gitReviewStateForMarks(segments: readonly GitReviewMark[], reviewed: HashSet.HashSet<GitReviewMark>) {
-	const reviewedSegments = Array.filter(segments, segment => HashSet.has(reviewed, segment))
-
-	if (Array.isReadonlyArrayEmpty(segments) || Array.isReadonlyArrayEmpty(reviewedSegments)) return 'unchecked' as const
-	if (Array.length(reviewedSegments) === Array.length(segments)) return 'checked' as const
-
+export function gitReviewStateForMarks(marks: readonly GitReviewMark[], reviewed: HashSet.HashSet<GitReviewMark>) {
+	if (Array.isReadonlyArrayEmpty(marks)) return 'unchecked' as const
+	const reviewedMarks = Array.filter(marks, mark => HashSet.has(reviewed, mark))
+	if (Array.isReadonlyArrayEmpty(reviewedMarks)) return 'unchecked' as const
+	if (Array.length(reviewedMarks) === Array.length(marks)) return 'checked' as const
 	return 'indeterminate' as const
 }
 
-export function gitReviewStateSaveComment(state: GitReviewState, comment: GitReviewComment) {
+export function gitReviewStateSaveComment(state: GitReviewState, draft: GitReviewCommentDraft) {
+	const comment = GitReviewComment.make({...draft, source: 'local'})
 	return GitReviewState.make({
 		comments: Array.append(
-			Array.filter(
-				state.comments,
-				currentComment =>
-					!Equal.equals(
-						{
-							filePath: currentComment.filePath,
-							lineNumber: currentComment.lineNumber,
-							side: currentComment.side ?? 'additions',
-							source: currentComment.source ?? 'local',
-							threadId: currentComment.threadId ?? ''
-						},
-						{
-							filePath: comment.filePath,
-							lineNumber: comment.lineNumber,
-							side: comment.side ?? 'additions',
-							source: comment.source ?? 'local',
-							threadId: comment.threadId ?? ''
-						}
-					)
-			),
-			GitReviewComment.make({...comment, resolved: false, source: 'local', threadId: undefined, url: undefined})
+			Array.filter(state.comments, currentComment => !sameCommentIdentity(currentComment, comment)),
+			comment
 		),
 		marks: state.marks
 	})
 }
 
-export function gitReviewStateResolveComment(
-	state: GitReviewState,
-	input: {readonly filePath: string; readonly lineNumber: number; readonly side?: 'additions' | 'deletions'}
-) {
+export function gitReviewStateDeleteComments(state: GitReviewState, comments: readonly GitReviewComment[]) {
+	const deletedThreadIds = pipe(
+		comments,
+		Array.filter(comment => comment.source === 'github' && Predicate.isString(comment.threadId)),
+		Array.map(comment => comment.threadId ?? ''),
+		HashSet.fromIterable
+	)
+
 	return GitReviewState.make({
-		comments: Array.map(state.comments, comment =>
-			Equal.equals(
-				{
-					filePath: comment.filePath,
-					lineNumber: comment.lineNumber,
-					side: comment.side ?? 'additions',
-					source: comment.source ?? 'local',
-					threadId: comment.threadId ?? ''
-				},
-				{
-					filePath: input.filePath,
-					lineNumber: input.lineNumber,
-					side: input.side ?? 'additions',
-					source: 'local',
-					threadId: ''
-				}
-			)
-				? GitReviewComment.make({...comment, resolved: true})
-				: comment
+		comments: Array.filter(state.comments, comment =>
+			comment.source === 'github' && HashSet.has(deletedThreadIds, comment.threadId ?? '')
+				? false
+				: Array.every(comments, deletedComment => !sameCommentIdentity(comment, deletedComment))
 		),
 		marks: state.marks
 	})
@@ -209,4 +176,23 @@ export function gitReviewStateUnmark(state: GitReviewState, marks: readonly GitR
 		comments: state.comments,
 		marks: Array.filter(state.marks, mark => !HashSet.has(reviewed, mark))
 	})
+}
+
+function sameCommentIdentity(left: GitReviewComment, right: GitReviewComment) {
+	return Equal.equals(
+		{
+			filePath: left.filePath,
+			lineNumber: left.lineNumber,
+			side: left.side ?? 'additions',
+			source: left.source,
+			threadId: left.threadId ?? ''
+		},
+		{
+			filePath: right.filePath,
+			lineNumber: right.lineNumber,
+			side: right.side ?? 'additions',
+			source: right.source,
+			threadId: right.threadId ?? ''
+		}
+	)
 }
