@@ -1,5 +1,5 @@
 import {homedir} from 'node:os'
-import {join} from 'node:path'
+import {join, resolve} from 'node:path'
 
 import type {Exit} from 'effect'
 import {
@@ -79,6 +79,15 @@ function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageT
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
+function sameTokens(left: typeof AgentUsageTokens.Type | undefined, right: typeof AgentUsageTokens.Type) {
+	return (
+		Predicate.isNotUndefined(left) &&
+		left.cached === right.cached &&
+		left.input === right.input &&
+		left.output === right.output
+	)
+}
+
 export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonly codexRoot: string}) {
 	const fs = yield* FileSystem.FileSystem
 	const files = yield* pipe(
@@ -89,52 +98,74 @@ export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonl
 		Effect.map(Array.flatten),
 		Effect.mapError(cause => new AgentError({cause}))
 	)
-	const contents = yield* pipe(
-		Effect.forEach(files, path => fs.readFileString(path), {concurrency: 'unbounded'}),
+	const tokens = yield* pipe(
+		Effect.forEach(
+			files,
+			path =>
+				pipe(
+					fs.readFileString(path),
+					Effect.map(content =>
+						pipe(
+							content,
+							String.split('\n'),
+							Array.reduce(
+								{
+									previousExplicit: undefined as typeof AgentUsageTokens.Type | undefined,
+									previousTotal: undefined as typeof AgentUsageTokens.Type | undefined,
+									total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
+								},
+								(current, line) =>
+									pipe(
+										Schema.decodeOption(CodexTokenLine)(line),
+										Option.match({
+											onNone: () => current,
+											onSome: value => {
+												if (Predicate.isNotUndefined(value.payload?.info?.total_token_usage)) {
+													const nextTotal = codexUsageTokens(value.payload.info.total_token_usage)
+													return {
+														previousExplicit: undefined,
+														previousTotal: nextTotal,
+														total: addTokens(
+															current.total,
+															Predicate.isUndefined(current.previousTotal)
+																? nextTotal
+																: {
+																		cached: Math.max(0, nextTotal.cached - current.previousTotal.cached),
+																		input: Math.max(0, nextTotal.input - current.previousTotal.input),
+																		output: Math.max(0, nextTotal.output - current.previousTotal.output)
+																	}
+														)
+													}
+												}
+
+												const explicit = value.payload?.info?.last_token_usage ?? value.payload?.usage ?? value.usage
+												if (Predicate.isUndefined(explicit)) return current
+
+												const nextExplicit = codexUsageTokens(explicit)
+												return {
+													...current,
+													previousExplicit: nextExplicit,
+													total: sameTokens(current.previousExplicit, nextExplicit)
+														? current.total
+														: addTokens(current.total, nextExplicit)
+												}
+											}
+										})
+									)
+							),
+							result => result.total
+						)
+					)
+				),
+			{concurrency: 8}
+		),
 		Effect.mapError(cause => new AgentError({cause}))
 	)
 
 	return AgentUsageTokens.make(
 		pipe(
-			contents,
-			Array.reduce({cached: 0, input: 0, output: 0}, (total, content) => {
-				const result = pipe(
-					content,
-					String.split('\n'),
-					Array.reduce({previousTotal: undefined as typeof AgentUsageTokens.Type | undefined, total}, (current, line) =>
-						pipe(
-							Schema.decodeOption(CodexTokenLine)(line),
-							Option.match({
-								onNone: () => current,
-								onSome: value => {
-									const explicit = value.payload?.info?.last_token_usage ?? value.payload?.usage ?? value.usage
-									if (Predicate.isNotUndefined(explicit)) {
-										return {...current, total: addTokens(current.total, codexUsageTokens(explicit))}
-									}
-
-									if (Predicate.isUndefined(value.payload?.info?.total_token_usage)) return current
-
-									const nextTotal = codexUsageTokens(value.payload.info.total_token_usage)
-									return {
-										previousTotal: nextTotal,
-										total: addTokens(
-											current.total,
-											Predicate.isUndefined(current.previousTotal)
-												? nextTotal
-												: {
-														cached: Math.max(0, nextTotal.cached - current.previousTotal.cached),
-														input: Math.max(0, nextTotal.input - current.previousTotal.input),
-														output: Math.max(0, nextTotal.output - current.previousTotal.output)
-													}
-										)
-									}
-								}
-							})
-						)
-					)
-				)
-				return result.total
-			})
+			tokens,
+			Array.reduce({cached: 0, input: 0, output: 0}, (total, value) => addTokens(total, value))
 		)
 	)
 })
@@ -143,7 +174,9 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-	const codexRoot = join(homedir(), '.codex')
+	const codexRoot = pipe(process.env['CODEX_HOME'] ?? '', String.trim, value =>
+		String.isNonEmpty(value) ? resolve(value) : join(homedir(), '.codex')
+	)
 
 	const commandOutput = Effect.fnUntraced(function* (commandName: string, args: readonly string[]) {
 		return yield* Effect.scoped(

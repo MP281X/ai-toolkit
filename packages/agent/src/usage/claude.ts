@@ -41,6 +41,7 @@ const ClaudeUsageWindow = Schema.Struct({
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 const ClaudeTokenUsage = Schema.Struct({
+	cache_creation_input_tokens: Schema.optional(Schema.Number),
 	cache_read_input_tokens: Schema.optional(Schema.Number),
 	cached_input_tokens: Schema.optional(Schema.Number),
 	input_tokens: Schema.optional(Schema.Number),
@@ -67,7 +68,8 @@ const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 
 function claudeUsageTokens(input: typeof ClaudeTokenUsage.Type) {
 	return {
-		cached: input.cache_read_input_tokens ?? input.cached_input_tokens ?? 0,
+		cached:
+			(input.cache_read_input_tokens ?? 0) + (input.cache_creation_input_tokens ?? input.cached_input_tokens ?? 0),
 		input: input.input_tokens ?? 0,
 		output: input.output_tokens ?? 0
 	}
