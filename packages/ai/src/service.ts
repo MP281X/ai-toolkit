@@ -1,74 +1,26 @@
-import {Array, Context, Effect, Layer, Match, Option, flow, pipe} from 'effect'
+import {Context, Effect, Layer, Match, flow, pipe} from 'effect'
 import type {Stream, SubscriptionRef} from 'effect'
 
 import type {Prompt, Response, Toolkit} from 'effect/unstable/ai'
-import {ChildProcess} from 'effect/unstable/process'
 
 import {makeLayerPi} from './agents/pi.ts'
-import type {AgentCommandProfileId, AgentCommandRequest, AgentLayerConfig, AgentPrompt, AgentStatus} from './schema.ts'
-import {AgentCommandProfile, AiError} from './schema.ts'
+import type {AiError, AiLayerConfig, AiPrompt, AiStatus} from './schema.ts'
 
-export class Agent extends Context.Service<
-	Agent,
+export class Ai extends Context.Service<
+	Ai,
 	{
-		readonly status: SubscriptionRef.SubscriptionRef<AgentStatus>
+		readonly status: SubscriptionRef.SubscriptionRef<AiStatus>
 		readonly history: Effect.Effect<readonly Prompt.Message[]>
-		readonly prompt: (input: AgentPrompt) => Stream.Stream<Response.StreamPart<Toolkit.Any['tools']>, AiError>
+		readonly prompt: (input: AiPrompt) => Stream.Stream<Response.StreamPart<Toolkit.Any['tools']>, AiError>
 	}
->()('@deslop/ai/service/Agent') {
-	public static layer(config: AgentLayerConfig) {
+>()('@deslop/ai/service/Ai') {
+	public static layer(config: AiLayerConfig) {
 		return pipe(
 			Match.value(config),
-			Match.when({agent: 'pi'}, input => Agent.layerPi(input)),
+			Match.when({agent: 'pi'}, input => Ai.layerPi(input)),
 			Match.exhaustive
 		)
 	}
 
-	public static layerPi = flow(makeLayerPi, Effect.map(Agent.of), Layer.effect(this))
-}
-
-const agentCommandProfiles = [
-	AgentCommandProfile.make({icon: 'codex', id: 'codex-gpt-5.5', label: 'codex'}),
-	AgentCommandProfile.make({icon: 'claude', id: 'claude-code-opus-4.8', label: 'claude'})
-]
-
-function commandForProfile(id: AgentCommandProfileId, cwd: string) {
-	const commands = {
-		'claude-code-opus-4.8': ChildProcess.make(
-			'claude',
-			['--model', 'claude-opus-4-8', '--permission-mode', 'bypassPermissions', '--effort', 'high'],
-			{cwd, env: {CLAUDE_CODE_NO_FLICKER: '1'}, extendEnv: true}
-		),
-		'codex-gpt-5.5': ChildProcess.make(
-			'codex',
-			['--model', 'gpt-5.5', '-c', 'model_reasoning_effort=medium', '--dangerously-bypass-approvals-and-sandbox'],
-			{cwd}
-		)
-	} satisfies Record<AgentCommandProfileId, ChildProcess.StandardCommand>
-
-	return commands[id]
-}
-
-export class AgentCommand extends Context.Service<
-	AgentCommand,
-	{
-		readonly command: (input: AgentCommandRequest) => Effect.Effect<ChildProcess.StandardCommand, AiError>
-		readonly profiles: Effect.Effect<readonly AgentCommandProfile[]>
-	}
->()('@deslop/ai/service/AgentCommand', {
-	make: Effect.gen(function* () {
-		return {
-			command(input: AgentCommandRequest) {
-				const profile = Array.findFirst(agentCommandProfiles, candidate => candidate.id === input.profileId)
-				if (Option.isNone(profile)) {
-					return Effect.fail(new AiError({message: `Unknown agent command profile: ${input.profileId}`}))
-				}
-
-				return Effect.succeed(commandForProfile(profile.value.id, input.cwd))
-			},
-			profiles: Effect.succeed<readonly AgentCommandProfile[]>(agentCommandProfiles)
-		}
-	})
-}) {
-	public static layer = Layer.effect(this, this.make)
+	public static layerPi = flow(makeLayerPi, Effect.map(Ai.of), Layer.effect(this))
 }
