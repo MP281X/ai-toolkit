@@ -10,6 +10,8 @@ import {Array, Context, Effect, String, pipe} from 'effect'
 import {afterEach, describe, expect, it} from 'vite-plus/test'
 
 import {
+	GitReviewComment,
+	GitReviewMark,
 	GitReviewStagedTarget,
 	GitReviewUnstagedTarget,
 	GitReviewChangesTarget,
@@ -113,8 +115,107 @@ describe('GitReview', () => {
 			})
 		)
 
-		expect(Array.map(entries.filtered, entry => entry.filePath)).toEqual(['keep.ts'])
+		expect(Array.map(entries.filtered, entry => entry.filePath)).toEqual(['drop.ts', 'keep.ts'])
 		expect(Array.map(entries.unfiltered, entry => entry.filePath)).toEqual(['drop.ts', 'keep.ts', 'plans/review.md'])
+	})
+
+	it('updates untracked entry revisions when same-size content changes', async () => {
+		const cwd = repository()
+		write(cwd, 'tracked.txt', 'base\n')
+		commit(cwd, 'base')
+		write(cwd, 'new.txt', 'ab\n')
+
+		const first = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
+			})
+		)
+		write(cwd, 'new.txt', 'cd\n')
+		const second = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				return yield* review.reviewFileEntries({target: GitReviewChangesTarget.make({}), viewMode: 'filtered'})
+			})
+		)
+
+		expect(first[0]?.revision).toContain('+ab')
+		expect(second[0]?.revision).toContain('+cd')
+		expect(first[0]?.revision).not.toBe(second[0]?.revision)
+	})
+
+	it('preserves staged rename patches when loading one file', async () => {
+		const cwd = repository()
+		write(cwd, 'old.txt', 'content\n')
+		commit(cwd, 'base')
+		git(cwd, ['mv', 'old.txt', 'new.txt'])
+
+		const content = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				return yield* review.reviewFileContent({
+					filePath: 'new.txt',
+					target: GitReviewStagedTarget.make({}),
+					viewMode: 'filtered'
+				})
+			})
+		)
+
+		expect(content.status).toBe('renamed')
+		expect(content.patch).toContain('rename from old.txt')
+		expect(content.patch).toContain('rename to new.txt')
+	})
+
+	it('rejects file content for ignored files outside review entries', async () => {
+		const cwd = repository()
+		write(cwd, '.gitignore', '.env\n')
+		commit(cwd, 'base')
+		write(cwd, '.env', 'SECRET=value\n')
+
+		await expect(
+			reviewEffect(
+				cwd,
+				Effect.gen(function* () {
+					const review = yield* GitReview
+					return yield* review.reviewFileContent({
+						filePath: '.env',
+						target: GitReviewChangesTarget.make({}),
+						viewMode: 'unfiltered'
+					})
+				})
+			)
+		).rejects.toThrow('File is not part of the current review.')
+	})
+
+	it('shows excluded review state only in unfiltered mode', async () => {
+		const cwd = repository()
+		const comment = GitReviewComment.make({
+			body: 'check lockfile',
+			filePath: 'pnpm-lock.yaml',
+			lineNumber: 1,
+			resolved: false
+		})
+		const mark = GitReviewMark.make({filePath: 'pnpm-lock.yaml', fingerprint: 'patch', segmentId: 'HEAD->worktree'})
+
+		const states = await reviewEffect(
+			cwd,
+			Effect.gen(function* () {
+				const review = yield* GitReview
+				yield* review.saveComment(comment)
+				yield* review.mark([mark])
+				const filtered = yield* review.reviewState('filtered')
+				const unfiltered = yield* review.reviewState('unfiltered')
+				return {filtered, unfiltered}
+			})
+		)
+
+		expect(states.filtered.comments).toHaveLength(0)
+		expect(states.filtered.marks).toHaveLength(0)
+		expect(Array.map(states.unfiltered.comments, current => current.filePath)).toEqual(['pnpm-lock.yaml'])
+		expect(Array.map(states.unfiltered.marks, current => current.filePath)).toEqual(['pnpm-lock.yaml'])
 	})
 
 	it('lists unchanged tracked and untracked files in unfiltered mode and loads unchanged content without a patch', async () => {

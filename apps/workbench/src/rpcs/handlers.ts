@@ -766,7 +766,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitReviews, payload.cwd),
-						Effect.map(review => review.watchReviewState())
+						Effect.map(review => review.watchReviewState(payload.viewMode))
 					)
 				),
 			'review.state.mark': payload =>

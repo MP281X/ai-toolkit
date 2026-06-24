@@ -118,20 +118,24 @@ const reviewFileContentAtom = Atom.family((key: string) => {
 	)
 })
 
-const reviewStateAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
+const emptyReviewState = GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
+
+const reviewStateAtom = Atom.family((key: string) => {
+	const parts = key.split('\u0000')
+	const cwd = parts[0] ?? ''
+	const viewMode = (parts[1] === 'unfiltered' ? 'unfiltered' : 'filtered') satisfies GitReviewViewMode
+
+	return RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('review.state', {cwd})),
+			Effect.map(client => client('review.state', {cwd, viewMode})),
 			Stream.unwrap
 		)
 	)
-)
+})
 
-const emptyReviewState = GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
-
-const reviewStateValueAtom = Atom.family((cwd: string) =>
-	Atom.map(reviewStateAtom(cwd), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
+const reviewStateValueAtom = Atom.family((key: string) =>
+	Atom.map(reviewStateAtom(key), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
@@ -278,6 +282,17 @@ function loadedDiffsReducer(current: HashMap.HashMap<string, GitDiff>, diff: Git
 	return HashMap.set(current, diff.filePath, diff)
 }
 
+function explicitOpenedFilesReducer(
+	current: HashSet.HashSet<string>,
+	action: readonly ['add', string] | readonly ['clear'] | readonly ['remove', string]
+) {
+	return Match.value(action[0]).pipe(
+		Match.when('add', () => HashSet.add(current, action[1] ?? '')),
+		Match.when('remove', () => HashSet.remove(current, action[1] ?? '')),
+		Match.orElse(() => HashSet.empty<string>())
+	)
+}
+
 function fuzzyFileScore(filePath: string, query: string) {
 	const normalizedPath = String.toLowerCase(filePath)
 	const normalizedQuery = String.toLowerCase(String.trim(query))
@@ -315,11 +330,16 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
-	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const shortcutsOpenState = useState(false)
 	const selectedScopeState = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
 	const viewModeState = useState<GitReviewViewMode>('filtered')
+	const reviewStateKey = `${input.cwd}\u0000${viewModeState[0]}`
+	const reviewStateValue = useAtomValue(reviewStateValueAtom(reviewStateKey))
 	const selectedFilePathState = useState('')
+	const [explicitOpenedFiles, updateExplicitOpenedFiles] = useReducer(
+		explicitOpenedFilesReducer,
+		HashSet.empty<string>()
+	)
 	const [fileSearch, setFileSearch] = useReducer<string, [string]>((_current, next) => next, '')
 	const [loadedDiffs, updateLoadedDiffs] = useReducer(loadedDiffsReducer, HashMap.empty<string, GitDiff>())
 	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
@@ -385,7 +405,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const selectedEntry = selectedReviewEntry()
 	const refreshEntries = useAtomRefresh(reviewEntries)
 	const refreshSuggestedMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
-	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
+	const refreshReviewState = useAtomRefresh(reviewStateAtom(reviewStateKey))
 	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
 	const resolveComments = useAtomSet(resolveCommentsActionAtom(input.cwd), {mode: 'promise'})
@@ -406,8 +426,28 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
 	const loadedReviewDiffs = Array.fromIterable(HashMap.values(loadedDiffs))
-	const visibleSegmentKeys = pipe(loadedReviewDiffs, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
-	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => HashSet.has(visibleSegmentKeys, mark))
+	const visibleEntryRevisions = pipe(
+		visibleReviewEntries,
+		Array.reduce(HashMap.empty<string, string | undefined>(), (revisions, entry) =>
+			HashMap.set(revisions, entry.filePath, entry.revision)
+		)
+	)
+	const loadedSegmentKeys = pipe(loadedReviewDiffs, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
+	const loadedPaths = pipe(
+		loadedReviewDiffs,
+		Array.map(diff => diff.filePath),
+		HashSet.fromIterable
+	)
+	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => {
+		if (HashSet.has(loadedPaths, mark.filePath)) return HashSet.has(loadedSegmentKeys, mark)
+		return pipe(
+			HashMap.get(visibleEntryRevisions, mark.filePath),
+			Option.match({
+				onNone: () => false,
+				onSome: revision => Predicate.isUndefined(revision) || revision === mark.fingerprint
+			})
+		)
+	})
 	const emptyReviewLabel = Match.value({searching: searchingFiles, viewMode: viewModeState[0]}).pipe(
 		Match.when({searching: true}, () => 'No matching files.'),
 		Match.when({viewMode: 'filtered'}, () => 'No changed files.'),
@@ -444,15 +484,33 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 	}
 
+	async function preloadReviewFile(filePath: string) {
+		if (HashMap.has(loadedDiffs, filePath)) return
+		try {
+			const diff = await loadReviewFileContent({
+				payload: {cwd: input.cwd, filePath, target: reviewTarget, viewMode: viewModeState[0]}
+			})
+			updateLoadedDiffs(diff)
+		} catch {
+			// Selection loads the file through the normal atom path and owns user-facing errors.
+		}
+	}
+
 	function openFile(filePath: string) {
 		selectedFilePathState[1](filePath)
 		const marks = pipe(
-			selectedEntry?.filePath === filePath ? [selectedEntry] : Array.empty<GitDiff>(),
+			loadedDiffs,
+			HashMap.get(filePath),
+			Option.match({onNone: () => Array.empty<GitDiff>(), onSome: diff => [diff]}),
 			Array.findFirst(diff => diff.filePath === filePath),
 			Option.map(gitReviewMarksForDiff),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
-		if (!Array.isReadonlyArrayEmpty(marks)) void markFileReviewed(marks)
+		if (!Array.isReadonlyArrayEmpty(marks)) {
+			void markFileReviewed(marks)
+			return
+		}
+		updateExplicitOpenedFiles(['add', filePath])
 	}
 
 	function selectTarget(target: GitReviewTarget) {
@@ -461,6 +519,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		})
 		if (target._tag !== 'commit') selectedScopeState[1](target)
 		selectedFilePathState[1]('')
+		updateExplicitOpenedFiles(['clear'])
 		setFileSearch('')
 		updateLoadedDiffs(null)
 	}
@@ -470,6 +529,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		refreshSuggestedMetadata()
 		refreshReviewState()
 		selectedFilePathState[1]('')
+		updateExplicitOpenedFiles(['clear'])
 		updateLoadedDiffs(null)
 	}
 
@@ -513,6 +573,8 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	useEffect(() => {
 		if (!AsyncResult.isSuccess(selectedContentResult)) return
 		updateLoadedDiffs(selectedContentResult.value)
+		if (!HashSet.has(explicitOpenedFiles, selectedContentResult.value.filePath)) return
+		updateExplicitOpenedFiles(['remove', selectedContentResult.value.filePath])
 		const marks = gitReviewMarksForDiff(selectedContentResult.value)
 		if (Array.isReadonlyArrayEmpty(marks)) return
 
@@ -525,7 +587,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 
 		void markLoadedFileReviewed()
-	}, [input.cwd, markReviewed, selectedContentResult])
+	}, [explicitOpenedFiles, input.cwd, markReviewed, selectedContentResult])
 
 	return (
 		<>
@@ -587,6 +649,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 														onClick={() => {
 															viewModeState[1](current => (current === 'filtered' ? 'unfiltered' : 'filtered'))
 															selectedFilePathState[1]('')
+															updateExplicitOpenedFiles(['clear'])
 															updateLoadedDiffs(null)
 														}}
 													>
@@ -611,6 +674,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 													void markReviewFile(filePath)
 												}}
 												openReviewEntry={openFile}
+												preloadReviewEntry={filePath => {
+													void preloadReviewFile(filePath)
+												}}
 												viewMode={viewModeState[0]}
 											/>
 										) : (
@@ -996,8 +1062,8 @@ function CommitList(input: {
 }) {
 	if (input.loading) {
 		return (
-			<div className="flex h-full min-h-0 items-center justify-center">
-				<Spinner className="text-muted-foreground size-4 border opacity-60" />
+			<div className="flex h-full min-h-0">
+				<Loading />
 			</div>
 		)
 	}
@@ -1182,6 +1248,7 @@ function DiffList(input: {
 	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
 	readonly marks: readonly GitReviewMark[]
 	readonly openReviewEntry: (filePath: string) => void
+	readonly preloadReviewEntry: (filePath: string) => void
 	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 	readonly viewMode: GitReviewViewMode
@@ -1193,6 +1260,11 @@ function DiffList(input: {
 		Array.reduce(HashMap.empty<string, readonly GitReviewMark[]>(), (marks, diff) =>
 			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
 		)
+	)
+	const loadedPaths = pipe(
+		input.loadedDiffs,
+		Array.map(diff => diff.filePath),
+		HashSet.fromIterable
 	)
 	const reviewed = HashSet.fromIterable(input.marks)
 
@@ -1221,14 +1293,34 @@ function DiffList(input: {
 		}
 
 		const marks = pipe(
-			marksByDiff,
-			HashMap.get(node.entry.filePath),
-			Option.getOrElse(() => Array.empty<GitReviewMark>())
+			HashSet.has(loadedPaths, node.entry.filePath)
+				? pipe(
+						marksByDiff,
+						HashMap.get(node.entry.filePath),
+						Option.getOrElse(() => Array.empty<GitReviewMark>())
+					)
+				: pipe(
+						input.marks,
+						Array.filter(
+							mark =>
+								mark.filePath === node.entry.filePath &&
+								(Predicate.isUndefined(node.entry.revision) || mark.fingerprint === node.entry.revision)
+						)
+					)
 		)
 		const state = gitReviewStateForMarks(marks, reviewed)
 
 		return (
-			<li key={node.path} className="w-full min-w-0">
+			<li
+				key={node.path}
+				className="w-full min-w-0"
+				onFocus={() => {
+					input.preloadReviewEntry(node.entry.filePath)
+				}}
+				onMouseEnter={() => {
+					input.preloadReviewEntry(node.entry.filePath)
+				}}
+			>
 				<TreeExplorerRow
 					selected={input.selectedEntry?.filePath === node.entry.filePath}
 					icon={<FileIcon filePath={node.entry.filePath} className="size-3" />}

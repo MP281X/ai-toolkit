@@ -128,7 +128,12 @@ export class RpcContracts extends RpcGroup.make(
 		}),
 		success: GitDiff
 	}),
-	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
+	Rpc.make('review.state', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, viewMode: GitReviewViewMode}),
+		stream: true,
+		success: GitReviewState
+	}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
