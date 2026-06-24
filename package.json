@@ -43,6 +43,7 @@
 		"@deslop/oxlint-rules": "workspace:*",
 
 		"vite": "catalog:",
+		"vitest": "catalog:",
 		"vite-plus": "catalog:"
 	}
 }

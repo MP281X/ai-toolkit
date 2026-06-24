@@ -677,7 +677,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.gen(function* () {
 						const review = yield* RcMap.get(gitReviews, payload.cwd)
 						const diffs = yield* review.reviewDiffs(GitReviewChangesTarget.make({}))
-						if (Array.isReadonlyArrayEmpty(diffs)) {
+						const promptDiffs = Array.map(diffs, diff => ({
+							filePath: diff.filePath,
+							patch: diff.patch ?? '',
+							status: diff.status
+						}))
+						if (Array.isReadonlyArrayEmpty(promptDiffs)) {
 							return yield* new GitError({message: 'No current changes to summarize.'})
 						}
 						const metadata = yield* review.metadata
@@ -691,7 +696,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 							agent.prompt({
 								messages: [
 									Prompt.makeMessage('user', {
-										content: [Prompt.makePart('text', {text: draftCommitPrompt({diffs, recentSubjects})})]
+										content: [Prompt.makePart('text', {text: draftCommitPrompt({diffs: promptDiffs, recentSubjects})})]
 									})
 								],
 								model: 'gpt-5.5',
@@ -731,12 +736,31 @@ export const RpcHandlers = RpcContracts.toLayer(
 						Effect.map(review => review.watchReviewDiffs(payload.target))
 					)
 				),
+			'review.fileContent': payload =>
+				pipe(
+					RcMap.get(gitReviews, payload.cwd),
+					Effect.flatMap(review =>
+						review.reviewFileContent({filePath: payload.filePath, target: payload.target, viewMode: payload.viewMode})
+					)
+				),
+			'review.fileEntries': payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(gitReviews, payload.cwd),
+						Effect.map(review => review.watchReviewFileEntries({target: payload.target, viewMode: payload.viewMode}))
+					)
+				),
 			'review.metadata': payload =>
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitReviews, payload.cwd),
 						Effect.map(review => review.watchReviewMetadata())
 					)
+				),
+			'review.stageAll': payload =>
+				pipe(
+					RcMap.get(gitReviews, payload.cwd),
+					Effect.flatMap(review => review.stageAll)
 				),
 			'review.state': payload =>
 				Stream.unwrap(

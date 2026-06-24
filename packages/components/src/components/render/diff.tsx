@@ -1,4 +1,4 @@
-import {Array, Option, Predicate, String, pipe} from 'effect'
+import {Array, Match, Option, Predicate, String, pipe} from 'effect'
 
 import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
@@ -302,7 +302,7 @@ function CommentAnnotation(props: {
 export function PatchDiff(props: {
 	readonly filePath: string
 	readonly fileContent?: string
-	readonly patch: string
+	readonly patch?: string
 	readonly comments?: readonly PatchDiff.Comment[]
 	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
 	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
@@ -311,20 +311,29 @@ export function PatchDiff(props: {
 	const pointerClientYRef = useRef<number>(null)
 	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
 	const [draftComment, setDraftComment] = useState<PatchDiff.Comment>()
-	const modeKey = `${props.filePath}\u0000${props.patch}`
+	const patch = Predicate.isString(props.patch) && String.isNonEmpty(props.patch) ? props.patch : undefined
+	const fileContent = Predicate.isString(props.fileContent) ? props.fileContent : undefined
+	const modeKey = `${props.filePath}\u0000${patch ?? ''}\u0000${Predicate.isString(fileContent) ? 'file' : 'pending'}`
 	const [modeState, setModeState] = useState<{readonly key: string; readonly mode: 'diff' | 'file'}>(() => ({
 		key: modeKey,
-		mode: 'diff'
+		mode: Predicate.isString(patch) ? 'diff' : 'file'
 	}))
-	const mode = modeState.key === modeKey ? modeState.mode : 'diff'
+	const preferredMode = Predicate.isString(patch) ? 'diff' : 'file'
+	const requestedMode = modeState.key === modeKey ? modeState.mode : preferredMode
+	function resolveMode() {
+		if (requestedMode === 'diff' && Predicate.isUndefined(patch)) return 'file'
+		if (requestedMode === 'file' && Predicate.isUndefined(fileContent) && Predicate.isString(patch)) return 'diff'
+		return requestedMode
+	}
+	const mode = resolveMode()
 	const language = resolveLanguage(props.filePath)
-	const fileDiff = setLanguageOverride(getSingularPatch(props.patch), language)
+	const fileDiff = Predicate.isString(patch) ? setLanguageOverride(getSingularPatch(patch), language) : undefined
 	const comments = props.comments ?? []
 	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
 
 	useEffect(() => {
 		containerRef.current?.focus()
-	}, [mode, props.filePath, props.patch])
+	}, [mode, props.filePath, props.patch, props.fileContent])
 
 	useLayoutEffect(() => {
 		if (Predicate.isNull(containerRef.current) || Predicate.isNull(scrollAnchorRef.current)) return
@@ -332,6 +341,7 @@ export function PatchDiff(props: {
 	}, [mode, props.fileContent])
 
 	function toggleMode() {
+		if (Predicate.isUndefined(patch) || Predicate.isUndefined(fileContent)) return
 		if (Predicate.isNull(containerRef.current)) return
 
 		const rect = containerRef.current.getBoundingClientRect()
@@ -348,6 +358,7 @@ export function PatchDiff(props: {
 	useHotkey(
 		'Tab',
 		event => {
+			if (Predicate.isUndefined(patch) || Predicate.isUndefined(fileContent)) return
 			event.preventDefault()
 			toggleMode()
 		},
@@ -380,27 +391,13 @@ export function PatchDiff(props: {
 		}
 	}
 
-	return (
-		<section
-			ref={containerRef}
-			tabIndex={-1}
-			aria-label="Diff viewer"
-			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none select-text"
-			onPointerMoveCapture={event => {
-				pointerClientYRef.current = event.clientY
-			}}
-			onPointerDownCapture={event => {
-				pointerClientYRef.current = event.clientY
-
-				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
-					event.currentTarget.focus()
-				}
-			}}
-		>
-			{mode === 'diff' ? (
+	const content = Match.value({fileContent, fileDiff, mode, patch}).pipe(
+		Match.when(
+			value => value.mode === 'diff' && Predicate.isNotUndefined(value.fileDiff),
+			value => (
 				<FileDiff<PatchDiff.Comment>
-					key={props.patch}
-					fileDiff={fileDiff}
+					key={value.patch}
+					fileDiff={value.fileDiff!}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
@@ -433,10 +430,14 @@ export function PatchDiff(props: {
 						/>
 					)}
 				/>
-			) : (
+			)
+		),
+		Match.when(
+			value => Predicate.isString(value.fileContent) || Predicate.isString(value.patch),
+			value => (
 				<File<PatchDiff.Comment>
 					key={props.filePath}
-					file={{contents: props.fileContent ?? '', lang: language, name: props.filePath}}
+					file={{contents: value.fileContent ?? '', lang: language, name: props.filePath}}
 					options={{
 						disableFileHeader: true,
 						disableLineNumbers: false,
@@ -464,7 +465,34 @@ export function PatchDiff(props: {
 						/>
 					)}
 				/>
-			)}
+			)
+		),
+		Match.orElse(() => (
+			<div className="text-muted-foreground flex h-full items-center justify-center text-sm">
+				<Spinner className="mr-2 size-3 border opacity-60" />
+				Loading file
+			</div>
+		))
+	)
+
+	return (
+		<section
+			ref={containerRef}
+			tabIndex={-1}
+			aria-label="Diff viewer"
+			className="bg-background block h-full min-h-0 w-full overflow-auto rounded-none outline-none select-text"
+			onPointerMoveCapture={event => {
+				pointerClientYRef.current = event.clientY
+			}}
+			onPointerDownCapture={event => {
+				pointerClientYRef.current = event.clientY
+
+				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
+					event.currentTarget.focus()
+				}
+			}}
+		>
+			{content}
 		</section>
 	)
 }

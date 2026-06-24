@@ -40,11 +40,13 @@ import {
 	GitProject,
 	GitPullRequest,
 	GitReviewComment,
+	GitReviewFileEntry,
 	GitReviewMetadata,
 	GitReviewState,
 	GitRepository,
 	type GitReviewMark,
 	type GitReviewTarget,
+	type GitReviewViewMode,
 	type GitWorktreeSource,
 	GitWorktree,
 	gitReviewStateMark,
@@ -346,9 +348,88 @@ function withDisplayedPatchSegments(diffs: readonly GitDiff[], id: string, type:
 			fileContent: diff.fileContent,
 			filePath: diff.filePath,
 			patch: diff.patch,
-			segments: [GitDiffSegment.make({filePath: diff.filePath, fingerprint: diff.patch, id, type})],
+			segments: Predicate.isString(diff.patch)
+				? [GitDiffSegment.make({filePath: diff.filePath, fingerprint: diff.patch, id, type})]
+				: diff.segments,
 			status: diff.status
 		})
+	)
+}
+
+function untrackedDiffFromContent(filePath: string, content: string) {
+	const patch = `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
+		String.split('\n')(content),
+		Array.map(line => `+${line}`),
+		Array.join('\n')
+	)}`
+
+	return GitDiff.make({
+		filePath,
+		patch,
+		segments: [GitDiffSegment.make({filePath, fingerprint: patch, id: 'HEAD->worktree', type: 'worktree'})],
+		status: 'added'
+	})
+}
+
+function reviewPathspec(viewMode: GitReviewViewMode) {
+	return viewMode === 'filtered' ? ['--', '.', ...reviewExclusionPathspecs] : ['--', '.']
+}
+
+function includeReviewEntry(viewMode: GitReviewViewMode, entry: GitReviewFileEntry) {
+	if (viewMode === 'unfiltered') return true
+	return entry.status !== 'deleted' && !isReviewExcludedPath(entry.filePath)
+}
+
+function statusFromNameStatus(code: string) {
+	if (String.startsWith('A')(code)) return 'added' as const
+	if (String.startsWith('D')(code)) return 'deleted' as const
+	if (String.startsWith('R')(code)) return 'renamed' as const
+	return 'modified' as const
+}
+
+function entryFromNameStatus(line: string) {
+	const fields = String.split('\t')(line)
+	const code = fields[0]
+	const filePath = String.startsWith('R')(code) ? (fields[2] ?? fields[1] ?? '') : (fields[1] ?? '')
+
+	return Array.head(
+		String.isEmpty(filePath) ? [] : [GitReviewFileEntry.make({filePath, status: statusFromNameStatus(code)})]
+	)
+}
+
+function changedEntriesFromNameStatus(lines: readonly string[], viewMode: GitReviewViewMode) {
+	return pipe(
+		lines,
+		Array.filter(String.isNonEmpty),
+		Array.map(entryFromNameStatus),
+		Array.getSomes,
+		Array.filter(entry => includeReviewEntry(viewMode, entry))
+	)
+}
+
+function mergeEntries(left: readonly GitReviewFileEntry[], right: readonly GitReviewFileEntry[]) {
+	return pipe(
+		Array.appendAll(left, right),
+		Array.reduce(HashMap.empty<string, GitReviewFileEntry>(), (entries, entry) =>
+			HashMap.set(entries, entry.filePath, entry)
+		),
+		HashMap.values,
+		Array.fromIterable,
+		Array.sortWith(entry => entry.filePath, Order.String)
+	)
+}
+
+function sameFileEntries(left: readonly GitReviewFileEntry[], right: readonly GitReviewFileEntry[]) {
+	return (
+		Array.length(left) === Array.length(right) &&
+		Array.every(
+			left,
+			(leftEntry, index) =>
+				Predicate.isNotUndefined(right[index]) &&
+				leftEntry.filePath === right[index].filePath &&
+				leftEntry.revision === right[index].revision &&
+				leftEntry.status === right[index].status
+		)
 	)
 }
 
@@ -867,9 +948,14 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 		const gitDiffs = Effect.fn('GitReview.gitDiffs')(function* (input: {
 			readonly args: readonly string[]
+			readonly filePath?: string
 			readonly segments: readonly GitDiffSegment[]
+			readonly viewMode?: GitReviewViewMode
 		}) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd, segmentCount: Array.length(input.segments)})
+			const pathspec = Predicate.isUndefined(input.filePath)
+				? reviewPathspec(input.viewMode ?? 'filtered')
+				: ['--', input.filePath]
 			const patch = yield* git.string(config.cwd, [
 				'diff',
 				...input.args,
@@ -879,20 +965,21 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'--patch',
 				'--find-renames',
 				'--no-ext-diff',
-				'--',
-				'.',
-				...reviewExclusionPathspecs
+				...pathspec
 			])
 
 			const diffs = pipe(
 				diffsFromPatch(patch, input.segments),
-				Array.filter(diff => !isReviewExcludedPath(diff.filePath))
+				Array.filter(diff => includeReviewEntry(input.viewMode ?? 'filtered', GitReviewFileEntry.make(diff)))
 			)
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
 			return diffs
 		})
 
-		const commitDiffs = Effect.fn('GitReview.commitDiffs')(function* (hash: string) {
+		const commitDiffs = Effect.fn('GitReview.commitDiffs')(function* (
+			hash: string,
+			viewMode: GitReviewViewMode = 'filtered'
+		) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd})
 			const args = [
 				'--root',
@@ -903,76 +990,77 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				'--find-renames',
 				'--no-ext-diff'
 			]
-			const pathspec = ['--', '.', ...reviewExclusionPathspecs]
+			const pathspec = reviewPathspec(viewMode)
+			const parents = yield* pipe(
+				git.string(config.cwd, ['rev-list', '--parents', '-n', '1', hash]),
+				Effect.map(flow(String.trim, String.split(/\s+/u)))
+			)
 			const patch = yield* pipe(
-				git.string(config.cwd, ['diff-tree', ...args, hash, ...pathspec]),
+				Array.length(parents) > 2
+					? git.string(config.cwd, ['show', '--remerge-diff', '--format=', ...Array.drop(args, 1), hash, ...pathspec])
+					: git.string(config.cwd, ['diff-tree', ...args, hash, ...pathspec]),
 				Effect.flatMap(output => {
 					if (/^diff --git /mu.test(output)) return Effect.succeed(output)
+					if (Array.length(parents) > 2) return Effect.succeed(output)
 
-					return pipe(
-						git.string(config.cwd, ['rev-list', '--parents', '-n', '1', hash]),
-						Effect.map(flow(String.trim, String.split(/\s+/u))),
-						Effect.flatMap(parents => {
-							const parent = parents[1]
-							if (Predicate.isUndefined(parent)) return Effect.succeed(output)
+					const parent = parents[1]
+					if (Predicate.isUndefined(parent)) return Effect.succeed(output)
 
-							return git.string(config.cwd, ['diff-tree', ...args, parent, hash, ...pathspec])
-						})
-					)
+					return git.string(config.cwd, ['diff-tree', ...args, parent, hash, ...pathspec])
 				})
 			)
 			const diffs = pipe(
 				diffsFromPatch(patch, Array.empty()),
-				Array.filter(diff => !isReviewExcludedPath(diff.filePath))
+				Array.filter(diff => includeReviewEntry(viewMode, GitReviewFileEntry.make(diff)))
 			)
 			yield* Effect.annotateCurrentSpan({diffCount: Array.length(diffs)})
 			return diffs
 		})
 
-		const untrackedDiffs = pipe(
-			git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
-			Effect.map(Array.filter(filePath => !isReviewExcludedPath(filePath))),
-			Effect.flatMap(files =>
-				Effect.forEach(
-					files,
-					filePath =>
-						pipe(
-							fs.readFileString(path.join(config.cwd, filePath)),
-							Effect.orElseSucceed(() => ''),
-							Effect.map(content => {
-								const patch = `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${Array.length(String.split('\n')(content))} @@\n${pipe(
-									String.split('\n')(content),
-									Array.map(line => `+${line}`),
-									Array.join('\n')
-								)}`
-
-								return GitDiff.make({
-									filePath,
-									patch,
-									segments: [
-										GitDiffSegment.make({filePath, fingerprint: patch, id: 'HEAD->worktree', type: 'worktree'})
-									],
-									status: 'added'
-								})
-							})
-						),
-					{concurrency: 'unbounded'}
+		const untrackedDiffs = Effect.fn('GitReview.untrackedDiffs')(function* (viewMode: GitReviewViewMode) {
+			return yield* pipe(
+				git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard']),
+				Effect.map(Array.filter(filePath => (viewMode === 'unfiltered' ? true : !isReviewExcludedPath(filePath)))),
+				Effect.flatMap(files =>
+					Effect.forEach(
+						files,
+						filePath =>
+							pipe(
+								fs.readFileString(path.join(config.cwd, filePath)),
+								Effect.orElseSucceed(() => ''),
+								Effect.map(content => untrackedDiffFromContent(filePath, content))
+							),
+						{concurrency: 'unbounded'}
+					)
 				)
 			)
-		)
+		})
 
-		const worktreeDiffs = Effect.gen(function* () {
+		const untrackedDiffForFile = Effect.fn('GitReview.untrackedDiffForFile')(function* (filePath: string) {
+			const files = yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard', '--', filePath])
+			if (!Array.some(files, file => file === filePath)) return
+
+			return yield* pipe(
+				fs.readFileString(path.join(config.cwd, filePath)),
+				Effect.orElseSucceed(() => ''),
+				Effect.map(content => untrackedDiffFromContent(filePath, content))
+			)
+		})
+
+		const unstagedDiffs = Effect.gen(function* () {
 			const status = yield* git.lines(config.cwd, ['status', '--porcelain'])
 			if (Array.isReadonlyArrayEmpty(status)) return Array.empty<GitDiff>()
 
 			const diffs = yield* pipe(
-				Effect.all([gitDiffs({args: ['HEAD'], segments: Array.empty()}), untrackedDiffs], {concurrency: 'unbounded'}),
+				Effect.all([gitDiffs({args: [], segments: Array.empty(), viewMode: 'filtered'}), untrackedDiffs('filtered')], {
+					concurrency: 'unbounded'
+				}),
 				Effect.map(([trackedDiffs, untracked]) =>
 					Array.appendAll(
 						Array.map(trackedDiffs, diff => {
 							const segment = GitDiffSegment.make({
 								filePath: diff.filePath,
-								fingerprint: diff.patch,
+								fingerprint: diff.patch ?? '',
 								id: 'HEAD->worktree',
 								type: 'worktree'
 							})
@@ -990,6 +1078,38 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 
 			return diffs
+		}).pipe(Effect.withSpan('GitReview.unstagedDiffs', {attributes: {cwd: config.cwd}}))
+
+		const stagedDiffs = Effect.gen(function* () {
+			const diffs = yield* gitDiffs({args: ['--cached'], segments: Array.empty(), viewMode: 'filtered'})
+			return pipe(
+				diffs,
+				Array.map(diff => {
+					const segment = GitDiffSegment.make({
+						filePath: diff.filePath,
+						fingerprint: diff.patch ?? '',
+						id: 'HEAD->index',
+						type: 'worktree'
+					})
+
+					return GitDiff.make({...diff, segments: Predicate.isString(diff.patch) ? [segment] : diff.segments})
+				})
+			)
+		}).pipe(Effect.withSpan('GitReview.stagedDiffs', {attributes: {cwd: config.cwd}}))
+
+		const worktreeDiffs = Effect.gen(function* () {
+			const status = yield* git.lines(config.cwd, ['status', '--porcelain'])
+			if (Array.isReadonlyArrayEmpty(status)) return Array.empty<GitDiff>()
+
+			const diffs = yield* pipe(
+				Effect.all(
+					[gitDiffs({args: ['HEAD'], segments: Array.empty(), viewMode: 'filtered'}), untrackedDiffs('filtered')],
+					{concurrency: 'unbounded'}
+				),
+				Effect.map(([trackedDiffs, untracked]) => Array.appendAll(trackedDiffs, untracked))
+			)
+
+			return withDisplayedPatchSegments(diffs, 'HEAD->worktree', 'worktree')
 		}).pipe(Effect.withSpan('GitReview.worktreeDiffs', {attributes: {cwd: config.cwd}}))
 
 		const fileContent = Effect.fn('GitReview.fileContent')(function* (input: {
@@ -997,17 +1117,99 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			readonly target: GitReviewTarget
 		}) {
 			yield* Effect.annotateCurrentSpan({cwd: config.cwd, filePath: input.filePath, target: input.target._tag})
-			if (input.target._tag !== 'commit') {
-				return yield* pipe(
-					fs.readFileString(path.join(config.cwd, input.filePath)),
-					Effect.orElseSucceed(() => '')
+			return yield* Match.value(input.target).pipe(
+				Match.when({_tag: 'staged'}, () =>
+					pipe(
+						git.string(config.cwd, ['show', `:${input.filePath}`]),
+						Effect.orElseSucceed(() => '')
+					)
+				),
+				Match.when({_tag: 'commit'}, target =>
+					pipe(
+						git.string(config.cwd, ['show', `${target.hash}:${input.filePath}`]),
+						Effect.orElseSucceed(() => '')
+					)
+				),
+				Match.orElse(() =>
+					pipe(
+						fs.readFileString(path.join(config.cwd, input.filePath)),
+						Effect.orElseSucceed(() => '')
+					)
 				)
-			}
-
-			return yield* pipe(
-				git.string(config.cwd, ['show', `${input.target.hash}:${input.filePath}`]),
-				Effect.orElseSucceed(() => '')
 			)
+		})
+
+		const untrackedEntries = Effect.fn('GitReview.untrackedEntries')(function* (viewMode: GitReviewViewMode) {
+			const files = yield* git.lines(config.cwd, ['ls-files', '--others', '--exclude-standard'])
+			return yield* pipe(
+				files,
+				Array.map(filePath => GitReviewFileEntry.make({filePath, status: 'added'})),
+				Array.filter(entry => includeReviewEntry(viewMode, entry)),
+				Effect.forEach(entry =>
+					pipe(
+						fs.stat(path.join(config.cwd, entry.filePath)),
+						Effect.map(info => GitReviewFileEntry.make({...entry, revision: `${info.size}`})),
+						Effect.orElseSucceed(() => entry)
+					)
+				)
+			)
+		})
+
+		const trackedFileEntries = Effect.gen(function* () {
+			const files = yield* git.lines(config.cwd, ['ls-files', '--cached'])
+			return Array.map(files, filePath => GitReviewFileEntry.make({filePath, status: 'unchanged' as const}))
+		}).pipe(Effect.withSpan('GitReview.trackedFileEntries', {attributes: {cwd: config.cwd}}))
+
+		const patchRevisionByFile = Effect.fn('GitReview.patchRevisionByFile')(function* (
+			args: readonly string[],
+			viewMode: GitReviewViewMode
+		) {
+			const diffs = yield* gitDiffs({args, segments: Array.empty(), viewMode})
+			return pipe(
+				diffs,
+				Array.reduce(HashMap.empty<string, string>(), (revisions, diff) =>
+					Predicate.isString(diff.patch) ? HashMap.set(revisions, diff.filePath, diff.patch) : revisions
+				)
+			)
+		})
+
+		const nameStatusEntries = Effect.fn('GitReview.nameStatusEntries')(function* (
+			args: readonly string[],
+			viewMode: GitReviewViewMode
+		) {
+			const entries = yield* pipe(
+				git.lines(config.cwd, ['diff', '--name-status', '--find-renames', ...args, ...reviewPathspec(viewMode)]),
+				Effect.map(lines => changedEntriesFromNameStatus(lines, viewMode))
+			)
+			const revisions = yield* patchRevisionByFile(args, viewMode)
+			return Array.map(entries, entry =>
+				GitReviewFileEntry.make({...entry, revision: Option.getOrUndefined(HashMap.get(revisions, entry.filePath))})
+			)
+		})
+
+		const worktreeFileEntries = Effect.fn('GitReview.worktreeFileEntries')(function* (viewMode: GitReviewViewMode) {
+			const changed = yield* Effect.all([nameStatusEntries(['HEAD'], viewMode), untrackedEntries(viewMode)], {
+				concurrency: 'unbounded'
+			})
+			if (viewMode === 'filtered') return mergeEntries(changed[0], changed[1])
+
+			return mergeEntries(yield* trackedFileEntries, mergeEntries(changed[0], changed[1]))
+		})
+
+		const unstagedFileEntries = Effect.fn('GitReview.unstagedFileEntries')(function* (viewMode: GitReviewViewMode) {
+			const changed = yield* Effect.all([nameStatusEntries([], viewMode), untrackedEntries(viewMode)], {
+				concurrency: 'unbounded'
+			})
+			if (viewMode === 'filtered') return mergeEntries(changed[0], changed[1])
+
+			return mergeEntries(yield* trackedFileEntries, mergeEntries(changed[0], changed[1]))
+		})
+
+		const stagedFileEntries = Effect.fn('GitReview.stagedFileEntries')(function* (viewMode: GitReviewViewMode) {
+			const changed = yield* nameStatusEntries(['--cached'], viewMode)
+			if (viewMode === 'filtered') return changed
+
+			return mergeEntries(yield* trackedFileEntries, changed)
 		})
 
 		const withFileContent = Effect.fn('GitReview.withFileContent')(function* (input: {
@@ -1043,6 +1245,12 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const changesDiffs = Effect.gen(function* () {
 				return yield* withFileContent({diffs: yield* worktreeDiffs, target})
 			})
+			const unstagedTargetDiffs = Effect.gen(function* () {
+				return yield* withFileContent({diffs: yield* unstagedDiffs, target})
+			})
+			const stagedTargetDiffs = Effect.gen(function* () {
+				return yield* withFileContent({diffs: yield* stagedDiffs, target})
+			})
 			const aggregateTargetDiffs = Effect.gen(function* () {
 				const base = target._tag === 'local' ? yield* localBase : yield* branchDiffBase
 				const diffs = yield* aggregateDiffs(base)
@@ -1054,6 +1262,8 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 
 			return yield* Match.value(target).pipe(
 				Match.when({_tag: 'changes'}, () => changesDiffs),
+				Match.when({_tag: 'unstaged'}, () => unstagedTargetDiffs),
+				Match.when({_tag: 'staged'}, () => stagedTargetDiffs),
 				Match.when({_tag: 'commit'}, commitTarget =>
 					Effect.gen(function* () {
 						const id = `${commitTarget.hash}^->${commitTarget.hash}`
@@ -1266,10 +1476,181 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			)
 		})
 
-		const aggregateDiffs = Effect.fn('GitReview.aggregateDiffs')(function* (base: string) {
-			const trackedDiffs = yield* gitDiffs({args: [base], segments: Array.empty()})
-			const untracked = yield* untrackedDiffs
+		const aggregateDiffs = Effect.fn('GitReview.aggregateDiffs')(function* (
+			base: string,
+			viewMode: GitReviewViewMode = 'filtered'
+		) {
+			const trackedDiffs = yield* gitDiffs({args: [base], segments: Array.empty(), viewMode})
+			const untracked = yield* untrackedDiffs(viewMode)
 			return Array.appendAll(trackedDiffs, untracked)
+		})
+
+		const commitFileEntries = Effect.fn('GitReview.commitFileEntries')(function* (
+			hash: string,
+			viewMode: GitReviewViewMode
+		) {
+			return pipe(
+				yield* commitDiffs(hash, viewMode),
+				Array.map(diff => GitReviewFileEntry.make({filePath: diff.filePath, status: diff.status}))
+			)
+		})
+
+		const aggregateFileEntries = Effect.fn('GitReview.aggregateFileEntries')(function* (
+			base: string,
+			viewMode: GitReviewViewMode
+		) {
+			const changed = yield* Effect.all([nameStatusEntries([base], viewMode), untrackedEntries(viewMode)], {
+				concurrency: 'unbounded'
+			})
+			if (viewMode === 'filtered') return mergeEntries(changed[0], changed[1])
+
+			return mergeEntries(yield* trackedFileEntries, mergeEntries(changed[0], changed[1]))
+		})
+
+		const reviewFileEntries = Effect.fn('GitReview.reviewFileEntries')(function* (input: {
+			readonly target: GitReviewTarget
+			readonly viewMode: GitReviewViewMode
+		}) {
+			yield* Effect.annotateCurrentSpan({cwd: config.cwd, target: input.target._tag, viewMode: input.viewMode})
+			const localEntries = Effect.gen(function* () {
+				return yield* aggregateFileEntries(yield* localBase, input.viewMode)
+			})
+			const branchEntries = Effect.gen(function* () {
+				return yield* aggregateFileEntries(yield* branchDiffBase, input.viewMode)
+			})
+
+			return yield* Match.value(input.target).pipe(
+				Match.when({_tag: 'changes'}, () => worktreeFileEntries(input.viewMode)),
+				Match.when({_tag: 'unstaged'}, () => unstagedFileEntries(input.viewMode)),
+				Match.when({_tag: 'staged'}, () => stagedFileEntries(input.viewMode)),
+				Match.when({_tag: 'commit'}, target => commitFileEntries(target.hash, input.viewMode)),
+				Match.when({_tag: 'local'}, () => localEntries),
+				Match.orElse(() => branchEntries)
+			)
+		})
+
+		const diffForFile = Effect.fn('GitReview.diffForFile')(function* (input: {
+			readonly filePath: string
+			readonly target: GitReviewTarget
+			readonly viewMode: GitReviewViewMode
+		}) {
+			const filePathspec = ['--', input.filePath]
+			function findDiff(diffs: readonly GitDiff[]) {
+				return pipe(
+					diffs,
+					Array.findFirst(diff => diff.filePath === input.filePath),
+					Option.getOrUndefined
+				)
+			}
+			const changesFileDiff = Effect.gen(function* () {
+				const tracked = yield* gitDiffs({
+					args: ['HEAD'],
+					filePath: input.filePath,
+					segments: Array.empty(),
+					viewMode: 'unfiltered'
+				})
+				const untracked = yield* untrackedDiffForFile(input.filePath)
+				const diffs = Predicate.isUndefined(untracked) ? tracked : Array.appendAll(tracked, [untracked])
+				return findDiff(withDisplayedPatchSegments(diffs, 'HEAD->worktree', 'worktree'))
+			})
+			const unstagedFileDiff = Effect.gen(function* () {
+				const tracked = yield* pipe(
+					git.string(config.cwd, [
+						'diff',
+						'--ignore-all-space',
+						'--ignore-blank-lines',
+						'--ignore-cr-at-eol',
+						'--patch',
+						'--find-renames',
+						'--no-ext-diff',
+						...filePathspec
+					]),
+					Effect.map(patch => diffsFromPatch(patch, Array.empty()))
+				)
+				const untracked = yield* untrackedDiffForFile(input.filePath)
+				const diffs = Predicate.isUndefined(untracked) ? tracked : Array.appendAll(tracked, [untracked])
+				return findDiff(withDisplayedPatchSegments(diffs, 'index->worktree', 'worktree'))
+			})
+			const stagedFileDiff = Effect.gen(function* () {
+				const patch = yield* git.string(config.cwd, [
+					'diff',
+					'--cached',
+					'--ignore-all-space',
+					'--ignore-blank-lines',
+					'--ignore-cr-at-eol',
+					'--patch',
+					'--find-renames',
+					'--no-ext-diff',
+					...filePathspec
+				])
+				return findDiff(withDisplayedPatchSegments(diffsFromPatch(patch, Array.empty()), 'HEAD->index', 'worktree'))
+			})
+			const localFileDiff = Effect.gen(function* () {
+				const base = yield* localBase
+				const tracked = yield* gitDiffs({
+					args: [base],
+					filePath: input.filePath,
+					segments: Array.empty(),
+					viewMode: input.viewMode
+				})
+				const untracked = yield* untrackedDiffForFile(input.filePath)
+				const diffs = Predicate.isUndefined(untracked) ? tracked : Array.appendAll(tracked, [untracked])
+				return findDiff(withDisplayedPatchSegments(diffs, `${base}->worktree`, 'worktree'))
+			})
+			const branchFileDiff = Effect.gen(function* () {
+				const base = yield* branchDiffBase
+				const tracked = yield* gitDiffs({
+					args: [base],
+					filePath: input.filePath,
+					segments: Array.empty(),
+					viewMode: input.viewMode
+				})
+				const untracked = yield* untrackedDiffForFile(input.filePath)
+				const diffs = Predicate.isUndefined(untracked) ? tracked : Array.appendAll(tracked, [untracked])
+				return findDiff(withDisplayedPatchSegments(diffs, `${base}->worktree`, 'worktree'))
+			})
+
+			return yield* Match.value(input.target).pipe(
+				Match.when({_tag: 'changes'}, () => changesFileDiff),
+				Match.when({_tag: 'unstaged'}, () => unstagedFileDiff),
+				Match.when({_tag: 'staged'}, () => stagedFileDiff),
+				Match.when({_tag: 'commit'}, target =>
+					Effect.gen(function* () {
+						return findDiff(
+							withDisplayedPatchSegments(
+								yield* commitDiffs(target.hash, input.viewMode),
+								`${target.hash}^->${target.hash}`,
+								'commit'
+							)
+						)
+					})
+				),
+				Match.when({_tag: 'local'}, () => localFileDiff),
+				Match.orElse(() => branchFileDiff)
+			)
+		})
+
+		const reviewFileContent = Effect.fn('GitReview.reviewFileContent')(function* (input: {
+			readonly filePath: string
+			readonly target: GitReviewTarget
+			readonly viewMode: GitReviewViewMode
+		}) {
+			yield* Effect.annotateCurrentSpan({
+				cwd: config.cwd,
+				filePath: input.filePath,
+				target: input.target._tag,
+				viewMode: input.viewMode
+			})
+			const diff = yield* diffForFile(input)
+			const content = diff?.status === 'deleted' ? undefined : yield* fileContent(input)
+
+			return GitDiff.make({
+				fileContent: content,
+				filePath: input.filePath,
+				patch: diff?.patch,
+				segments: diff?.segments ?? [],
+				status: diff?.status ?? 'unchanged'
+			})
 		})
 
 		const prReviewComments = Effect.gen(function* () {
@@ -1377,12 +1758,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			Stream.mapEffect(() =>
 				pipe(
 					git.lines(config.cwd, ['status', '--porcelain']),
-					Effect.map(lines =>
-						Array.some(lines, line => {
-							const filePath = String.trim(String.slice(3)(line))
-							return String.isNonEmpty(filePath) && !isReviewExcludedPath(filePath)
-						})
-					),
+					Effect.map(lines => !Array.isReadonlyArrayEmpty(lines)),
 					Effect.orElseSucceed(() => true)
 				)
 			),
@@ -1446,11 +1822,18 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				yield* Ref.set(githubCommentsRef, Array.head(emptyGitReviewCommentLists))
 			}),
 			reviewDiffs,
+			reviewFileContent,
+			reviewFileEntries,
 			reviewState,
 			saveComment: Effect.fn('GitReview.saveComment')(function* (comment: GitReviewComment) {
 				yield* Effect.annotateCurrentSpan({cwd: config.cwd, filePath: comment.filePath})
 				yield* SubscriptionRef.update(state, current => gitReviewStateSaveComment(current, comment))
 			}),
+			stageAll: pipe(
+				git.string(config.cwd, ['add', '-A']),
+				Effect.asVoid,
+				Effect.withSpan('GitReview.stageAll', {attributes: {cwd: config.cwd}})
+			),
 			unmark: Effect.fn('GitReview.unmark')(function* (marks: readonly GitReviewMark[]) {
 				yield* Effect.annotateCurrentSpan({cwd: config.cwd, markCount: Array.length(marks)})
 				yield* SubscriptionRef.update(state, current => gitReviewStateUnmark(current, marks))
@@ -1481,6 +1864,23 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 									leftDiff.patch === right[index].patch
 							)
 					)
+				)
+			},
+			watchReviewFileEntries: (input: {readonly target: GitReviewTarget; readonly viewMode: GitReviewViewMode}) => {
+				const entries = pipe(
+					reviewFileEntries(input),
+					Effect.catch(() => Effect.succeed(Array.empty<GitReviewFileEntry>()))
+				)
+				if (input.target._tag === 'commit') return Stream.fromEffect(entries)
+
+				return Stream.fromEffect(entries).pipe(
+					Stream.concat(
+						pipe(
+							worktreeChanges,
+							Stream.mapEffect(() => entries)
+						)
+					),
+					Stream.changesWith(sameFileEntries)
 				)
 			},
 			watchReviewMetadata: () =>

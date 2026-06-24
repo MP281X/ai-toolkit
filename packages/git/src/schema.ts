@@ -6,7 +6,10 @@ export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
 }) {}
 
 type GitDiffStatus = typeof GitDiffStatus.Type
-const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
+const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed', 'unchanged'])
+
+export type GitReviewViewMode = typeof GitReviewViewMode.Type
+export const GitReviewViewMode = Schema.Literals(['filtered', 'unfiltered'])
 
 export type GitDiffSegment = typeof GitDiffSegment.Type
 export const GitDiffSegment = Schema.Struct({
@@ -20,13 +23,26 @@ export type GitDiff = typeof GitDiff.Type
 export const GitDiff = Schema.Struct({
 	fileContent: Schema.optional(Schema.String),
 	filePath: Schema.String,
-	patch: Schema.String,
+	patch: Schema.optional(Schema.String),
 	segments: Schema.Array(GitDiffSegment),
+	status: GitDiffStatus
+})
+
+export type GitReviewFileEntry = typeof GitReviewFileEntry.Type
+export const GitReviewFileEntry = Schema.Struct({
+	filePath: Schema.String,
+	revision: Schema.optional(Schema.String),
 	status: GitDiffStatus
 })
 
 export type GitReviewChangesTarget = typeof GitReviewChangesTarget.Type
 export const GitReviewChangesTarget = Schema.TaggedStruct('changes', {})
+
+export type GitReviewStagedTarget = typeof GitReviewStagedTarget.Type
+export const GitReviewStagedTarget = Schema.TaggedStruct('staged', {})
+
+export type GitReviewUnstagedTarget = typeof GitReviewUnstagedTarget.Type
+export const GitReviewUnstagedTarget = Schema.TaggedStruct('unstaged', {})
 
 export type GitReviewLocalTarget = typeof GitReviewLocalTarget.Type
 export const GitReviewLocalTarget = Schema.TaggedStruct('local', {})
@@ -40,6 +56,8 @@ export const GitReviewCommitTarget = Schema.TaggedStruct('commit', {hash: Schema
 export type GitReviewTarget = typeof GitReviewTarget.Type
 export const GitReviewTarget = Schema.Union([
 	GitReviewChangesTarget,
+	GitReviewStagedTarget,
+	GitReviewUnstagedTarget,
 	GitReviewLocalTarget,
 	GitReviewBranchTarget,
 	GitReviewCommitTarget

@@ -16,10 +16,12 @@ import {
 	GitProject,
 	GitPullRequest,
 	GitReviewComment,
+	GitReviewFileEntry,
 	GitReviewMark,
 	GitReviewMetadata,
 	GitReviewState,
 	GitReviewTarget,
+	GitReviewViewMode,
 	GitWorktreeSource
 } from '@deslop/git/schema'
 import {PortlessRun} from '@deslop/portless/schema'
@@ -110,6 +112,22 @@ export class RpcContracts extends RpcGroup.make(
 		stream: true,
 		success: Schema.Array(GitDiff)
 	}),
+	Rpc.make('review.fileEntries', {
+		error: GitError,
+		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget, viewMode: GitReviewViewMode}),
+		stream: true,
+		success: Schema.Array(GitReviewFileEntry)
+	}),
+	Rpc.make('review.fileContent', {
+		error: GitError,
+		payload: Schema.Struct({
+			cwd: Schema.String,
+			filePath: Schema.String,
+			target: GitReviewTarget,
+			viewMode: GitReviewViewMode
+		}),
+		success: GitDiff
+	}),
 	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
 	Rpc.make('review.state.mark', {
 		error: GitError,
@@ -119,6 +137,7 @@ export class RpcContracts extends RpcGroup.make(
 		error: GitError,
 		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
 	}),
+	Rpc.make('review.stageAll', {error: GitError, payload: CwdPayload}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
 		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
