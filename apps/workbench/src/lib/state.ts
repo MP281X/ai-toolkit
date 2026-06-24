@@ -218,21 +218,15 @@ export const usageAtom = Atom.family((provider: 'claude' | 'codex') =>
 	)
 )
 
+export const usageSubscriptionAtom = Atom.family((provider: 'claude' | 'codex') =>
+	Atom.keepAlive(RpcClient.runtime.atom(Effect.flatMap(RpcClient, client => client('usage.subscription', {provider}))))
+)
+
 export const systemUsageAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
 			Effect.map(client => client('usage.system', void 0)),
-			Stream.unwrap
-		)
-	)
-)
-
-export const usageTokensAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('usage.tokens', void 0)),
 			Stream.unwrap
 		)
 	)

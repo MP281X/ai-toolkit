@@ -6,6 +6,8 @@ import {
 	Duration,
 	Effect,
 	Equal,
+	Exit,
+	Function,
 	HashMap,
 	HashSet,
 	Layer,
@@ -14,7 +16,7 @@ import {
 	RcMap,
 	Ref,
 	Record,
-	Schedule,
+	Result,
 	Schema,
 	Stream,
 	String,
@@ -25,17 +27,19 @@ import {
 import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
-import {RpcContracts, TerminalPayload, type AgentSession} from '#rpcs/contracts.ts'
+import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
 import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
-import {AiError, type AgentCommandProfile, type AgentCommandRequest} from '@deslop/ai/schema'
-import {Agent, AgentCommand} from '@deslop/ai/service'
+import type {AgentProvider} from '@deslop/agent/schema'
+import {Agent, AgentUsage} from '@deslop/agent/service'
+import {AiError} from '@deslop/ai/schema'
+import {Ai} from '@deslop/ai/service'
 import {GitError, GitReviewChangesTarget} from '@deslop/git/schema'
 import {GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
+import {Os} from '@deslop/os/service'
 import {PortlessRun} from '@deslop/portless/schema'
 import {Portless} from '@deslop/portless/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
-import {Usage} from '@deslop/usage/service'
 
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
@@ -131,7 +135,7 @@ function removePackageScripts(
 function makeAgentSession(input: {
 	readonly cwd: string
 	readonly preparedCommand: ChildProcess.StandardCommand
-	readonly profile: AgentCommandProfile
+	readonly profile: AgentProfile
 	readonly sessions: HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>
 	readonly uuid: string
 }) {
@@ -209,17 +213,30 @@ const PublishAgentSessions = RcMap.make({
 	idleTimeToLive: Duration.minutes(5),
 	lookup: Effect.fnUntraced(function* (cwd: string) {
 		const context = yield* Layer.buildWithScope(
-			Agent.layer({
+			Ai.layer({
 				agent: 'pi',
 				cwd,
 				systemPrompt: Prompt.makeMessage('system', {
 					content:
 						'You write minimal, useful git commit messages. Return only commit message text. Do not use markdown fences, quotes, or explanations.'
-				}),
-				tools: 'none'
+				})
 			}),
 			yield* Effect.scope
 		)
+
+		return Context.get(context, Ai)
+	})
+})
+
+const agentProfiles = [
+	{icon: 'codex', id: 'codex', label: 'codex'},
+	{icon: 'claude', id: 'claude', label: 'claude'}
+] satisfies readonly AgentProfile[]
+
+const ProviderAgents = RcMap.make({
+	idleTimeToLive: Duration.minutes(5),
+	lookup: Effect.fnUntraced(function* (config: {readonly cwd: string; readonly provider: AgentProvider}) {
+		const context = yield* Layer.buildWithScope(Agent.layer(config), yield* Effect.scope)
 
 		return Context.get(context, Agent)
 	})
@@ -272,9 +289,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitReviews = yield* GitReviewSessions
 		const gitPublishes = yield* GitPublishSessions
 		const publishAgents = yield* PublishAgentSessions
-		const agentCommand = yield* AgentCommand
+		const providerAgents = yield* ProviderAgents
 		const portless = yield* Portless
-		const usage = yield* Usage
+		const os = yield* Os
+		const codexUsageContext = yield* Layer.buildWithScope(AgentUsage.layer({provider: 'codex'}), yield* Effect.scope)
+		const claudeUsageContext = yield* Layer.buildWithScope(AgentUsage.layer({provider: 'claude'}), yield* Effect.scope)
+		const codexUsage = Context.get(codexUsageContext, AgentUsage)
+		const claudeUsage = Context.get(claudeUsageContext, AgentUsage)
 		const portlessScripts = yield* Ref.make(
 			HashMap.empty<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>()
 		)
@@ -461,7 +482,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 
 		const sidebarSnapshot = Effect.fnUntraced(function* () {
-			const profiles = yield* agentCommand.profiles
 			const statuses = yield* SubscriptionRef.get(runStatuses)
 			const sidebarProjects = yield* pipe(
 				SubscriptionRef.get(git.projects),
@@ -517,7 +537,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			)
 
-			return {agentProfiles: profiles, projects: sidebarProjects}
+			return {agentProfiles, projects: sidebarProjects}
 		})
 
 		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
@@ -547,36 +567,29 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		return RpcContracts.of({
 			agents: payload =>
-				Stream.unwrap(
-					pipe(
-						SubscriptionRef.get(agents),
-						Effect.map(current =>
-							pipe(
-								Stream.make(current),
-								Stream.concat(Stream.drop(1)(SubscriptionRef.changes(agents))),
-								Stream.map(sessions =>
-									pipe(
-										Array.fromIterable(HashMap.values(sessions)),
-										Array.filter(session => session.cwd === payload.cwd)
-									)
-								)
-							)
-						)
-					)
+				pipe(
+					Stream.fromEffect(currentAgentSessions(payload.cwd)),
+					Stream.concat(Stream.mapEffect(SubscriptionRef.changes(agents), () => currentAgentSessions(payload.cwd)))
 				),
-			'agents.create': Effect.fn('WorkbenchRpc.agents.create')(function* (payload: AgentCommandRequest) {
+			'agents.create': Effect.fn('WorkbenchRpc.agents.create')(function* (payload: {
+				readonly cwd: string
+				readonly provider: AgentProvider
+			}) {
+				const providerAgent = yield* pipe(
+					RcMap.get(providerAgents, {cwd: payload.cwd, provider: payload.provider}),
+					Effect.mapError(cause => new TerminalError({cause, message: 'failed to prepare agent provider'}))
+				)
 				const preparedCommand = yield* pipe(
-					agentCommand.command({cwd: payload.cwd, profileId: payload.profileId}),
+					providerAgent.create,
 					Effect.mapError(cause => new TerminalError({cause, message: cause.message}))
 				)
-				const profiles = yield* agentCommand.profiles
 				const profile = pipe(
-					profiles,
-					Array.findFirst(candidate => candidate.id === payload.profileId),
+					agentProfiles,
+					Array.findFirst(candidate => candidate.id === payload.provider),
 					Option.getOrUndefined
 				)
 				if (Predicate.isUndefined(profile)) {
-					return yield* new TerminalError({message: `Unknown agent profile: ${payload.profileId}`})
+					return yield* new TerminalError({message: `Unknown agent provider: ${payload.provider}`})
 				}
 				const agentSession = makeAgentSession({
 					cwd: payload.cwd,
@@ -644,7 +657,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 				return agentSession
 			}),
-			'agents.profiles': () => agentCommand.profiles,
+			'agents.profiles': () => Effect.succeed(agentProfiles),
 			'agents.remove': payload => removeAgent(AgentSessionKey.make(payload)),
 			'home.sidebar': () =>
 				pipe(
@@ -852,13 +865,25 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
 				),
-			usage: payload =>
-				pipe(
-					Stream.fromEffect(payload.provider === 'claude' ? usage.claude : usage.codex),
-					Stream.repeat(Schedule.spaced('30 seconds'))
-				),
-			'usage.system': () => pipe(Stream.fromEffect(usage.system), Stream.repeat(Schedule.spaced('5 seconds'))),
-			'usage.tokens': () => pipe(Stream.fromEffect(usage.tokens), Stream.repeat(Schedule.spaced('30 seconds')))
+			usage: payload => {
+				const ref = payload.provider === 'claude' ? claudeUsage.usage : codexUsage.usage
+				return Stream.unwrap(
+					Effect.gen(function* () {
+						const current = yield* SubscriptionRef.get(ref)
+						return pipe(
+							Stream.make(current),
+							Stream.concat(SubscriptionRef.changes(ref)),
+							Stream.filterMap(option => Result.fromOption(option, Function.constVoid)),
+							Stream.flatMap(
+								Exit.match({onFailure: cause => Stream.failCause(cause), onSuccess: value => Stream.succeed(value)})
+							)
+						)
+					})
+				)
+			},
+			'usage.subscription': payload =>
+				payload.provider === 'claude' ? claudeUsage.subscription : codexUsage.subscription,
+			'usage.system': () => SubscriptionRef.changes(os.resources)
 		})
 	})
 )

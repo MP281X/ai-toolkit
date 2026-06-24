@@ -1,16 +1,14 @@
-import {Array, Schema, pipe} from 'effect'
+import {Schema} from 'effect'
 
 import {Prompt} from 'effect/unstable/ai'
-
-import * as Catalog from './catalog.ts'
 
 export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
 	cause: Schema.optional(Schema.Defect),
 	message: Schema.String
 }) {}
 
-export type AgentStatus = typeof AgentStatus.Type
-const AgentStatus = Schema.Struct({
+export type AiStatus = typeof AiStatus.Type
+export const AiStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'running', 'retrying', 'stopping', 'awaiting_input', 'error']),
 	updatedAt: Schema.DateTimeUtc
 })
@@ -24,46 +22,16 @@ const AgentId = Schema.Literals(['pi'] as const)
 type ProviderId = typeof ProviderId.Type
 const ProviderId = Schema.Literals(['openai-codex'] as const)
 
-type AgentPromptModelId = typeof AgentPromptModelId.Type
-const AgentPromptModelId = Schema.Literals(['gpt-5.5'] as const)
+type AiPromptModelId = typeof AiPromptModelId.Type
+const AiPromptModelId = Schema.Literals(['gpt-5.5'] as const)
 
-export type AgentPrompt = typeof AgentPrompt.Type
-const AgentPrompt = Schema.Struct({
+export type AiPrompt = typeof AiPrompt.Type
+export const AiPrompt = Schema.Struct({
 	messages: Schema.Array(Prompt.Message),
-	model: AgentPromptModelId,
+	model: AiPromptModelId,
 	provider: ProviderId,
 	thinkingLevel: Schema.optional(ThinkingLevel)
 })
 
-export type AgentLayerConfig = typeof AgentLayerConfig.Type
-const AgentLayerConfig = Schema.Struct({
-	agent: AgentId,
-	cwd: Schema.String,
-	systemPrompt: Prompt.SystemMessage,
-	tools: Schema.optional(Schema.Union([Schema.Literals(['all', 'none'] as const), Schema.Array(Schema.String)]))
-})
-
-export type AgentCommandProfile = typeof AgentCommandProfile.Type
-export const AgentCommandProfile = Schema.Struct({
-	icon: Catalog.AgentCommandIcon,
-	id: Catalog.AgentCommandProfileId,
-	label: Schema.String,
-	model: Catalog.ModelId,
-	usageProvider: Catalog.UsageProviderId
-})
-
-export const agentCommandProfileValues = pipe(
-	Catalog.agentCommandProfiles,
-	Array.map(profile =>
-		AgentCommandProfile.make({
-			icon: profile.icon,
-			id: profile.id,
-			label: profile.label,
-			model: profile.model,
-			usageProvider: profile.usageProvider
-		})
-	)
-)
-
-export type AgentCommandRequest = typeof AgentCommandRequest.Type
-export const AgentCommandRequest = Schema.Struct({cwd: Schema.String, profileId: Catalog.AgentCommandProfileId})
+export type AiLayerConfig = typeof AiLayerConfig.Type
+export const AiLayerConfig = Schema.Struct({agent: AgentId, cwd: Schema.String, systemPrompt: Prompt.SystemMessage})
