@@ -47,7 +47,6 @@ description: Use when editing AGENTS.md, SKILL.md files, custom oxlint rules, ru
 - Keep custom rules narrow.
 - Rule fixes produce the accepted target shape directly.
 - Add custom rules after accepting the enforced shape.
-- Rule replacement carries matching authoring guidance.
 - For newly written repo tooling, reshape the code before adding config exceptions.
 - If a rule fix makes code less direct, revisit the rule or scope.
 - Shared constants require stable repo policy or multiple real consumers.

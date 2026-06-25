@@ -5,7 +5,7 @@
 
 	"engines": {"node": ">=24"},
 	"packageManager": "pnpm@11.6.0",
-	"workspaces": ["apps/*", "packages/*"],
+
 	"deslop": {
 		"portless": [
 			"@deslop/portfolio#dev:client",
@@ -43,6 +43,7 @@
 		"@deslop/oxlint-rules": "workspace:*",
 
 		"vite": "catalog:",
+		"vitest": "catalog:",
 		"vite-plus": "catalog:"
 	}
 }

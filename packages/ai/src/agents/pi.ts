@@ -17,14 +17,19 @@ import {
 	pipe
 } from 'effect'
 
-import {getModel} from '@earendil-works/pi-ai'
 import type {AssistantMessage, ImageContent, Message, TextContent, ToolResultMessage} from '@earendil-works/pi-ai'
-import type {AgentSessionEvent} from '@earendil-works/pi-coding-agent'
-import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
+import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
+import {
+	DefaultResourceLoader,
+	SessionManager,
+	createAgentSession,
+	getAgentDir,
+	type AgentSessionEvent
+} from '@earendil-works/pi-coding-agent'
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
-import type {AgentLayerConfig, AgentPrompt, AgentStatus} from '../schema.ts'
+import type {AiLayerConfig, AiPrompt, AiStatus} from '../schema.ts'
 import {AiError} from '../schema.ts'
 
 function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted') {
@@ -157,7 +162,7 @@ const piToolResultsFromPromptParts = Effect.fnUntraced(function* (
 
 const piMessagesFromPromptHistory = Effect.fnUntraced(function* (
 	messages: readonly Prompt.Message[],
-	input: AgentPrompt,
+	input: AiPrompt,
 	currentUserMessage: Prompt.UserMessage
 ) {
 	const history = Array.flatten(
@@ -306,25 +311,16 @@ function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_en
 	})
 }
 
-export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig) {
-	const status = yield* SubscriptionRef.make<AgentStatus>({state: 'idle', updatedAt: yield* DateTime.now})
+export const makeLayerPi = Effect.fnUntraced(function* (config: AiLayerConfig) {
+	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const history = yield* Ref.make<readonly Prompt.Message[]>([])
 	const promptLock = yield* Semaphore.make(1)
-
-	const setStatus = Effect.fnUntraced(function* (state: AgentStatus['state']) {
+	const setStatus = Effect.fnUntraced(function* (state: AiStatus['state']) {
 		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
 	})
 
-	const session = Effect.fnUntraced(function* (input: AgentPrompt) {
-		const model = getModel(input.provider, input.model)
-		const noTools = config.tools === 'none' ? 'all' : undefined
-		const tools = pipe(
-			Match.value(config.tools),
-			Match.when('all', () => ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls']),
-			Match.when('none', () => undefined as string[] | undefined),
-			Match.when(undefined, () => undefined as string[] | undefined),
-			Match.orElse(selectedTools => [...selectedTools])
-		)
+	const session = Effect.fnUntraced(function* (input: AiPrompt) {
+		const model = OPENAI_CODEX_MODELS[input.model]
 		const resourceLoader = new DefaultResourceLoader({
 			agentDir: getAgentDir(),
 			appendSystemPromptOverride: () => [],
@@ -355,11 +351,11 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 				createAgentSession({
 					cwd: config.cwd,
 					model,
-					noTools,
+					noTools: 'all',
 					resourceLoader,
 					sessionManager,
 					thinkingLevel: input.thinkingLevel ?? 'low',
-					tools
+					tools: undefined
 				})
 		})
 
@@ -373,7 +369,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 
 	return {
 		history: Ref.get(history),
-		prompt: (input: AgentPrompt) =>
+		prompt: (input: AiPrompt) =>
 			Stream.callback<Response.StreamPart<Toolkit.Any['tools']>, AiError>(queue =>
 				pipe(
 					Effect.gen(function* () {
@@ -476,7 +472,7 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AgentLayerConfig
 						)
 					}),
 					Semaphore.withPermit(promptLock),
-					Effect.withSpan('Agent.prompt')
+					Effect.withSpan('Ai.prompt')
 				)
 			),
 		status

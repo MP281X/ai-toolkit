@@ -8,10 +8,9 @@ import {Suspense, startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeSidebarAtom, agentBrowserSessionsAtom, worktreeRouteId} from '#lib/state.ts'
-import {UsageStrip} from '#routes/components/-usage-strip.tsx'
-import type {AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import {UsageStrip, UsageStripFallback} from '#routes/components/-usage-strip.tsx'
+import type {AgentProfile, AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
 import type {AgentBrowserSession} from '@deslop/agent-browser/schema'
-import type {AgentCommandProfile} from '@deslop/ai/schema'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
@@ -21,6 +20,7 @@ import {
 	GitBranchPlus,
 	GlobeIcon,
 	Layers,
+	ListTree,
 	MonitorIcon,
 	PanelTop,
 	PlayIcon,
@@ -99,7 +99,7 @@ function HomeLayout() {
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
 			),
-			activeWorktreeId: String.split('/')(state.location.pathname)[1]
+			activeWorktreeId: String.split('/')(state.location.pathname)[1] ?? ''
 		})
 	})
 	const activeHome = useAtomSuspense(activeSidebarAtom(homeRouteState.activeWorktreeId))
@@ -108,7 +108,7 @@ function HomeLayout() {
 	return (
 		<div className="bg-background h-full min-h-0 flex-1 overflow-hidden">
 			<ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
-				<ResizablePanel defaultSize="22%" minSize="16%" maxSize="34%">
+				<ResizablePanel defaultSize="26%" minSize="20%" maxSize="38%">
 					<WorktreeManager
 						activeProject={activeHome.value.activeProject}
 						activeAgentBrowserSession={
@@ -179,6 +179,14 @@ function HomeLayout() {
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>
+	)
+}
+
+function UsageStripBoundary() {
+	return (
+		<Suspense fallback={<UsageStripFallback />}>
+			<UsageStrip />
+		</Suspense>
 	)
 }
 
@@ -523,9 +531,17 @@ function AgentSessionRow(input: {
 							event.stopPropagation()
 							input.onStop()
 						}}
-						title={`Stop ${input.session.label}`}
+						title={`${terminalStatusActive(input.session.state.state) && input.session.state.state !== 'idle' ? 'Stop' : 'Remove'} ${input.session.label}`}
 					>
-						{input.stopping ? <Spinner className="size-2.5 border opacity-60" /> : <Square className="size-3" />}
+						{pipe(
+							Match.value({
+								active: terminalStatusActive(input.session.state.state) && input.session.state.state !== 'idle',
+								stopping: input.stopping
+							}),
+							Match.when({stopping: true}, () => <Spinner className="size-2.5 border opacity-60" />),
+							Match.when({active: true}, () => <Square className="size-3" />),
+							Match.orElse(() => <Trash className="size-3" />)
+						)}
 					</Button>
 				}
 				icon={<ProcessStateIcon state={input.session.state.state} />}
@@ -541,7 +557,7 @@ function AgentSessionRow(input: {
 
 function WorktreeAgents(input: {
 	readonly cwd: string
-	readonly profiles: readonly AgentCommandProfile[]
+	readonly profiles: readonly AgentProfile[]
 	readonly sessions: readonly AgentSession[]
 	readonly selectAgent: (cwd: string, agentId: string) => void
 }) {
@@ -555,7 +571,7 @@ function WorktreeAgents(input: {
 
 		startingProfilesState[1](current => HashSet.add(current, profile.id))
 		try {
-			const session = await create({payload: {cwd: input.cwd, profileId: profile.id}})
+			const session = await create({payload: {cwd: input.cwd, provider: profile.id}})
 			input.selectAgent(input.cwd, session.uuid)
 		} catch (error) {
 			toast.error(formatError(error))
@@ -717,12 +733,16 @@ function WorktreeAgentBrowser(input: {
 	)
 }
 
+function worktreeHasAgent(worktree: SidebarWorktree) {
+	return worktree.agents.length > 0
+}
+
 function WorktreeManager(input: {
 	readonly activeProject?: SidebarProject
 	readonly activeAgentBrowserSession?: string
 	readonly activeWorktree?: SidebarWorktree
 	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
-	readonly agentProfiles: readonly AgentCommandProfile[]
+	readonly agentProfiles: readonly AgentProfile[]
 	readonly agentBrowserSessions: readonly AgentBrowserSession[]
 	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
@@ -732,7 +752,7 @@ function WorktreeManager(input: {
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const fixProject = useAtomSet(RpcClient.mutation('projects.fix'), {mode: 'promise'})
+	const maintenanceProject = useAtomSet(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
 	const [state, setState] = useState(() => ({
@@ -742,7 +762,8 @@ function WorktreeManager(input: {
 		creatingBranch: '',
 		deleteDialogOpen: false,
 		deletingWorktree: false,
-		fixingProject: ''
+		filterAgentWorktrees: false,
+		maintainingProject: ''
 	}))
 	const createWorktreeProject =
 		pipe(
@@ -750,7 +771,9 @@ function WorktreeManager(input: {
 			Array.findFirst(project => project.repository.root === state.createWorktreeProjectRoot),
 			Option.getOrUndefined
 		) ?? input.activeProject
-	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
+	const branchSnapshot = useAtomSuspense(
+		branchesAtom(state.actionsOpen ? (createWorktreeProject?.repository.root ?? '') : '')
+	)
 	const localBranchNames = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => candidate.type === 'local'),
@@ -823,17 +846,16 @@ function WorktreeManager(input: {
 			setState(current => ({...current, deletingWorktree: false}))
 		}
 	}
-	async function fixRepository(cwd: string) {
-		setState(current => ({...current, fixingProject: cwd}))
+	async function maintainRepository(cwd: string) {
+		setState(current => ({...current, maintainingProject: cwd}))
 		try {
-			await fixProject({payload: {cwd}})
+			await maintenanceProject({payload: {cwd}})
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
-			setState(current => ({...current, fixingProject: ''}))
+			setState(current => ({...current, maintainingProject: ''}))
 		}
 	}
-
 	return (
 		<div className="flex h-full flex-col border-r">
 			<div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center border-b">
@@ -850,21 +872,41 @@ function WorktreeManager(input: {
 						{input.activeWorktree ? shortPath(input.activeWorktree.root) : 'No worktree selected'}
 					</span>
 				</Button>
-				{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
+				<span className="flex items-center">
 					<Button
 						type="button"
-						variant="destructive"
+						variant="ghost"
 						size="icon"
-						className="h-8 w-8"
-						disabled={state.deletingWorktree}
+						aria-pressed={state.filterAgentWorktrees}
+						aria-label={state.filterAgentWorktrees ? 'Showing agent worktrees' : 'Showing all worktrees'}
+						className={state.filterAgentWorktrees ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
 						onClick={() => {
-							setState(current => ({...current, deleteDialogOpen: true}))
+							setState(current => ({...current, filterAgentWorktrees: !current.filterAgentWorktrees}))
 						}}
-						title="Delete worktree"
+						title={state.filterAgentWorktrees ? 'Show all worktrees' : 'Show agent worktrees'}
 					>
-						{state.deletingWorktree ? <Spinner className="size-2.5 border opacity-60" /> : <Trash className="size-3" />}
+						{state.filterAgentWorktrees ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
 					</Button>
-				)}
+					{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
+						<Button
+							type="button"
+							variant="destructive"
+							size="icon"
+							className="h-8 w-8"
+							disabled={state.deletingWorktree}
+							onClick={() => {
+								setState(current => ({...current, deleteDialogOpen: true}))
+							}}
+							title="Delete worktree"
+						>
+							{state.deletingWorktree ? (
+								<Spinner className="size-2.5 border opacity-60" />
+							) : (
+								<Trash className="size-3" />
+							)}
+						</Button>
+					)}
+				</span>
 			</div>
 
 			<Dialog
@@ -1007,10 +1049,16 @@ function WorktreeManager(input: {
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
 					{Array.map(input.projects, project => {
+						const worktrees = state.filterAgentWorktrees
+							? pipe(project.worktrees, Array.filter(worktreeHasAgent))
+							: project.worktrees
+
+						if (worktrees.length === 0) return null
+
 						const projectWorktree =
 							Option.getOrUndefined(
-								Array.findFirst(project.worktrees, candidate => candidate.root === project.repository.root)
-							) ?? project.worktrees[0]
+								Array.findFirst(worktrees, candidate => candidate.root === project.repository.root)
+							) ?? worktrees[0]
 
 						return (
 							<li key={project.repository.gitDirectory} className="min-w-0 py-1 first:pt-0">
@@ -1036,14 +1084,14 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											disabled={state.fixingProject === project.repository.root}
+											disabled={state.maintainingProject === project.repository.root}
 											onClick={event => {
 												event.stopPropagation()
-												void fixRepository(project.repository.root)
+												void maintainRepository(project.repository.root)
 											}}
-											title="Fix repo state"
+											title="Repository maintenance"
 										>
-											{state.fixingProject === project.repository.root ? (
+											{state.maintainingProject === project.repository.root ? (
 												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />
@@ -1069,7 +1117,7 @@ function WorktreeManager(input: {
 									</span>
 								</div>
 								<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-									{Array.map(project.worktrees, worktree => (
+									{Array.map(worktrees, worktree => (
 										<li key={worktree.root} className="w-full min-w-0">
 											<TreeExplorerRow
 												key={worktree.root}
@@ -1135,7 +1183,7 @@ function WorktreeManager(input: {
 				</TreeExplorerSection>
 			</TreeExplorer>
 
-			<UsageStrip />
+			<UsageStripBoundary />
 		</div>
 	)
 }

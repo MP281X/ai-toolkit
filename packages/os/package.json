@@ -1,7 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/usage",
+	"name": "@deslop/os",
 
 	"exports": {
 		"./schema": "./src/schema.ts",

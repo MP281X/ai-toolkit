@@ -9,29 +9,24 @@ import {
 	AgentBrowserSession,
 	AgentBrowserSessionRequest
 } from '@deslop/agent-browser/schema'
-import {
-	AgentCommandIcon,
-	AgentCommandProfile,
-	AgentCommandProfileId,
-	AgentCommandRequest,
-	AiError
-} from '@deslop/ai/schema'
+import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
+import {AiError} from '@deslop/ai/schema'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
 	GitError,
 	GitProject,
-	GitPullRequest,
 	GitReviewComment,
+	GitReviewCommentDraft,
 	GitReviewMark,
 	GitReviewMetadata,
 	GitReviewState,
 	GitReviewTarget,
 	GitWorktreeSource
 } from '@deslop/git/schema'
+import {OsError, Resources} from '@deslop/os/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
-import {SystemUsage, UsageError, UsageProvider} from '@deslop/usage/schema'
 
 const CwdPayload = Schema.Struct({cwd: Schema.String})
 
@@ -53,12 +48,15 @@ const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
-	icon: AgentCommandIcon,
+	icon: AgentProvider,
 	label: Schema.String,
-	profileId: AgentCommandProfileId,
+	profileId: AgentProvider,
 	state: TerminalStatusPayload,
 	uuid: Schema.String
 })
+
+export type AgentProfile = typeof AgentProfile.Type
+const AgentProfile = Schema.Struct({icon: AgentProvider, id: AgentProvider, label: Schema.String})
 
 export type ScriptRun = typeof ScriptRun.Type
 export const ScriptRun = Schema.Struct({
@@ -91,16 +89,17 @@ const SidebarProject = Schema.Struct({
 	worktrees: Schema.Array(SidebarWorktree)
 })
 
-const HomeSidebar = Schema.Struct({
-	agentProfiles: Schema.Array(AgentCommandProfile),
-	projects: Schema.Array(SidebarProject)
-})
+const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
 
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
-	Rpc.make('agents.create', {error: TerminalError, payload: AgentCommandRequest, success: AgentSession}),
-	Rpc.make('agents.profiles', {error: AiError, success: Schema.Array(AgentCommandProfile)}),
+	Rpc.make('agents.create', {
+		error: TerminalError,
+		payload: Schema.Struct({cwd: Schema.String, provider: AgentProvider}),
+		success: AgentSession
+	}),
+	Rpc.make('agents.profiles', {error: AgentError, success: Schema.Array(AgentProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
 	Rpc.make('agentBrowser.health', {error: AgentBrowserError, success: AgentBrowserHealth}),
@@ -118,6 +117,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('projects', {error: GitError, stream: true, success: Schema.Array(GitProject)}),
 	Rpc.make('projects.branches', {error: GitError, payload: CwdPayload, success: GitBranchesSnapshot}),
+	Rpc.make('projects.maintenance', {error: GitError, payload: CwdPayload}),
 	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
 	Rpc.make('review.diffs', {
 		error: GitError,
@@ -136,23 +136,14 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('review.comments.save', {
 		error: GitError,
-		payload: Schema.Struct({comment: GitReviewComment, cwd: Schema.String})
+		payload: Schema.Struct({comment: GitReviewCommentDraft, cwd: Schema.String})
 	}),
 	Rpc.make('review.comments.resolve', {
 		error: GitError,
-		payload: Schema.Struct({
-			cwd: Schema.String,
-			filePath: Schema.String,
-			lineNumber: Schema.Number,
-			side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
-			threadId: Schema.optional(Schema.String)
-		})
+		payload: Schema.Struct({comments: Schema.Array(GitReviewComment), cwd: Schema.String})
 	}),
-	Rpc.make('publish.approve', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, message: Schema.String}),
-		success: Schema.optional(GitPullRequest)
-	}),
+	Rpc.make('publish.checkpoint', {error: GitError, payload: CwdPayload}),
+	Rpc.make('publish.publish', {error: GitError, payload: Schema.Struct({cwd: Schema.String, message: Schema.String})}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
@@ -160,7 +151,6 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.String
 	}),
 	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
-	Rpc.make('projects.fix', {error: GitError, payload: CwdPayload}),
 	Rpc.make('runs.portless', {error: TerminalError, payload: CwdPayload, success: Schema.Array(PortlessRun)}),
 	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
 	Rpc.make('terminal.write', {
@@ -185,10 +175,15 @@ export class RpcContracts extends RpcGroup.make(
 		success: TerminalFrame
 	}),
 	Rpc.make('usage', {
-		error: UsageError,
-		payload: Schema.Struct({provider: Schema.Literals(['claude', 'codex'])}),
+		error: AgentError,
+		payload: Schema.Struct({provider: AgentUsageProvider}),
 		stream: true,
-		success: UsageProvider
+		success: AgentUsageData
 	}),
-	Rpc.make('usage.system', {error: UsageError, stream: true, success: SystemUsage})
+	Rpc.make('usage.subscription', {
+		error: AgentError,
+		payload: Schema.Struct({provider: AgentUsageProvider}),
+		success: AgentSubscription
+	}),
+	Rpc.make('usage.system', {error: OsError, stream: true, success: Resources})
 ) {}

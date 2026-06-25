@@ -6,56 +6,60 @@
 		"zones": [
 			{"name": "app-portfolio", "patterns": ["apps/portfolio/**"]},
 			{"name": "app-workbench", "patterns": ["apps/workbench/**"]},
+			{"name": "package-agent", "patterns": ["packages/agent/**"]},
 			{"name": "package-agent-browser", "patterns": ["packages/agent-browser/**"]},
 			{"name": "package-ai", "patterns": ["packages/ai/**"]},
 			{"name": "package-components", "patterns": ["packages/components/**"]},
 			{"name": "package-git", "patterns": ["packages/git/**"]},
 			{"name": "package-opentelemetry", "patterns": ["packages/opentelemetry/**"]},
+			{"name": "package-os", "patterns": ["packages/os/**"]},
 			{"name": "package-oxlint-rules", "patterns": ["packages/oxlint-rules/src/oxlint-plugin.ts"]},
 			{"name": "package-portless", "patterns": ["packages/portless/**"]},
-			{"name": "package-terminal", "patterns": ["packages/terminal/**"]},
-			{"name": "package-usage", "patterns": ["packages/usage/**"]}
+			{"name": "package-terminal", "patterns": ["packages/terminal/**"]}
 		],
 		"rules": [
 			{
 				"from": "app-portfolio",
 				"allow": [
 					"app-portfolio",
+					"package-agent",
 					"package-agent-browser",
 					"package-ai",
 					"package-components",
 					"package-git",
 					"package-opentelemetry",
+					"package-os",
 					"package-oxlint-rules",
 					"package-portless",
-					"package-terminal",
-					"package-usage"
+					"package-terminal"
 				]
 			},
 			{
 				"from": "app-workbench",
 				"allow": [
 					"app-workbench",
+					"package-agent",
 					"package-agent-browser",
 					"package-ai",
 					"package-components",
 					"package-git",
 					"package-opentelemetry",
+					"package-os",
 					"package-oxlint-rules",
 					"package-portless",
-					"package-terminal",
-					"package-usage"
+					"package-terminal"
 				]
 			},
+			{"from": "package-agent", "allow": ["package-agent"]},
 			{"from": "package-agent-browser", "allow": ["package-agent-browser"]},
 			{"from": "package-ai", "allow": ["package-ai"]},
 			{"from": "package-components", "allow": ["package-components"]},
 			{"from": "package-git", "allow": ["package-git"]},
 			{"from": "package-opentelemetry", "allow": ["package-opentelemetry"]},
+			{"from": "package-os", "allow": ["package-os"]},
 			{"from": "package-oxlint-rules", "allow": ["package-oxlint-rules"]},
 			{"from": "package-portless", "allow": ["package-portless"]},
-			{"from": "package-terminal", "allow": ["package-terminal"]},
-			{"from": "package-usage", "allow": ["package-usage"]}
+			{"from": "package-terminal", "allow": ["package-terminal"]}
 		],
 		"coverage": {
 			"requireAllFiles": true,
@@ -77,7 +81,14 @@
 	],
 	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
 	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
-	"publicPackages": ["@deslop/components"],
+	"publicPackages": [
+		"@deslop/agent",
+		"@deslop/agent-browser",
+		"@deslop/ai",
+		"@deslop/components",
+		"@deslop/os",
+		"@deslop/oxlint-rules"
+	],
 	"security": {
 		"categories": {"exclude": ["dynamic-regex", "header-injection", "path-traversal", "prototype-pollution", "ssrf"]}
 	},

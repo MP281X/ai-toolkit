@@ -7,19 +7,22 @@ allowBuilds:
   protobufjs: true
   '@google/genai': true
   msgpackr-extract: true
+  agent-browser: true
 
 onlyBuiltDependencies:
   - msw
   - protobufjs
   - '@google/genai'
   - msgpackr-extract
+  - agent-browser
 
 catalogMode: prefer
 
 catalog:
   vite-plus: latest
   vite: npm:@voidzero-dev/vite-plus-core@latest
-overrides: {vite: 'catalog:', vitest: 'npm:@voidzero-dev/vite-plus-test@latest'}
+  vitest: npm:@voidzero-dev/vite-plus-test@latest
+overrides: {vite: 'catalog:'}
 peerDependencyRules:
   allowAny: [vite, vitest]
   allowedVersions: {vite: '*', vitest: '*'}

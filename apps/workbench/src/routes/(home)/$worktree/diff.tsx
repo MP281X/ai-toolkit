@@ -14,7 +14,6 @@ import {
 	CheckIcon,
 	CircleCheckIcon,
 	CopyIcon,
-	ExternalLinkIcon,
 	FileIcon,
 	FolderIcon,
 	MinusIcon,
@@ -23,7 +22,7 @@ import {
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
-import {Button, buttonVariants} from '@deslop/components/ui/button'
+import {Button} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
@@ -34,6 +33,7 @@ import {
 	type GitCommit,
 	type GitDiff,
 	GitReviewComment,
+	type GitReviewCommentDraft,
 	GitReviewBranchTarget,
 	GitReviewChangesTarget,
 	GitReviewCommitTarget,
@@ -58,6 +58,7 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 		)
 	)
 )
+
 function targetKey(target: GitReviewTarget) {
 	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
 }
@@ -102,7 +103,7 @@ const reviewStateValueAtom = Atom.family((cwd: string) =>
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
-	Atom.optimistic(Atom.make(() => ({generatingMessage: false, publishing: false})))
+	Atom.optimistic(Atom.make(() => ({checkpointing: false, generatingMessage: false, publishing: false})))
 )
 
 const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
@@ -117,15 +118,27 @@ const generatePublishMessageActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
-const approvePublishActionAtom = Atom.family((cwd: string) =>
+const publishActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
 		fn: RpcClient.runtime.fn<string>()(
-			Effect.fn('DiffPage.approvePublish')(function* (message) {
+			Effect.fn('DiffPage.publish')(function* (message) {
 				const client = yield* RpcClient
-				return yield* client('publish.approve', {cwd, message})
+				return yield* client('publish.publish', {cwd, message})
 			})
 		),
 		reducer: state => ({...state, publishing: true})
+	})
+)
+
+const checkpointActionAtom = Atom.family((cwd: string) =>
+	Atom.optimisticFn(reviewActionsStateAtom(cwd), {
+		fn: RpcClient.runtime.fn<null>()(
+			Effect.fn('DiffPage.checkpoint')(function* (_) {
+				const client = yield* RpcClient
+				return yield* client('publish.checkpoint', {cwd})
+			})
+		),
+		reducer: state => ({...state, checkpointing: true})
 	})
 )
 
@@ -139,13 +152,7 @@ const resolveCommentActionAtom = Atom.family((cwd: string) =>
 			Effect.fn('DiffPage.resolveComment')(function* (resolveInput) {
 				const client = yield* RpcClient
 
-				yield* client('review.comments.resolve', {
-					cwd,
-					filePath: resolveInput.comment.filePath,
-					lineNumber: resolveInput.comment.lineNumber,
-					side: resolveInput.comment.side,
-					threadId: resolveInput.comment.threadId
-				})
+				yield* client('review.comments.resolve', {comments: [resolveInput.comment], cwd})
 			})
 		),
 		reducer: (state, resolveInput) => ({
@@ -161,22 +168,7 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 			Effect.fn('DiffPage.resolveComments')(function* (comments) {
 				const client = yield* RpcClient
 
-				yield* pipe(
-					comments,
-					Array.dedupeWith(
-						(left, right) =>
-							Predicate.isNotUndefined(left.comment.threadId) && left.comment.threadId === right.comment.threadId
-					),
-					Effect.forEach(resolveInput =>
-						client('review.comments.resolve', {
-							cwd,
-							filePath: resolveInput.comment.filePath,
-							lineNumber: resolveInput.comment.lineNumber,
-							side: resolveInput.comment.side,
-							threadId: resolveInput.comment.threadId
-						})
-					)
-				)
+				yield* client('review.comments.resolve', {comments: Array.map(comments, input => input.comment), cwd})
 			})
 		),
 		reducer: (state, comments) => ({
@@ -240,6 +232,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
 	const localCommits = suggestedMetadataLoaded ? suggestedMetadata.value.localCommits : Array.empty<GitCommit>()
 	const branchCommits = suggestedMetadataLoaded ? suggestedMetadata.value.branchCommits : Array.empty<GitCommit>()
+	const checkpointCommits = Array.takeWhile(localCommits, commit => commit.checkpoint)
 	const allCommits = Array.appendAll(localCommits, branchCommits)
 	const selectedCommit = pipe(
 		allCommits,
@@ -248,9 +241,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	)
 	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
 	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
+	const changesReviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(GitReviewChangesTarget.make({}))}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
+	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
 	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
+	const changesReviewDiffsLoaded = AsyncResult.isSuccess(changesReviewDiffsResult)
+	const changesReviewDiffsValue = changesReviewDiffsLoaded ? changesReviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedFilePath =
 		String.isNonEmpty(selectedFilePathState[0]) &&
 		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
@@ -264,7 +261,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					Option.getOrUndefined
 				)
 			: undefined) ?? reviewDiffsValue[0]
+	const refreshMetadata = useAtomRefresh(suggestedMetadataAtom(input.cwd))
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
+	const refreshChangesDiffs = useAtomRefresh(changesReviewDiffs)
 	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
 	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
@@ -274,13 +273,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
 	const effectiveComments = Array.map(reviewStateValue.comments, comment => ({
 		...comment,
-		resolved: comment.resolved === true,
-		resolving: HashSet.has(commentResolutionState.resolving, comment),
-		source: comment.source ?? 'local'
+		resolving: HashSet.has(commentResolutionState.resolving, comment)
 	}))
-	const unresolvedComments = Array.filter(effectiveComments, comment => !comment.resolved)
-	const unresolvedCommentInputs = Array.map(unresolvedComments, comment => ({comment}))
-	const commentsByFile = groupCommentsByFile(unresolvedComments)
+	const unresolvedCommentInputs = Array.map(effectiveComments, comment => ({comment}))
+	const commentsByFile = groupCommentsByFile(effectiveComments)
 	const selectedEntryComments = selectedEntry
 		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
 		: Array.empty()
@@ -323,11 +319,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	function refreshReview() {
+		refreshMetadata()
 		refreshDiffs()
+		refreshChangesDiffs()
 		refreshReviewState()
 	}
 
-	async function saveQueuedComment(comment: typeof GitReviewComment.Type) {
+	async function saveQueuedComment(comment: GitReviewCommentDraft) {
 		try {
 			await saveComment({payload: {comment, cwd: input.cwd}})
 		} catch {
@@ -379,12 +377,15 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					<div className="flex h-full flex-col border-r">
 						<CommitActionForm
 							cwd={input.cwd}
-							dirty={suggestedMetadataLoaded && suggestedMetadata.value.dirty}
-							hasReviewableChanges={
-								AsyncResult.isSuccess(reviewDiffsResult) && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
+							dirty={
+								(suggestedMetadataLoaded && suggestedMetadata.value.dirty) ||
+								(changesReviewDiffsLoaded && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue))
 							}
-							loading={!suggestedMetadataLoaded}
-							prUrl={suggestedMetadataLoaded ? suggestedMetadata.value.prUrl : undefined}
+							hasReviewableWorktreeChanges={
+								changesReviewDiffsLoaded && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue)
+							}
+							hasCheckpointCommits={!Array.isReadonlyArrayEmpty(checkpointCommits)}
+							loading={!suggestedMetadataLoaded || !changesReviewDiffsLoaded}
 							refreshReview={refreshReview}
 							unpushedCommits={suggestedMetadataLoaded && suggestedMetadata.value.unpushedCommits}
 							unpushedCount={Array.length(localCommits)}
@@ -457,22 +458,17 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 												body: comment.body,
 												filePath: comment.filePath,
 												lineNumber: comment.lineNumber,
-												resolved: false,
 												side: comment.side
 											})
 										}}
 										onResolveComment={comment => {
-											void resolveReviewComment({
-												...comment,
-												resolved: comment.resolved === true,
-												source: comment.source ?? 'local'
-											})
+											void resolveReviewComment({...comment, source: comment.source ?? 'local'})
 										}}
 									/>
 								</div>
 							)}
 						</div>
-						{!Array.isReadonlyArrayEmpty(unresolvedComments) && (
+						{!Array.isReadonlyArrayEmpty(effectiveComments) && (
 							<footer className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t px-2">
 								<div className="flex min-w-0 items-center gap-1 overflow-hidden">
 									{Array.map(commentsByFile, group => (
@@ -505,9 +501,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										size="icon-sm"
 										aria-label="Copy all comments"
 										title="Copy all comments"
-										disabled={Array.isReadonlyArrayEmpty(unresolvedComments)}
+										disabled={Array.isReadonlyArrayEmpty(effectiveComments)}
 										onClick={() => {
-											void copyReviewComments(unresolvedComments)
+											void copyReviewComments(effectiveComments)
 										}}
 									>
 										<CopyIcon />
@@ -544,9 +540,9 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 function CommitActionForm(input: {
 	readonly cwd: string
 	readonly dirty: boolean
-	readonly hasReviewableChanges: boolean
+	readonly hasCheckpointCommits: boolean
+	readonly hasReviewableWorktreeChanges: boolean
 	readonly loading: boolean
-	readonly prUrl?: string
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 	readonly unpushedCount: number
@@ -555,12 +551,18 @@ function CommitActionForm(input: {
 	const commitMessageState = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
 	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
-	const approvePublish = useAtomSet(approvePublishActionAtom(input.cwd), {mode: 'promise'})
+	const checkpoint = useAtomSet(checkpointActionAtom(input.cwd), {mode: 'promise'})
+	const publish = useAtomSet(publishActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const commitMessagePlaceholder = Match.value({dirty: input.dirty, loading: input.loading}).pipe(
+	const commitMessagePlaceholder = Match.value({
+		checkpoints: input.hasCheckpointCommits,
+		dirty: input.dirty,
+		loading: input.loading
+	}).pipe(
 		Match.when({loading: true}, () => 'Loading'),
 		Match.when({dirty: true}, () => 'Generate commit message'),
-		Match.orElse(() => 'No changes')
+		Match.when({checkpoints: true}, () => 'Generate squash message'),
+		Match.orElse(() => (input.unpushedCommits ? 'Generate branch summary' : 'No changes'))
 	)
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
@@ -574,18 +576,43 @@ function CommitActionForm(input: {
 		Match.orElse(() => commitMessagePlaceholder)
 	)
 
+	function canPublishDirtyChanges() {
+		return input.dirty && input.hasReviewableWorktreeChanges
+	}
+
+	function canPublishCheckpoints() {
+		return !input.dirty && input.hasCheckpointCommits
+	}
+
+	function canPublishExistingCommits() {
+		return !input.dirty && !input.hasCheckpointCommits && input.unpushedCommits
+	}
+
+	function publishRequiresMessage() {
+		return canPublishDirtyChanges() || canPublishCheckpoints()
+	}
+
+	function canGenerateMessage() {
+		return canPublishDirtyChanges() || canPublishCheckpoints() || canPublishExistingCommits()
+	}
+
+	function canSubmitPublish() {
+		return canPublishDirtyChanges() || canPublishCheckpoints() || canPublishExistingCommits()
+	}
+
 	async function submitPublish() {
 		if (
 			input.loading ||
 			actionState.publishing ||
-			(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
-			(input.dirty && String.isEmpty(trimmedCommitMessage))
+			actionState.checkpointing ||
+			!canSubmitPublish() ||
+			(publishRequiresMessage() && String.isEmpty(trimmedCommitMessage))
 		) {
 			return
 		}
 
 		try {
-			await approvePublish(trimmedCommitMessage)
+			await publish(trimmedCommitMessage)
 			commitMessageState[1]('')
 			input.refreshReview()
 		} catch (error) {
@@ -598,14 +625,33 @@ function CommitActionForm(input: {
 			input.loading ||
 			actionState.generatingMessage ||
 			actionState.publishing ||
-			!input.dirty ||
-			!input.hasReviewableChanges
+			actionState.checkpointing ||
+			!canGenerateMessage()
 		) {
 			return
 		}
 
 		try {
 			commitMessageState[1](await generatePublishMessage(null))
+		} catch (error) {
+			toast.error(formatError(error))
+		}
+	}
+
+	async function createCheckpoint() {
+		if (
+			input.loading ||
+			actionState.checkpointing ||
+			actionState.publishing ||
+			!input.dirty ||
+			!input.hasReviewableWorktreeChanges
+		) {
+			return
+		}
+
+		try {
+			await checkpoint(null)
+			input.refreshReview()
 		} catch (error) {
 			toast.error(formatError(error))
 		}
@@ -640,13 +686,13 @@ function CommitActionForm(input: {
 				size="icon-xs"
 				className="size-4"
 				aria-label="Generate commit message"
-				title="Generate commit message"
+				title={canPublishExistingCommits() ? 'Generate branch summary' : 'Generate commit message'}
 				disabled={
 					input.loading ||
 					actionState.generatingMessage ||
+					actionState.checkpointing ||
 					actionState.publishing ||
-					!input.dirty ||
-					!input.hasReviewableChanges
+					!canGenerateMessage()
 				}
 				onClick={() => {
 					void generateMessage()
@@ -655,44 +701,46 @@ function CommitActionForm(input: {
 				{actionState.generatingMessage ? <Spinner className="size-2.5 border opacity-60" /> : <SparklesIcon />}
 			</Button>
 			<Button
+				type="button"
+				variant="ghost"
+				size="icon-xs"
+				className="size-4"
+				aria-label="Checkpoint"
+				title="Create checkpoint"
+				disabled={
+					input.loading ||
+					actionState.checkpointing ||
+					actionState.publishing ||
+					!input.dirty ||
+					!input.hasReviewableWorktreeChanges
+				}
+				onClick={() => {
+					void createCheckpoint()
+				}}
+			>
+				{actionState.checkpointing ? <Spinner className="size-2.5 border opacity-60" /> : <CircleCheckIcon />}
+			</Button>
+			<Button
 				type="submit"
 				variant="ghost"
 				size="icon-xs"
 				className="size-4"
 				aria-label="Publish"
-				title="Commit, push, and open a draft PR"
+				title="Commit and push"
 				disabled={
 					input.loading ||
 					actionState.publishing ||
-					(input.dirty ? !input.hasReviewableChanges : !input.unpushedCommits) ||
-					(input.dirty && String.isEmpty(trimmedCommitMessage))
+					actionState.checkpointing ||
+					!canSubmitPublish() ||
+					(publishRequiresMessage() && String.isEmpty(trimmedCommitMessage))
 				}
 			>
 				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
 			</Button>
-			{input.loading ? (
+			{input.loading && (
 				<span className="text-muted-foreground flex size-4 items-center justify-center">
 					<Spinner className="size-2.5 border opacity-60" />
 				</span>
-			) : (
-				String.isNonEmpty(input.prUrl ?? '') && (
-					<a
-						className={cn(buttonVariants({size: 'icon-xs', variant: 'ghost'}), 'size-4')}
-						href={pipe(
-							URL.parse(input.prUrl ?? ''),
-							Option.fromNullishOr,
-							Option.filter(parsed => parsed.protocol === 'https:' && parsed.hostname === 'github.com'),
-							Option.map(parsed => parsed.href),
-							Option.getOrUndefined
-						)}
-						target="_blank"
-						rel="noopener noreferrer"
-						aria-label="Open pull request"
-						title="Open pull request"
-					>
-						<ExternalLinkIcon />
-					</a>
-				)
 			)}
 		</div>
 	)
