@@ -1,9 +1,8 @@
-import {Array, Match, Option, Predicate, pipe} from 'effect'
+import {Array, Match, Predicate, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
-import {useEffect, useReducer, useRef, type KeyboardEvent, type PointerEvent, type WheelEvent} from 'react'
+import {useEffect, useReducer, useRef, type PointerEvent, type WheelEvent} from 'react'
 
-import {Button} from '#components/ui/button.tsx'
 import {cn} from '#lib/utils.ts'
 
 type AgentBrowserFrame = {
@@ -20,14 +19,33 @@ type AgentBrowserTab = {
 	readonly url?: string
 }
 
-type AgentBrowserStatus = {readonly connected?: boolean; readonly engine?: string; readonly type: 'status'}
+type AgentBrowserInput =
+	| {
+			readonly button?: 'left' | 'none'
+			readonly clickCount?: number
+			readonly deltaX?: number
+			readonly deltaY?: number
+			readonly eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
+			readonly modifiers?: number
+			readonly type: 'input_mouse'
+			readonly x: number
+			readonly y: number
+	  }
+	| {
+			readonly code: string
+			readonly eventType: 'keyDown' | 'keyUp'
+			readonly key: string
+			readonly modifiers?: number
+			readonly text?: string
+			readonly type: 'input_keyboard'
+			readonly windowsVirtualKeyCode?: number
+	  }
 
-type State = {
-	readonly connected: boolean
-	readonly frame?: AgentBrowserFrame
-	readonly status?: AgentBrowserStatus
-	readonly tabs: readonly AgentBrowserTab[]
-	readonly userCursor?: {readonly x: number; readonly y: number}
+function emptyState() {
+	return {
+		frame: undefined as AgentBrowserFrame | undefined,
+		tabs: Array.empty<AgentBrowserTab>() as readonly AgentBrowserTab[]
+	}
 }
 
 export function agentBrowserStreamUrl(session: string) {
@@ -37,26 +55,16 @@ export function agentBrowserStreamUrl(session: string) {
 }
 
 function reduceState(
-	state: State,
+	state: ReturnType<typeof emptyState>,
 	action:
-		| {readonly type: 'close'}
 		| {readonly frame: AgentBrowserFrame; readonly type: 'frame'}
-		| {readonly status: AgentBrowserStatus; readonly type: 'status'}
 		| {readonly tabs: readonly AgentBrowserTab[]; readonly type: 'tabs'}
-		| {readonly type: 'open'}
-		| {readonly cursor: {readonly x: number; readonly y: number}; readonly type: 'userCursor'}
+		| {readonly type: 'reset'}
 ) {
 	return pipe(
 		Match.value(action),
-		Match.when({type: 'open'}, () => ({...state, connected: true})),
-		Match.when({type: 'close'}, () => ({...state, connected: false})),
-		Match.when({type: 'userCursor'}, value => ({...state, userCursor: value.cursor})),
+		Match.when({type: 'reset'}, emptyState),
 		Match.when({type: 'frame'}, value => ({...state, frame: value.frame})),
-		Match.when({type: 'status'}, value => ({
-			...state,
-			connected: value.status.connected ?? state.connected,
-			status: value.status
-		})),
 		Match.when({type: 'tabs'}, value => ({...state, tabs: value.tabs})),
 		Match.exhaustive
 	)
@@ -78,6 +86,12 @@ async function decodeMessage(source: unknown) {
 	}
 }
 
+function sendSocket(socket: WebSocket | null, input: AgentBrowserInput) {
+	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
+	// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
+	socket.send(JSON.stringify(input))
+}
+
 function modifiers(event: {
 	readonly altKey: boolean
 	readonly ctrlKey: boolean
@@ -91,8 +105,29 @@ function printableKey(event: KeyboardEvent) {
 	return event.key.length === 1 && !event.ctrlKey && !event.metaKey ? event.key : undefined
 }
 
-function tabTitle(tab: AgentBrowserTab) {
-	return tab.title ?? tab.url ?? tab.label ?? tab.tabId
+function tabValue(value: string | undefined) {
+	return Predicate.isNotUndefined(value) && value !== '' ? value : undefined
+}
+
+function defaultTabLabel(tab: AgentBrowserTab) {
+	return (
+		tabValue(tab.label) ??
+		tabValue(tab.title) ??
+		(tab.url === 'about:blank' ? undefined : tabValue(tab.url)) ??
+		'New tab'
+	)
+}
+
+function defaultTabTitle(tab: AgentBrowserTab) {
+	return tabValue(tab.title) ?? tabValue(tab.url) ?? tabValue(tab.label) ?? tab.tabId
+}
+
+function visibleTab(tab: AgentBrowserTab) {
+	return (
+		tab.url !== 'about:blank' ||
+		Predicate.isNotUndefined(tabValue(tab.label)) ||
+		Predicate.isNotUndefined(tabValue(tab.title))
+	)
 }
 
 function scalePoint(
@@ -136,17 +171,6 @@ function frameMessage(value: unknown) {
 	}
 }
 
-function statusMessage(value: unknown) {
-	if (!Predicate.hasProperty(value, 'type') || value.type !== 'status') return
-	return {
-		...(Predicate.hasProperty(value, 'connected') && Predicate.isBoolean(value.connected)
-			? {connected: value.connected}
-			: {}),
-		...(Predicate.hasProperty(value, 'engine') && Predicate.isString(value.engine) ? {engine: value.engine} : {}),
-		type: 'status' as const
-	}
-}
-
 function tabsMessage(value: unknown) {
 	if (!Predicate.hasProperty(value, 'type') || value.type !== 'tabs') return
 	if (!Predicate.hasProperty(value, 'tabs') || !Array.isArray(value.tabs)) return
@@ -173,43 +197,44 @@ export function AgentBrowser(props: {
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const socketRef = useRef<WebSocket | null>(null)
-	const [state, dispatch] = useReducer(reduceState, {connected: false, tabs: []} satisfies State)
+	const [state, dispatch] = useReducer(reduceState, emptyState())
 	const streamUrl =
 		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
-	const activeTab = pipe(
-		state.tabs,
-		Array.findFirst(tab => tab.active === true),
-		Option.getOrUndefined
-	)
-
 	useEffect(() => {
+		dispatch({type: 'reset'})
 		if (Predicate.isUndefined(streamUrl)) return
 
-		const socket = new WebSocket(streamUrl)
-		socketRef.current = socket
-		socket.addEventListener('open', () => {
-			dispatch({type: 'open'})
-		})
-		socket.addEventListener('close', () => {
-			dispatch({type: 'close'})
-		})
-		async function handleMessage(data: unknown) {
-			const message = await decodeMessage(data)
-			const frame = frameMessage(message)
-			if (Predicate.isNotUndefined(frame)) dispatch({frame, type: 'frame'})
+		const abort = new AbortController()
 
-			const status = statusMessage(message)
-			if (Predicate.isNotUndefined(status)) dispatch({status, type: 'status'})
+		function connect() {
+			if (abort.signal.aborted || Predicate.isUndefined(streamUrl)) return
 
-			const tabs = tabsMessage(message)
-			if (Predicate.isNotUndefined(tabs)) dispatch({tabs, type: 'tabs'})
+			const socket = new WebSocket(streamUrl)
+			socketRef.current = socket
+			socket.addEventListener('close', () => {
+				if (abort.signal.aborted || socketRef.current !== socket) return
+				setTimeout(connect, 750)
+			})
+			async function handleMessage(data: unknown) {
+				const message = await decodeMessage(data)
+				if (abort.signal.aborted || socketRef.current !== socket) return
+
+				const frame = frameMessage(message)
+				if (Predicate.isNotUndefined(frame)) dispatch({frame, type: 'frame'})
+
+				const tabs = tabsMessage(message)
+				if (Predicate.isNotUndefined(tabs)) dispatch({tabs, type: 'tabs'})
+			}
+			socket.addEventListener('message', event => {
+				void handleMessage(event.data)
+			})
 		}
-		socket.addEventListener('message', event => {
-			void handleMessage(event.data)
-		})
+
+		connect()
 
 		return () => {
-			socket.close()
+			abort.abort()
+			socketRef.current?.close()
 			socketRef.current = null
 		}
 	}, [streamUrl])
@@ -229,37 +254,12 @@ export function AgentBrowser(props: {
 		image.src = `data:image/jpeg;base64,${state.frame.data}`
 	}, [state.frame])
 
-	function send(
-		input:
-			| {
-					readonly button?: 'left' | 'none'
-					readonly clickCount?: number
-					readonly deltaX?: number
-					readonly deltaY?: number
-					readonly eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
-					readonly modifiers?: number
-					readonly type: 'input_mouse'
-					readonly x: number
-					readonly y: number
-			  }
-			| {
-					readonly code: string
-					readonly eventType: 'keyDown' | 'keyUp'
-					readonly key: string
-					readonly modifiers?: number
-					readonly text?: string
-					readonly type: 'input_keyboard'
-					readonly windowsVirtualKeyCode?: number
-			  }
-	) {
-		if (Predicate.isNull(socketRef.current) || socketRef.current.readyState !== WebSocket.OPEN) return
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
-		socketRef.current.send(JSON.stringify(input))
+	function send(input: AgentBrowserInput) {
+		sendSocket(socketRef.current, input)
 	}
 
 	function pointer(event: PointerEvent<HTMLCanvasElement>, eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased') {
 		const point = scalePoint(event, state.frame)
-		dispatch({cursor: point, type: 'userCursor'})
 		send({
 			button: mouseButton(eventType, event.buttons),
 			clickCount: eventType === 'mousePressed' || eventType === 'mouseReleased' ? 1 : 0,
@@ -270,17 +270,59 @@ export function AgentBrowser(props: {
 		})
 	}
 
-	function keyboard(event: KeyboardEvent<HTMLCanvasElement>, eventType: 'keyDown' | 'keyUp') {
-		send({
-			code: event.code,
-			eventType,
-			key: event.key,
-			modifiers: modifiers(event),
-			text: eventType === 'keyDown' ? printableKey(event) : undefined,
-			type: 'input_keyboard',
-			windowsVirtualKeyCode: event.keyCode
-		})
-	}
+	useEffect(() => {
+		function handleKeyboard(event: KeyboardEvent) {
+			if (document.activeElement !== canvasRef.current) return
+			event.preventDefault()
+			event.stopPropagation()
+			const eventType = event.type === 'keydown' ? 'keyDown' : 'keyUp'
+			const text =
+				eventType === 'keyDown'
+					? pipe(
+							Match.value(event.key),
+							Match.when('Backspace', () => '\b'),
+							Match.when('Enter', () => '\r'),
+							Match.when('Tab', () => '\t'),
+							Match.orElse(() => printableKey(event))
+						)
+					: undefined
+			const windowsVirtualKeyCode = pipe(
+				Match.value(event.key),
+				Match.when('ArrowDown', () => 40),
+				Match.when('ArrowLeft', () => 37),
+				Match.when('ArrowRight', () => 39),
+				Match.when('ArrowUp', () => 38),
+				Match.when('Backspace', () => 8),
+				Match.when('Delete', () => 46),
+				Match.when('End', () => 35),
+				Match.when('Enter', () => 13),
+				Match.when('Escape', () => 27),
+				Match.when('Home', () => 36),
+				Match.when('PageDown', () => 34),
+				Match.when('PageUp', () => 33),
+				Match.when('Tab', () => 9),
+				Match.orElse(() => event.keyCode)
+			)
+			sendSocket(socketRef.current, {
+				code: event.code,
+				eventType,
+				key: event.key,
+				modifiers: modifiers(event),
+				text,
+				type: 'input_keyboard',
+				windowsVirtualKeyCode
+			})
+		}
+
+		window.addEventListener('keydown', handleKeyboard, true)
+		window.addEventListener('keyup', handleKeyboard, true)
+		return () => {
+			window.removeEventListener('keydown', handleKeyboard, true)
+			window.removeEventListener('keyup', handleKeyboard, true)
+		}
+	}, [])
+
+	const visibleTabs = pipe(state.tabs, Array.filter(visibleTab))
 
 	if (Predicate.isUndefined(streamUrl)) {
 		return (
@@ -297,35 +339,30 @@ export function AgentBrowser(props: {
 
 	return (
 		<div className={cn('bg-background flex h-full min-h-0 min-w-0 flex-col overflow-hidden border', props.className)}>
-			<div className="bg-muted/30 flex h-9 shrink-0 items-center gap-1 border-b px-1">
+			<div className="bg-background flex h-9 shrink-0 items-center border-b px-2">
 				<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-					{state.tabs.length === 0 ? (
-						<span className="text-muted-foreground px-2 font-mono text-xs">{props.session ?? 'agent-browser'}</span>
+					{visibleTabs.length === 0 ? (
+						<span className="text-muted-foreground text-xs">{props.session ?? 'agent-browser'}</span>
 					) : (
-						Array.map(state.tabs, tab => (
-							<Button
+						Array.map(visibleTabs, tab => (
+							<button
 								key={tab.tabId}
 								type="button"
-								variant={tab.active === true ? 'secondary' : 'ghost'}
-								size="sm"
-								className="h-7 max-w-52 shrink-0 justify-start rounded-none px-2 font-mono text-xs"
-								title={tabTitle(tab)}
+								aria-current={tab.active === true ? 'page' : undefined}
+								className={cn(
+									'border-border h-6 max-w-44 shrink-0 truncate border px-2 text-left text-xs',
+									tab.active === true
+										? 'bg-primary/15 text-primary'
+										: 'text-muted-foreground hover:bg-muted hover:text-foreground'
+								)}
+								title={defaultTabTitle(tab)}
 								onClick={() => {
 									props.onSelectTab?.(tab)
 								}}
 							>
-								<span className="min-w-0 truncate">{tab.label ?? tab.tabId}</span>
-							</Button>
+								{defaultTabLabel(tab)}
+							</button>
 						))
-					)}
-				</div>
-				<div className="text-muted-foreground flex shrink-0 items-center gap-2 px-2 font-mono text-xs">
-					<span className={state.connected ? 'text-chart-1' : undefined}>
-						{state.connected ? 'connected' : 'offline'}
-					</span>
-					{Predicate.isNotUndefined(state.status?.engine) && <span>{state.status.engine}</span>}
-					{Predicate.isNotUndefined(activeTab?.url) && (
-						<span className="hidden max-w-80 truncate lg:block">{activeTab.url}</span>
 					)}
 				</div>
 			</div>
@@ -358,29 +395,12 @@ export function AgentBrowser(props: {
 							...point
 						})
 					}}
-					onKeyDown={event => {
-						event.preventDefault()
-						keyboard(event, 'keyDown')
-					}}
-					onKeyUp={event => {
-						event.preventDefault()
-						keyboard(event, 'keyUp')
-					}}
 				/>
 				{Predicate.isUndefined(state.frame) && (
 					<div className="text-muted-foreground absolute inset-0 flex items-center justify-center gap-2 text-sm">
 						<RotateCwIcon className="size-4 animate-spin" />
 						Waiting for browser stream.
 					</div>
-				)}
-				{Predicate.isNotUndefined(state.userCursor) && Predicate.isNotUndefined(state.frame) && (
-					<div
-						className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-blue-500 shadow"
-						style={{
-							left: `${(state.userCursor.x / (state.frame.metadata?.deviceWidth ?? 1)) * 100}%`,
-							top: `${(state.userCursor.y / (state.frame.metadata?.deviceHeight ?? 1)) * 100}%`
-						}}
-					/>
 				)}
 			</div>
 		</div>

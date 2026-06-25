@@ -430,7 +430,7 @@ function PortlessGroup(input: {
 					input.selectPortless(input.cwd)
 				}}
 			>
-				deslop
+				agent-browser
 			</TreeExplorerRow>
 			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 				{Array.map(input.runs, run => (
@@ -454,6 +454,7 @@ function PortlessRunRow(input: {
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
+	const taskLabel = pipe(input.run.script.taskId, String.replace(/^@[^/]+\//u, ''))
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -467,19 +468,19 @@ function PortlessRunRow(input: {
 							event.stopPropagation()
 							input.selectPortless(input.run.script.cwd, input.run.origin.origin)
 						}}
-						title={`Open ${input.run.script.taskId} preview`}
+						title={`Open ${taskLabel} preview`}
 					>
 						<GlobeIcon className="size-3" />
 					</Button>
 				}
 				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
-				title={input.run.script.command ?? input.run.script.taskId}
+				title={input.run.script.command ?? taskLabel}
 				onClick={() => {
 					input.selectRun(input.run.script.cwd, input.run.script.sessionId, input.status.state === 'idle')
 				}}
 			>
-				{input.run.script.taskId}
+				{taskLabel}
 			</TreeExplorerRow>
 		</li>
 	)

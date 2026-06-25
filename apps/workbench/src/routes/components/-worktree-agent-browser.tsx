@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Option, Predicate, Schema, pipe} from 'effect'
 
 import {useEffect} from 'react'
 
@@ -13,23 +13,11 @@ const visualizerViewport = {height: 1080, width: 1920} as const
 
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-function tabLabel(origin: PortlessOrigin) {
-	const label = pipe(
-		origin.taskId,
-		String.toLowerCase,
-		String.replaceAll(/[^a-z0-9_-]+/gu, '-'),
-		String.replace(/^-+|-+$/gu, '')
-	)
-	return `app-${String.isEmpty(label) ? 'preview' : label}`
-}
-
 function selectedOrigin(origins: readonly PortlessOrigin[], selected: string | undefined) {
-	return (
-		pipe(
-			Option.fromUndefinedOr(selected),
-			Option.flatMap(origin => Array.findFirst(origins, candidate => candidate.origin === origin)),
-			Option.getOrUndefined
-		) ?? origins[0]
+	return pipe(
+		Option.fromUndefinedOr(selected),
+		Option.flatMap(origin => Array.findFirst(origins, candidate => candidate.origin === origin)),
+		Option.getOrUndefined
 	)
 }
 
@@ -40,7 +28,7 @@ export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly 
 	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'), {mode: 'promise'})
 	const setViewport = useAtomSet(RpcClient.mutation('agentBrowser.viewport'), {mode: 'promise'})
 	const origin = selectedOrigin(origins.value, input.origin)
-	const session = Predicate.isUndefined(origin) ? undefined : origin.worktree
+	const session = origin?.worktree ?? origins.value[0]?.worktree
 
 	useEffect(() => {
 		if (Predicate.isUndefined(origin) || Predicate.isUndefined(session)) return
@@ -49,7 +37,7 @@ export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly 
 		const currentSession = session
 		async function open() {
 			try {
-				await openTab({payload: {label: tabLabel(currentOrigin), session: currentSession, url: currentOrigin.origin}})
+				await openTab({payload: {label: currentOrigin.taskId, session: currentSession, url: currentOrigin.origin}})
 				await setViewport({
 					payload: {height: visualizerViewport.height, session: currentSession, width: visualizerViewport.width}
 				})

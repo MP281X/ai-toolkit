@@ -149,10 +149,55 @@ function streamSessionPath(url: string) {
 	return match[1]
 }
 
+function tabHandle(tab: string) {
+	if (/^t\d+$/iu.test(tab)) return tab
+	const label = pipe(
+		tab,
+		String.replace(/^@[^/]+\//u, ''),
+		String.toLowerCase,
+		String.replaceAll(/[^a-z0-9_-]+/gu, '-'),
+		String.replace(/^-+|-+$/gu, '')
+	)
+	return String.isEmpty(label) ? 'preview' : label
+}
+
+function displayTabLabel(label: string) {
+	return pipe(label, String.replace(/^(.+)-dev-(.+)$/u, '$1#dev:$2'))
+}
+
+function sameOrigin(request: HttpServerRequest.HttpServerRequest) {
+	if (Predicate.isUndefined(request.headers['origin']) || Predicate.isUndefined(request.headers['host'])) return false
+	try {
+		return new URL(request.headers['origin']).host === request.headers['host']
+	} catch {
+		return false
+	}
+}
+
+function normalizedStreamTab(tab: unknown) {
+	if (!Predicate.hasProperty(tab, 'label') || !Predicate.isString(tab.label)) return tab
+	return {...tab, label: displayTabLabel(tab.label)}
+}
+
+function streamMessage(message: string | Uint8Array) {
+	if (!Predicate.isString(message)) return message
+	try {
+		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
+		const parsed = JSON.parse(message) as unknown
+		if (!Predicate.hasProperty(parsed, 'type') || parsed.type !== 'tabs') return message
+		if (!Predicate.hasProperty(parsed, 'tabs') || !Array.isArray(parsed.tabs)) return message
+		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
+		return JSON.stringify({...parsed, tabs: Array.map(parsed.tabs, normalizedStreamTab)})
+	} catch {
+		return message
+	}
+}
+
 function proxyStream(sessionName: string) {
 	return pipe(
 		Effect.gen(function* () {
 			const request = yield* HttpServerRequest.HttpServerRequest
+			if (!sameOrigin(request)) return HttpServerResponse.empty({status: 403})
 			const agentBrowser = yield* AgentBrowser
 			const session = yield* pipe(agentBrowser.session({session: sessionName}), Effect.option)
 			if (Option.isNone(session)) return HttpServerResponse.empty({status: 404})
@@ -171,7 +216,7 @@ function proxyStream(sessionName: string) {
 			yield* Effect.all(
 				[
 					outbound.value
-						.runRaw(message => writeInbound(message))
+						.runRaw(message => writeInbound(streamMessage(message)))
 						.pipe(
 							Effect.catchReason('SocketError', 'SocketCloseError', reason =>
 								writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(
@@ -269,10 +314,11 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 				readonly url: string
 			}) {
 				yield* validateSession(input.session)
-				const switched = yield* pipe(run(['--session', input.session, 'tab', input.label]), Effect.option)
+				const handle = tabHandle(input.label)
+				const switched = yield* pipe(run(['--session', input.session, 'tab', handle]), Effect.option)
 				if (Option.isSome(switched)) return
 				yield* pipe(
-					run(['--session', input.session, 'tab', 'new', '--label', input.label, input.url]),
+					run(['--session', input.session, 'tab', 'new', '--label', handle, input.url]),
 					Effect.catch(() => run(['--session', input.session, 'open', input.url]))
 				)
 			}),
@@ -286,7 +332,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 				readonly tab: string
 			}) {
 				yield* validateSession(input.session)
-				yield* run(['--session', input.session, 'tab', input.tab])
+				yield* run(['--session', input.session, 'tab', tabHandle(input.tab)])
 			}),
 			viewport: Effect.fn('AgentBrowser.viewport')(function* (input: {
 				readonly height: number
