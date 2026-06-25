@@ -29,7 +29,7 @@ import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
 import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
-import {AgentBrowser, agentBrowserSessionNameForAgent} from '@deslop/agent-browser/service'
+import {AgentBrowser} from '@deslop/agent-browser/service'
 import {type AgentProvider, type AgentUsageProvider} from '@deslop/agent/schema'
 import {Agent, AgentUsage} from '@deslop/agent/service'
 import {AiError} from '@deslop/ai/schema'
@@ -38,7 +38,7 @@ import {GitError, GitReviewBranchTarget, GitReviewChangesTarget, GitReviewLocalT
 import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {Os} from '@deslop/os/service'
 import {PortlessRun} from '@deslop/portless/schema'
-import {Portless} from '@deslop/portless/service'
+import {Portless, portlessWorktreeId} from '@deslop/portless/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 
@@ -85,6 +85,17 @@ function removePortlessScript(
 	const key = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
 	return {current: HashMap.remove(current, key), script}
+}
+
+function portlessRunCount(
+	current: HashMap.HashMap<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>,
+	cwd: string
+) {
+	return pipe(
+		Array.fromIterable(HashMap.values(current)),
+		Array.filter(run => run.script.cwd === cwd),
+		Array.length
+	)
 }
 
 function replacePackageScripts(
@@ -463,6 +474,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 					onSome: Effect.fnUntraced(function* (script) {
 						yield* Ref.set(portlessScripts, removed.current)
 						yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
+						if (portlessRunCount(removed.current, script.script.cwd) === 0) {
+							yield* pipe(agentBrowser.close({session: portlessWorktreeId(script.script.cwd)}), Effect.ignore)
+						}
 						yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
 						yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
 						yield* Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
@@ -512,6 +526,15 @@ export const RpcHandlers = RpcContracts.toLayer(
 										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
 										Effect.andThen(
 											Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
+										),
+										Effect.andThen(
+											Ref.get(portlessScripts).pipe(
+												Effect.flatMap(current =>
+													portlessRunCount(current, script.script.cwd) === 0
+														? pipe(agentBrowser.close({session: portlessWorktreeId(script.script.cwd)}), Effect.ignore)
+														: Effect.void
+												)
+											)
 										),
 										Effect.andThen(SubscriptionRef.update(sidebarRunsVersion, current => current + 1)),
 										Effect.andThen(invalidateTerminal(input)),
@@ -622,7 +645,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'agentBrowser.close': payload => agentBrowser.close(payload),
 			'agentBrowser.health': () => agentBrowser.health,
 			'agentBrowser.open': payload => agentBrowser.open(payload),
+			'agentBrowser.openTab': payload => agentBrowser.openTab(payload),
 			'agentBrowser.sessions': () => agentBrowser.sessions,
+			'agentBrowser.switchTab': payload => agentBrowser.switchTab(payload),
 			'agentBrowser.viewport': payload => agentBrowser.viewport(payload),
 			agents: payload =>
 				pipe(
@@ -657,22 +682,23 @@ export const RpcHandlers = RpcContracts.toLayer(
 					uuid: randomUUID()
 				})
 
-				yield* SubscriptionRef.update(agents, sessions =>
-					HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
-				)
 				// Coding agents can run without agent-browser; add browser tooling only when available.
 				const browserEnv = yield* pipe(
-					agentBrowser.browserEnv({session: agentBrowserSessionNameForAgent(agentSession.uuid)}),
+					agentBrowser.browserEnv({session: portlessWorktreeId(agentSession.cwd)}),
 					Effect.option,
 					Effect.map(Option.getOrUndefined)
 				)
+				const agentSessionWithEnv = {
+					...agentSession,
+					...(Predicate.isUndefined(browserEnv) ? {} : {env: browserEnv})
+				} satisfies AgentSession
 				const input = yield* terminalSession(
 					TerminalPayload.make({
-						args: agentSession.args,
-						command: agentSession.command,
-						cwd: agentSession.cwd,
-						...(Predicate.isUndefined(browserEnv) ? {} : {env: browserEnv}),
-						sessionId: agentSession.uuid
+						args: agentSessionWithEnv.args,
+						command: agentSessionWithEnv.command,
+						cwd: agentSessionWithEnv.cwd,
+						...(Predicate.isUndefined(agentSessionWithEnv.env) ? {} : {env: agentSessionWithEnv.env}),
+						sessionId: agentSessionWithEnv.uuid
 					})
 				).pipe(Effect.map(terminalSessionInput))
 				yield* Ref.update(resolvedTerminals, sessions =>
@@ -680,7 +706,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 				const sessionTerminal = yield* RcMap.get(terminals, input)
 				yield* sessionTerminal.restart
-				const key = AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid})
+				yield* SubscriptionRef.update(agents, sessions =>
+					HashMap.set(
+						sessions,
+						AgentSessionKey.make({cwd: agentSessionWithEnv.cwd, uuid: agentSessionWithEnv.uuid}),
+						agentSessionWithEnv
+					)
+				)
+				const key = AgentSessionKey.make({cwd: agentSessionWithEnv.cwd, uuid: agentSessionWithEnv.uuid})
 				yield* pipe(
 					Effect.scoped(
 						pipe(
@@ -702,7 +735,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.forkDetach
 				)
 
-				return agentSession
+				return agentSessionWithEnv
 			}),
 			'agents.profiles': () => Effect.succeed(agentProfiles),
 			'agents.remove': payload => removeAgent(AgentSessionKey.make(payload)),
@@ -719,7 +752,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload =>
 				pipe(
-					portless.clear(payload.cwd),
+					agentBrowser.close({session: portlessWorktreeId(payload.cwd)}).pipe(Effect.ignore),
+					Effect.andThen(portless.clear(payload.cwd)),
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
 					Effect.andThen(RcMap.invalidate(scriptWorktrees, payload.cwd)),
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),

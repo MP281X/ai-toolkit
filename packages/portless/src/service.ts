@@ -8,73 +8,9 @@ import {Socket} from 'effect/unstable/socket'
 
 import {PortlessOrigin, PortlessRun, PortlessScript} from './schema.ts'
 
-import {command, discover} from '#lib/utils.ts'
+import {command, discover, portlessWorktreeId} from '#lib/utils.ts'
 
-const INJECTED_HEAD = `<script>
-(() => {
-  if (window.__deslopBrowserBridge) return
-  window.__deslopBrowserBridge = true
-
-  const serialize = value => {
-    if (typeof value === 'string') return value
-    return String(value)
-  }
-  const send = (level, message) => window.parent?.postMessage({deslopBrowserLog: true, level, message}, '*')
-  const sendFavicon = () => {
-    const icon = Array.from(document.head.querySelectorAll('link')).find(link => link.rel === 'shortcut icon' || link.rel.split(/\\s+/).includes('icon'))
-    window.parent?.postMessage({deslopBrowserFavicon: true, href: icon?.href}, '*')
-  }
-
-  for (const level of ['debug', 'info', 'log', 'warn', 'error']) {
-    const original = console[level]
-    console[level] = (...args) => {
-      send(level, args.map(serialize).join(' '))
-      original.apply(console, args)
-    }
-  }
-
-  window.addEventListener('error', event => send('error', event.message || 'Resource failed to load'), true)
-  window.addEventListener('unhandledrejection', event => send('error', serialize(event.reason)))
-  window.addEventListener('message', event => {
-    if (event.data?.deslopBrowserClear !== true) return
-    localStorage.clear()
-    sessionStorage.clear()
-    document.cookie.split(';').forEach(cookie => {
-      document.cookie = cookie.replace(/^\\s*([^=]+)=.*$/, '$1=; Max-Age=0; Path=/')
-    })
-    caches?.keys?.().then(keys => Promise.all(keys.map(key => caches.delete(key))))
-    navigator.serviceWorker?.getRegistrations?.().then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
-    location.reload()
-  })
-
-  const sendLocation = () => window.parent?.postMessage({deslopBrowserLocation: true, path: location.pathname + location.search + location.hash}, '*')
-  const wrapHistory = name => {
-    const original = history[name]
-    history[name] = function(...args) {
-      const result = original.apply(this, args)
-      sendLocation()
-      return result
-    }
-  }
-  wrapHistory('pushState')
-  wrapHistory('replaceState')
-  window.addEventListener('popstate', sendLocation)
-  window.addEventListener('hashchange', sendLocation)
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sendFavicon, {once: true})
-  else sendFavicon()
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sendLocation, {once: true})
-  else sendLocation()
-})()
-</script>
-<script crossorigin="anonymous" src="//unpkg.com/react-scan/dist/auto.global.js" onload="window.reactScan?.({allowInIframe: true, _debug: 'verbose'})"></script>
-<script src="https://unpkg.com/react-grab/dist/index.global.js"></script>`
-
-function injectScripts(html: string) {
-	return /<head[^>]*>/i.test(html)
-		? html.replace(/<head[^>]*>/i, match => `${match}\n${INJECTED_HEAD}`)
-		: `${INJECTED_HEAD}\n${html}`
-}
+export {portlessWorktreeId}
 
 function loopDetectedResponse(hops: number) {
 	return pipe(
@@ -105,25 +41,8 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	const headers = new Headers(upstreamResponse.headers)
 	headers.delete('content-length')
 	headers.delete('content-encoding')
-	if (
-		!(
-			request.method === 'GET' && pipe(upstreamResponse.headers.get('content-type') ?? '', String.includes('text/html'))
-		)
-	) {
-		return HttpServerResponse.fromWeb(
-			new Response(upstreamResponse.body, {
-				headers,
-				status: upstreamResponse.status,
-				statusText: upstreamResponse.statusText
-			})
-		)
-	}
-
-	const body = yield* Effect.tryPromise(() => upstreamResponse.text())
-	headers.set('content-type', 'text/html; charset=utf-8')
-
 	return HttpServerResponse.fromWeb(
-		new Response(injectScripts(body), {
+		new Response(upstreamResponse.body, {
 			headers,
 			status: upstreamResponse.status,
 			statusText: upstreamResponse.statusText
@@ -357,7 +276,8 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 								origin: route.script.origin,
 								port: route.port,
 								sessionId: route.script.sessionId,
-								taskId: route.script.taskId
+								taskId: route.script.taskId,
+								worktree: route.worktree
 							}),
 							script: PortlessScript.make(route.script),
 							status: {state: 'prepared'}

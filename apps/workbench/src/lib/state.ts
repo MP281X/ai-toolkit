@@ -1,4 +1,4 @@
-import {Array, Effect, Function, Hash, Option, Order, Predicate, Record, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, Hash, Option, Order, Predicate, Record, Schema, Stream, String, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
@@ -109,12 +109,12 @@ export const portlessOriginsAtom = Atom.family((cwd: string) =>
 	Atom.make(get =>
 		pipe(
 			get.result(portlessRunsAtom(cwd)),
-			Effect.map(scripts =>
+			Effect.map(runs =>
 				pipe(
-					scripts,
-					Array.map(run => run.origin.origin),
-					Array.dedupe,
-					Array.sortWith(Function.identity, Order.String)
+					runs,
+					Array.map(run => run.origin),
+					Array.dedupeWith((left, right) => left.origin === right.origin),
+					Array.sortWith(origin => origin.origin, Order.String)
 				)
 			)
 		)
@@ -203,17 +203,6 @@ export const agentsAtom = Atom.family((cwd: string) =>
 			Effect.map(client => client('agents', {cwd})),
 			Stream.unwrap
 		)
-	)
-)
-
-export const agentBrowserSessionsAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('agentBrowser.sessions', void 0)),
-			Stream.unwrap
-		),
-		{initialValue: []}
 	)
 )
 

@@ -5,11 +5,10 @@ import {fileURLToPath} from 'node:url'
 
 import {NodeHttpServer, NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Array, Config, Effect, Layer, Option, Predicate, String, pipe} from 'effect'
+import {Config, Layer, Predicate, String, pipe} from 'effect'
 
-import {HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
+import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
-import {Socket} from 'effect/unstable/socket'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
@@ -30,14 +29,12 @@ function contentType(file: string) {
 	return 'application/octet-stream'
 }
 
-function localHostname(host: string | undefined) {
-	if (Predicate.isUndefined(host)) return
-	return pipe(host, String.split(':'), Array.head, Option.getOrUndefined)
-}
-
 function localRequest(request: IncomingMessage) {
-	const hostname = localHostname(request.headers.host)
-	return Predicate.isUndefined(hostname) || hostname === 'localhost'
+	return (
+		Predicate.isUndefined(request.headers.host) ||
+		request.headers.host === 'localhost' ||
+		String.startsWith('localhost:')(request.headers.host)
+	)
 }
 
 function staticFile(url: string | undefined) {
@@ -96,69 +93,15 @@ function createWorkbenchServer() {
 	return server
 }
 
-const agentBrowserStreamProxy = pipe(
-	Effect.gen(function* () {
-		const request = yield* HttpServerRequest.HttpServerRequest
-		const params = yield* HttpRouter.params
-		if (Predicate.isUndefined(params['session'])) return HttpServerResponse.empty({status: 404})
-
-		const agentBrowser = yield* AgentBrowser
-		const session = yield* pipe(agentBrowser.session({session: params['session']}), Effect.option)
-		if (Option.isNone(session)) return HttpServerResponse.empty({status: 404})
-		const outbound = yield* pipe(
-			Socket.makeWebSocket(`ws://127.0.0.1:${session.value.streamPort}`),
-			Effect.provide(Socket.layerWebSocketConstructorGlobal),
-			Effect.option
-		)
-		if (Option.isNone(outbound)) return HttpServerResponse.empty({status: 502})
-
-		const inbound = yield* request.upgrade
-		const writeInbound = yield* inbound.writer
-		const writeOutbound = yield* outbound.value.writer
-
-		yield* Effect.all(
-			[
-				outbound.value
-					.runRaw(message => writeInbound(message))
-					.pipe(
-						Effect.catchReason('SocketError', 'SocketCloseError', reason =>
-							writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
-						),
-						Effect.catch(() =>
-							writeInbound(new Socket.CloseEvent(1011, 'agent-browser proxy error')).pipe(
-								Effect.catch(() => Effect.void)
-							)
-						)
-					),
-				inbound
-					.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-					.pipe(
-						Effect.catch(() => Effect.void),
-						Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
-					)
-			],
-			{concurrency: 'unbounded', discard: true}
-		)
-
-		return HttpServerResponse.empty()
-	}),
-	Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 404})))
-)
-
 NodeRuntime.runMain(
 	pipe(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				pipe(
-					HttpRouter.addAll([
-						HttpRouter.route('GET', '/api/agent-browser/sessions/:session/stream', agentBrowserStreamProxy)
-					]),
-					Layer.provide(AgentBrowser.layer)
-				),
-				pipe(
 					RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
 					Layer.provide(LiveLayers)
 				),
+				HttpRouter.middleware(AgentBrowser.middleware, {global: true}),
 				HttpRouter.middleware(Portless.middleware, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			),

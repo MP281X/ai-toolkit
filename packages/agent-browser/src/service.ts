@@ -1,36 +1,29 @@
-import {execFile} from 'node:child_process'
-import {access, readdir, readFile, rm} from 'node:fs/promises'
+import {readdir, readFile, rm} from 'node:fs/promises'
 import {homedir} from 'node:os'
 import path from 'node:path'
 
 import {Array, Context, Effect, Layer, Option, Predicate, Schedule, Stream, String, pipe} from 'effect'
 
+import {HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
+import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import {Socket} from 'effect/unstable/socket'
+
 import {AgentBrowserError, AgentBrowserHealth, AgentBrowserSession} from './schema.ts'
-
-const sessionNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
-
-export function validAgentBrowserSessionName(name: string) {
-	return sessionNamePattern.test(name)
-}
-
-export function agentBrowserSessionNameForAgent(uuid: string) {
-	return `deslop-agent-${uuid}`
-}
 
 function validViewportDimension(value: number) {
 	return Number.isInteger(value) && value >= 320 && value <= 4096
 }
 
-export function agentBrowserSocketDirs(env: NodeJS.ProcessEnv = process.env) {
-	return pipe(
-		[
-			env['AGENT_BROWSER_SOCKET_DIR'],
-			Predicate.isUndefined(env['XDG_RUNTIME_DIR']) ? undefined : path.join(env['XDG_RUNTIME_DIR'], 'agent-browser'),
-			path.join(env['HOME'] ?? homedir(), '.agent-browser')
-		],
-		Array.filter(Predicate.isString),
-		Array.dedupe
-	)
+function socketDir(env: NodeJS.ProcessEnv = process.env) {
+	if (Predicate.isNotUndefined(env['AGENT_BROWSER_SOCKET_DIR']) && String.isNonEmpty(env['AGENT_BROWSER_SOCKET_DIR'])) {
+		return env['AGENT_BROWSER_SOCKET_DIR']
+	}
+
+	if (Predicate.isNotUndefined(env['XDG_RUNTIME_DIR']) && String.isNonEmpty(env['XDG_RUNTIME_DIR'])) {
+		return path.join(env['XDG_RUNTIME_DIR'], 'agent-browser')
+	}
+
+	return path.join(env['HOME'] ?? homedir(), '.agent-browser')
 }
 
 function parsePort(source: string) {
@@ -47,8 +40,8 @@ function processAlive(pid: number) {
 	try {
 		process.kill(pid, 0)
 		return true
-	} catch {
-		return false
+	} catch (error) {
+		return Predicate.hasProperty(error, 'code') && error.code === 'EPERM'
 	}
 }
 
@@ -62,27 +55,30 @@ function optionalFile(file: string) {
 	)
 }
 
-function removeSidecars(socketDir: string, session: string) {
+function extensionPaths(source: string | undefined) {
+	if (Predicate.isUndefined(source)) return []
+	return pipe(String.split(',')(source), Array.map(String.trim), Array.filter(String.isNonEmpty))
+}
+
+function removeSidecars(directory: string, session: string) {
 	return pipe(
-		Effect.forEach(['stream', 'pid', 'engine', 'version'], extension =>
-			Effect.tryPromise(() => rm(path.join(socketDir, `${session}.${extension}`), {force: true}))
+		Effect.forEach(['sock', 'stream', 'pid', 'engine', 'provider', 'version', 'extensions'], extension =>
+			Effect.tryPromise(() => rm(path.join(directory, `${session}.${extension}`), {force: true}))
 		),
 		Effect.ignore
 	)
 }
 
-export const agentBrowserMetadata = Effect.fn('AgentBrowser.metadata')(function* (input: {
+const metadata = Effect.fn('AgentBrowser.metadata')(function* (input: {
 	readonly session: string
 	readonly socketDir: string
 }) {
-	if (!validAgentBrowserSessionName(input.session)) {
+	if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.session)) {
 		return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
 	}
 
-	const streamFile = path.join(input.socketDir, `${input.session}.stream`)
-	const pidFile = path.join(input.socketDir, `${input.session}.pid`)
 	const streamPort = yield* pipe(
-		Effect.tryPromise(() => readFile(streamFile, 'utf8')),
+		Effect.tryPromise(() => readFile(path.join(input.socketDir, `${input.session}.stream`), 'utf8')),
 		Effect.map(parsePort),
 		Effect.mapError(
 			cause => new AgentBrowserError({cause, message: `Unknown agent-browser session: ${input.session}`})
@@ -94,7 +90,7 @@ export const agentBrowserMetadata = Effect.fn('AgentBrowser.metadata')(function*
 		)
 	)
 	const pid = yield* pipe(
-		Effect.tryPromise(() => readFile(pidFile, 'utf8')),
+		Effect.tryPromise(() => readFile(path.join(input.socketDir, `${input.session}.pid`), 'utf8')),
 		Effect.map(parsePid),
 		Effect.mapError(cause => new AgentBrowserError({cause, message: `Missing pid metadata for ${input.session}`})),
 		Effect.flatMap(value =>
@@ -110,34 +106,36 @@ export const agentBrowserMetadata = Effect.fn('AgentBrowser.metadata')(function*
 
 	return AgentBrowserSession.make({
 		engine: yield* optionalFile(path.join(input.socketDir, `${input.session}.engine`)),
+		extensions: extensionPaths(yield* optionalFile(path.join(input.socketDir, `${input.session}.extensions`))),
 		name: input.session,
 		pid,
-		socketDir: input.socketDir,
+		provider: yield* optionalFile(path.join(input.socketDir, `${input.session}.provider`)),
 		streamPort,
 		version: yield* optionalFile(path.join(input.socketDir, `${input.session}.version`))
 	})
 })
 
-const discoverSocketDir = Effect.fn('AgentBrowser.discoverSocketDir')(function* (socketDir: string) {
+const discoverSessions = Effect.gen(function* () {
+	const directory = socketDir()
 	const files = yield* pipe(
-		Effect.tryPromise(() => readdir(socketDir)),
+		Effect.tryPromise(() => readdir(directory)),
 		Effect.catch(() => Effect.succeed<readonly string[]>([]))
 	)
-	const sessions = pipe(
+	const sessionNames = pipe(
 		files,
 		Array.filter(String.endsWith('.stream')),
 		Array.map(file => String.slice(0, -'.stream'.length)(file)),
-		Array.filter(validAgentBrowserSessionName),
+		Array.filter(session => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(session)),
 		Array.dedupe
 	)
 
 	return yield* pipe(
-		sessions,
+		sessionNames,
 		Effect.forEach(
-			sessionName =>
+			session =>
 				pipe(
-					agentBrowserMetadata({session: sessionName, socketDir}),
-					Effect.match({onFailure: () => [], onSuccess: metadata => [metadata]})
+					metadata({session, socketDir: directory}),
+					Effect.match({onFailure: () => [], onSuccess: value => [value]})
 				),
 			{concurrency: 8}
 		),
@@ -145,120 +143,173 @@ const discoverSocketDir = Effect.fn('AgentBrowser.discoverSocketDir')(function* 
 	)
 })
 
-const vpxExecutableName = process.platform === 'win32' ? 'vpx.cmd' : 'vpx'
-const vpxAgentBrowserPrefix = ['agent-browser'] satisfies readonly string[]
-
-function pathBinDirs(envPath: string | undefined) {
-	return pipe(envPath?.split(path.delimiter) ?? [], Array.filter(String.isNonEmpty))
+function streamSessionPath(url: string) {
+	const match = /^\/api\/agent-browser\/sessions\/([^/]+)\/stream$/u.exec(new URL(url, 'http://localhost').pathname)
+	if (Predicate.isNull(match)) return
+	return match[1]
 }
 
-const resolveVpx = Effect.gen(function* () {
-	for (const binDir of pathBinDirs(process.env['PATH'])) {
-		const bin = path.join(binDir, vpxExecutableName)
-		const available = yield* pipe(
-			Effect.tryPromise(() => access(bin)),
-			Effect.as(true),
-			Effect.catch(() => Effect.succeed(false))
-		)
-		if (available) return {bin, binDir}
-	}
-	return yield* new AgentBrowserError({message: 'vpx executable is not installed'})
-})
-
-const resolveAgentBrowserBin = Effect.gen(function* () {
-	const vpx = yield* resolveVpx
-	return {...vpx, command: vpx.bin, prefix: vpxAgentBrowserPrefix}
-})
-
-function execAgentBrowser(args: readonly string[]) {
+function proxyStream(sessionName: string) {
 	return pipe(
-		resolveAgentBrowserBin,
-		Effect.flatMap(resolved =>
-			Effect.tryPromise({
-				catch: cause => new AgentBrowserError({cause, message: 'agent-browser command failed'}),
-				try: () =>
-					new Promise<void>((resolve, reject) => {
-						execFile(resolved.command, [...resolved.prefix, ...args], (cause, stdout, stderr) => {
-							if (cause) {
-								reject(
-									new AgentBrowserError({cause, message: String.trim(stderr) || String.trim(stdout) || cause.message})
+		Effect.gen(function* () {
+			const request = yield* HttpServerRequest.HttpServerRequest
+			const agentBrowser = yield* AgentBrowser
+			const session = yield* pipe(agentBrowser.session({session: sessionName}), Effect.option)
+			if (Option.isNone(session)) return HttpServerResponse.empty({status: 404})
+
+			const outbound = yield* pipe(
+				Socket.makeWebSocket(`ws://127.0.0.1:${session.value.streamPort}`),
+				Effect.provide(Socket.layerWebSocketConstructorGlobal),
+				Effect.option
+			)
+			if (Option.isNone(outbound)) return HttpServerResponse.empty({status: 502})
+
+			const inbound = yield* request.upgrade
+			const writeInbound = yield* inbound.writer
+			const writeOutbound = yield* outbound.value.writer
+
+			yield* Effect.all(
+				[
+					outbound.value
+						.runRaw(message => writeInbound(message))
+						.pipe(
+							Effect.catchReason('SocketError', 'SocketCloseError', reason =>
+								writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(
+									Effect.catch(() => Effect.void)
 								)
-								return
-							}
-							resolve()
-						})
-					})
-			})
-		)
+							),
+							Effect.catch(() =>
+								writeInbound(new Socket.CloseEvent(1011, 'agent-browser proxy error')).pipe(
+									Effect.catch(() => Effect.void)
+								)
+							)
+						),
+					inbound
+						.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
+						.pipe(
+							Effect.catch(() => Effect.void),
+							Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
+						)
+				],
+				{concurrency: 'unbounded', discard: true}
+			)
+
+			return HttpServerResponse.empty()
+		}),
+		Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 404})))
 	)
 }
 
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
 	make: Effect.gen(function* () {
+		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+		const run = Effect.fn('AgentBrowser.run')(function* (args: readonly string[]) {
+			return yield* Effect.scoped(
+				Effect.gen(function* () {
+					const handle = yield* pipe(
+						spawner.spawn(ChildProcess.make('vpx', ['agent-browser', ...args], {stderr: 'pipe', stdout: 'pipe'})),
+						Effect.mapError(cause => new AgentBrowserError({cause, message: 'failed to spawn agent-browser'}))
+					)
+					const output = yield* Effect.all(
+						{
+							stderr: pipe(
+								Stream.decodeText(handle.stderr),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							),
+							stdout: pipe(
+								Stream.decodeText(handle.stdout),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							)
+						},
+						{concurrency: 'unbounded'}
+					)
+					const exitCode = yield* pipe(
+						handle.exitCode,
+						Effect.mapError(cause => new AgentBrowserError({cause, message: 'agent-browser command failed'}))
+					)
+					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+						const stderr = String.trim(output.stderr)
+						const stdout = String.trim(output.stdout)
+						return yield* new AgentBrowserError({
+							cause: new Error(
+								stderr || stdout || `vpx agent-browser ${Array.join(' ')(args)} exited with ${exitCode}`
+							),
+							message: stderr || stdout || 'agent-browser command failed'
+						})
+					}
+					return output.stdout
+				})
+			)
+		})
+		const validateSession = Effect.fnUntraced(function* (session: string) {
+			if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(session)) {
+				return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${session}`})
+			}
+		})
+
 		return {
 			browserEnv: Effect.fn('AgentBrowser.browserEnv')(function* (input: {readonly session: string}) {
-				if (!validAgentBrowserSessionName(input.session)) {
-					return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
-				}
-				const resolved = yield* resolveAgentBrowserBin
-				return {
-					AGENT_BROWSER_SESSION: input.session,
-					PATH: `${resolved.binDir}${path.delimiter}${process.env['PATH'] ?? ''}`
-				}
+				yield* validateSession(input.session)
+				return {AGENT_BROWSER_SESSION: input.session}
 			}),
 			close: Effect.fn('AgentBrowser.close')(function* (input: {readonly session: string}) {
-				if (!validAgentBrowserSessionName(input.session)) {
-					return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
-				}
-				yield* execAgentBrowser(['--session', input.session, 'close'])
+				yield* validateSession(input.session)
+				yield* run(['--session', input.session, 'close'])
 			}),
-			health: pipe(
-				resolveAgentBrowserBin,
-				Effect.map(resolved => AgentBrowserHealth.make({available: true, bin: resolved.bin, binDir: resolved.binDir})),
-				Effect.catch(() => Effect.succeed(AgentBrowserHealth.make({available: false})))
-			),
+			health: Effect.succeed(AgentBrowserHealth.make({available: true, bin: 'vpx'})),
 			open: Effect.fn('AgentBrowser.open')(function* (input: {readonly session: string; readonly url: string}) {
-				if (!validAgentBrowserSessionName(input.session)) {
-					return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
-				}
-				yield* execAgentBrowser(['--session', input.session, 'open', input.url])
+				yield* validateSession(input.session)
+				yield* run(['--session', input.session, 'open', input.url])
+			}),
+			openTab: Effect.fn('AgentBrowser.openTab')(function* (input: {
+				readonly label: string
+				readonly session: string
+				readonly url: string
+			}) {
+				yield* validateSession(input.session)
+				const switched = yield* pipe(run(['--session', input.session, 'tab', input.label]), Effect.option)
+				if (Option.isSome(switched)) return
+				yield* pipe(
+					run(['--session', input.session, 'tab', 'new', '--label', input.label, input.url]),
+					Effect.catch(() => run(['--session', input.session, 'open', input.url]))
+				)
 			}),
 			session: Effect.fn('AgentBrowser.session')(function* (input: {readonly session: string}) {
-				const sessions = yield* pipe(
-					agentBrowserSocketDirs(),
-					Effect.forEach(socketDir =>
-						pipe(
-							agentBrowserMetadata({session: input.session, socketDir}),
-							Effect.match({onFailure: () => [], onSuccess: metadata => [metadata]})
-						)
-					),
-					Effect.map(Array.flatten)
-				)
-				const session = sessions[0]
-				if (Predicate.isUndefined(session)) {
-					return yield* new AgentBrowserError({message: `Unknown agent-browser session: ${input.session}`})
-				}
-				return session
+				yield* validateSession(input.session)
+				return yield* metadata({session: input.session, socketDir: socketDir()})
 			}),
-			sessions: pipe(
-				Stream.fromEffect(pipe(agentBrowserSocketDirs(), Effect.forEach(discoverSocketDir), Effect.map(Array.flatten))),
-				Stream.repeat(Schedule.spaced('1 second'))
-			),
+			sessions: pipe(Stream.fromEffect(discoverSessions), Stream.repeat(Schedule.spaced('1 second'))),
+			switchTab: Effect.fn('AgentBrowser.switchTab')(function* (input: {
+				readonly session: string
+				readonly tab: string
+			}) {
+				yield* validateSession(input.session)
+				yield* run(['--session', input.session, 'tab', input.tab])
+			}),
 			viewport: Effect.fn('AgentBrowser.viewport')(function* (input: {
 				readonly height: number
 				readonly session: string
 				readonly width: number
 			}) {
-				if (!validAgentBrowserSessionName(input.session)) {
-					return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
-				}
+				yield* validateSession(input.session)
 				if (!validViewportDimension(input.width) || !validViewportDimension(input.height)) {
 					return yield* new AgentBrowserError({message: 'Invalid agent-browser viewport dimensions'})
 				}
-				yield* execAgentBrowser(['--session', input.session, 'set', 'viewport', `${input.width}`, `${input.height}`])
+				yield* run(['--session', input.session, 'set', 'viewport', `${input.width}`, `${input.height}`])
 			})
 		}
 	})
 }) {
 	public static layer = Layer.effect(this, this.make)
+
+	public static middleware = Effect.fnUntraced(function* <E, R>(
+		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
+	) {
+		const request = yield* HttpServerRequest.HttpServerRequest
+		const session = Predicate.isUndefined(request.url) ? undefined : streamSessionPath(request.url)
+		if (Predicate.isUndefined(session)) return yield* app
+		return yield* proxyStream(decodeURIComponent(session))
+	})
 }

@@ -15,9 +15,10 @@ export const AgentBrowserHealth = Schema.Struct({
 export type AgentBrowserSession = typeof AgentBrowserSession.Type
 export const AgentBrowserSession = Schema.Struct({
 	engine: Schema.optional(Schema.String),
+	extensions: Schema.Array(Schema.String),
 	name: Schema.String,
 	pid: Schema.Number,
-	socketDir: Schema.String,
+	provider: Schema.optional(Schema.String),
 	streamPort: Schema.Number,
 	version: Schema.optional(Schema.String)
 })
@@ -27,6 +28,16 @@ export const AgentBrowserOpenRequest = Schema.Struct({session: Schema.String, ur
 
 export type AgentBrowserSessionRequest = typeof AgentBrowserSessionRequest.Type
 export const AgentBrowserSessionRequest = Schema.Struct({session: Schema.String})
+
+export type AgentBrowserTabOpenRequest = typeof AgentBrowserTabOpenRequest.Type
+export const AgentBrowserTabOpenRequest = Schema.Struct({
+	label: Schema.String,
+	session: Schema.String,
+	url: Schema.String
+})
+
+export type AgentBrowserTabSwitchRequest = typeof AgentBrowserTabSwitchRequest.Type
+export const AgentBrowserTabSwitchRequest = Schema.Struct({session: Schema.String, tab: Schema.String})
 
 export type AgentBrowserViewportRequest = typeof AgentBrowserViewportRequest.Type
 export const AgentBrowserViewportRequest = Schema.Struct({

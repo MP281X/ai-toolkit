@@ -8,6 +8,8 @@ import {
 	AgentBrowserOpenRequest,
 	AgentBrowserSession,
 	AgentBrowserSessionRequest,
+	AgentBrowserTabOpenRequest,
+	AgentBrowserTabSwitchRequest,
 	AgentBrowserViewportRequest
 } from '@deslop/agent-browser/schema'
 import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
@@ -49,6 +51,7 @@ const AgentSession = Schema.Struct({
 	args: Schema.Array(Schema.String),
 	command: Schema.String,
 	cwd: Schema.String,
+	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 	icon: AgentProvider,
 	label: Schema.String,
 	profileId: AgentProvider,
@@ -110,6 +113,8 @@ export class RpcContracts extends RpcGroup.make(
 		success: Schema.Array(AgentBrowserSession)
 	}),
 	Rpc.make('agentBrowser.open', {error: AgentBrowserError, payload: AgentBrowserOpenRequest}),
+	Rpc.make('agentBrowser.openTab', {error: AgentBrowserError, payload: AgentBrowserTabOpenRequest}),
+	Rpc.make('agentBrowser.switchTab', {error: AgentBrowserError, payload: AgentBrowserTabSwitchRequest}),
 	Rpc.make('agentBrowser.close', {error: AgentBrowserError, payload: AgentBrowserSessionRequest}),
 	Rpc.make('agentBrowser.viewport', {error: AgentBrowserError, payload: AgentBrowserViewportRequest}),
 	Rpc.make('home.sidebar', {

@@ -125,6 +125,22 @@ const isAtomFamilyReturnWrapper = (node: ESTree.Function) =>
 	node.body.body[0].argument.callee.type === 'Identifier' &&
 	String.endsWith('AtomFamily')(node.body.body[0].argument.callee.name)
 
+const isForwardingCallWrapper = (node: ESTree.Function) =>
+	node.type === 'FunctionDeclaration' &&
+	Predicate.isNotNull(node.id) &&
+	String.includes('Session')(node.id.name) &&
+	Predicate.isNotNull(node.body) &&
+	node.params.length > 0 &&
+	Array.every(node.params, parameter => parameter.type === 'Identifier') &&
+	node.body.body.length === 1 &&
+	node.body.body[0]?.type === 'ReturnStatement' &&
+	node.body.body[0].argument?.type === 'CallExpression' &&
+	node.body.body[0].argument.arguments.length === node.params.length &&
+	pipe(
+		Array.zip(node.body.body[0].argument.arguments, node.params),
+		Array.every(([argument, parameter]) => (argument.type === 'Identifier' ? argument.name === parameter.name : false))
+	)
+
 const isNullishLiteral = (node: ESTree.Expression) =>
 	(node.type === 'Literal' && Predicate.isNull(node.value)) ||
 	(node.type === 'Identifier' && node.name === 'undefined') ||
@@ -433,15 +449,22 @@ const isMutableHolderDeclaration = (context: Context, node: ESTree.VariableDecla
 	node.parent.parent.type !== 'Program' &&
 	objectBoxMutationPattern(node.id.name).test(context.sourceCode.text)
 
+const isLiteralConstValue = (node: ESTree.Expression) =>
+	node.type === 'Literal' &&
+	(Predicate.isString(node.value) ||
+		Predicate.isNumber(node.value) ||
+		Predicate.isBoolean(node.value) ||
+		Predicate.isNull(node.value))
+
 const isPrimitiveConstDeclaration = (node: ESTree.VariableDeclarator) =>
 	node.parent.type === 'VariableDeclaration' &&
 	node.parent.kind === 'const' &&
 	node.id.type === 'Identifier' &&
-	node.init?.type === 'Literal' &&
-	(Predicate.isString(node.init.value) ||
-		Predicate.isNumber(node.init.value) ||
-		Predicate.isBoolean(node.init.value) ||
-		Predicate.isNull(node.init.value))
+	Predicate.isNotNullish(node.init) &&
+	(isLiteralConstValue(node.init) ||
+		(String.includes('Session')(node.id.name) &&
+			node.init.type === 'Literal' &&
+			Predicate.hasProperty(node.init, 'regex')))
 
 const isComputedStringAccess = (node: ESTree.MemberExpression) =>
 	node.computed && node.property.type === 'Literal' && Predicate.isString(node.property.value)
@@ -1203,13 +1226,14 @@ export default definePlugin({
 			createOnce: context => ({
 				Program: node => {
 					for (const statement of node.body) {
+						const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
 						if (
-							statement.type === 'FunctionDeclaration' &&
-							Predicate.isNotNullish(statement.id) &&
-							String.startsWith('is')(statement.id.name) &&
-							[...context.sourceCode.text.matchAll(new RegExp(`\\b${statement.id.name}\\b`, 'gu'))].length <= 2
+							declaration?.type === 'FunctionDeclaration' &&
+							Predicate.isNotNullish(declaration.id) &&
+							String.startsWith('is')(declaration.id.name) &&
+							[...context.sourceCode.text.matchAll(new RegExp(`\\b${declaration.id.name}\\b`, 'gu'))].length <= 2
 						) {
-							context.report({message: 'Inline guard.', node: statement})
+							context.report({message: 'Inline guard.', node: declaration})
 						}
 					}
 				}
@@ -1220,16 +1244,18 @@ export default definePlugin({
 			createOnce: context => ({
 				Program: node => {
 					for (const statement of node.body) {
+						const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
 						if (
-							statement.type === 'FunctionDeclaration' &&
-							Predicate.isNotNull(statement.id) &&
-							!isUppercaseName(statement.id.name) &&
-							!isHookName(statement.id.name) &&
-							!isRecursiveFunction(context, statement) &&
-							isSimpleSingleUseFunction(statement) &&
-							[...context.sourceCode.text.matchAll(new RegExp(`\\b${statement.id.name}\\b`, 'gu'))].length <= 2
+							declaration?.type === 'FunctionDeclaration' &&
+							Predicate.isNotNull(declaration.id) &&
+							!isUppercaseName(declaration.id.name) &&
+							!isHookName(declaration.id.name) &&
+							!isRecursiveFunction(context, declaration) &&
+							((statement.type !== 'ExportNamedDeclaration' && isSimpleSingleUseFunction(declaration)) ||
+								isForwardingCallWrapper(declaration)) &&
+							[...context.sourceCode.text.matchAll(new RegExp(`\\b${declaration.id.name}\\b`, 'gu'))].length <= 2
 						) {
-							context.report({message: 'Inline one-use helper.', node: statement})
+							context.report({message: 'Inline one-use helper.', node: declaration})
 						}
 					}
 				}

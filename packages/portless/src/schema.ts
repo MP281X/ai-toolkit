@@ -26,7 +26,8 @@ export const PortlessOrigin = Schema.Struct({
 	origin: Schema.String,
 	port: Schema.Number,
 	sessionId: Schema.String,
-	taskId: Schema.String
+	taskId: Schema.String,
+	worktree: Schema.String
 })
 
 export type PortlessRun = typeof PortlessRun.Type

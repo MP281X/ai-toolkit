@@ -1,7 +1,7 @@
 import * as NodeFs from 'node:fs'
 import * as NodePath from 'node:path'
 
-import {Array, Effect, Function, Hash, HashMap, Option, Order, Predicate, Record, Schema, String, pipe} from 'effect'
+import {Array, Effect, Function, HashMap, Option, Order, Predicate, Record, Schema, String, pipe} from 'effect'
 
 import {ChildProcess} from 'effect/unstable/process'
 
@@ -29,6 +29,10 @@ function hostSegment(value: string) {
 		String.replace(/^-+|-+$/gu, '')
 	)
 	return String.isEmpty(segment) ? 'app' : segment
+}
+
+export function portlessWorktreeId(cwd: string) {
+	return hostSegment(NodePath.basename(cwd))
 }
 
 function scriptHostSegment(value: string) {
@@ -226,11 +230,7 @@ export const discover = Effect.fnUntraced(function* (
 			const scriptName = script?.scriptName ?? parts.scriptName
 			const packageSegment = hostSegment(packageName ?? taskId)
 			const scriptSegment = scriptHostSegment(scriptName ?? taskId)
-			const worktree = `${hostSegment(NodePath.basename(cwd))}-${pipe(
-				Math.abs(Hash.string(cwd)).toString(16),
-				String.padStart(8, '0'),
-				String.slice(0, 8)
-			)}`
+			const worktree = portlessWorktreeId(cwd)
 			const packageOrigin = input.origin(pipe([packageSegment, worktree, 'localhost'], Array.join('.')))
 
 			return Effect.map(input.port(taskId), port => {
@@ -260,7 +260,8 @@ export const discover = Effect.fnUntraced(function* (
 						...(Predicate.isUndefined(scriptName) ? {} : {scriptName}),
 						sessionId: taskId,
 						taskId
-					}
+					},
+					worktree
 				}
 			})
 		}),
