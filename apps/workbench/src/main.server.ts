@@ -116,24 +116,29 @@ const agentBrowserStreamProxy = pipe(
 		const writeInbound = yield* inbound.writer
 		const writeOutbound = yield* outbound.value.writer
 
-		yield* outbound.value
-			.runRaw(message => writeInbound(message))
-			.pipe(
-				Effect.catchReason('SocketError', 'SocketCloseError', reason =>
-					writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
-				),
-				Effect.catch(() =>
-					writeInbound(new Socket.CloseEvent(1011, 'agent-browser proxy error')).pipe(Effect.catch(() => Effect.void))
-				),
-				Effect.forkScoped
-			)
-
-		yield* inbound
-			.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-			.pipe(
-				Effect.catch(() => Effect.void),
-				Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
-			)
+		yield* Effect.all(
+			[
+				outbound.value
+					.runRaw(message => writeInbound(message))
+					.pipe(
+						Effect.catchReason('SocketError', 'SocketCloseError', reason =>
+							writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
+						),
+						Effect.catch(() =>
+							writeInbound(new Socket.CloseEvent(1011, 'agent-browser proxy error')).pipe(
+								Effect.catch(() => Effect.void)
+							)
+						)
+					),
+				inbound
+					.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
+					.pipe(
+						Effect.catch(() => Effect.void),
+						Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
+					)
+			],
+			{concurrency: 'unbounded', discard: true}
+		)
 
 		return HttpServerResponse.empty()
 	}),

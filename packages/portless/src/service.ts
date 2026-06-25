@@ -151,24 +151,27 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
 
-	yield* outbound
-		.runRaw(message => writeInbound(message))
-		.pipe(
-			Effect.catchReason('SocketError', 'SocketCloseError', reason =>
-				writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.catch(() =>
-				writeInbound(new Socket.CloseEvent(1011, 'proxy error')).pipe(Effect.catch(() => Effect.void))
-			),
-			Effect.forkScoped
-		)
-
-	yield* inbound
-		.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-		.pipe(
-			Effect.catch(() => Effect.void),
-			Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
-		)
+	yield* Effect.all(
+		[
+			outbound
+				.runRaw(message => writeInbound(message))
+				.pipe(
+					Effect.catchReason('SocketError', 'SocketCloseError', reason =>
+						writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void))
+					),
+					Effect.catch(() =>
+						writeInbound(new Socket.CloseEvent(1011, 'proxy error')).pipe(Effect.catch(() => Effect.void))
+					)
+				),
+			inbound
+				.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
+				.pipe(
+					Effect.catch(() => Effect.void),
+					Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void)))
+				)
+		],
+		{concurrency: 'unbounded', discard: true}
+	)
 
 	return HttpServerResponse.empty()
 })

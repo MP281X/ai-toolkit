@@ -6,9 +6,8 @@ import {AgentError, type AgentLayerConfig} from '../schema.ts'
 
 const codexCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
-		'vp',
+		'vpx',
 		[
-			'dlx',
 			'@openai/codex@latest',
 			'--model',
 			'gpt-5.5',

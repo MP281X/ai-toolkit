@@ -1,12 +1,14 @@
-import {useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Option, Predicate, Schema, pipe} from 'effect'
+import {Array, Predicate, Schema} from 'effect'
 
 import {createFileRoute} from '@tanstack/react-router'
 import {useEffect, useRef, useState, type PointerEvent} from 'react'
 
+import {RpcClient} from '#lib/atomRuntime.ts'
 import {agentBrowserSessionsAtom} from '#lib/state.ts'
 import {
+	decodeAgentBrowserStreamEventData,
 	initialAgentBrowserStreamState,
 	reduceAgentBrowserStreamMessage,
 	type AgentBrowserStreamState
@@ -39,20 +41,33 @@ function AgentBrowserPage() {
 	)
 }
 
+const visualizerViewport = {height: 1080, width: 1920} as const
+
 function AgentBrowserCanvas(input: {readonly session?: string}) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const socketRef = useRef<WebSocket | null>(null)
+	const setViewport = useAtomSet(RpcClient.mutation('agentBrowser.viewport'), {mode: 'promise'})
 	const [state, setState] = useState<{readonly connected: boolean; readonly stream: AgentBrowserStreamState}>(() => ({
 		connected: false,
 		stream: initialAgentBrowserStreamState()
 	}))
 
-	// oxlint-disable-next-line react-doctor/no-cascading-set-state -- independent WebSocket event handlers
 	useEffect(() => {
 		if (Predicate.isUndefined(input.session)) return
 
+		async function applyViewport(session: string) {
+			try {
+				await setViewport({payload: {height: visualizerViewport.height, session, width: visualizerViewport.width}})
+			} catch {}
+		}
+		void applyViewport(input.session)
+
 		const socket = new WebSocket(streamUrl(input.session))
 		socketRef.current = socket
+		async function handleMessage(data: unknown) {
+			const message = await decodeAgentBrowserStreamEventData(data)
+			setState(current => ({...current, stream: reduceAgentBrowserStreamMessage(current.stream, message)}))
+		}
 		socket.addEventListener('open', () => {
 			setState(current => ({...current, connected: true}))
 		})
@@ -60,23 +75,14 @@ function AgentBrowserCanvas(input: {readonly session?: string}) {
 			setState(current => ({...current, connected: false}))
 		})
 		socket.addEventListener('message', event => {
-			setState(current => ({
-				...current,
-				stream: reduceAgentBrowserStreamMessage(
-					current.stream,
-					pipe(
-						Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(event.data),
-						Option.getOrElse(() => ({message: `${event.data}`, type: 'console'}))
-					)
-				)
-			}))
+			void handleMessage(event.data)
 		})
 
 		return () => {
 			socket.close()
 			socketRef.current = null
 		}
-	}, [input.session])
+	}, [input.session, setViewport])
 
 	useEffect(() => {
 		if (Predicate.isUndefined(state.stream.frame) || Predicate.isNull(canvasRef.current)) return
@@ -119,18 +125,18 @@ function AgentBrowserCanvas(input: {readonly session?: string}) {
 	}
 
 	return (
-		<div className="flex min-h-0 min-w-0 flex-col">
+		<div className="flex h-full min-h-0 min-w-0 flex-col">
 			<div className="flex h-9 shrink-0 items-center gap-3 border-b px-2 text-xs">
 				<span className={cn('font-mono', state.connected ? 'text-chart-1' : 'text-muted-foreground')}>
 					{state.connected ? 'connected' : 'disconnected'}
 				</span>
 				<span className="min-w-0 truncate font-mono">{input.session}</span>
 			</div>
-			<div className="bg-muted/30 min-h-0 flex-1 overflow-auto">
+			<div className="bg-muted/30 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2">
 				<canvas
 					ref={canvasRef}
 					tabIndex={0}
-					className="bg-background focus:ring-ring block min-h-full min-w-full outline-none focus:ring-2"
+					className="bg-background focus:ring-ring block h-auto max-h-full w-auto max-w-full outline-none focus:ring-2"
 					onPointerDown={event => {
 						event.currentTarget.focus()
 						pointer(event, 'mousePressed')

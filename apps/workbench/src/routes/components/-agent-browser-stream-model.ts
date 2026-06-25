@@ -48,6 +48,22 @@ export function initialAgentBrowserStreamState() {
 	return AgentBrowserStreamState.make({console: [], tabs: []})
 }
 
+function streamEventDataText(source: unknown) {
+	if (source instanceof Blob) return source.text()
+	if (source instanceof ArrayBuffer || ArrayBuffer.isView(source)) return new TextDecoder().decode(source)
+	if (Predicate.isString(source)) return source
+	return 'Unsupported WebSocket message data'
+}
+
+export async function decodeAgentBrowserStreamEventData(source: unknown) {
+	const data = await streamEventDataText(source)
+
+	return pipe(
+		Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(data),
+		Option.getOrElse(() => ({message: data, type: 'console'}))
+	)
+}
+
 function text(value: unknown) {
 	if (Predicate.isString(value)) return value
 	if (Predicate.isUndefined(value)) return ''

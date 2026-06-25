@@ -7,7 +7,8 @@ import {
 	AgentBrowserHealth,
 	AgentBrowserOpenRequest,
 	AgentBrowserSession,
-	AgentBrowserSessionRequest
+	AgentBrowserSessionRequest,
+	AgentBrowserViewportRequest
 } from '@deslop/agent-browser/schema'
 import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
 import {AiError} from '@deslop/ai/schema'
@@ -110,6 +111,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('agentBrowser.open', {error: AgentBrowserError, payload: AgentBrowserOpenRequest}),
 	Rpc.make('agentBrowser.close', {error: AgentBrowserError, payload: AgentBrowserSessionRequest}),
+	Rpc.make('agentBrowser.viewport', {error: AgentBrowserError, payload: AgentBrowserViewportRequest}),
 	Rpc.make('home.sidebar', {
 		error: Schema.Union([GitError, TerminalError, AiError]),
 		stream: true,

@@ -5,6 +5,7 @@ import {Effect, FileSystem} from 'effect'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 const repositories = [
+	{name: 'agent-browser', url: 'https://github.com/vercel-labs/agent-browser'},
 	{name: 'codex', url: 'https://github.com/openai/codex'},
 	{name: 'effect', url: 'https://github.com/Effect-TS/effect-smol'},
 	{name: 'effect-lsp', url: 'https://github.com/Effect-TS/language-service'},

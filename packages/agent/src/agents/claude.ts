@@ -6,9 +6,8 @@ import {AgentError, type AgentLayerConfig} from '../schema.ts'
 
 const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
-		'vp',
+		'vpx',
 		[
-			'dlx',
 			'@anthropic-ai/claude-code@latest',
 			'--model',
 			'claude-opus-4-8',

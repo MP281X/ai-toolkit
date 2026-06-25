@@ -2,7 +2,6 @@ import {execFile} from 'node:child_process'
 import {access, readdir, readFile, rm} from 'node:fs/promises'
 import {homedir} from 'node:os'
 import path from 'node:path'
-import {fileURLToPath} from 'node:url'
 
 import {Array, Context, Effect, Layer, Option, Predicate, Schedule, Stream, String, pipe} from 'effect'
 
@@ -16,6 +15,10 @@ export function validAgentBrowserSessionName(name: string) {
 
 export function agentBrowserSessionNameForAgent(uuid: string) {
 	return `deslop-agent-${uuid}`
+}
+
+function validViewportDimension(value: number) {
+	return Number.isInteger(value) && value >= 320 && value <= 4096
 }
 
 export function agentBrowserSocketDirs(env: NodeJS.ProcessEnv = process.env) {
@@ -142,31 +145,16 @@ const discoverSocketDir = Effect.fn('AgentBrowser.discoverSocketDir')(function* 
 	)
 })
 
-function packageRoot() {
-	return path.dirname(fileURLToPath(import.meta.url))
+const vpxExecutableName = process.platform === 'win32' ? 'vpx.cmd' : 'vpx'
+const vpxAgentBrowserPrefix = ['agent-browser'] satisfies readonly string[]
+
+function pathBinDirs(envPath: string | undefined) {
+	return pipe(envPath?.split(path.delimiter) ?? [], Array.filter(String.isNonEmpty))
 }
 
-function selfAndParents(directory: string): readonly string[] {
-	const parent = path.dirname(directory)
-	return parent === directory ? [directory] : [directory, ...selfAndParents(parent)]
-}
-
-function candidateBinDirs() {
-	const start = packageRoot()
-	return pipe(
-		[
-			...Array.map(selfAndParents(start), directory => path.join(directory, 'node_modules', '.bin')),
-			path.resolve(start, '..', 'node_modules', '.bin')
-		],
-		Array.dedupe
-	)
-}
-
-const executableName = process.platform === 'win32' ? 'agent-browser.cmd' : 'agent-browser'
-
-const resolveAgentBrowserBin = Effect.gen(function* () {
-	for (const binDir of candidateBinDirs()) {
-		const bin = path.join(binDir, executableName)
+const resolveVpx = Effect.gen(function* () {
+	for (const binDir of pathBinDirs(process.env['PATH'])) {
+		const bin = path.join(binDir, vpxExecutableName)
 		const available = yield* pipe(
 			Effect.tryPromise(() => access(bin)),
 			Effect.as(true),
@@ -174,8 +162,12 @@ const resolveAgentBrowserBin = Effect.gen(function* () {
 		)
 		if (available) return {bin, binDir}
 	}
+	return yield* new AgentBrowserError({message: 'vpx executable is not installed'})
+})
 
-	return yield* new AgentBrowserError({message: 'agent-browser CLI is not installed'})
+const resolveAgentBrowserBin = Effect.gen(function* () {
+	const vpx = yield* resolveVpx
+	return {...vpx, command: vpx.bin, prefix: vpxAgentBrowserPrefix}
 })
 
 function execAgentBrowser(args: readonly string[]) {
@@ -186,7 +178,7 @@ function execAgentBrowser(args: readonly string[]) {
 				catch: cause => new AgentBrowserError({cause, message: 'agent-browser command failed'}),
 				try: () =>
 					new Promise<void>((resolve, reject) => {
-						execFile(resolved.bin, [...args], (cause, stdout, stderr) => {
+						execFile(resolved.command, [...resolved.prefix, ...args], (cause, stdout, stderr) => {
 							if (cause) {
 								reject(
 									new AgentBrowserError({cause, message: String.trim(stderr) || String.trim(stdout) || cause.message})
@@ -251,7 +243,20 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 			sessions: pipe(
 				Stream.fromEffect(pipe(agentBrowserSocketDirs(), Effect.forEach(discoverSocketDir), Effect.map(Array.flatten))),
 				Stream.repeat(Schedule.spaced('1 second'))
-			)
+			),
+			viewport: Effect.fn('AgentBrowser.viewport')(function* (input: {
+				readonly height: number
+				readonly session: string
+				readonly width: number
+			}) {
+				if (!validAgentBrowserSessionName(input.session)) {
+					return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${input.session}`})
+				}
+				if (!validViewportDimension(input.width) || !validViewportDimension(input.height)) {
+					return yield* new AgentBrowserError({message: 'Invalid agent-browser viewport dimensions'})
+				}
+				yield* execAgentBrowser(['--session', input.session, 'set', 'viewport', `${input.width}`, `${input.height}`])
+			})
 		}
 	})
 }) {

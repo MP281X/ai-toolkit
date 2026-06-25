@@ -1,6 +1,10 @@
 import {describe, expect, it} from 'vite-plus/test'
 
-import {initialAgentBrowserStreamState, reduceAgentBrowserStreamMessage} from './-agent-browser-stream-model.ts'
+import {
+	decodeAgentBrowserStreamEventData,
+	initialAgentBrowserStreamState,
+	reduceAgentBrowserStreamMessage
+} from './-agent-browser-stream-model.ts'
 
 describe('reduceAgentBrowserStreamMessage', () => {
 	it('tracks frame, status, tabs, console, and result messages', () => {
@@ -28,5 +32,15 @@ describe('reduceAgentBrowserStreamMessage', () => {
 	it('ignores unknown messages', () => {
 		const initial = initialAgentBrowserStreamState()
 		expect(reduceAgentBrowserStreamMessage(initial, {type: 'other'})).toBe(initial)
+	})
+
+	it('decodes proxied binary websocket messages', async () => {
+		await expect(decodeAgentBrowserStreamEventData(new Blob(['{"data":"abc","type":"frame"}']))).resolves.toEqual({
+			data: 'abc',
+			type: 'frame'
+		})
+		await expect(
+			decodeAgentBrowserStreamEventData(new TextEncoder().encode('{"data":"abc","type":"frame"}'))
+		).resolves.toEqual({data: 'abc', type: 'frame'})
 	})
 })

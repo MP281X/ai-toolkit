@@ -438,10 +438,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return yield* new TerminalError({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
-			const session = yield* pipe(terminalSession(input), Effect.map(terminalSessionInput))
-			yield* Ref.update(resolvedTerminals, current =>
-				HashMap.set(current, TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId}), session)
-			)
+			const statusKey = TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId})
+			const resolved = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
+			const session = Predicate.isNotUndefined(resolved)
+				? resolved
+				: yield* pipe(terminalSession(input), Effect.map(terminalSessionInput))
+			yield* Ref.update(resolvedTerminals, current => HashMap.set(current, statusKey, session))
 			return yield* RcMap.get(terminals, session)
 		})
 		const invalidateTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
@@ -602,21 +604,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 			yield* SubscriptionRef.update(agents, current => HashMap.remove(current, payload))
 			if (Predicate.isUndefined(session)) return
 
-			const input = terminalSessionInput({
+			const input = TerminalPayload.make({
 				args: session.args,
 				command: session.command,
 				cwd: session.cwd,
 				sessionId: session.uuid
 			})
 			yield* pipe(
-				RcMap.get(terminals, input),
+				getTerminal(input),
 				Effect.flatMap(terminal => terminal.stop),
 				Effect.ignore
 			)
-			yield* pipe(RcMap.invalidate(terminals, input), Effect.ignore)
-			yield* Ref.update(resolvedTerminals, current =>
-				HashMap.remove(current, TerminalStatusKey.make({cwd: payload.cwd, sessionId: payload.uuid}))
-			)
+			yield* invalidateTerminal(input)
 		})
 
 		return RpcContracts.of({
@@ -624,6 +623,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'agentBrowser.health': () => agentBrowser.health,
 			'agentBrowser.open': payload => agentBrowser.open(payload),
 			'agentBrowser.sessions': () => agentBrowser.sessions,
+			'agentBrowser.viewport': payload => agentBrowser.viewport(payload),
 			agents: payload =>
 				pipe(
 					Stream.fromEffect(currentAgentSessions(payload.cwd)),
@@ -660,22 +660,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 				yield* SubscriptionRef.update(agents, sessions =>
 					HashMap.set(sessions, AgentSessionKey.make({cwd: agentSession.cwd, uuid: agentSession.uuid}), agentSession)
 				)
+				// Coding agents can run without agent-browser; add browser tooling only when available.
 				const browserEnv = yield* pipe(
 					agentBrowser.browserEnv({session: agentBrowserSessionNameForAgent(agentSession.uuid)}),
-					Effect.mapError(
-						cause =>
-							new TerminalError({
-								cause,
-								message: cause instanceof Error ? cause.message : 'failed to prepare agent-browser environment'
-							})
-					)
+					Effect.option,
+					Effect.map(Option.getOrUndefined)
 				)
 				const input = yield* terminalSession(
 					TerminalPayload.make({
 						args: agentSession.args,
 						command: agentSession.command,
 						cwd: agentSession.cwd,
-						env: browserEnv,
+						...(Predicate.isUndefined(browserEnv) ? {} : {env: browserEnv}),
 						sessionId: agentSession.uuid
 					})
 				).pipe(Effect.map(terminalSessionInput))

@@ -22,7 +22,7 @@
 		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
 		"test": "vp test",
 
-		"shadcn": "cd packages/components && vp dlx shadcn@latest",
+		"shadcn": "cd packages/components && vpx shadcn@latest",
 
 		"postinstall": "node scripts/clone-source-repos.ts"
 	},

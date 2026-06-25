@@ -27,3 +27,10 @@ export const AgentBrowserOpenRequest = Schema.Struct({session: Schema.String, ur
 
 export type AgentBrowserSessionRequest = typeof AgentBrowserSessionRequest.Type
 export const AgentBrowserSessionRequest = Schema.Struct({session: Schema.String})
+
+export type AgentBrowserViewportRequest = typeof AgentBrowserViewportRequest.Type
+export const AgentBrowserViewportRequest = Schema.Struct({
+	height: Schema.Number,
+	session: Schema.String,
+	width: Schema.Number
+})
