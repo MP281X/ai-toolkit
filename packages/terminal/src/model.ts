@@ -1,4 +1,4 @@
-import {Array, Match, Option, String, pipe} from 'effect'
+import {Array, Match, Option, Predicate, String, pipe} from 'effect'
 
 import {SerializeAddon} from '@xterm/addon-serialize'
 import HeadlessModule from '@xterm/headless'
@@ -71,15 +71,46 @@ export function terminalScreenStore(size?: TerminalSize) {
 	}
 }
 
+const terminalTitleDecorationPattern = /^[\s\-–—_·•*✢✣✤✥✦✧✩✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿πΠ∏]+/u
+const terminalTitleActivityPattern = /^[\s·•*✢✣✤✥✦✧✩✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿\u2800-\u28ff]/u
+
+function terminalTitleContent(title: string) {
+	return pipe(title, String.replace(terminalTitleDecorationPattern, ''), String.trim)
+}
+
+function terminalTitleActivity(title: string) {
+	if (/^Claude Code$/iu.test(terminalTitleContent(title))) return false
+	return terminalTitleActivityPattern.test(title)
+}
+
+function normalizeTerminalTitle(title: string) {
+	const normalized = pipe(
+		Array.fromIterable(title),
+		Array.filter(char => {
+			const codePoint = char.codePointAt(0) ?? 0
+			if (codePoint <= 0x1f || codePoint === 0x7f || (codePoint >= 0x80 && codePoint <= 0x9f)) return false
+			if (codePoint === 0xfffd) return false
+			if (codePoint >= 0x2800 && codePoint <= 0x28ff) return false
+			return true
+		}),
+		Array.join(''),
+		String.trim
+	)
+	if (normalized === '') return
+
+	const chars = Array.fromIterable(normalized)
+	return Array.length(chars) <= 200 ? normalized : pipe(chars, Array.take(200), Array.join(''))
+}
+
 export function terminalTitleStatus(title: string) {
 	const trimmed = title.trim()
 	if (trimmed === '') return {state: 'idle' as const, title: ''}
 
 	if (/^\[\s*[!.]\s*\]\s*Action Required\b/iu.test(trimmed)) {
-		return {state: 'waiting' as const, title: trimmed.replace(/^\[\s*[!.]\s*\]\s*/iu, '') || trimmed}
+		return {state: 'waiting' as const, title: String.replace(/^\[\s*[!.]\s*\]\s*/iu, '')(trimmed) || trimmed}
 	}
 
-	return {state: 'running' as const, title: trimmed}
+	return {state: 'idle' as const, title: trimmed}
 }
 
 function terminalProgressStatus(value: string) {
@@ -92,51 +123,89 @@ function terminalProgressStatus(value: string) {
 	)
 }
 
+function terminalOscStart(input: string, index: number) {
+	const code = input.charCodeAt(index)
+	if (code === 0x9d) return {length: 1, payloadStart: index + 1}
+	if (code === 0x1b && input[index + 1] === ']') return {length: 2, payloadStart: index + 2}
+	return void 0
+}
+
+function terminalOscEnd(input: string, payloadStart: number) {
+	const bell = pipe(
+		String.slice(payloadStart)(input),
+		String.indexOf('\u0007'),
+		Option.map(index => index + payloadStart),
+		Option.getOrElse(() => -1)
+	)
+	const st = pipe(
+		String.slice(payloadStart)(input),
+		String.indexOf('\u001b\\'),
+		Option.map(index => index + payloadStart),
+		Option.getOrElse(() => -1)
+	)
+	const c1St = pipe(
+		String.slice(payloadStart)(input),
+		String.indexOf('\u009c'),
+		Option.map(index => index + payloadStart),
+		Option.getOrElse(() => -1)
+	)
+	const candidates = Array.filter([bell, st, c1St], index => index !== -1)
+	const end = Array.reduce(candidates, -1, (current, candidate) =>
+		current === -1 || candidate < current ? candidate : current
+	)
+	if (end === -1) return
+	return {index: end, length: end === st ? 2 : 1}
+}
+
+function terminalOscTitleUpdate(command: string, value: string) {
+	if (command === '0' || command === '2') {
+		const title = normalizeTerminalTitle(value)
+		if (Predicate.isUndefined(title) && !terminalTitleActivity(value)) return
+		return {state: terminalTitleActivity(value) ? ('running' as const) : undefined, title, type: 'title'} as const
+	}
+	if (command !== '9') return
+	if (value === '3;') return {state: 'idle' as const, title: undefined, type: 'title'} as const
+	if (!String.startsWith('3;')(value)) return
+
+	const rawTitle = String.slice(2)(value)
+	const title = normalizeTerminalTitle(rawTitle)
+	if (Predicate.isUndefined(title) && !terminalTitleActivity(rawTitle)) return
+	return {state: terminalTitleActivity(rawTitle) ? ('running' as const) : undefined, title, type: 'title'} as const
+}
+
 export function terminalOscUpdates(data: string, carry = '') {
 	const input = `${carry}${data}`
 	const scan = {
 		index: 0,
 		nextCarry: '',
 		updates: Array.empty<
-			| {readonly title: string; readonly type: 'title'}
+			| {
+					readonly state: TerminalStatus['state'] | undefined
+					readonly title: string | undefined
+					readonly type: 'title'
+			  }
 			| {readonly state: TerminalStatus['state']; readonly type: 'progress'}
 		>()
 	}
 
 	while (scan.index < input.length) {
-		if (input.charCodeAt(scan.index) !== 0x1b) {
-			scan.index += 1
-			continue
-		}
-		if (scan.index === input.length - 1) {
-			scan.nextCarry = String.slice(scan.index)(input)
-			break
-		}
-		if (input[scan.index + 1] !== ']') {
+		const start = terminalOscStart(input, scan.index)
+		if (Predicate.isUndefined(start)) {
+			if (input.charCodeAt(scan.index) === 0x1b && scan.index === input.length - 1) {
+				scan.nextCarry = String.slice(scan.index)(input)
+				break
+			}
 			scan.index += 1
 			continue
 		}
 
-		const bell = pipe(
-			String.slice(scan.index + 2)(input),
-			String.indexOf('\u0007'),
-			Option.map(index => index + scan.index + 2),
-			Option.getOrElse(() => -1)
-		)
-		const st = pipe(
-			String.slice(scan.index + 2)(input),
-			String.indexOf('\u001b\\'),
-			Option.map(index => index + scan.index + 2),
-			Option.getOrElse(() => -1)
-		)
-		const end = bell === -1 || (st !== -1 && st < bell) ? st : bell
-		const skip = bell === -1 || (st !== -1 && st < bell) ? 2 : 1
-		if (end === -1) {
+		const end = terminalOscEnd(input, start.payloadStart)
+		if (Predicate.isUndefined(end)) {
 			scan.nextCarry = String.slice(scan.index)(input)
 			break
 		}
 
-		const payload = String.slice(scan.index + 2, end)(input)
+		const payload = String.slice(start.payloadStart, end.index)(input)
 		const separator = pipe(
 			payload,
 			String.indexOf(';'),
@@ -144,14 +213,15 @@ export function terminalOscUpdates(data: string, carry = '') {
 		)
 		const command = separator === -1 ? payload : String.slice(0, separator)(payload)
 		const value = separator === -1 ? '' : String.slice(separator + 1)(payload)
-		if (command === '0' || command === '2') scan.updates = Array.append(scan.updates, {title: value, type: 'title'})
+		const titleUpdate = terminalOscTitleUpdate(command, value)
+		if (Predicate.isNotUndefined(titleUpdate)) scan.updates = Array.append(scan.updates, titleUpdate)
 		if (command === '9' && String.startsWith('4;')(value)) {
 			scan.updates = Array.append(scan.updates, {
 				state: terminalProgressStatus(String.slice(2)(value)),
 				type: 'progress'
 			})
 		}
-		scan.index = end + skip
+		scan.index = end.index + end.length
 	}
 
 	return {carry: Buffer.byteLength(scan.nextCarry) > 4096 ? '' : scan.nextCarry, updates: scan.updates}

@@ -4,10 +4,14 @@ import {join, resolve} from 'node:path'
 import type {Exit} from 'effect'
 import {
 	Array,
+	Duration,
 	Effect,
 	FileSystem,
+	HashMap,
+	Number,
 	Option,
 	Predicate,
+	Ref,
 	Schedule,
 	Schema,
 	Stream,
@@ -17,7 +21,6 @@ import {
 } from 'effect'
 
 import {HttpClient} from 'effect/unstable/http'
-import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 import {AgentError, AgentSubscription, AgentUsageData, AgentUsageTokens} from '../schema.ts'
 
@@ -37,29 +40,6 @@ const CodexUsage = Schema.Struct({
 	})
 })
 
-const CodexTokenUsage = Schema.Struct({
-	cached_input_tokens: Schema.optional(Schema.Number),
-	input_tokens: Schema.optional(Schema.Number),
-	output_tokens: Schema.optional(Schema.Number)
-})
-
-const CodexTokenLine = Schema.fromJsonString(
-	Schema.Struct({
-		payload: Schema.optional(
-			Schema.Struct({
-				info: Schema.optional(
-					Schema.Struct({
-						last_token_usage: Schema.optional(CodexTokenUsage),
-						total_token_usage: Schema.optional(CodexTokenUsage)
-					})
-				),
-				usage: Schema.optional(CodexTokenUsage)
-			})
-		),
-		usage: Schema.optional(CodexTokenUsage)
-	})
-)
-
 const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
 	if (!(yield* fs.exists(root))) return []
@@ -71,8 +51,28 @@ const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	)
 })
 
-function codexUsageTokens(input: typeof CodexTokenUsage.Type) {
-	return {cached: input.cached_input_tokens ?? 0, input: input.input_tokens ?? 0, output: input.output_tokens ?? 0}
+function objectProperty(input: unknown, key: string) {
+	if (!Predicate.isObject(input)) return
+	const value = (input as {[key: string]: unknown})[key]
+	return Predicate.isObject(value) ? value : undefined
+}
+
+function numberProperty(input: unknown, key: string) {
+	if (!Predicate.isObject(input)) return 0
+	const value = (input as {[key: string]: unknown})[key]
+	return Predicate.isNumber(value) ? value : 0
+}
+
+function jsonLine(line: string) {
+	return pipe(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(line), Option.getOrUndefined)
+}
+
+function codexUsageTokens(input: unknown) {
+	return {
+		cached: numberProperty(input, 'cached_input_tokens'),
+		input: numberProperty(input, 'input_tokens'),
+		output: numberProperty(input, 'output_tokens')
+	}
 }
 
 function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
@@ -88,122 +88,143 @@ function sameTokens(left: typeof AgentUsageTokens.Type | undefined, right: typeo
 	)
 }
 
+function tokenNumber(content: string, cursor: number, until: number) {
+	return pipe(
+		/^\s*(\d+)/u.exec(content.slice(cursor, until))?.[1],
+		Option.fromUndefinedOr,
+		Option.flatMap(Number.parse),
+		Option.getOrElse(() => 0)
+	)
+}
+
+function tokenField(content: string, field: string, from: number, until: number) {
+	const fieldIndex = content.indexOf(field, from)
+	if (fieldIndex < 0 || fieldIndex > until) return 0
+
+	const separatorIndex = content.indexOf(':', fieldIndex + field.length)
+	if (separatorIndex < 0 || separatorIndex > until) return 0
+
+	return tokenNumber(content, separatorIndex + 1, until)
+}
+
+function totalUsageFromMarker(content: string, markerIndex: number) {
+	const start = content.indexOf('{', markerIndex + '"total_token_usage"'.length)
+	if (start < 0) return
+
+	const end = content.indexOf('}', start)
+	if (end < 0) return
+
+	return {
+		cached: tokenField(content, '"cached_input_tokens"', start, end),
+		input: tokenField(content, '"input_tokens"', start, end),
+		output: tokenField(content, '"output_tokens"', start, end)
+	}
+}
+
+function totalDelta(previous: typeof AgentUsageTokens.Type | undefined, next: typeof AgentUsageTokens.Type) {
+	if (Predicate.isUndefined(previous)) return next
+	if (next.cached < previous.cached || next.input < previous.input || next.output < previous.output) return next
+
+	return {
+		cached: next.cached - previous.cached,
+		input: next.input - previous.input,
+		output: next.output - previous.output
+	}
+}
+
+function totalUsageTokensFromContent(content: string) {
+	const matches = [...content.matchAll(/"total_token_usage"/gu)]
+	if (Array.isReadonlyArrayEmpty(matches)) return
+
+	return Array.reduce(
+		matches,
+		{
+			previous: undefined as typeof AgentUsageTokens.Type | undefined,
+			total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
+		},
+		(current, match) => {
+			const next = totalUsageFromMarker(content, match.index)
+			return Predicate.isUndefined(next)
+				? current
+				: {previous: next, total: addTokens(current.total, totalDelta(current.previous, next))}
+		}
+	).total
+}
+
+function explicitUsageFromLine(line: string) {
+	const decoded = jsonLine(line)
+	const payload = objectProperty(decoded, 'payload')
+	const info = objectProperty(payload, 'info')
+	return (
+		objectProperty(info, 'last_token_usage') ?? objectProperty(payload, 'usage') ?? objectProperty(decoded, 'usage')
+	)
+}
+
+function explicitUsageTokensFromContent(content: string) {
+	return pipe(
+		content,
+		String.split('\n'),
+		Array.reduce(
+			{
+				previous: undefined as typeof AgentUsageTokens.Type | undefined,
+				total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
+			},
+			(current, line) => {
+				if (String.includes('"last_token_usage"')(line) || String.includes('"usage"')(line)) {
+					const usage = explicitUsageFromLine(line)
+					if (Predicate.isUndefined(usage)) return current
+
+					const next = codexUsageTokens(usage)
+					return {
+						previous: next,
+						total: sameTokens(current.previous, next) ? current.total : addTokens(current.total, next)
+					}
+				}
+
+				return current
+			}
+		),
+		result => result.total
+	)
+}
+
+function codexTokensFromContent(content: string) {
+	return totalUsageTokensFromContent(content) ?? explicitUsageTokensFromContent(content)
+}
+
+function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+	return AgentUsageTokens.make(
+		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
+			addTokens(total, file.tokens)
+		)
+	)
+}
+
 export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonly codexRoot: string}) {
 	const fs = yield* FileSystem.FileSystem
 	const files = yield* pipe(
 		Effect.all(
 			[codexJsonlFiles(join(input.codexRoot, 'sessions')), codexJsonlFiles(join(input.codexRoot, 'archived_sessions'))],
-			{concurrency: 'unbounded'}
+			{concurrency: 2}
 		),
 		Effect.map(Array.flatten),
 		Effect.mapError(cause => new AgentError({cause}))
 	)
 	const tokens = yield* pipe(
-		Effect.forEach(
-			files,
-			path =>
-				pipe(
-					fs.readFileString(path),
-					Effect.map(content =>
-						pipe(
-							content,
-							String.split('\n'),
-							Array.reduce(
-								{
-									previousExplicit: undefined as typeof AgentUsageTokens.Type | undefined,
-									previousTotal: undefined as typeof AgentUsageTokens.Type | undefined,
-									total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
-								},
-								(current, line) =>
-									pipe(
-										Schema.decodeOption(CodexTokenLine)(line),
-										Option.match({
-											onNone: () => current,
-											onSome: value => {
-												if (Predicate.isNotUndefined(value.payload?.info?.total_token_usage)) {
-													const nextTotal = codexUsageTokens(value.payload.info.total_token_usage)
-													return {
-														previousExplicit: undefined,
-														previousTotal: nextTotal,
-														total: addTokens(
-															current.total,
-															Predicate.isUndefined(current.previousTotal)
-																? nextTotal
-																: {
-																		cached: Math.max(0, nextTotal.cached - current.previousTotal.cached),
-																		input: Math.max(0, nextTotal.input - current.previousTotal.input),
-																		output: Math.max(0, nextTotal.output - current.previousTotal.output)
-																	}
-														)
-													}
-												}
-
-												const explicit = value.payload?.info?.last_token_usage ?? value.payload?.usage ?? value.usage
-												if (Predicate.isUndefined(explicit)) return current
-
-												const nextExplicit = codexUsageTokens(explicit)
-												return {
-													...current,
-													previousExplicit: nextExplicit,
-													total: sameTokens(current.previousExplicit, nextExplicit)
-														? current.total
-														: addTokens(current.total, nextExplicit)
-												}
-											}
-										})
-									)
-							),
-							result => result.total
-						)
-					)
-				),
-			{concurrency: 8}
-		),
+		files,
+		Effect.forEach(path => pipe(fs.readFileString(path), Effect.map(codexTokensFromContent)), {concurrency: 8}),
 		Effect.mapError(cause => new AgentError({cause}))
 	)
 
-	return AgentUsageTokens.make(
-		pipe(
-			tokens,
-			Array.reduce({cached: 0, input: 0, output: 0}, (total, value) => addTokens(total, value))
-		)
-	)
+	return sumTokenFiles(Array.map(tokens, value => ({tokens: value})))
 })
 
 export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readonly provider: 'codex'}) {
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
-	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 	const codexRoot = pipe(process.env['CODEX_HOME'] ?? '', String.trim, value =>
 		String.isNonEmpty(value) ? resolve(value) : join(homedir(), '.codex')
 	)
-
-	const commandOutput = Effect.fnUntraced(function* (commandName: string, args: readonly string[]) {
-		return yield* Effect.scoped(
-			Effect.gen(function* () {
-				const handle = yield* pipe(
-					spawner.spawn(ChildProcess.make(commandName, args, {stderr: 'pipe', stdout: 'pipe'})),
-					Effect.mapError(cause => new AgentError({cause}))
-				)
-				const [stdout, exitCode] = yield* Effect.all([
-					Stream.runCollect(handle.stdout).pipe(Effect.map(chunks => Buffer.concat(chunks).toString('utf8'))),
-					handle.exitCode
-				]).pipe(Effect.mapError(cause => new AgentError({cause})))
-				if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-					return yield* new AgentError({message: `${commandName} exited with ${exitCode}`})
-				}
-				return stdout
-			})
-		)
-	})
-
-	const status = commandOutput('codex', ['login', 'status'])
-	function retryAuth<A, R>(effect: Effect.Effect<A, AgentError, R>) {
-		return pipe(
-			effect,
-			Effect.catch(() => pipe(status, Effect.ignore, Effect.andThen(effect)))
-		)
-	}
 
 	const codexToken = pipe(
 		fs.readFileString(join(codexRoot, 'auth.json')),
@@ -217,35 +238,88 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 		Effect.map(credentials => credentials.tokens.access_token)
 	)
 
-	const remoteUsage = remoteCodexUsage(client, codexToken)
-	const subscription = retryAuth(
-		pipe(
-			remoteUsage,
-			Effect.map(usage => codexSubscriptionLabel(usage.plan_type)),
-			Effect.flatMap(label =>
-				Predicate.isString(label)
-					? Effect.succeed(AgentSubscription.make(label))
-					: new AgentError({message: 'subscription unavailable'})
-			)
+	const tokenFileCache = yield* Ref.make(
+		HashMap.empty<
+			string,
+			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
+		>()
+	)
+	const loadCachedTokens = Effect.fnUntraced(function* () {
+		const files = yield* pipe(
+			Effect.all(
+				[codexJsonlFiles(join(codexRoot, 'sessions')), codexJsonlFiles(join(codexRoot, 'archived_sessions'))],
+				{concurrency: 2}
+			),
+			Effect.map(Array.flatten),
+			Effect.mapError(cause => new AgentError({cause}))
+		)
+		const currentCache = yield* Ref.get(tokenFileCache)
+		const tokenFiles = yield* pipe(
+			files,
+			Effect.forEach(
+				path =>
+					Effect.gen(function* () {
+						const info = yield* pipe(
+							fs.stat(path),
+							Effect.mapError(cause => new AgentError({cause}))
+						)
+						if (info.type !== 'File') return []
+
+						const mtimeMs = pipe(
+							info.mtime,
+							Option.map(value => value.getTime()),
+							Option.getOrElse(() => 0)
+						)
+						const size = pipe(
+							Number.parse(`${info.size}`),
+							Option.getOrElse(() => 0)
+						)
+						const cached = pipe(currentCache, HashMap.get(path), Option.getOrUndefined)
+						if (Predicate.isNotUndefined(cached) && cached.mtimeMs === mtimeMs && cached.size === size) {
+							return [[path, cached] as const]
+						}
+
+						const tokens = yield* pipe(
+							fs.readFileString(path),
+							Effect.map(codexTokensFromContent),
+							Effect.mapError(cause => new AgentError({cause}))
+						)
+						return [[path, {mtimeMs, size, tokens}] as const]
+					}),
+				{concurrency: 4}
+			),
+			Effect.map(Array.flatten)
+		)
+		const nextCache = HashMap.fromIterable(tokenFiles)
+		yield* Ref.set(tokenFileCache, nextCache)
+		return sumTokenFiles(HashMap.values(nextCache))
+	})
+
+	const remoteUsage = yield* Effect.cachedWithTTL(remoteCodexUsage(client, codexToken), Duration.minutes(1))
+	const subscription = pipe(
+		remoteUsage,
+		Effect.map(usage => codexSubscriptionLabel(usage.plan_type)),
+		Effect.flatMap(label =>
+			Predicate.isString(label)
+				? Effect.succeed(AgentSubscription.make(label))
+				: new AgentError({message: 'subscription unavailable'})
 		)
 	)
-	const loadUsage = retryAuth(
-		Effect.gen(function* () {
-			const usage = yield* remoteUsage
-			const tokens = yield* loadCodexUsageTokens({codexRoot})
-			return AgentUsageData.make({
-				fiveHour: codexWindow(usage.rate_limit.primary_window),
-				tokens,
-				weekly: codexWindow(usage.rate_limit.secondary_window)
-			})
+	const loadUsage = Effect.gen(function* () {
+		const usage = yield* remoteUsage
+		const tokens = yield* loadCachedTokens()
+		return AgentUsageData.make({
+			fiveHour: codexWindow(usage.rate_limit.primary_window),
+			tokens,
+			weekly: codexWindow(usage.rate_limit.secondary_window)
 		})
-	).pipe(Effect.provideService(FileSystem.FileSystem, fs))
+	}).pipe(Effect.provideService(FileSystem.FileSystem, fs))
 	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
 		Array.head([])
 	)
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
-		Stream.repeat(Schedule.spaced('1 minute')),
+		Stream.repeat(Schedule.spaced('10 minutes')),
 		Stream.runForEach(value => SubscriptionRef.set(usage, Array.head([value]))),
 		Effect.forkScoped
 	)

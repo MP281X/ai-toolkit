@@ -18,6 +18,7 @@ const repositories = [
 	{name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre'},
 	{name: 'portless', url: 'https://github.com/vercel-labs/portless'},
 	{name: 'react-doctor', url: 'https://github.com/millionco/react-doctor'},
+	{name: 'superset', url: 'https://github.com/superset-sh/superset'},
 	{name: 't3code', url: 'https://github.com/pingdotgg/t3code'},
 	{name: 'tanstack-form', url: 'https://github.com/TanStack/form'},
 	{name: 'tanstack-hotkey', url: 'https://github.com/TanStack/hotkeys'},

@@ -92,11 +92,20 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			return SubscriptionRef.get(status).pipe(Effect.flatMap(current => publishStatus({...current, state})))
 		}
 
-		function setTitle(title: string) {
+		function setTitle(title: string | undefined, state: TerminalStatus['state'] | undefined) {
 			return SubscriptionRef.get(status).pipe(
 				Effect.flatMap(current => {
 					if (!terminalStatusActive(current.state)) return Effect.void
-					return publishStatus({...current, ...terminalTitleStatus(title)})
+					if (Predicate.isUndefined(title)) {
+						return Predicate.isUndefined(state)
+							? Effect.void
+							: publishStatus(state === 'running' ? {...current, state} : {...current, ...terminalTitleStatus('')})
+					}
+
+					const titleStatus = terminalTitleStatus(title)
+					return publishStatus(
+						Predicate.isUndefined(state) ? {...current, ...titleStatus} : {...current, ...titleStatus, state}
+					)
 				})
 			)
 		}
@@ -115,7 +124,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				return [parsed.updates, parsed.carry] as const
 			})
 			for (const update of updates) {
-				yield* update.type === 'title' ? setTitle(update.title) : setProgress(update.state)
+				yield* update.type === 'title' ? setTitle(update.title, update.state) : setProgress(update.state)
 			}
 			yield* Effect.promise(() => screen.write(chunk))
 			yield* publishFrame({data: chunk, sequence: yield* nextSequence(), type: 'output'})

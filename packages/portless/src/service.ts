@@ -1,10 +1,9 @@
 import {createServer} from 'node:net'
 
-import type {FileSystem, Path} from 'effect'
 import {Array, Context, Effect, HashMap, HashSet, Layer, Option, Predicate, Semaphore, String, pipe} from 'effect'
 
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
-import type {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import type {ChildProcess} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
 import {PortlessOrigin, PortlessRun, PortlessScript} from './schema.ts'
@@ -219,10 +218,6 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 			sessionRoutes: HashMap.empty<string, string>()
 		}
 		const portLock = yield* Semaphore.make(1)
-		const discoveryContext = yield* Effect.context<
-			ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-		>()
-
 		function origin(host: string) {
 			return `http://${host}:${proxyPort}`
 		}
@@ -350,7 +345,6 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 
 			return yield* pipe(
 				discover(cwd, {origin, port: sessionId => port(`${cwd}:${sessionId}`)}),
-				Effect.provide(discoveryContext),
 				Effect.map(discovered =>
 					Array.map(discovered, route => ({
 						...PortlessRun.make({

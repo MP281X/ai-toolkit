@@ -2,14 +2,13 @@ import {Effect, Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {AgentError, AgentProvider, AgentUsageData, AgentSubscription} from '@deslop/agent/schema'
+import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
 import {AiError} from '@deslop/ai/schema'
 import {
 	GitBranchesSnapshot,
 	GitDiff,
 	GitError,
 	GitProject,
-	GitPullRequest,
 	GitReviewComment,
 	GitReviewCommentDraft,
 	GitReviewMark,
@@ -129,17 +128,7 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({comments: Schema.Array(GitReviewComment), cwd: Schema.String})
 	}),
 	Rpc.make('publish.checkpoint', {error: GitError, payload: CwdPayload}),
-	Rpc.make('publish.publish', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, message: Schema.String}),
-		success: Schema.optional(GitPullRequest)
-	}),
-	Rpc.make('publish.pullRequest', {
-		error: GitError,
-		payload: CwdPayload,
-		stream: true,
-		success: Schema.optional(GitPullRequest)
-	}),
+	Rpc.make('publish.publish', {error: GitError, payload: Schema.Struct({cwd: Schema.String, message: Schema.String})}),
 	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
 	Rpc.make('projects.createWorktree', {
 		error: GitError,
@@ -172,13 +161,13 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('usage', {
 		error: AgentError,
-		payload: Schema.Struct({provider: AgentProvider}),
+		payload: Schema.Struct({provider: AgentUsageProvider}),
 		stream: true,
 		success: AgentUsageData
 	}),
 	Rpc.make('usage.subscription', {
 		error: AgentError,
-		payload: Schema.Struct({provider: AgentProvider}),
+		payload: Schema.Struct({provider: AgentUsageProvider}),
 		success: AgentSubscription
 	}),
 	Rpc.make('usage.system', {error: OsError, stream: true, success: Resources})

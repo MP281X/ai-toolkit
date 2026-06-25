@@ -507,9 +507,17 @@ function AgentSessionRow(input: {
 							event.stopPropagation()
 							input.onStop()
 						}}
-						title={`Stop ${input.session.label}`}
+						title={`${terminalStatusActive(input.session.state.state) && input.session.state.state !== 'idle' ? 'Stop' : 'Remove'} ${input.session.label}`}
 					>
-						{input.stopping ? <Spinner className="size-2.5 border opacity-60" /> : <Square className="size-3" />}
+						{pipe(
+							Match.value({
+								active: terminalStatusActive(input.session.state.state) && input.session.state.state !== 'idle',
+								stopping: input.stopping
+							}),
+							Match.when({stopping: true}, () => <Spinner className="size-2.5 border opacity-60" />),
+							Match.when({active: true}, () => <Square className="size-3" />),
+							Match.orElse(() => <Trash className="size-3" />)
+						)}
 					</Button>
 				}
 				icon={<ProcessStateIcon state={input.session.state.state} />}
@@ -625,11 +633,8 @@ function WorktreeAgents(input: {
 	)
 }
 
-function worktreeHasActiveAgent(worktree: SidebarWorktree) {
-	return pipe(
-		worktree.agents,
-		Array.some(session => terminalStatusActive(session.state.state) && session.state.state !== 'idle')
-	)
+function worktreeHasAgent(worktree: SidebarWorktree) {
+	return worktree.agents.length > 0
 }
 
 function WorktreeManager(input: {
@@ -654,7 +659,7 @@ function WorktreeManager(input: {
 		creatingBranch: '',
 		deleteDialogOpen: false,
 		deletingWorktree: false,
-		filterActiveAgents: false,
+		filterAgentWorktrees: false,
 		maintainingProject: ''
 	}))
 	const createWorktreeProject =
@@ -663,7 +668,9 @@ function WorktreeManager(input: {
 			Array.findFirst(project => project.repository.root === state.createWorktreeProjectRoot),
 			Option.getOrUndefined
 		) ?? input.activeProject
-	const branchSnapshot = useAtomSuspense(branchesAtom(createWorktreeProject?.repository.root ?? ''))
+	const branchSnapshot = useAtomSuspense(
+		branchesAtom(state.actionsOpen ? (createWorktreeProject?.repository.root ?? '') : '')
+	)
 	const localBranchNames = pipe(
 		branchSnapshot.value.branches,
 		Array.filter(candidate => candidate.type === 'local'),
@@ -767,15 +774,15 @@ function WorktreeManager(input: {
 						type="button"
 						variant="ghost"
 						size="icon"
-						aria-pressed={state.filterActiveAgents}
-						aria-label={state.filterActiveAgents ? 'Showing active agent worktrees' : 'Showing all worktrees'}
-						className={state.filterActiveAgents ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
+						aria-pressed={state.filterAgentWorktrees}
+						aria-label={state.filterAgentWorktrees ? 'Showing agent worktrees' : 'Showing all worktrees'}
+						className={state.filterAgentWorktrees ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
 						onClick={() => {
-							setState(current => ({...current, filterActiveAgents: !current.filterActiveAgents}))
+							setState(current => ({...current, filterAgentWorktrees: !current.filterAgentWorktrees}))
 						}}
-						title={state.filterActiveAgents ? 'Show all worktrees' : 'Show active agent worktrees'}
+						title={state.filterAgentWorktrees ? 'Show all worktrees' : 'Show agent worktrees'}
 					>
-						{state.filterActiveAgents ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
+						{state.filterAgentWorktrees ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
 					</Button>
 					{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
 						<Button
@@ -939,8 +946,8 @@ function WorktreeManager(input: {
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
 					{Array.map(input.projects, project => {
-						const worktrees = state.filterActiveAgents
-							? pipe(project.worktrees, Array.filter(worktreeHasActiveAgent))
+						const worktrees = state.filterAgentWorktrees
+							? pipe(project.worktrees, Array.filter(worktreeHasAgent))
 							: project.worktrees
 
 						if (worktrees.length === 0) return null

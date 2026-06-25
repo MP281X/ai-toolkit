@@ -1,21 +1,9 @@
-import {
-	Array,
-	Effect,
-	FileSystem,
-	Function,
-	Hash,
-	HashMap,
-	Option,
-	Order,
-	Path,
-	Predicate,
-	Record,
-	Schema,
-	String,
-	pipe
-} from 'effect'
+import * as NodeFs from 'node:fs'
+import * as NodePath from 'node:path'
 
-import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import {Array, Effect, Function, Hash, HashMap, Option, Order, Predicate, Record, Schema, String, pipe} from 'effect'
+
+import {ChildProcess} from 'effect/unstable/process'
 
 import {PortlessPackageJson} from '../schema.ts'
 
@@ -68,6 +56,7 @@ const FrameworkCommand = Schema.Literals([
 	'vp'
 ])
 
+const ignoredPackageManifestDirectories = ['build', 'dist', 'node_modules', 'target'] as const
 const packageRunners = ['bunx', 'npx', 'pnpm', 'pnpx', 'yarn'] as const
 const packageRunnerSubcommands = ['dlx', 'exec'] as const
 
@@ -163,33 +152,63 @@ function packageScripts(
 	)
 }
 
+function readDirectoryEntries(directory: string) {
+	try {
+		return NodeFs.readdirSync(directory, {withFileTypes: true})
+	} catch {
+		return []
+	}
+}
+
+function readTextFile(filePath: string) {
+	try {
+		return NodeFs.readFileSync(filePath, 'utf8')
+	} catch {
+		return void 0
+	}
+}
+
+function packageJsonPaths(cwd: string) {
+	const pending = ['']
+	const packagePaths = Array.empty<string>()
+
+	while (!Array.isReadonlyArrayEmpty(pending)) {
+		const directory = pending.pop() ?? ''
+		const absoluteDirectory = directory === '' ? cwd : NodePath.join(cwd, directory)
+		const entries = readDirectoryEntries(absoluteDirectory)
+
+		for (const entry of entries) {
+			const relative = directory === '' ? entry.name : NodePath.join(directory, entry.name)
+			if (entry.name === 'package.json' && entry.isFile()) {
+				packagePaths.push(relative)
+				continue
+			}
+			if (!entry.isDirectory()) continue
+			if (String.startsWith('.')(entry.name)) continue
+			if (pipe(ignoredPackageManifestDirectories, Array.contains(entry.name))) continue
+
+			pending.push(relative)
+		}
+	}
+
+	return pipe(packagePaths, Array.sortWith(Function.identity, Order.String))
+}
+
+function readPackageManifests(cwd: string) {
+	return pipe(
+		packageJsonPaths(cwd),
+		Array.flatMap(packagePath => {
+			const source = readTextFile(NodePath.join(cwd, packagePath))
+			return Predicate.isUndefined(source) ? [] : [{packageJson: packageJson(source), packagePath}]
+		})
+	)
+}
+
 export const discover = Effect.fnUntraced(function* (
 	cwd: string,
 	input: {readonly origin: (host: string) => string; readonly port: (sessionId: string) => Effect.Effect<number>}
 ) {
-	const execString = yield* ChildProcessSpawner.ChildProcessSpawner.useSync(spawner => spawner.string)
-	const fs = yield* FileSystem.FileSystem
-	const path = yield* Path.Path
-	const output = yield* execString(
-		ChildProcess.make('git', ['ls-files', '-co', '--exclude-standard', '--', 'package.json', '**/package.json'], {cwd})
-	)
-	const packagePaths = pipe(
-		String.split('\n')(output),
-		Array.filter(packagePath => packagePath === 'package.json' || String.endsWith('/package.json')(packagePath))
-	)
-	const packageManifests = yield* pipe(
-		packagePaths,
-		Effect.forEach(
-			packagePath =>
-				pipe(
-					fs.readFileString(path.join(cwd, packagePath)),
-					Effect.flatMap(source => Effect.try({catch: Function.identity, try: () => packageJson(source)})),
-					Effect.match({onFailure: () => [], onSuccess: manifest => [{packageJson: manifest, packagePath}]})
-				),
-			{concurrency: 16}
-		),
-		Effect.map(Array.flatten)
-	)
+	const packageManifests = readPackageManifests(cwd)
 	const configuredTaskIds = pipe(
 		packageManifests,
 		Array.findFirst(manifest => manifest.packagePath === 'package.json'),
@@ -207,7 +226,7 @@ export const discover = Effect.fnUntraced(function* (
 			const scriptName = script?.scriptName ?? parts.scriptName
 			const packageSegment = hostSegment(packageName ?? taskId)
 			const scriptSegment = scriptHostSegment(scriptName ?? taskId)
-			const worktree = `${hostSegment(path.basename(cwd))}-${pipe(
+			const worktree = `${hostSegment(NodePath.basename(cwd))}-${pipe(
 				Math.abs(Hash.string(cwd)).toString(16),
 				String.padStart(8, '0'),
 				String.slice(0, 8)
