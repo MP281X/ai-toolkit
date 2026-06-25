@@ -29,11 +29,11 @@ import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
 import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
-import type {AgentProvider} from '@deslop/agent/schema'
+import {type AgentProvider, type AgentUsageProvider} from '@deslop/agent/schema'
 import {Agent, AgentUsage} from '@deslop/agent/service'
 import {AiError} from '@deslop/ai/schema'
 import {Ai} from '@deslop/ai/service'
-import {GitError, GitReviewChangesTarget, GitReviewLocalTarget} from '@deslop/git/schema'
+import {GitError, GitReviewBranchTarget, GitReviewChangesTarget, GitReviewLocalTarget} from '@deslop/git/schema'
 import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {Os} from '@deslop/os/service'
 import {PortlessRun} from '@deslop/portless/schema'
@@ -239,7 +239,8 @@ const PublishAgentSessions = RcMap.make({
 
 const agentProfiles = [
 	{icon: 'codex', id: 'codex', label: 'codex'},
-	{icon: 'claude', id: 'claude', label: 'claude'}
+	{icon: 'claude', id: 'claude', label: 'claude'},
+	{icon: 'pi', id: 'pi', label: 'pi'}
 ] satisfies readonly AgentProfile[]
 
 const ProviderAgents = RcMap.make({
@@ -251,9 +252,19 @@ const ProviderAgents = RcMap.make({
 	})
 })
 
+const AgentUsageSessions = RcMap.make({
+	idleTimeToLive: Duration.minutes(2),
+	lookup: Effect.fnUntraced(function* (provider: AgentUsageProvider) {
+		const context = yield* Layer.buildWithScope(AgentUsage.layer({provider}), yield* Effect.scope)
+
+		return Context.get(context, AgentUsage)
+	})
+})
+
 function draftCommitPrompt(input: {
 	readonly diffs: readonly {readonly filePath: string; readonly patch: string; readonly status: string}[]
 	readonly recentSubjects: readonly string[]
+	readonly scope: 'branch' | 'worktree'
 }) {
 	const patches = pipe(
 		input.diffs,
@@ -268,7 +279,9 @@ function draftCommitPrompt(input: {
 				Array.join('\n')
 			)}`
 
-	return `Write a git commit message for these current worktree changes.
+	const scopeLabel = input.scope === 'branch' ? 'branch changes' : 'current worktree changes'
+
+	return `Write a git commit message for these ${scopeLabel}.
 
 Rules:
 - Return exactly a commit message, with no markdown or commentary.
@@ -300,12 +313,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitPublishes = yield* GitPublishSessions
 		const publishAgents = yield* PublishAgentSessions
 		const providerAgents = yield* ProviderAgents
+		const agentUsages = yield* AgentUsageSessions
 		const portless = yield* Portless
 		const os = yield* Os
-		const codexUsageContext = yield* Layer.buildWithScope(AgentUsage.layer({provider: 'codex'}), yield* Effect.scope)
-		const claudeUsageContext = yield* Layer.buildWithScope(AgentUsage.layer({provider: 'claude'}), yield* Effect.scope)
-		const codexUsage = Context.get(codexUsageContext, AgentUsage)
-		const claudeUsage = Context.get(claudeUsageContext, AgentUsage)
 		const portlessScripts = yield* Ref.make(
 			HashMap.empty<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>()
 		)
@@ -324,13 +334,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 		)
 		const portlessStatusWatchers = yield* Ref.make(HashSet.empty<ScriptSessionKey>())
 		const runStatuses = yield* SubscriptionRef.make(HashMap.empty<ScriptSessionKey, AgentSession['state']>())
+		const sidebarRunsVersion = yield* SubscriptionRef.make(0)
+		const worktreeRunsRequested = yield* Ref.make(HashSet.empty<string>())
 		const resolvedTerminals = yield* Ref.make(
 			HashMap.empty<
 				TerminalStatusKey,
 				{readonly command?: ChildProcess.StandardCommand; readonly cwd: string; readonly sessionId?: string}
 			>()
 		)
-
 		const portlessWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
@@ -359,6 +370,20 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 				return scriptRuns(scripts)
 			})
+		})
+		const requestWorktreeRuns = Effect.fnUntraced(function* (cwd: string) {
+			const shouldStart = yield* Ref.modify(worktreeRunsRequested, requested =>
+				HashSet.has(requested, cwd) ? ([false, requested] as const) : ([true, HashSet.add(requested, cwd)] as const)
+			)
+			if (!shouldStart) return
+			yield* Effect.forkScoped(
+				pipe(
+					Effect.all([RcMap.get(portlessWorktrees, cwd), RcMap.get(scriptWorktrees, cwd)], {concurrency: 2}),
+					Effect.tap(() => SubscriptionRef.update(sidebarRunsVersion, current => current + 1)),
+					Effect.catch(() => Ref.update(worktreeRunsRequested, current => HashSet.remove(current, cwd))),
+					Effect.ignore
+				)
+			)
 		})
 
 		const terminalSession = Effect.fnUntraced(function* (input: TerminalPayload) {
@@ -427,12 +452,20 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
-			if (Predicate.isUndefined(removed.script)) return
-			yield* Ref.set(portlessScripts, removed.current)
-
-			yield* portless.remove({cwd: removed.script.script.cwd, sessionId: removed.script.script.sessionId})
-			yield* pipe(RcMap.invalidate(portlessWorktrees, removed.script.script.cwd), Effect.ignore)
-			yield* pipe(RcMap.invalidate(scriptWorktrees, removed.script.script.cwd), Effect.ignore)
+			return yield* pipe(
+				Option.fromUndefinedOr(removed.script),
+				Option.match({
+					onNone: () => Effect.void,
+					onSome: Effect.fnUntraced(function* (script) {
+						yield* Ref.set(portlessScripts, removed.current)
+						yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
+						yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
+						yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
+						yield* Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
+						yield* SubscriptionRef.update(sidebarRunsVersion, current => current + 1)
+					})
+				})
+			)
 		})
 		const watchPortlessRoute = Effect.fnUntraced(function* (
 			input: TerminalPayload,
@@ -473,6 +506,10 @@ export const RpcHandlers = RpcContracts.toLayer(
 										),
 										Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
 										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
+										Effect.andThen(
+											Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
+										),
+										Effect.andThen(SubscriptionRef.update(sidebarRunsVersion, current => current + 1)),
 										Effect.andThen(invalidateTerminal(input)),
 										Effect.andThen(Ref.update(portlessStatusWatchers, current => HashSet.remove(current, watcherKey)))
 									)
@@ -493,6 +530,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		const sidebarSnapshot = Effect.fnUntraced(function* () {
 			const statuses = yield* SubscriptionRef.get(runStatuses)
+			const cachedPortlessScripts = yield* Ref.get(portlessScripts)
+			const cachedPackageScripts = yield* Ref.get(packageScripts)
 			const sidebarProjects = yield* pipe(
 				SubscriptionRef.get(git.projects),
 				Effect.flatMap(snapshot =>
@@ -504,13 +543,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 									project.worktrees,
 									worktree =>
 										Effect.gen(function* () {
-											const portlessRuns = yield* pipe(
-												RcMap.get(portlessWorktrees, worktree.root),
-												Effect.orElseSucceed(() => [])
+											yield* requestWorktreeRuns(worktree.root)
+											const portlessRuns = pipe(
+												Array.fromIterable(HashMap.values(cachedPortlessScripts)),
+												Array.filter(run => run.script.cwd === worktree.root),
+												Array.map(run => PortlessRun.make({origin: run.origin, script: run.script, status: run.status}))
 											)
-											const packageRuns = yield* pipe(
-												RcMap.get(scriptWorktrees, worktree.root),
-												Effect.orElseSucceed(() => [])
+											const packageRuns = pipe(
+												Array.fromIterable(HashMap.values(cachedPackageScripts)),
+												Array.filter(script => script.cwd === worktree.root),
+												scriptRuns
 											)
 											return {
 												agents: yield* currentAgentSessions(worktree.root),
@@ -632,31 +674,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 							SubscriptionRef.changes(sessionTerminal.status),
 							Stream.takeUntil(state => terminalStatusDone(state)),
 							Stream.runForEach(state =>
-								pipe(
-									SubscriptionRef.update(agents, sessions =>
-										pipe(
-											HashMap.get(sessions, key),
-											Option.match({
-												onNone: () => sessions,
-												onSome: session => HashMap.set(sessions, key, {...session, state})
-											})
-										)
-									),
-									Effect.andThen(
-										terminalStatusDone(state)
-											? pipe(
-													SubscriptionRef.update(agents, sessions => HashMap.remove(sessions, key)),
-													Effect.andThen(pipe(RcMap.invalidate(terminals, input), Effect.ignore)),
-													Effect.andThen(
-														Ref.update(resolvedTerminals, sessions =>
-															HashMap.remove(
-																sessions,
-																TerminalStatusKey.make({cwd: agentSession.cwd, sessionId: agentSession.uuid})
-															)
-														)
-													)
-												)
-											: Effect.void
+								SubscriptionRef.update(agents, sessions =>
+									pipe(
+										HashMap.get(sessions, key),
+										Option.match({
+											onNone: () => sessions,
+											onSome: session => HashMap.set(sessions, key, {...session, state})
+										})
 									)
 								)
 							)
@@ -673,6 +697,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					Stream.merge(SubscriptionRef.changes(git.projects), SubscriptionRef.changes(agents)),
 					Stream.merge(SubscriptionRef.changes(runStatuses)),
+					Stream.merge(SubscriptionRef.changes(sidebarRunsVersion)),
 					Stream.mapEffect(() => sidebarSnapshot()),
 					Stream.changes
 				),
@@ -685,6 +710,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
 					Effect.andThen(RcMap.invalidate(scriptWorktrees, payload.cwd)),
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
+					Effect.andThen(Ref.update(worktreeRunsRequested, current => HashSet.remove(current, payload.cwd))),
+					Effect.andThen(SubscriptionRef.update(sidebarRunsVersion, current => current + 1)),
 					Effect.andThen(git.deleteWorktree(payload))
 				),
 			'projects.maintenance': payload => git.maintenance(payload.cwd),
@@ -700,16 +727,23 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return yield* Effect.scoped(
 					Effect.gen(function* () {
 						const changes = yield* RcMap.get(gitChanges, payload.cwd)
-						const changesDiffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
-						const changesDiffs = yield* SubscriptionRef.get(changesDiffsRef)
 						const metadata = yield* SubscriptionRef.get(changes.metadata)
 						const checkpointCommits = Array.takeWhile(metadata.localCommits, commit => commit.checkpoint)
+						const changesDiffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
+						const changesDiffs = yield* SubscriptionRef.get(changesDiffsRef)
 						const diffs = yield* Effect.gen(function* () {
 							if (!Array.isReadonlyArrayEmpty(changesDiffs)) return changesDiffs
-							if (Array.isReadonlyArrayEmpty(checkpointCommits)) return changesDiffs
+							if (Array.isReadonlyArrayEmpty(checkpointCommits)) {
+								const branchDiffsRef = yield* changes.diffs(GitReviewBranchTarget.make({}))
+								return yield* SubscriptionRef.get(branchDiffsRef)
+							}
 							const localDiffsRef = yield* changes.diffs(GitReviewLocalTarget.make({}))
 							return yield* SubscriptionRef.get(localDiffsRef)
 						})
+						const scope =
+							Array.isReadonlyArrayEmpty(changesDiffs) && Array.isReadonlyArrayEmpty(checkpointCommits)
+								? 'branch'
+								: 'worktree'
 						const promptDiffs = Array.map(diffs, diff => ({
 							filePath: diff.filePath,
 							patch: diff.patch ?? '',
@@ -728,7 +762,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 							agent.prompt({
 								messages: [
 									Prompt.makeMessage('user', {
-										content: [Prompt.makePart('text', {text: draftCommitPrompt({diffs: promptDiffs, recentSubjects})})]
+										content: [
+											Prompt.makePart('text', {text: draftCommitPrompt({diffs: promptDiffs, recentSubjects, scope})})
+										]
 									})
 								],
 								model: 'gpt-5.5',
@@ -752,13 +788,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					RcMap.get(gitPublishes, payload.cwd),
 					Effect.flatMap(publish => publish.publish({message: payload.message})),
 					Effect.tap(() => RcMap.invalidate(gitChanges, payload.cwd))
-				),
-			'publish.pullRequest': payload =>
-				Stream.unwrap(
-					pipe(
-						RcMap.get(gitPublishes, payload.cwd),
-						Effect.map(publish => pipe(SubscriptionRef.changes(publish.pullRequest), Stream.map(Option.getOrUndefined)))
-					)
 				),
 			'review.comments.resolve': payload =>
 				pipe(
@@ -899,24 +928,35 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.write(payload.data))
 				),
-			usage: payload => {
-				const ref = payload.provider === 'claude' ? claudeUsage.usage : codexUsage.usage
-				return Stream.unwrap(
-					Effect.gen(function* () {
-						const current = yield* SubscriptionRef.get(ref)
-						return pipe(
-							Stream.make(current),
-							Stream.concat(SubscriptionRef.changes(ref)),
-							Stream.filterMap(option => Result.fromOption(option, Function.constVoid)),
-							Stream.flatMap(
-								Exit.match({onFailure: cause => Stream.failCause(cause), onSuccess: value => Stream.succeed(value)})
+			usage: payload =>
+				Stream.unwrap(
+					pipe(
+						RcMap.get(agentUsages, payload.provider),
+						Effect.map(agentUsage =>
+							Stream.unwrap(
+								Effect.gen(function* () {
+									const current = yield* SubscriptionRef.get(agentUsage.usage)
+									return pipe(
+										Stream.make(current),
+										Stream.concat(SubscriptionRef.changes(agentUsage.usage)),
+										Stream.filterMap(option => Result.fromOption(option, Function.constVoid)),
+										Stream.flatMap(
+											Exit.match({
+												onFailure: cause => Stream.failCause(cause),
+												onSuccess: value => Stream.succeed(value)
+											})
+										)
+									)
+								})
 							)
 						)
-					})
-				)
-			},
+					)
+				),
 			'usage.subscription': payload =>
-				payload.provider === 'claude' ? claudeUsage.subscription : codexUsage.subscription,
+				pipe(
+					RcMap.get(agentUsages, payload.provider),
+					Effect.flatMap(agentUsage => agentUsage.subscription)
+				),
 			'usage.system': () => SubscriptionRef.changes(os.resources)
 		})
 	})

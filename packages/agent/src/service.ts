@@ -5,12 +5,13 @@ import type {ChildProcess} from 'effect/unstable/process'
 
 import {makeLayerClaude} from './agents/claude.ts'
 import {makeLayerCodex} from './agents/codex.ts'
+import {makeLayerPi} from './agents/pi.ts'
 import {
 	type AgentError,
 	type AgentLayerConfig,
-	type AgentProvider,
 	type AgentSubscription,
-	type AgentUsageData
+	type AgentUsageData,
+	type AgentUsageProvider
 } from './schema.ts'
 import {makeLayerClaudeUsage} from './usage/claude.ts'
 import {makeLayerCodexUsage} from './usage/codex.ts'
@@ -24,6 +25,7 @@ export class Agent extends Context.Service<
 			Match.value(config),
 			Match.when({provider: 'codex'}, input => Agent.layerCodex(input)),
 			Match.when({provider: 'claude'}, input => Agent.layerClaude(input)),
+			Match.when({provider: 'pi'}, input => Agent.layerPi(input)),
 			Match.exhaustive
 		)
 	}
@@ -33,6 +35,9 @@ export class Agent extends Context.Service<
 
 	public static layerClaude = (config: AgentLayerConfig) =>
 		Layer.effect(this, pipe(makeLayerClaude(config), Effect.map(Agent.of)))
+
+	public static layerPi = (config: AgentLayerConfig) =>
+		Layer.effect(this, pipe(makeLayerPi(config), Effect.map(Agent.of)))
 }
 
 export class AgentUsage extends Context.Service<
@@ -42,7 +47,7 @@ export class AgentUsage extends Context.Service<
 		readonly usage: SubscriptionRef.SubscriptionRef<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>
 	}
 >()('@deslop/agent/service/AgentUsage') {
-	public static layer(config: {readonly provider: AgentProvider}) {
+	public static layer(config: {readonly provider: AgentUsageProvider}) {
 		return pipe(
 			Match.value(config),
 			Match.when({provider: 'codex'}, input => AgentUsage.layerCodex(input)),

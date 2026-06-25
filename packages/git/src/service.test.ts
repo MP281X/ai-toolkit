@@ -64,6 +64,13 @@ function metadata(cwd: string) {
 		cwd,
 		Effect.gen(function* () {
 			const changes = yield* GitChanges
+			for (const _ of Array.range(0, 40)) {
+				const snapshot = yield* SubscriptionRef.get(changes.metadata)
+				if (!Array.isReadonlyArrayEmpty(snapshot.localCommits) || !Array.isReadonlyArrayEmpty(snapshot.branchCommits)) {
+					return snapshot
+				}
+				yield* Effect.promise(() => setTimeout(50))
+			}
 			return yield* SubscriptionRef.get(changes.metadata)
 		})
 	)

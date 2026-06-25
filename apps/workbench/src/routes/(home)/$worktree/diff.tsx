@@ -14,7 +14,6 @@ import {
 	CheckIcon,
 	CircleCheckIcon,
 	CopyIcon,
-	ExternalLinkIcon,
 	FileIcon,
 	FolderIcon,
 	MinusIcon,
@@ -23,7 +22,7 @@ import {
 } from '@deslop/components/icons'
 import {PatchDiff, formatCopiedComment} from '@deslop/components/render/diff'
 import {TreeExplorer, TreeExplorerRow, TreeExplorerSection} from '@deslop/components/tree-explorer'
-import {Button, buttonVariants} from '@deslop/components/ui/button'
+import {Button} from '@deslop/components/ui/button'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {ResizableHandle, ResizablePanel, ResizablePanelGroup} from '@deslop/components/ui/resizable'
 import {toast} from '@deslop/components/ui/sonner'
@@ -60,15 +59,6 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const publishPullRequestAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('publish.pullRequest', {cwd})),
-			Stream.unwrap
-		)
-	)
-)
 function targetKey(target: GitReviewTarget) {
 	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
 }
@@ -234,7 +224,6 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
-	const pullRequest = useAtomValue(publishPullRequestAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
 	const shortcutsOpenState = useState(false)
 	const selectedScopeState = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
@@ -257,9 +246,8 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
 	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
-	const changesReviewDiffsValue = AsyncResult.isSuccess(changesReviewDiffsResult)
-		? changesReviewDiffsResult.value
-		: Array.empty<GitDiff>()
+	const changesReviewDiffsLoaded = AsyncResult.isSuccess(changesReviewDiffsResult)
+	const changesReviewDiffsValue = changesReviewDiffsLoaded ? changesReviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedFilePath =
 		String.isNonEmpty(selectedFilePathState[0]) &&
 		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
@@ -389,16 +377,15 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 					<div className="flex h-full flex-col border-r">
 						<CommitActionForm
 							cwd={input.cwd}
-							dirty={suggestedMetadataLoaded && suggestedMetadata.value.dirty}
-							hasReviewableChanges={
-								AsyncResult.isSuccess(reviewDiffsResult) && !Array.isReadonlyArrayEmpty(reviewDiffsValue)
+							dirty={
+								(suggestedMetadataLoaded && suggestedMetadata.value.dirty) ||
+								(changesReviewDiffsLoaded && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue))
 							}
 							hasReviewableWorktreeChanges={
-								AsyncResult.isSuccess(changesReviewDiffsResult) && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue)
+								changesReviewDiffsLoaded && !Array.isReadonlyArrayEmpty(changesReviewDiffsValue)
 							}
 							hasCheckpointCommits={!Array.isReadonlyArrayEmpty(checkpointCommits)}
-							loading={!suggestedMetadataLoaded}
-							prUrl={AsyncResult.isSuccess(pullRequest) ? pullRequest.value?.url : undefined}
+							loading={!suggestedMetadataLoaded || !changesReviewDiffsLoaded}
 							refreshReview={refreshReview}
 							unpushedCommits={suggestedMetadataLoaded && suggestedMetadata.value.unpushedCommits}
 							unpushedCount={Array.length(localCommits)}
@@ -554,10 +541,8 @@ function CommitActionForm(input: {
 	readonly cwd: string
 	readonly dirty: boolean
 	readonly hasCheckpointCommits: boolean
-	readonly hasReviewableChanges: boolean
 	readonly hasReviewableWorktreeChanges: boolean
 	readonly loading: boolean
-	readonly prUrl?: string
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 	readonly unpushedCount: number
@@ -577,7 +562,7 @@ function CommitActionForm(input: {
 		Match.when({loading: true}, () => 'Loading'),
 		Match.when({dirty: true}, () => 'Generate commit message'),
 		Match.when({checkpoints: true}, () => 'Generate squash message'),
-		Match.orElse(() => 'No changes')
+		Match.orElse(() => (input.unpushedCommits ? 'Generate branch summary' : 'No changes'))
 	)
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
@@ -608,7 +593,7 @@ function CommitActionForm(input: {
 	}
 
 	function canGenerateMessage() {
-		return canPublishDirtyChanges() || canPublishCheckpoints()
+		return canPublishDirtyChanges() || canPublishCheckpoints() || canPublishExistingCommits()
 	}
 
 	function canSubmitPublish() {
@@ -701,7 +686,7 @@ function CommitActionForm(input: {
 				size="icon-xs"
 				className="size-4"
 				aria-label="Generate commit message"
-				title="Generate commit message"
+				title={canPublishExistingCommits() ? 'Generate branch summary' : 'Generate commit message'}
 				disabled={
 					input.loading ||
 					actionState.generatingMessage ||
@@ -741,7 +726,7 @@ function CommitActionForm(input: {
 				size="icon-xs"
 				className="size-4"
 				aria-label="Publish"
-				title="Commit, push, and open a draft PR"
+				title="Commit and push"
 				disabled={
 					input.loading ||
 					actionState.publishing ||
@@ -752,29 +737,10 @@ function CommitActionForm(input: {
 			>
 				{actionState.publishing ? <Spinner className="size-2.5 border opacity-60" /> : <UploadIcon />}
 			</Button>
-			{input.loading ? (
+			{input.loading && (
 				<span className="text-muted-foreground flex size-4 items-center justify-center">
 					<Spinner className="size-2.5 border opacity-60" />
 				</span>
-			) : (
-				String.isNonEmpty(input.prUrl ?? '') && (
-					<a
-						className={cn(buttonVariants({size: 'icon-xs', variant: 'ghost'}), 'size-4')}
-						href={pipe(
-							URL.parse(input.prUrl ?? ''),
-							Option.fromNullishOr,
-							Option.filter(parsed => parsed.protocol === 'https:' && parsed.hostname === 'github.com'),
-							Option.map(parsed => parsed.href),
-							Option.getOrUndefined
-						)}
-						target="_blank"
-						rel="noopener noreferrer"
-						aria-label="Open pull request"
-						title="Open pull request"
-					>
-						<ExternalLinkIcon />
-					</a>
-				)
 			)}
 		</div>
 	)

@@ -6,7 +6,10 @@ export class AgentError extends Schema.TaggedErrorClass<AgentError>()('AgentErro
 }) {}
 
 export type AgentProvider = typeof AgentProvider.Type
-export const AgentProvider = Schema.Literals(['codex', 'claude'] as const)
+export const AgentProvider = Schema.Literals(['codex', 'claude', 'pi'] as const)
+
+export type AgentUsageProvider = typeof AgentUsageProvider.Type
+export const AgentUsageProvider = Schema.Literals(['codex', 'claude'] as const)
 
 export type AgentLayerConfig = typeof AgentLayerConfig.Type
 export const AgentLayerConfig = Schema.Struct({cwd: Schema.String, provider: AgentProvider})

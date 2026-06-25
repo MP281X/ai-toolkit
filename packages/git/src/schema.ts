@@ -45,9 +45,6 @@ export const GitCommit = Schema.Struct({
 	subject: Schema.String
 })
 
-export type GitPullRequest = typeof GitPullRequest.Type
-export const GitPullRequest = Schema.Struct({url: Schema.String})
-
 export type GitReviewMetadata = typeof GitReviewMetadata.Type
 export const GitReviewMetadata = Schema.Struct({
 	branchCommits: Schema.Array(GitCommit),

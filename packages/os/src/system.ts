@@ -33,15 +33,3 @@ export function nodeProcessUsage(input?: {readonly heapLimitBytes: number; reado
 
 	return {heapLimitBytes, heapUsedBytes, heapUtilization}
 }
-
-export function darwinMemoryUtilization(input: {readonly memsizeOutput: string; readonly vmStatOutput: string}) {
-	const pageSize = Number(/page size of (\d+) bytes/u.exec(input.vmStatOutput)?.[1] ?? 0)
-	const total = Number(/(\d+)/u.exec(input.memsizeOutput)?.[1] ?? 0)
-	const usedPages =
-		Number(/Pages active:\s+(\d+)\./u.exec(input.vmStatOutput)?.[1] ?? 0) +
-		Number(/Pages wired down:\s+(\d+)\./u.exec(input.vmStatOutput)?.[1] ?? 0) +
-		Number(/Pages occupied by compressor:\s+(\d+)\./u.exec(input.vmStatOutput)?.[1] ?? 0)
-
-	if (total <= 0) return 0
-	return Math.max(0, Math.min(100, ((usedPages * pageSize) / total) * 100))
-}

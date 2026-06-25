@@ -19,8 +19,13 @@ import {
 
 import type {AssistantMessage, ImageContent, Message, TextContent, ToolResultMessage} from '@earendil-works/pi-ai'
 import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
-import type {AgentSessionEvent} from '@earendil-works/pi-coding-agent'
-import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
+import {
+	DefaultResourceLoader,
+	SessionManager,
+	createAgentSession,
+	getAgentDir,
+	type AgentSessionEvent
+} from '@earendil-works/pi-coding-agent'
 import type {Prompt, Toolkit} from 'effect/unstable/ai'
 import {Response} from 'effect/unstable/ai'
 
@@ -310,7 +315,6 @@ export const makeLayerPi = Effect.fnUntraced(function* (config: AiLayerConfig) {
 	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const history = yield* Ref.make<readonly Prompt.Message[]>([])
 	const promptLock = yield* Semaphore.make(1)
-
 	const setStatus = Effect.fnUntraced(function* (state: AiStatus['state']) {
 		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
 	})
