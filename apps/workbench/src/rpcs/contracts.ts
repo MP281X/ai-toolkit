@@ -1,17 +1,8 @@
-import {Effect, Schema} from 'effect'
+import {Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {
-	AgentBrowserError,
-	AgentBrowserHealth,
-	AgentBrowserOpenRequest,
-	AgentBrowserSession,
-	AgentBrowserSessionRequest,
-	AgentBrowserTabOpenRequest,
-	AgentBrowserTabSwitchRequest,
-	AgentBrowserViewportRequest
-} from '@deslop/agent-browser/schema'
+import {AgentBrowserError, AgentBrowserTabSwitch} from '@deslop/agent-browser/schema'
 import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
 import {AiError} from '@deslop/ai/schema'
 import {
@@ -63,18 +54,11 @@ export type AgentProfile = typeof AgentProfile.Type
 const AgentProfile = Schema.Struct({icon: AgentProvider, id: AgentProvider, label: Schema.String})
 
 export type ScriptRun = typeof ScriptRun.Type
-export const ScriptRun = Schema.Struct({
+const ScriptRun = Schema.Struct({
 	command: Schema.String,
 	scriptName: Schema.String,
 	sessionId: Schema.String,
 	taskId: Schema.String
-})
-
-export const ScriptPackageJson = Schema.Struct({
-	scripts: Schema.Record(Schema.String, Schema.String).pipe(
-		Schema.optional,
-		Schema.withDecodingDefault(Effect.succeed({}))
-	)
 })
 
 export type SidebarWorktree = typeof SidebarWorktree.Type
@@ -106,17 +90,7 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agents.profiles', {error: AgentError, success: Schema.Array(AgentProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
-	Rpc.make('agentBrowser.health', {error: AgentBrowserError, success: AgentBrowserHealth}),
-	Rpc.make('agentBrowser.sessions', {
-		error: AgentBrowserError,
-		stream: true,
-		success: Schema.Array(AgentBrowserSession)
-	}),
-	Rpc.make('agentBrowser.open', {error: AgentBrowserError, payload: AgentBrowserOpenRequest}),
-	Rpc.make('agentBrowser.openTab', {error: AgentBrowserError, payload: AgentBrowserTabOpenRequest}),
-	Rpc.make('agentBrowser.switchTab', {error: AgentBrowserError, payload: AgentBrowserTabSwitchRequest}),
-	Rpc.make('agentBrowser.close', {error: AgentBrowserError, payload: AgentBrowserSessionRequest}),
-	Rpc.make('agentBrowser.viewport', {error: AgentBrowserError, payload: AgentBrowserViewportRequest}),
+	Rpc.make('agentBrowser.switchTab', {error: AgentBrowserError, payload: AgentBrowserTabSwitch}),
 	Rpc.make('home.sidebar', {
 		error: Schema.Union([GitError, TerminalError, AiError]),
 		stream: true,

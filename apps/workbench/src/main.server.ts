@@ -107,7 +107,6 @@ NodeRuntime.runMain(
 			),
 			{disableLogger: true}
 		),
-		Layer.provide(AgentBrowser.layer),
 		Layer.provide(Portless.layer),
 		Layer.provide(
 			NodeHttpServer.layerConfig(createWorkbenchServer, {

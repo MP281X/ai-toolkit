@@ -7,7 +7,7 @@
 	"packageManager": "pnpm@11.6.0",
 
 	"deslop": {
-		"portless": [
+		"dev": [
 			"@deslop/portfolio#dev:client",
 			"@deslop/portfolio#dev:server",
 			"@deslop/workbench#dev:client",

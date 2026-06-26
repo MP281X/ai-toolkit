@@ -65,7 +65,11 @@ const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey)
 		pipe(
 			RpcClient,
 			Effect.flatMap(client =>
-				client('terminal.attach', {...terminalSessionInput(input.session), ...input.size}, {asQueue: true})
+				client(
+					'terminal.attach',
+					{...terminalSessionInput(input.session), ...input.size},
+					{asQueue: true, streamBufferSize: 64}
+				)
 			)
 		)
 	)

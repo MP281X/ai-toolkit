@@ -11,6 +11,7 @@ import {
 	HashMap,
 	HashSet,
 	Layer,
+	Match,
 	Option,
 	Predicate,
 	RcMap,
@@ -28,7 +29,6 @@ import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
-import {discoverPackageScripts, packageScriptCommand, scriptRuns} from '#rpcs/scripts.ts'
 import {AgentBrowser} from '@deslop/agent-browser/service'
 import {type AgentProvider, type AgentUsageProvider} from '@deslop/agent/schema'
 import {Agent, AgentUsage} from '@deslop/agent/service'
@@ -37,8 +37,9 @@ import {Ai} from '@deslop/ai/service'
 import {GitError, GitReviewBranchTarget, GitReviewChangesTarget, GitReviewLocalTarget} from '@deslop/git/schema'
 import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {Os} from '@deslop/os/service'
-import {PortlessRun} from '@deslop/portless/schema'
+import {PortlessOrigin, PortlessRun, PortlessScript} from '@deslop/portless/schema'
 import {Portless, portlessWorktreeId} from '@deslop/portless/service'
+import {Scripts} from '@deslop/scripts/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 
@@ -56,8 +57,6 @@ const TerminalSessionIdentity = Schema.Struct({
 	cwd: Schema.String,
 	sessionId: Schema.optional(Schema.String)
 })
-
-const agentBrowserViewport = {height: 1080, width: 1920} as const
 
 function terminalStatusDone(state: AgentSession['state']) {
 	return !terminalStatusActive(state.state)
@@ -82,61 +81,46 @@ function replacePortlessScripts(
 	)
 }
 
-function removePortlessScript(
-	current: HashMap.HashMap<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>,
-	input: {readonly cwd: string; readonly sessionId?: string}
-) {
-	if (Predicate.isUndefined(input.sessionId)) return {current, script: undefined}
-
-	const key = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
-	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
-	return {current: HashMap.remove(current, key), script}
+function scriptName(taskId: string) {
+	const index = taskId.indexOf('#')
+	return index < 0 ? taskId : String.slice(index + 1)(taskId)
 }
 
-function replacePackageScripts(
-	current: HashMap.HashMap<
-		ScriptSessionKey,
-		{
-			readonly command: string
-			readonly cwd: string
-			readonly preparedCommand: ChildProcess.StandardCommand
-			readonly scriptName: string
-			readonly sessionId: string
-			readonly taskId: string
-		}
-	>,
-	cwd: string,
-	scripts: Parameters<typeof scriptRuns>[0]
-) {
+function packageSegment(taskId: string) {
+	const index = taskId.indexOf('#')
+	return index < 0 ? taskId : String.slice(0, index)(taskId)
+}
+
+function routeSegment(value: string) {
+	const segment = pipe(
+		value,
+		String.toLowerCase,
+		String.replaceAll(/[^a-z0-9-]+/gu, '-'),
+		String.replace(/^-+|-+$/gu, '')
+	)
+	return String.isEmpty(segment) ? 'app' : segment
+}
+
+function scriptRouteSegment(value: string) {
 	return pipe(
-		scripts,
-		Array.reduce(
-			HashMap.filter(current, script => script.cwd !== cwd),
-			(next, script) =>
-				HashMap.set(next, ScriptSessionKey.make({cwd, sessionId: script.sessionId}), {
-					...script,
-					cwd,
-					preparedCommand: packageScriptCommand(cwd, script)
-				})
-		)
+		Match.value(value),
+		Match.when('dev:client', () => 'client'),
+		Match.when('dev:server', () => 'server'),
+		Match.orElse(routeSegment)
 	)
 }
 
-function removePackageScripts(
-	current: HashMap.HashMap<
-		ScriptSessionKey,
-		{
-			readonly command: string
-			readonly cwd: string
-			readonly preparedCommand: ChildProcess.StandardCommand
-			readonly scriptName: string
-			readonly sessionId: string
-			readonly taskId: string
-		}
-	>,
-	cwd: string
-) {
-	return HashMap.filter(current, script => script.cwd !== cwd)
+function scriptRun(taskId: string, command: ChildProcess.StandardCommand) {
+	return {
+		command: `${command.command} ${Array.join(' ')(command.args)}`,
+		scriptName: scriptName(taskId),
+		sessionId: taskId,
+		taskId
+	}
+}
+
+function removePackageScripts(current: HashMap.HashMap<ScriptSessionKey, ChildProcess.StandardCommand>, cwd: string) {
+	return HashMap.filter(current, (_, key) => key.cwd !== cwd)
 }
 
 function makeAgentSession(input: {
@@ -319,7 +303,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitReviews = yield* GitReviewSessions
 		const gitPublishes = yield* GitPublishSessions
 		const publishAgents = yield* PublishAgentSessions
-		const agentBrowser = yield* AgentBrowser
 		const providerAgents = yield* ProviderAgents
 		const agentUsages = yield* AgentUsageSessions
 		const portless = yield* Portless
@@ -327,19 +310,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const portlessScripts = yield* Ref.make(
 			HashMap.empty<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>()
 		)
-		const packageScripts = yield* Ref.make(
-			HashMap.empty<
-				ScriptSessionKey,
-				{
-					readonly command: string
-					readonly cwd: string
-					readonly preparedCommand: ChildProcess.StandardCommand
-					readonly scriptName: string
-					readonly sessionId: string
-					readonly taskId: string
-				}
-			>()
-		)
+		const packageScripts = yield* Ref.make(HashMap.empty<ScriptSessionKey, ChildProcess.StandardCommand>())
 		const portlessStatusWatchers = yield* Ref.make(HashSet.empty<ScriptSessionKey>())
 		const runStatuses = yield* SubscriptionRef.make(HashMap.empty<ScriptSessionKey, AgentSession['state']>())
 		const sidebarRunsVersion = yield* SubscriptionRef.make(0)
@@ -354,14 +325,41 @@ export const RpcHandlers = RpcContracts.toLayer(
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const scripts = yield* pipe(
-					portless.scripts(cwd),
-					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover portless scripts in ${cwd}`}))
+					Effect.provide(Scripts, Scripts.layer({cwd})),
+					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover scripts in ${cwd}`}))
+				)
+				const worktree = portlessWorktreeId(cwd)
+				const runs = yield* pipe(
+					Array.fromIterable(HashMap.entries(scripts.dev)),
+					Effect.forEach(([key, command]) =>
+						Effect.gen(function* () {
+							const name = scriptName(key)
+							const route = yield* portless.open({
+								command,
+								segments: [scriptRouteSegment(name), routeSegment(packageSegment(key)), worktree]
+							})
+							const run = PortlessRun.make({
+								origin: PortlessOrigin.make({...route.origin, sessionId: key, taskId: key, worktree}),
+								script: PortlessScript.make({
+									cwd,
+									env: route.env,
+									origin: route.origin.origin,
+									portless: true,
+									scriptName: name,
+									sessionId: key,
+									taskId: key
+								}),
+								status: {state: 'prepared'}
+							})
+							return {...run, preparedCommand: route.command}
+						})
+					)
 				)
 
-				yield* Ref.update(portlessScripts, current => replacePortlessScripts(current, cwd, scripts))
+				yield* Ref.update(portlessScripts, current => replacePortlessScripts(current, cwd, runs))
 
 				return pipe(
-					scripts,
+					runs,
 					Array.map(route => PortlessRun.make({origin: route.origin, script: route.script, status: route.status}))
 				)
 			})
@@ -369,41 +367,49 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const portlessBrowsers = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
-				const session = portlessWorktreeId(cwd)
-				yield* pipe(agentBrowser.close({session}), Effect.ignore)
-				return yield* Effect.acquireRelease(
-					Effect.succeed({
-						sync: Effect.fnUntraced(function* (input: {
-							readonly active: readonly PortlessRun[]
-							readonly inactive: readonly PortlessRun[]
-						}) {
-							yield* agentBrowser.syncTabs({
-								active: Array.map(input.active, run => ({url: run.origin.origin})),
-								inactive: Array.map(input.inactive, run => ({url: run.origin.origin})),
-								session
-							})
-							yield* agentBrowser.viewport({
-								height: agentBrowserViewport.height,
-								session,
-								width: agentBrowserViewport.width
-							})
+				return yield* Effect.gen(function* () {
+					const browser = yield* AgentBrowser.pipe(
+						Effect.provide(AgentBrowser.layer({sessionId: portlessWorktreeId(cwd)}))
+					)
+					return {
+						sync: Effect.fnUntraced(function* (runs: readonly PortlessRun[]) {
+							yield* pipe(
+								runs,
+								Array.filter(run => scriptRouteSegment(scriptName(run.script.sessionId)) !== 'server'),
+								Effect.forEach(
+									run =>
+										browser.openTab({
+											label: `${routeSegment(packageSegment(run.script.sessionId))}-${routeSegment(scriptName(run.script.sessionId))}`,
+											url: run.origin.origin
+										}),
+									{discard: true}
+								)
+							)
 						})
-					}),
-					() => agentBrowser.close({session}).pipe(Effect.ignore)
-				)
+					}
+				})
 			})
 		})
 		const scriptWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const scripts = yield* pipe(
-					discoverPackageScripts(cwd),
-					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover package scripts in ${cwd}`}))
+					Effect.provide(Scripts, Scripts.layer({cwd})),
+					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover scripts in ${cwd}`}))
+				)
+				const packageRuns = Array.fromIterable(HashMap.entries(scripts.scripts))
+
+				yield* Ref.update(packageScripts, current =>
+					pipe(
+						packageRuns,
+						Array.reduce(
+							HashMap.filter(current, (_, key) => key.cwd !== cwd),
+							(next, [sessionId, command]) => HashMap.set(next, ScriptSessionKey.make({cwd, sessionId}), command)
+						)
+					)
 				)
 
-				yield* Ref.update(packageScripts, current => replacePackageScripts(current, cwd, scripts))
-
-				return scriptRuns(scripts)
+				return Array.map(packageRuns, ([taskId, command]) => scriptRun(taskId, command))
 			})
 		})
 		const requestWorktreeRuns = Effect.fnUntraced(function* (cwd: string) {
@@ -441,10 +447,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 			if (Predicate.isNotUndefined(portlessScript)) {
 				return {
-					command: ChildProcess.make(portlessScript.preparedCommand.command, portlessScript.preparedCommand.args, {
-						...portlessScript.preparedCommand.options,
-						env: {...portlessScript.preparedCommand.options.env, ...portlessScript.script.env}
-					}),
+					command: portlessScript.preparedCommand,
 					cwd: portlessScript.script.cwd,
 					sessionId: portlessScript.script.sessionId
 				}
@@ -465,7 +468,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			)
 			if (Predicate.isNotUndefined(packageScript)) {
-				return {command: packageScript.preparedCommand, cwd: packageScript.cwd, sessionId: packageScript.sessionId}
+				return {command: packageScript, cwd: input.cwd, sessionId: input.sessionId}
 			}
 
 			return yield* new TerminalError({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
@@ -502,57 +505,16 @@ export const RpcHandlers = RpcContracts.toLayer(
 					)
 				)
 			)
-			return {active, scripts}
+			return active
 		})
 		const syncPortlessBrowser = Effect.fnUntraced(function* (cwd: string) {
-			yield* pipe(
-				Effect.scoped(
-					Effect.gen(function* () {
-						const runs = yield* activePortlessRuns(cwd)
-						if (Array.isReadonlyArrayEmpty(runs.active)) {
-							yield* RcMap.invalidate(portlessBrowsers, cwd)
-							return
-						}
-						const browser = yield* RcMap.get(portlessBrowsers, cwd)
-						yield* browser.sync({
-							active: runs.active,
-							inactive: Array.filter(runs.scripts, run => !Array.contains(runs.active, run))
-						})
-					})
-				),
-				Effect.ignore
-			)
-		})
-		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
-			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
-			return yield* pipe(
-				Option.fromUndefinedOr(removed.script),
-				Option.match({
-					onNone: () => Effect.void,
-					onSome: Effect.fnUntraced(function* (script) {
-						yield* Ref.set(portlessScripts, removed.current)
-						const runs = yield* activePortlessRuns(script.script.cwd)
-						if (Array.isReadonlyArrayEmpty(runs.active)) {
-							yield* pipe(RcMap.invalidate(portlessBrowsers, script.script.cwd), Effect.ignore)
-						} else {
-							yield* pipe(
-								Effect.scoped(
-									Effect.gen(function* () {
-										const browser = yield* RcMap.get(portlessBrowsers, script.script.cwd)
-										yield* browser.sync({active: runs.active, inactive: [script]})
-									})
-								),
-								Effect.ignore
-							)
-						}
-						yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
-						yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
-						yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
-						yield* Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
-						yield* SubscriptionRef.update(sidebarRunsVersion, current => current + 1)
-					})
-				})
-			)
+			const runs = yield* activePortlessRuns(cwd)
+			if (Array.isReadonlyArrayEmpty(runs)) {
+				yield* pipe(RcMap.invalidate(portlessBrowsers, cwd), Effect.ignore)
+				return
+			}
+			const browser = yield* RcMap.get(portlessBrowsers, cwd)
+			yield* pipe(browser.sync(runs), Effect.ignore)
 		})
 		const watchPortlessRoute = Effect.fnUntraced(function* (
 			input: TerminalPayload,
@@ -575,6 +537,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 			yield* pipe(
 				Effect.gen(function* () {
 					const status = yield* SubscriptionRef.get(sessionTerminal.status)
+					yield* SubscriptionRef.update(runStatuses, current =>
+						HashMap.set(
+							current,
+							ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+							status
+						)
+					)
 					if (terminalStatusRunning(status)) yield* syncPortlessBrowser(script.script.cwd).pipe(Effect.forkDetach)
 
 					yield* pipe(
@@ -590,12 +559,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 									)
 								),
 								Effect.andThen(
-									terminalStatusDone(state)
-										? pipe(
-												releasePortlessRoute({cwd: script.script.cwd, sessionId: script.script.sessionId}),
-												Effect.andThen(invalidateTerminal(input))
-											)
-										: syncPortlessBrowser(script.script.cwd)
+									terminalStatusDone(state) ? invalidateTerminal(input) : syncPortlessBrowser(script.script.cwd)
 								)
 							)
 						)
@@ -635,9 +599,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 												Array.map(run => PortlessRun.make({origin: run.origin, script: run.script, status: run.status}))
 											)
 											const packageRuns = pipe(
-												Array.fromIterable(HashMap.values(cachedPackageScripts)),
-												Array.filter(script => script.cwd === worktree.root),
-												scriptRuns
+												Array.fromIterable(HashMap.entries(cachedPackageScripts)),
+												Array.filter(([key]) => key.cwd === worktree.root),
+												Array.map(([key, command]) => scriptRun(key.sessionId, command))
 											)
 											return {
 												agents: yield* currentAgentSessions(worktree.root),
@@ -700,13 +664,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 
 		return RpcContracts.of({
-			'agentBrowser.close': payload => agentBrowser.close(payload),
-			'agentBrowser.health': () => agentBrowser.health,
-			'agentBrowser.open': payload => agentBrowser.open(payload),
-			'agentBrowser.openTab': payload => agentBrowser.openTab(payload),
-			'agentBrowser.sessions': () => agentBrowser.sessions,
-			'agentBrowser.switchTab': payload => agentBrowser.switchTab(payload),
-			'agentBrowser.viewport': payload => agentBrowser.viewport(payload),
+			'agentBrowser.switchTab': payload =>
+				pipe(
+					AgentBrowser,
+					Effect.provide(AgentBrowser.layer({sessionId: payload.session})),
+					Effect.flatMap(browser => browser.switchTab(payload.tab))
+				),
 			agents: payload =>
 				pipe(
 					Stream.fromEffect(currentAgentSessions(payload.cwd)),
@@ -740,15 +703,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 					uuid: randomUUID()
 				})
 
-				// Coding agents can run without agent-browser; add browser tooling only when available.
-				const browserEnv = yield* pipe(
-					agentBrowser.browserEnv({session: portlessWorktreeId(agentSession.cwd)}),
-					Effect.option,
-					Effect.map(Option.getOrUndefined)
-				)
 				const agentSessionWithEnv = {
 					...agentSession,
-					...(Predicate.isUndefined(browserEnv) ? {} : {env: browserEnv})
+					env: {AGENT_BROWSER_ENABLE: 'react-devtools', AGENT_BROWSER_SESSION: portlessWorktreeId(agentSession.cwd)}
 				} satisfies AgentSession
 				const input = yield* terminalSession(
 					TerminalPayload.make({
@@ -810,9 +767,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'projects.createWorktree': payload => git.createWorktree(payload),
 			'projects.deleteWorktree': payload =>
 				pipe(
-					agentBrowser.close({session: portlessWorktreeId(payload.cwd)}).pipe(Effect.ignore),
-					Effect.andThen(portless.clear(payload.cwd)),
-					Effect.andThen(RcMap.invalidate(portlessBrowsers, payload.cwd)),
+					RcMap.invalidate(portlessBrowsers, payload.cwd),
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
 					Effect.andThen(RcMap.invalidate(scriptWorktrees, payload.cwd)),
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
@@ -1026,7 +981,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
 				}
-				yield* releasePortlessRoute(input)
 				yield* invalidateTerminal(input)
 				return status
 			}),

@@ -13,6 +13,7 @@ function selectedOrigin(origins: readonly PortlessOrigin[], selected: string | u
 	return pipe(
 		Option.fromUndefinedOr(selected),
 		Option.flatMap(origin => Array.findFirst(origins, candidate => candidate.origin === origin)),
+		Option.orElse(() => Array.head(origins)),
 		Option.getOrUndefined
 	)
 }

@@ -1,0 +1,9 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/scripts",
+
+	"exports": {
+		"./service": "./src/service.ts"
+	}
+}

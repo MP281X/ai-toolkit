@@ -367,12 +367,11 @@ function PortlessGroup(input: {
 					terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
 					input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
 			)
-			await Promise.all(
-				Array.map(input.runs, run => {
-					const session = portlessSession(run)
-					return active ? stop({payload: session}) : restart({payload: session})
-				})
-			)
+			for (const run of input.runs) {
+				const session = portlessSession(run)
+				if (active) await stop({payload: session})
+				else await restart({payload: session})
+			}
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {

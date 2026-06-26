@@ -15,6 +15,7 @@
 			{"name": "package-os", "patterns": ["packages/os/**"]},
 			{"name": "package-oxlint-rules", "patterns": ["packages/oxlint-rules/src/oxlint-plugin.ts"]},
 			{"name": "package-portless", "patterns": ["packages/portless/**"]},
+			{"name": "package-scripts", "patterns": ["packages/scripts/**"]},
 			{"name": "package-terminal", "patterns": ["packages/terminal/**"]}
 		],
 		"rules": [
@@ -31,6 +32,7 @@
 					"package-os",
 					"package-oxlint-rules",
 					"package-portless",
+					"package-scripts",
 					"package-terminal"
 				]
 			},
@@ -47,6 +49,7 @@
 					"package-os",
 					"package-oxlint-rules",
 					"package-portless",
+					"package-scripts",
 					"package-terminal"
 				]
 			},
@@ -59,6 +62,7 @@
 			{"from": "package-os", "allow": ["package-os"]},
 			{"from": "package-oxlint-rules", "allow": ["package-oxlint-rules"]},
 			{"from": "package-portless", "allow": ["package-portless"]},
+			{"from": "package-scripts", "allow": ["package-scripts"]},
 			{"from": "package-terminal", "allow": ["package-terminal"]}
 		],
 		"coverage": {

@@ -394,7 +394,7 @@ export function AgentBrowser(props: {
 									props.onSelectTab?.(tab)
 								}}
 							>
-								{props.labelForTab?.(tab) ?? tab.tabId}
+								{props.labelForTab?.(tab) ?? tabValue(tab.label) ?? tab.tabId}
 							</button>
 						))
 					)}

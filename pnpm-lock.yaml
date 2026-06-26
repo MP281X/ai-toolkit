@@ -130,6 +130,9 @@ importers:
       '@deslop/portless':
         specifier: workspace:*
         version: link:../../packages/portless
+      '@deslop/scripts':
+        specifier: workspace:*
+        version: link:../../packages/scripts
       '@rolldown/plugin-babel':
         specifier: latest
         version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.1(@types/node@26.0.0)(jiti@2.7.0)(typescript@6.0.3)(yaml@2.9.0))(rolldown@1.0.3)
@@ -294,6 +297,8 @@ importers:
         version: 1.71.0
 
   packages/portless: {}
+
+  packages/scripts: {}
 
   packages/terminal:
     dependencies:
