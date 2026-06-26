@@ -57,8 +57,14 @@ const TerminalSessionIdentity = Schema.Struct({
 	sessionId: Schema.optional(Schema.String)
 })
 
+const agentBrowserViewport = {height: 1080, width: 1920} as const
+
 function terminalStatusDone(state: AgentSession['state']) {
 	return !terminalStatusActive(state.state)
+}
+
+function terminalStatusRunning(state: AgentSession['state']) {
+	return terminalStatusActive(state.state) && state.state !== 'idle'
 }
 
 function replacePortlessScripts(
@@ -85,17 +91,6 @@ function removePortlessScript(
 	const key = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 	const script = pipe(current, HashMap.get(key), Option.getOrUndefined)
 	return {current: HashMap.remove(current, key), script}
-}
-
-function portlessRunCount(
-	current: HashMap.HashMap<ScriptSessionKey, PortlessRun & {readonly preparedCommand: ChildProcess.StandardCommand}>,
-	cwd: string
-) {
-	return pipe(
-		Array.fromIterable(HashMap.values(current)),
-		Array.filter(run => run.script.cwd === cwd),
-		Array.length
-	)
 }
 
 function replacePackageScripts(
@@ -371,6 +366,33 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 			})
 		})
+		const portlessBrowsers = yield* RcMap.make({
+			idleTimeToLive: Duration.infinity,
+			lookup: Effect.fnUntraced(function* (cwd: string) {
+				const session = portlessWorktreeId(cwd)
+				yield* pipe(agentBrowser.close({session}), Effect.ignore)
+				return yield* Effect.acquireRelease(
+					Effect.succeed({
+						sync: Effect.fnUntraced(function* (input: {
+							readonly active: readonly PortlessRun[]
+							readonly inactive: readonly PortlessRun[]
+						}) {
+							yield* agentBrowser.syncTabs({
+								active: Array.map(input.active, run => ({url: run.origin.origin})),
+								inactive: Array.map(input.inactive, run => ({url: run.origin.origin})),
+								session
+							})
+							yield* agentBrowser.viewport({
+								height: agentBrowserViewport.height,
+								session,
+								width: agentBrowserViewport.width
+							})
+						})
+					}),
+					() => agentBrowser.close({session}).pipe(Effect.ignore)
+				)
+			})
+		})
 		const scriptWorktrees = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
@@ -465,6 +487,42 @@ export const RpcHandlers = RpcContracts.toLayer(
 			yield* Ref.update(resolvedTerminals, current => HashMap.remove(current, statusKey))
 			if (Predicate.isNotUndefined(session)) yield* pipe(RcMap.invalidate(terminals, session), Effect.ignore)
 		})
+		const activePortlessRuns = Effect.fnUntraced(function* (cwd: string) {
+			const statuses = yield* SubscriptionRef.get(runStatuses)
+			const scripts = pipe(
+				Array.fromIterable(HashMap.values(yield* Ref.get(portlessScripts))),
+				Array.filter(run => run.script.cwd === cwd)
+			)
+			const active = Array.filter(scripts, run =>
+				terminalStatusRunning(
+					pipe(
+						statuses,
+						HashMap.get(ScriptSessionKey.make({cwd: run.script.cwd, sessionId: run.script.sessionId})),
+						Option.getOrElse(() => ({state: 'idle' as const, title: ''}))
+					)
+				)
+			)
+			return {active, scripts}
+		})
+		const syncPortlessBrowser = Effect.fnUntraced(function* (cwd: string) {
+			yield* pipe(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const runs = yield* activePortlessRuns(cwd)
+						if (Array.isReadonlyArrayEmpty(runs.active)) {
+							yield* RcMap.invalidate(portlessBrowsers, cwd)
+							return
+						}
+						const browser = yield* RcMap.get(portlessBrowsers, cwd)
+						yield* browser.sync({
+							active: runs.active,
+							inactive: Array.filter(runs.scripts, run => !Array.contains(runs.active, run))
+						})
+					})
+				),
+				Effect.ignore
+			)
+		})
 		const releasePortlessRoute = Effect.fnUntraced(function* (input: TerminalPayload) {
 			const removed = removePortlessScript(yield* Ref.get(portlessScripts), input)
 			return yield* pipe(
@@ -473,10 +531,21 @@ export const RpcHandlers = RpcContracts.toLayer(
 					onNone: () => Effect.void,
 					onSome: Effect.fnUntraced(function* (script) {
 						yield* Ref.set(portlessScripts, removed.current)
-						yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
-						if (portlessRunCount(removed.current, script.script.cwd) === 0) {
-							yield* pipe(agentBrowser.close({session: portlessWorktreeId(script.script.cwd)}), Effect.ignore)
+						const runs = yield* activePortlessRuns(script.script.cwd)
+						if (Array.isReadonlyArrayEmpty(runs.active)) {
+							yield* pipe(RcMap.invalidate(portlessBrowsers, script.script.cwd), Effect.ignore)
+						} else {
+							yield* pipe(
+								Effect.scoped(
+									Effect.gen(function* () {
+										const browser = yield* RcMap.get(portlessBrowsers, script.script.cwd)
+										yield* browser.sync({active: runs.active, inactive: [script]})
+									})
+								),
+								Effect.ignore
+							)
 						}
+						yield* portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId})
 						yield* pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)
 						yield* pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)
 						yield* Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
@@ -504,46 +573,35 @@ export const RpcHandlers = RpcContracts.toLayer(
 			if (watching) return
 
 			yield* pipe(
-				SubscriptionRef.changes(sessionTerminal.status),
-				Stream.takeUntil(state => terminalStatusDone(state)),
-				Stream.runForEach(state =>
-					pipe(
-						SubscriptionRef.update(runStatuses, current =>
-							HashMap.set(
-								current,
-								ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId}),
-								state
-							)
-						),
-						Effect.andThen(
-							terminalStatusDone(state)
-								? pipe(
-										portless.remove({cwd: script.script.cwd, sessionId: script.script.sessionId}),
-										Effect.andThen(
-											Ref.update(portlessScripts, current => removePortlessScript(current, script.script).current)
-										),
-										Effect.andThen(pipe(RcMap.invalidate(portlessWorktrees, script.script.cwd), Effect.ignore)),
-										Effect.andThen(pipe(RcMap.invalidate(scriptWorktrees, script.script.cwd), Effect.ignore)),
-										Effect.andThen(
-											Ref.update(worktreeRunsRequested, current => HashSet.remove(current, script.script.cwd))
-										),
-										Effect.andThen(
-											Ref.get(portlessScripts).pipe(
-												Effect.flatMap(current =>
-													portlessRunCount(current, script.script.cwd) === 0
-														? pipe(agentBrowser.close({session: portlessWorktreeId(script.script.cwd)}), Effect.ignore)
-														: Effect.void
-												)
-											)
-										),
-										Effect.andThen(SubscriptionRef.update(sidebarRunsVersion, current => current + 1)),
-										Effect.andThen(invalidateTerminal(input)),
-										Effect.andThen(Ref.update(portlessStatusWatchers, current => HashSet.remove(current, watcherKey)))
+				Effect.gen(function* () {
+					const status = yield* SubscriptionRef.get(sessionTerminal.status)
+					if (terminalStatusRunning(status)) yield* syncPortlessBrowser(script.script.cwd).pipe(Effect.forkDetach)
+
+					yield* pipe(
+						SubscriptionRef.changes(sessionTerminal.status),
+						Stream.takeUntil(state => terminalStatusDone(state)),
+						Stream.runForEach(state =>
+							pipe(
+								SubscriptionRef.update(runStatuses, current =>
+									HashMap.set(
+										current,
+										ScriptSessionKey.make({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+										state
 									)
-								: Effect.void
+								),
+								Effect.andThen(
+									terminalStatusDone(state)
+										? pipe(
+												releasePortlessRoute({cwd: script.script.cwd, sessionId: script.script.sessionId}),
+												Effect.andThen(invalidateTerminal(input))
+											)
+										: syncPortlessBrowser(script.script.cwd)
+								)
+							)
 						)
 					)
-				),
+				}),
+				Effect.ensuring(Ref.update(portlessStatusWatchers, current => HashSet.remove(current, watcherKey))),
 				Effect.forkDetach
 			)
 		})
@@ -754,6 +812,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				pipe(
 					agentBrowser.close({session: portlessWorktreeId(payload.cwd)}).pipe(Effect.ignore),
 					Effect.andThen(portless.clear(payload.cwd)),
+					Effect.andThen(RcMap.invalidate(portlessBrowsers, payload.cwd)),
 					Effect.andThen(RcMap.invalidate(portlessWorktrees, payload.cwd)),
 					Effect.andThen(RcMap.invalidate(scriptWorktrees, payload.cwd)),
 					Effect.andThen(Ref.update(packageScripts, current => removePackageScripts(current, payload.cwd))),
@@ -905,6 +964,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				if (Predicate.isNotUndefined(input.sessionId)) {
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+					yield* syncPortlessBrowser(input.cwd).pipe(Effect.forkDetach)
 				}
 				yield* watchPortlessRoute(input, sessionTerminal)
 				return status

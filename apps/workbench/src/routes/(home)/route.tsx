@@ -361,21 +361,18 @@ function PortlessGroup(input: {
 
 		actionState[1](true)
 		try {
-			for (const run of input.runs) {
-				const session = portlessSession(run)
-				if (
-					Array.some(
-						input.runs,
-						candidate =>
-							terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
-							input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
-					)
-				) {
-					await stop({payload: session})
-				} else {
-					await restart({payload: session})
-				}
-			}
+			const active = Array.some(
+				input.runs,
+				candidate =>
+					terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
+					input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
+			)
+			await Promise.all(
+				Array.map(input.runs, run => {
+					const session = portlessSession(run)
+					return active ? stop({payload: session}) : restart({payload: session})
+				})
+			)
 		} catch (error) {
 			toast.error(formatError(error))
 		} finally {
@@ -404,8 +401,8 @@ function PortlessGroup(input: {
 									terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
 									input.runStatuses[run.script.sessionId]?.state !== 'idle'
 							)
-								? 'Stop deslop'
-								: 'Start deslop'
+								? 'Stop agent-browser'
+								: 'Start agent-browser'
 						}
 					>
 						{pipe(
@@ -454,7 +451,6 @@ function PortlessRunRow(input: {
 	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const taskLabel = pipe(input.run.script.taskId, String.replace(/^@[^/]+\//u, ''))
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -468,19 +464,19 @@ function PortlessRunRow(input: {
 							event.stopPropagation()
 							input.selectPortless(input.run.script.cwd, input.run.origin.origin)
 						}}
-						title={`Open ${taskLabel} preview`}
+						title={`Open ${input.run.script.taskId} preview`}
 					>
 						<GlobeIcon className="size-3" />
 					</Button>
 				}
 				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
-				title={input.run.script.command ?? taskLabel}
+				title={input.run.script.command ?? input.run.script.taskId}
 				onClick={() => {
 					input.selectRun(input.run.script.cwd, input.run.script.sessionId, input.status.state === 'idle')
 				}}
 			>
-				{taskLabel}
+				{input.run.script.taskId}
 			</TreeExplorerRow>
 		</li>
 	)

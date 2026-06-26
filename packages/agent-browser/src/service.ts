@@ -2,13 +2,28 @@ import {readdir, readFile, rm} from 'node:fs/promises'
 import {homedir} from 'node:os'
 import path from 'node:path'
 
-import {Array, Context, Effect, Layer, Option, Predicate, Schedule, Stream, String, pipe} from 'effect'
+import {
+	Array,
+	Context,
+	Effect,
+	Hash,
+	HashSet,
+	Layer,
+	Option,
+	Predicate,
+	Schedule,
+	Schema,
+	Semaphore,
+	Stream,
+	String,
+	pipe
+} from 'effect'
 
 import {HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
-import {AgentBrowserError, AgentBrowserHealth, AgentBrowserSession} from './schema.ts'
+import {AgentBrowserError, AgentBrowserHealth, AgentBrowserSession, AgentBrowserTabListResponse} from './schema.ts'
 
 function validViewportDimension(value: number) {
 	return Number.isInteger(value) && value >= 320 && value <= 4096
@@ -149,22 +164,6 @@ function streamSessionPath(url: string) {
 	return match[1]
 }
 
-function tabHandle(tab: string) {
-	if (/^t\d+$/iu.test(tab)) return tab
-	const label = pipe(
-		tab,
-		String.replace(/^@[^/]+\//u, ''),
-		String.toLowerCase,
-		String.replaceAll(/[^a-z0-9_-]+/gu, '-'),
-		String.replace(/^-+|-+$/gu, '')
-	)
-	return String.isEmpty(label) ? 'preview' : label
-}
-
-function displayTabLabel(label: string) {
-	return pipe(label, String.replace(/^(.+)-dev-(.+)$/u, '$1#dev:$2'))
-}
-
 function sameOrigin(request: HttpServerRequest.HttpServerRequest) {
 	if (Predicate.isUndefined(request.headers['origin']) || Predicate.isUndefined(request.headers['host'])) return false
 	try {
@@ -174,23 +173,37 @@ function sameOrigin(request: HttpServerRequest.HttpServerRequest) {
 	}
 }
 
-function normalizedStreamTab(tab: unknown) {
-	if (!Predicate.hasProperty(tab, 'label') || !Predicate.isString(tab.label)) return tab
-	return {...tab, label: displayTabLabel(tab.label)}
+function comparableUrl(source: string) {
+	try {
+		return new URL(source).href
+	} catch {
+		return source
+	}
 }
 
-function streamMessage(message: string | Uint8Array) {
-	if (!Predicate.isString(message)) return message
+function sameUrl(left: string, right: string) {
 	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
-		const parsed = JSON.parse(message) as unknown
-		if (!Predicate.hasProperty(parsed, 'type') || parsed.type !== 'tabs') return message
-		if (!Predicate.hasProperty(parsed, 'tabs') || !Array.isArray(parsed.tabs)) return message
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
-		return JSON.stringify({...parsed, tabs: Array.map(parsed.tabs, normalizedStreamTab)})
+		const leftUrl = new URL(left)
+		const rightUrl = new URL(right)
+		if (rightUrl.pathname === '/' && rightUrl.search === '' && rightUrl.hash === '') {
+			return leftUrl.origin === rightUrl.origin
+		}
+		return leftUrl.href === rightUrl.href
 	} catch {
-		return message
+		return comparableUrl(left) === comparableUrl(right)
 	}
+}
+
+function tabKey(source: string) {
+	const normalized = comparableUrl(source)
+	const slug = pipe(
+		normalized,
+		String.toLowerCase,
+		String.replaceAll(/[^a-z0-9]+/gu, '-'),
+		String.replace(/^-+|-+$/gu, ''),
+		String.slice(0, 64)
+	)
+	return `portless-${String.isEmpty(slug) ? 'tab' : slug}-${Math.abs(Hash.string(normalized))}`
 }
 
 function proxyStream(sessionName: string) {
@@ -216,7 +229,7 @@ function proxyStream(sessionName: string) {
 			yield* Effect.all(
 				[
 					outbound.value
-						.runRaw(message => writeInbound(streamMessage(message)))
+						.runRaw(message => writeInbound(message))
 						.pipe(
 							Effect.catchReason('SocketError', 'SocketCloseError', reason =>
 								writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(
@@ -248,11 +261,18 @@ function proxyStream(sessionName: string) {
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
 	make: Effect.gen(function* () {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+		const tabLock = yield* Semaphore.make(1)
 		const run = Effect.fn('AgentBrowser.run')(function* (args: readonly string[]) {
 			return yield* Effect.scoped(
 				Effect.gen(function* () {
 					const handle = yield* pipe(
-						spawner.spawn(ChildProcess.make('vpx', ['agent-browser', ...args], {stderr: 'pipe', stdout: 'pipe'})),
+						spawner.spawn(
+							ChildProcess.make('vpx', ['agent-browser', ...args], {
+								env: {...process.env, AGENT_BROWSER_ENABLE: 'react-devtools'},
+								stderr: 'pipe',
+								stdout: 'pipe'
+							})
+						),
 						Effect.mapError(cause => new AgentBrowserError({cause, message: 'failed to spawn agent-browser'}))
 					)
 					const output = yield* Effect.all(
@@ -293,11 +313,83 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 				return yield* new AgentBrowserError({message: `Invalid agent-browser session: ${session}`})
 			}
 		})
+		const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (session: string) {
+			yield* validateSession(session)
+			return yield* pipe(
+				run(['--json', '--session', session, 'tab']),
+				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(AgentBrowserTabListResponse))),
+				Effect.map(response => response.data.tabs)
+			)
+		})
+		const syncTabs = Effect.fn('AgentBrowser.syncTabs')(function* (input: {
+			readonly active: readonly {readonly url: string}[]
+			readonly inactive: readonly {readonly url: string}[]
+			readonly session: string
+		}) {
+			const tabs = yield* pipe(listTabs(input.session), Effect.option, Effect.map(Option.getOrElse(() => [])))
+			const active = Array.map(input.active, item => ({key: tabKey(item.url), url: item.url}))
+			const activeKeys = pipe(
+				active,
+				Array.reduce(HashSet.empty<string>(), (keys, item) => HashSet.add(keys, item.key))
+			)
+			const commands = Array.empty<string>()
+			for (const inactive of input.inactive) {
+				const key = tabKey(inactive.url)
+				if (HashSet.has(activeKeys, key)) continue
+				for (const matchingTab of Array.filter(
+					tabs,
+					candidate =>
+						candidate.label === key || (Predicate.isNotUndefined(candidate.url) && sameUrl(candidate.url, inactive.url))
+				)) {
+					commands.push(`tab close ${matchingTab.tabId}`)
+				}
+			}
+			for (const desired of active) {
+				const matching = Array.filter(
+					tabs,
+					tab => tab.label === desired.key || (Predicate.isNotUndefined(tab.url) && sameUrl(tab.url, desired.url))
+				)
+				const keep = pipe(
+					matching,
+					Array.findFirst(tab => tab.label === desired.key),
+					Option.orElse(() => Array.head(matching))
+				)
+				for (const tab of matching) {
+					if (Option.isSome(keep) && tab.tabId === keep.value.tabId) continue
+					commands.push(`tab close ${tab.tabId}`)
+				}
+				if (Option.isNone(keep)) commands.push(`tab new --label ${desired.key} ${desired.url}`)
+			}
+			if (Array.isReadonlyArrayEmpty(commands)) return
+			yield* run(['--session', input.session, 'batch', ...commands])
+		}, Semaphore.withPermit(tabLock))
+		const openTab = Effect.fn('AgentBrowser.openTab')(function* (input: {
+			readonly label: string
+			readonly session: string
+			readonly url: string
+		}) {
+			const tabs = yield* pipe(listTabs(input.session), Effect.option, Effect.map(Option.getOrElse(() => [])))
+			const matchingTabs = Array.filter(tabs, tab => Predicate.isNotUndefined(tab.url) && sameUrl(tab.url, input.url))
+			const existing = Array.head(matchingTabs)
+			if (Option.isSome(existing)) {
+				yield* run(['--session', input.session, 'tab', existing.value.tabId])
+				yield* Effect.forEach(
+					Array.drop(matchingTabs, 1),
+					tab => pipe(run(['--session', input.session, 'tab', 'close', tab.tabId]), Effect.ignore),
+					{discard: true}
+				)
+				return
+			}
+			yield* pipe(
+				run(['--session', input.session, 'tab', 'new', input.url]),
+				Effect.catch(() => run(['--session', input.session, 'open', input.url]))
+			)
+		}, Semaphore.withPermit(tabLock))
 
 		return {
 			browserEnv: Effect.fn('AgentBrowser.browserEnv')(function* (input: {readonly session: string}) {
 				yield* validateSession(input.session)
-				return {AGENT_BROWSER_SESSION: input.session}
+				return {AGENT_BROWSER_ENABLE: 'react-devtools', AGENT_BROWSER_SESSION: input.session}
 			}),
 			close: Effect.fn('AgentBrowser.close')(function* (input: {readonly session: string}) {
 				yield* validateSession(input.session)
@@ -308,20 +400,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 				yield* validateSession(input.session)
 				yield* run(['--session', input.session, 'open', input.url])
 			}),
-			openTab: Effect.fn('AgentBrowser.openTab')(function* (input: {
-				readonly label: string
-				readonly session: string
-				readonly url: string
-			}) {
-				yield* validateSession(input.session)
-				const handle = tabHandle(input.label)
-				const switched = yield* pipe(run(['--session', input.session, 'tab', handle]), Effect.option)
-				if (Option.isSome(switched)) return
-				yield* pipe(
-					run(['--session', input.session, 'tab', 'new', '--label', handle, input.url]),
-					Effect.catch(() => run(['--session', input.session, 'open', input.url]))
-				)
-			}),
+			openTab,
 			session: Effect.fn('AgentBrowser.session')(function* (input: {readonly session: string}) {
 				yield* validateSession(input.session)
 				return yield* metadata({session: input.session, socketDir: socketDir()})
@@ -332,8 +411,9 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 				readonly tab: string
 			}) {
 				yield* validateSession(input.session)
-				yield* run(['--session', input.session, 'tab', tabHandle(input.tab)])
+				yield* run(['--session', input.session, 'tab', input.tab])
 			}),
+			syncTabs,
 			viewport: Effect.fn('AgentBrowser.viewport')(function* (input: {
 				readonly height: number
 				readonly session: string

@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, pipe} from 'effect'
+import {Array, Match, Option, Predicate, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
 import {useEffect, useReducer, useRef, type PointerEvent, type WheelEvent} from 'react'
@@ -109,17 +109,22 @@ function tabValue(value: string | undefined) {
 	return Predicate.isNotUndefined(value) && value !== '' ? value : undefined
 }
 
-function defaultTabLabel(tab: AgentBrowserTab) {
-	return (
-		tabValue(tab.label) ??
-		tabValue(tab.title) ??
-		(tab.url === 'about:blank' ? undefined : tabValue(tab.url)) ??
-		'New tab'
-	)
-}
-
 function defaultTabTitle(tab: AgentBrowserTab) {
 	return tabValue(tab.title) ?? tabValue(tab.url) ?? tabValue(tab.label) ?? tab.tabId
+}
+
+function sameTabUrl(left: string | undefined, right: string) {
+	if (Predicate.isUndefined(left)) return false
+	try {
+		const leftUrl = new URL(left)
+		const rightUrl = new URL(right)
+		if (rightUrl.pathname === '/' && rightUrl.search === '' && rightUrl.hash === '') {
+			return leftUrl.origin === rightUrl.origin
+		}
+		return leftUrl.href === rightUrl.href
+	} catch {
+		return left === right
+	}
 }
 
 function visibleTab(tab: AgentBrowserTab) {
@@ -137,10 +142,16 @@ function scalePoint(
 	const rect = event.currentTarget.getBoundingClientRect()
 	const width = frame?.metadata?.deviceWidth ?? event.currentTarget.width
 	const height = frame?.metadata?.deviceHeight ?? event.currentTarget.height
-	return {
-		x: Math.round(((event.clientX - rect.left) / rect.width) * width),
-		y: Math.round(((event.clientY - rect.top) / rect.height) * height)
-	}
+	const scale = Math.min(rect.width / width, rect.height / height)
+	if (!Number.isFinite(scale) || scale <= 0) return
+
+	const renderedWidth = width * scale
+	const renderedHeight = height * scale
+	const x = ((event.clientX - rect.left - (rect.width - renderedWidth) / 2) / renderedWidth) * width
+	const y = ((event.clientY - rect.top - (rect.height - renderedHeight) / 2) / renderedHeight) * height
+	if (x < 0 || x > width || y < 0 || y > height) return
+
+	return {x: Math.round(x), y: Math.round(y)}
 }
 
 function mouseButton(eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel', buttons: number) {
@@ -191,15 +202,27 @@ function tabsMessage(value: unknown) {
 
 export function AgentBrowser(props: {
 	readonly className?: string
+	readonly labelForTab?: (tab: {
+		readonly label?: string
+		readonly tabId: string
+		readonly title?: string
+		readonly url?: string
+	}) => string | undefined
 	readonly onSelectTab?: (tab: {readonly label?: string; readonly tabId: string}) => void
+	readonly selectedUrl?: string
 	readonly session?: string
 	readonly streamUrl?: string
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const socketRef = useRef<WebSocket | null>(null)
+	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
 	const [state, dispatch] = useReducer(reduceState, emptyState())
 	const streamUrl =
 		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
+	useEffect(() => {
+		onSelectTabRef.current = props.onSelectTab
+	}, [props.onSelectTab])
+
 	useEffect(() => {
 		dispatch({type: 'reset'})
 		if (Predicate.isUndefined(streamUrl)) return
@@ -260,6 +283,7 @@ export function AgentBrowser(props: {
 
 	function pointer(event: PointerEvent<HTMLCanvasElement>, eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased') {
 		const point = scalePoint(event, state.frame)
+		if (Predicate.isUndefined(point)) return
 		send({
 			button: mouseButton(eventType, event.buttons),
 			clickCount: eventType === 'mousePressed' || eventType === 'mouseReleased' ? 1 : 0,
@@ -324,6 +348,16 @@ export function AgentBrowser(props: {
 
 	const visibleTabs = pipe(state.tabs, Array.filter(visibleTab))
 
+	useEffect(() => {
+		pipe(
+			Option.fromUndefinedOr(props.selectedUrl),
+			Option.map(selectedUrl => Array.findFirst(visibleTabs, candidate => sameTabUrl(candidate.url, selectedUrl))),
+			Option.flatten,
+			Option.filter(tab => tab.active !== true),
+			Option.map(tab => onSelectTabRef.current?.(tab))
+		)
+	}, [props.selectedUrl, visibleTabs])
+
 	if (Predicate.isUndefined(streamUrl)) {
 		return (
 			<div
@@ -350,7 +384,7 @@ export function AgentBrowser(props: {
 								type="button"
 								aria-current={tab.active === true ? 'page' : undefined}
 								className={cn(
-									'border-border h-6 max-w-44 shrink-0 truncate border px-2 text-left text-xs',
+									'border-border h-6 w-fit shrink-0 border px-2 text-left text-xs whitespace-nowrap',
 									tab.active === true
 										? 'bg-primary/15 text-primary'
 										: 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -360,7 +394,7 @@ export function AgentBrowser(props: {
 									props.onSelectTab?.(tab)
 								}}
 							>
-								{defaultTabLabel(tab)}
+								{props.labelForTab?.(tab) ?? tab.tabId}
 							</button>
 						))
 					)}
@@ -370,7 +404,7 @@ export function AgentBrowser(props: {
 				<canvas
 					ref={canvasRef}
 					tabIndex={0}
-					className="bg-background focus:ring-ring block h-auto max-h-full w-auto max-w-full outline-none focus:ring-2"
+					className="focus:ring-ring block h-full w-full object-contain outline-none focus:ring-2"
 					onPointerDown={event => {
 						event.currentTarget.focus()
 						pointer(event, 'mousePressed')
@@ -384,6 +418,7 @@ export function AgentBrowser(props: {
 					onWheel={event => {
 						event.preventDefault()
 						const point = scalePoint(event, state.frame)
+						if (Predicate.isUndefined(point)) return
 						send({
 							button: 'none',
 							clickCount: 0,

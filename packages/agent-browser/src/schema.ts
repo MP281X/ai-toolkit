@@ -39,6 +39,15 @@ export const AgentBrowserTabOpenRequest = Schema.Struct({
 export type AgentBrowserTabSwitchRequest = typeof AgentBrowserTabSwitchRequest.Type
 export const AgentBrowserTabSwitchRequest = Schema.Struct({session: Schema.String, tab: Schema.String})
 
+export type AgentBrowserTabListResponse = typeof AgentBrowserTabListResponse.Type
+export const AgentBrowserTabListResponse = Schema.Struct({
+	data: Schema.Struct({
+		tabs: Schema.Array(
+			Schema.Struct({label: Schema.optional(Schema.String), tabId: Schema.String, url: Schema.optional(Schema.String)})
+		)
+	})
+})
+
 export type AgentBrowserViewportRequest = typeof AgentBrowserViewportRequest.Type
 export const AgentBrowserViewportRequest = Schema.Struct({
 	height: Schema.Number,
