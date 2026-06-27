@@ -1,7 +1,7 @@
 import {Array, Equal, HashSet, Predicate, Schema, pipe} from 'effect'
 
 export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}
 

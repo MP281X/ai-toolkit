@@ -3,7 +3,7 @@ import {Schema} from 'effect'
 import {Prompt} from 'effect/unstable/ai'
 
 export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 	message: Schema.String
 }) {}
 

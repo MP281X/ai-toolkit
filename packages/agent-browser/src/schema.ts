@@ -1,7 +1,7 @@
 import {Array, HashMap, HashSet, Option, Schema, String, pipe} from 'effect'
 
 export class AgentBrowserError extends Schema.TaggedErrorClass<AgentBrowserError>()('AgentBrowserError', {
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 	message: Schema.String
 }) {}
 

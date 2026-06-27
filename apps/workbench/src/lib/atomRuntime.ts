@@ -33,7 +33,7 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 	group: RpcContracts,
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
-		Layer.provideMerge(
+		Layer.provide(
 			Socket.layerWebSocket(
 				pipe(
 					Effect.all({
@@ -73,7 +73,7 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 				)
 			)
 		),
-		Layer.provideMerge(Socket.layerWebSocketConstructorGlobal),
-		Layer.provideMerge(LiveLayers)
+		Layer.provide(Socket.layerWebSocketConstructorGlobal),
+		Layer.provide(LiveLayers)
 	)
 }) {}

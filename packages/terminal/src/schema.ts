@@ -1,7 +1,7 @@
 import {Schema} from 'effect'
 
 export class TerminalError extends Schema.TaggedErrorClass<TerminalError>()('TerminalError', {
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}
 
