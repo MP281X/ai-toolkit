@@ -1,4 +1,4 @@
-import {Array, Effect, Function, Hash, Option, Order, Predicate, Record, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, Hash, Option, Order, Predicate, Record, Schema, Stream, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
@@ -65,7 +65,11 @@ const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey)
 		pipe(
 			RpcClient,
 			Effect.flatMap(client =>
-				client('terminal.attach', {...terminalSessionInput(input.session), ...input.size}, {asQueue: true})
+				client(
+					'terminal.attach',
+					{...terminalSessionInput(input.session), ...input.size},
+					{asQueue: true, streamBufferSize: 64}
+				)
 			)
 		)
 	)
@@ -91,33 +95,6 @@ export const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomK
 			Stream.unwrap
 		),
 		{initialValue: {state: 'idle', title: ''}}
-	)
-)
-
-const portlessRunsAtom = Atom.family((cwd: string) =>
-	Atom.keepAlive(
-		RpcClient.runtime.atom(
-			Effect.flatMap(RpcClient, client =>
-				String.isNonEmpty(cwd) ? client('runs.portless', {cwd}) : Effect.succeed([])
-			),
-			{initialValue: []}
-		)
-	)
-)
-
-export const portlessOriginsAtom = Atom.family((cwd: string) =>
-	Atom.make(get =>
-		pipe(
-			get.result(portlessRunsAtom(cwd)),
-			Effect.map(scripts =>
-				pipe(
-					scripts,
-					Array.map(run => run.origin.origin),
-					Array.dedupe,
-					Array.sortWith(Function.identity, Order.String)
-				)
-			)
-		)
 	)
 )
 

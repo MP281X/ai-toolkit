@@ -26,15 +26,9 @@ export const PortlessOrigin = Schema.Struct({
 	origin: Schema.String,
 	port: Schema.Number,
 	sessionId: Schema.String,
-	taskId: Schema.String
+	taskId: Schema.String,
+	worktree: Schema.String
 })
 
 export type PortlessRun = typeof PortlessRun.Type
 export const PortlessRun = Schema.Struct({origin: PortlessOrigin, script: PortlessScript, status: PortlessStatus})
-
-export type PortlessPackageJson = typeof PortlessPackageJson.Type
-export const PortlessPackageJson = Schema.Struct({
-	deslop: Schema.optional(Schema.Struct({portless: Schema.optional(Schema.Array(Schema.String))})),
-	name: Schema.optional(Schema.String),
-	scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))
-})

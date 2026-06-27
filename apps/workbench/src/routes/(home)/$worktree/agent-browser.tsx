@@ -4,12 +4,12 @@ import {createFileRoute} from '@tanstack/react-router'
 
 import {AgentBrowserRouteSearch, WorktreeAgentBrowser} from '#routes/components/-worktree-agent-browser.tsx'
 
-export const Route = createFileRoute('/(home)/$worktree/portless')({
-	component: PortlessPage,
+export const Route = createFileRoute('/(home)/$worktree/agent-browser')({
+	component: AgentBrowserPage,
 	validateSearch: Schema.toStandardSchemaV1(AgentBrowserRouteSearch)
 })
 
-function PortlessPage() {
+function AgentBrowserPage() {
 	const params = Route.useParams()
 	const search = Route.useSearch()
 

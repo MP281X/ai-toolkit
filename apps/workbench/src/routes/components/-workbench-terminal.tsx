@@ -175,14 +175,33 @@ function TerminalAttachment(input: {
 					pullFrames(void 0)
 					return
 				}
+				if (Predicate.isNull(input.terminalRef.current)) {
+					activeRef.current = false
+					writingRef.current = false
+					input.onDone()
+					return
+				}
 				if (operation.type === 'reset') {
-					input.terminalRef.current?.reset()
+					try {
+						input.terminalRef.current.reset()
+					} catch {
+						activeRef.current = false
+						writingRef.current = false
+						input.onDone()
+						return
+					}
 					process(index + 1)
 					return
 				}
-				input.terminalRef.current?.write(operation.data, () => {
-					process(index + 1)
-				})
+				try {
+					input.terminalRef.current.write(operation.data, () => {
+						process(index + 1)
+					})
+				} catch {
+					activeRef.current = false
+					writingRef.current = false
+					input.onDone()
+				}
 			}
 			process(0)
 		},

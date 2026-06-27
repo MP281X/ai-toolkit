@@ -15,6 +15,7 @@ import {
 	AgentIcon,
 	BotIcon,
 	Braces,
+	ExternalLinkIcon,
 	GitBranch,
 	GitBranchPlus,
 	GlobeIcon,
@@ -87,6 +88,7 @@ function HomeLayout() {
 				Match.value(state.location.pathname),
 				Match.when(String.endsWith('/terminal'), () => 'terminal' as const),
 				Match.when(String.endsWith('/portless'), () => 'portless' as const),
+				Match.when(String.endsWith('/agent-browser'), () => 'agent-browser' as const),
 				Match.when(String.endsWith('/run'), () => 'run' as const),
 				Match.when(String.endsWith('/agent'), () => 'agent' as const),
 				Match.orElse(() => 'diff' as const)
@@ -116,13 +118,9 @@ function HomeLayout() {
 								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
 							})
 						}}
-						selectPortless={(worktreeRoot, origin) => {
+						selectPortless={worktreeRoot => {
 							startTransition(() => {
-								void navigate({
-									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: {origin},
-									to: '/$worktree/portless'
-								})
+								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/agent-browser'})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
@@ -208,6 +206,14 @@ function sortScriptRuns(runs: readonly ScriptRun[]) {
 
 function sortPortlessRuns(runs: readonly PortlessRun[]) {
 	return [...runs].toSorted((left, right) => left.script.taskId.localeCompare(right.script.taskId))
+}
+
+function nativeBrowserUrl(origin: string) {
+	try {
+		const url = new URL(origin)
+		return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
+	} catch {}
+	return null
 }
 
 function WorktreeScripts(input: {
@@ -326,7 +332,7 @@ function WorktreePortless(input: {
 	readonly cwd: string
 	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
 	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const sortedRuns = sortPortlessRuns(input.runs)
@@ -348,10 +354,9 @@ function PortlessGroup(input: {
 	readonly cwd: string
 	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
 	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const expandedState = useState(true)
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
 	const actionState = useState(false)
@@ -361,20 +366,16 @@ function PortlessGroup(input: {
 
 		actionState[1](true)
 		try {
+			const active = Array.some(
+				input.runs,
+				candidate =>
+					terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
+					input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
+			)
 			for (const run of input.runs) {
 				const session = portlessSession(run)
-				if (
-					Array.some(
-						input.runs,
-						candidate =>
-							terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
-							input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
-					)
-				) {
-					await stop({payload: session})
-				} else {
-					await restart({payload: session})
-				}
+				if (active) await stop({payload: session})
+				else await restart({payload: session})
 			}
 		} catch (error) {
 			toast.error(formatError(error))
@@ -404,8 +405,8 @@ function PortlessGroup(input: {
 									terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
 									input.runStatuses[run.script.sessionId]?.state !== 'idle'
 							)
-								? 'Stop deslop'
-								: 'Start deslop'
+								? 'Stop agent-browser'
+								: 'Start agent-browser'
 						}
 					>
 						{pipe(
@@ -427,25 +428,22 @@ function PortlessGroup(input: {
 				icon={<GlobeIcon />}
 				selected={false}
 				onClick={() => {
-					expandedState[1](expanded => !expanded)
+					input.selectPortless(input.cwd)
 				}}
 			>
-				deslop
+				agent-browser
 			</TreeExplorerRow>
-			{expandedState[0] && (
-				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{Array.map(input.runs, run => (
-						<Suspense key={run.script.sessionId} fallback={<Loading />}>
-							<PortlessRunRow
-								run={run}
-								status={input.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}}
-								selectPortless={input.selectPortless}
-								selectRun={input.selectRun}
-							/>
-						</Suspense>
-					))}
-				</ul>
-			)}
+			<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
+				{Array.map(input.runs, run => (
+					<Suspense key={run.script.sessionId} fallback={<Loading />}>
+						<PortlessRunRow
+							run={run}
+							status={input.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}}
+							selectRun={input.selectRun}
+						/>
+					</Suspense>
+				))}
+			</ul>
 		</li>
 	)
 }
@@ -453,26 +451,49 @@ function PortlessGroup(input: {
 function PortlessRunRow(input: {
 	readonly run: PortlessRun
 	readonly status: AgentSession['state']
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
+	const browserUrl = nativeBrowserUrl(input.run.origin.origin)
+
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
 				actions={
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="text-muted-foreground hover:text-foreground"
-						onClick={event => {
-							event.stopPropagation()
-							input.selectPortless(input.run.script.cwd, input.run.origin.origin)
-						}}
-						title={`Open ${input.run.script.taskId} preview`}
-					>
-						<GlobeIcon className="size-3" />
-					</Button>
+					<span className="flex h-full items-center justify-end">
+						<Button
+							render={
+								<a
+									href={
+										Predicate.isNull(browserUrl) ||
+										!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+											? undefined
+											: browserUrl
+									}
+									target="_blank"
+									rel="noopener noreferrer"
+									onClick={event => {
+										event.stopPropagation()
+										if (
+											Predicate.isNull(browserUrl) ||
+											!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+										) {
+											event.preventDefault()
+										}
+									}}
+								/>
+							}
+							variant="ghost"
+							size="icon-xs"
+							className="text-muted-foreground hover:text-foreground"
+							disabled={
+								Predicate.isNull(browserUrl) ||
+								!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+							}
+							title={`Open ${input.run.script.taskId} in browser`}
+						>
+							<ExternalLinkIcon className="size-3" />
+						</Button>
+					</span>
 				}
 				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
@@ -640,12 +661,12 @@ function worktreeHasAgent(worktree: SidebarWorktree) {
 function WorktreeManager(input: {
 	readonly activeProject?: SidebarProject
 	readonly activeWorktree?: SidebarWorktree
-	readonly activeView: 'agent' | 'diff' | 'terminal' | 'portless' | 'run'
+	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
 	readonly agentProfiles: readonly AgentProfile[]
 	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
