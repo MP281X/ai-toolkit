@@ -2,16 +2,40 @@ import {readFile} from 'node:fs/promises'
 import {homedir} from 'node:os'
 import path from 'node:path'
 
-import {Array, Context, Effect, Layer, Option, Predicate, Stream, String, pipe} from 'effect'
+import {
+	Array,
+	Context,
+	Duration,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Predicate,
+	Ref,
+	Schema,
+	Stream,
+	String,
+	pipe
+} from 'effect'
 
 import {HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
-import {AgentBrowserError} from './schema.ts'
+import {AgentBrowserError, agentBrowserOwnedTabLabels} from './schema.ts'
 
 function socketDir() {
 	return path.join(homedir(), '.agent-browser')
+}
+
+function agentBrowserEnableEnv(enable: string | undefined) {
+	if (Predicate.isUndefined(enable) || String.isEmpty(enable)) return 'react-devtools'
+	if (String.includes('react-devtools')(enable)) return enable
+	return `${enable},react-devtools`
+}
+
+function agentBrowserEnv() {
+	return {...process.env, AGENT_BROWSER_ENABLE: agentBrowserEnableEnv(process.env['AGENT_BROWSER_ENABLE'])}
 }
 
 const streamPort = Effect.fn('AgentBrowser.streamPort')(function* (session: string) {
@@ -88,11 +112,7 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 		Effect.gen(function* () {
 			const handle = yield* pipe(
 				spawner.spawn(
-					ChildProcess.make('vpx', ['agent-browser', '--enable', 'react-devtools', ...args], {
-						env: process.env,
-						stderr: 'pipe',
-						stdout: 'pipe'
-					})
+					ChildProcess.make('vpx', ['agent-browser', ...args], {env: agentBrowserEnv(), stderr: 'pipe', stdout: 'pipe'})
 				),
 				Effect.mapError(cause => new AgentBrowserError({cause, message: 'failed to spawn agent-browser'}))
 			)
@@ -127,27 +147,144 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 	)
 })
 
+const AgentBrowserCliTabs = Schema.Struct({
+	data: Schema.Struct({
+		tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
+	})
+})
+
+function decodeAgentBrowserTabs(output: string) {
+	try {
+		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser CLI JSON output
+		const decoded = JSON.parse(output) as unknown
+		return pipe(
+			Schema.decodeUnknownSync(AgentBrowserCliTabs)(decoded).data.tabs,
+			Array.map(tab => ({label: Predicate.isNull(tab.label) ? undefined : tab.label, tabId: tab.tabId, url: tab.url}))
+		)
+	} catch {
+		return Array.empty<{readonly label?: string; readonly tabId: string; readonly url: string}>()
+	}
+}
+
+const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (sessionId: string) {
+	return decodeAgentBrowserTabs(yield* runAgentBrowser(['--session', sessionId, '--json', 'tab']))
+})
+
+const reachable = Effect.fn('AgentBrowser.reachable')(function* (url: string) {
+	const controller = new AbortController()
+	const timeout = setTimeout(() => {
+		controller.abort()
+	}, 750)
+	return yield* pipe(
+		Effect.tryPromise({
+			catch: cause => new AgentBrowserError({cause, message: `unreachable browser tab origin: ${url}`}),
+			try: () => fetch(url, {redirect: 'manual', signal: controller.signal})
+		}),
+		Effect.ensuring(
+			Effect.sync(() => {
+				clearTimeout(timeout)
+			})
+		),
+		Effect.asVoid
+	)
+})
+
+function waitForReachable(url: string, attempts = 40): Effect.Effect<boolean> {
+	return pipe(
+		reachable(url),
+		Effect.as(true),
+		Effect.catch(() =>
+			attempts <= 1
+				? Effect.succeed(false)
+				: pipe(Effect.sleep(Duration.millis(750)), Effect.andThen(waitForReachable(url, attempts - 1)))
+		)
+	)
+}
+
+const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
+	readonly label: string
+	readonly origin: string
+	readonly sessionId: string
+}) {
+	const existingTabs = yield* listTabs(input.sessionId)
+	const existingTab = pipe(
+		existingTabs,
+		Array.findFirst(tab => tab.label === input.label)
+	)
+	if (Option.isSome(existingTab)) return
+
+	yield* waitForReachable(input.origin)
+	yield* pipe(
+		runAgentBrowser(['--session', input.sessionId, 'tab', 'new', input.origin, '--label', input.label]),
+		Effect.catch(error => (String.includes('already used')(error.message) ? Effect.void : Effect.fail(error)))
+	)
+	yield* runAgentBrowser(['--session', input.sessionId, 'set', 'viewport', '1600', '900'])
+})
+
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
-	make: Effect.fn('AgentBrowser.make')(function* (input: {readonly sessionId: string}) {
+	make: Effect.fn('AgentBrowser.make')(function* (input: {
+		readonly closeOnFinalize?: boolean
+		readonly sessionId: string
+	}) {
+		const labelsByOrigin = yield* Ref.make(HashMap.empty<string, string>())
+		if (input.closeOnFinalize === true) {
+			yield* Effect.addFinalizer(() => runAgentBrowser(['--session', input.sessionId, 'close']).pipe(Effect.ignore))
+		}
 		return {
-			openTab(tab: {readonly label: string; readonly url: string}) {
+			openTabs(origins: readonly string[]) {
 				return pipe(
-					runAgentBrowser(['--session', input.sessionId, 'tab', 'new', '--label', tab.label, tab.url]),
-					Effect.catch(error =>
-						String.includes('already used')(error.message)
-							? runAgentBrowser(['--session', input.sessionId, 'tab', tab.label])
-							: Effect.fail(error)
+					Ref.set(labelsByOrigin, agentBrowserOwnedTabLabels(origins)),
+					Effect.andThen(
+						pipe(
+							runAgentBrowser(['--session', input.sessionId, 'stream', 'enable']),
+							Effect.catch(error =>
+								String.includes('already enabled')(error.message) ? Effect.void : Effect.fail(error)
+							)
+						)
+					),
+					Effect.andThen(
+						Effect.forEach(
+							origins,
+							origin =>
+								pipe(
+									Ref.get(labelsByOrigin),
+									Effect.flatMap(labels =>
+										pipe(
+											HashMap.get(labels, origin),
+											Option.match({
+												onNone: () => Effect.void,
+												onSome: label => openOwnedTab({label, origin, sessionId: input.sessionId})
+											})
+										)
+									)
+								),
+							{concurrency: 1, discard: true}
+						)
 					),
 					Effect.asVoid
 				)
 			},
-			switchTab(tab: string) {
-				return pipe(runAgentBrowser(['--session', input.sessionId, 'tab', tab]), Effect.asVoid)
+			switchTab(origin: string) {
+				return pipe(
+					Ref.get(labelsByOrigin),
+					Effect.flatMap(labels =>
+						pipe(
+							HashMap.get(labels, origin),
+							Option.match({
+								onNone: () =>
+									Effect.fail(new AgentBrowserError({message: `Unknown agent-browser tab origin: ${origin}`})),
+								onSome: label => runAgentBrowser(['--session', input.sessionId, 'tab', label])
+							})
+						)
+					),
+					Effect.asVoid
+				)
 			}
 		}
 	})
 }) {
-	public static layer = (input: {readonly sessionId: string}) => Layer.effect(this, this.make(input))
+	public static layer = (input: {readonly closeOnFinalize?: boolean; readonly sessionId: string}) =>
+		Layer.effect(this, this.make(input))
 
 	public static middleware = Effect.fnUntraced(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>

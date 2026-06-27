@@ -90,6 +90,7 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('agents.profiles', {error: AgentError, success: Schema.Array(AgentProfile)}),
 	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
 	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
+	Rpc.make('agentBrowser.sync', {error: AgentBrowserError, payload: CwdPayload}),
 	Rpc.make('agentBrowser.switchTab', {error: AgentBrowserError, payload: AgentBrowserTabSwitch}),
 	Rpc.make('home.sidebar', {
 		error: Schema.Union([GitError, TerminalError, AiError]),

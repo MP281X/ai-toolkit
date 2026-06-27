@@ -117,13 +117,9 @@ function HomeLayout() {
 								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
 							})
 						}}
-						selectPortless={(worktreeRoot, origin) => {
+						selectPortless={worktreeRoot => {
 							startTransition(() => {
-								void navigate({
-									params: {worktree: worktreeRouteId(worktreeRoot)},
-									search: Predicate.isUndefined(origin) ? {} : {origin},
-									to: '/$worktree/agent-browser'
-								})
+								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/agent-browser'})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
@@ -327,7 +323,7 @@ function WorktreePortless(input: {
 	readonly cwd: string
 	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
 	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const sortedRuns = sortPortlessRuns(input.runs)
@@ -349,7 +345,7 @@ function PortlessGroup(input: {
 	readonly cwd: string
 	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
 	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
@@ -434,7 +430,6 @@ function PortlessGroup(input: {
 						<PortlessRunRow
 							run={run}
 							status={input.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}}
-							selectPortless={input.selectPortless}
 							selectRun={input.selectRun}
 						/>
 					</Suspense>
@@ -447,27 +442,11 @@ function PortlessGroup(input: {
 function PortlessRunRow(input: {
 	readonly run: PortlessRun
 	readonly status: AgentSession['state']
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
-				actions={
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="text-muted-foreground hover:text-foreground"
-						onClick={event => {
-							event.stopPropagation()
-							input.selectPortless(input.run.script.cwd, input.run.origin.origin)
-						}}
-						title={`Open ${input.run.script.taskId} preview`}
-					>
-						<GlobeIcon className="size-3" />
-					</Button>
-				}
 				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
 				title={input.run.script.command ?? input.run.script.taskId}
@@ -639,7 +618,7 @@ function WorktreeManager(input: {
 	readonly projects: readonly SidebarProject[]
 	readonly selectWorktree: (worktreeRoot: string) => void
 	readonly selectTerminal: (worktreeRoot: string) => void
-	readonly selectPortless: (worktreeRoot: string, origin?: string) => void
+	readonly selectPortless: (worktreeRoot: string) => void
 	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {

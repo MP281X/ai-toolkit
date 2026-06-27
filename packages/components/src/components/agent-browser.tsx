@@ -1,7 +1,7 @@
-import {Array, Match, Option, Predicate, pipe} from 'effect'
+import {Array, Match, Predicate, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
-import {useEffect, useReducer, useRef, type PointerEvent, type WheelEvent} from 'react'
+import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
 
 import {cn} from '#lib/utils.ts'
 
@@ -11,63 +11,19 @@ type AgentBrowserFrame = {
 	readonly type: 'frame'
 }
 
-type AgentBrowserTab = {
-	readonly active?: boolean
-	readonly label?: string
-	readonly tabId: string
-	readonly title?: string
-	readonly url?: string
+type AgentBrowserOwnedTab = {
+	readonly id: string
+	readonly label: string
+	readonly streamLabel: string
+	readonly url: string
 }
 
-type AgentBrowserInput =
-	| {
-			readonly button?: 'left' | 'none'
-			readonly clickCount?: number
-			readonly deltaX?: number
-			readonly deltaY?: number
-			readonly eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
-			readonly modifiers?: number
-			readonly type: 'input_mouse'
-			readonly x: number
-			readonly y: number
-	  }
-	| {
-			readonly code: string
-			readonly eventType: 'keyDown' | 'keyUp'
-			readonly key: string
-			readonly modifiers?: number
-			readonly text?: string
-			readonly type: 'input_keyboard'
-			readonly windowsVirtualKeyCode?: number
-	  }
-
-function emptyState() {
-	return {
-		frame: undefined as AgentBrowserFrame | undefined,
-		tabs: Array.empty<AgentBrowserTab>() as readonly AgentBrowserTab[]
-	}
-}
+const emptyTabs = Array.empty<AgentBrowserOwnedTab>()
 
 export function agentBrowserStreamUrl(session: string) {
 	const url = new URL(`/api/agent-browser/sessions/${encodeURIComponent(session)}/stream`, location.origin)
 	url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
 	return url.toString()
-}
-
-function reduceState(
-	state: ReturnType<typeof emptyState>,
-	action:
-		| {readonly frame: AgentBrowserFrame; readonly type: 'frame'}
-		| {readonly tabs: readonly AgentBrowserTab[]; readonly type: 'tabs'}
-		| {readonly type: 'reset'}
-) {
-	return pipe(
-		Match.value(action),
-		Match.when({type: 'reset'}, emptyState),
-		Match.when({type: 'frame'}, value => ({...state, frame: value.frame})),
-		Match.when({type: 'tabs'}, value => ({...state, tabs: value.tabs})),
-		Match.exhaustive
-	)
 }
 
 function messageText(source: unknown) {
@@ -86,7 +42,30 @@ async function decodeMessage(source: unknown) {
 	}
 }
 
-function sendSocket(socket: WebSocket | null, input: AgentBrowserInput) {
+function sendSocket(
+	socket: WebSocket | null,
+	input:
+		| {
+				readonly button?: 'left' | 'none'
+				readonly clickCount?: number
+				readonly deltaX?: number
+				readonly deltaY?: number
+				readonly eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
+				readonly modifiers?: number
+				readonly type: 'input_mouse'
+				readonly x: number
+				readonly y: number
+		  }
+		| {
+				readonly code: string
+				readonly eventType: 'keyDown' | 'keyUp'
+				readonly key: string
+				readonly modifiers?: number
+				readonly text?: string
+				readonly type: 'input_keyboard'
+				readonly windowsVirtualKeyCode?: number
+		  }
+) {
 	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
 	// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
 	socket.send(JSON.stringify(input))
@@ -105,53 +84,37 @@ function printableKey(event: KeyboardEvent) {
 	return event.key.length === 1 && !event.ctrlKey && !event.metaKey ? event.key : undefined
 }
 
-function tabValue(value: string | undefined) {
-	return Predicate.isNotUndefined(value) && value !== '' ? value : undefined
-}
-
-function defaultTabTitle(tab: AgentBrowserTab) {
-	return tabValue(tab.title) ?? tabValue(tab.url) ?? tabValue(tab.label) ?? tab.tabId
-}
-
-function sameTabUrl(left: string | undefined, right: string) {
-	if (Predicate.isUndefined(left)) return false
-	try {
-		const leftUrl = new URL(left)
-		const rightUrl = new URL(right)
-		if (rightUrl.pathname === '/' && rightUrl.search === '' && rightUrl.hash === '') {
-			return leftUrl.origin === rightUrl.origin
-		}
-		return leftUrl.href === rightUrl.href
-	} catch {
-		return left === right
-	}
-}
-
-function visibleTab(tab: AgentBrowserTab) {
-	return (
-		tab.url !== 'about:blank' ||
-		Predicate.isNotUndefined(tabValue(tab.label)) ||
-		Predicate.isNotUndefined(tabValue(tab.title))
-	)
-}
-
-function scalePoint(
-	event: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>,
-	frame: AgentBrowserFrame | undefined
-) {
-	const rect = event.currentTarget.getBoundingClientRect()
-	const width = frame?.metadata?.deviceWidth ?? event.currentTarget.width
-	const height = frame?.metadata?.deviceHeight ?? event.currentTarget.height
-	const scale = Math.min(rect.width / width, rect.height / height)
+export function agentBrowserCanvasPoint(input: {
+	readonly clientX: number
+	readonly clientY: number
+	readonly rect: {readonly height: number; readonly left: number; readonly top: number; readonly width: number}
+	readonly viewport: {readonly height: number; readonly width: number}
+}) {
+	const scale = Math.min(input.rect.width / input.viewport.width, input.rect.height / input.viewport.height)
 	if (!Number.isFinite(scale) || scale <= 0) return
 
-	const renderedWidth = width * scale
-	const renderedHeight = height * scale
-	const x = ((event.clientX - rect.left - (rect.width - renderedWidth) / 2) / renderedWidth) * width
-	const y = ((event.clientY - rect.top - (rect.height - renderedHeight) / 2) / renderedHeight) * height
-	if (x < 0 || x > width || y < 0 || y > height) return
+	const renderedWidth = input.viewport.width * scale
+	const renderedHeight = input.viewport.height * scale
+	const x =
+		((input.clientX - input.rect.left - (input.rect.width - renderedWidth) / 2) / renderedWidth) * input.viewport.width
+	const y =
+		((input.clientY - input.rect.top - (input.rect.height - renderedHeight) / 2) / renderedHeight) *
+		input.viewport.height
+	if (x < 0 || x > input.viewport.width || y < 0 || y > input.viewport.height) return
 
 	return {x: Math.round(x), y: Math.round(y)}
+}
+
+function pointerPoint(
+	event: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>,
+	viewport: {readonly height: number; readonly width: number}
+) {
+	return agentBrowserCanvasPoint({
+		clientX: event.clientX,
+		clientY: event.clientY,
+		rect: event.currentTarget.getBoundingClientRect(),
+		viewport
+	})
 }
 
 function mouseButton(eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel', buttons: number) {
@@ -186,7 +149,13 @@ function tabsMessage(value: unknown) {
 	if (!Predicate.hasProperty(value, 'type') || value.type !== 'tabs') return
 	if (!Predicate.hasProperty(value, 'tabs') || !Array.isArray(value.tabs)) return
 
-	const tabs = Array.empty<AgentBrowserTab>()
+	const tabs = Array.empty<{
+		readonly active?: boolean
+		readonly label?: string
+		readonly tabId: string
+		readonly title?: string
+		readonly url?: string
+	}>()
 	for (const tab of value.tabs) {
 		if (!Predicate.hasProperty(tab, 'tabId') || !Predicate.isString(tab.tabId)) continue
 		tabs.push({
@@ -200,31 +169,139 @@ function tabsMessage(value: unknown) {
 	return tabs
 }
 
-export function AgentBrowser(props: {
-	readonly className?: string
-	readonly labelForTab?: (tab: {
+export function agentBrowserActiveOwnedTabId(input: {
+	readonly ownedTabs: readonly {
+		readonly id: string
+		readonly label: string
+		readonly streamLabel: string
+		readonly url: string
+	}[]
+	readonly streamTabs: readonly {
+		readonly active?: boolean
 		readonly label?: string
 		readonly tabId: string
 		readonly title?: string
 		readonly url?: string
-	}) => string | undefined
-	readonly onSelectTab?: (tab: {readonly label?: string; readonly tabId: string}) => void
-	readonly selectedUrl?: string
+	}[]
+}) {
+	const active = Array.findFirst(input.streamTabs, tab => tab.active === true)
+	if (active._tag === 'None' || Predicate.isUndefined(active.value.label)) return
+
+	const owned = Array.findFirst(input.ownedTabs, tab => tab.streamLabel === active.value.label)
+	return owned._tag === 'Some' ? owned.value.id : undefined
+}
+
+function frameViewport(frame: AgentBrowserFrame, bitmap: ImageBitmap) {
+	return {height: frame.metadata?.deviceHeight ?? bitmap.height, width: frame.metadata?.deviceWidth ?? bitmap.width}
+}
+
+function decodeFrame(frame: AgentBrowserFrame) {
+	const binary = atob(frame.data)
+	const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+	return createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}))
+}
+
+export function AgentBrowser(props: {
+	readonly className?: string
+	readonly onSelectTab?: (tab: {
+		readonly id: string
+		readonly label: string
+		readonly streamLabel: string
+		readonly url: string
+	}) => void
 	readonly session?: string
 	readonly streamUrl?: string
+	readonly tabs?: readonly {
+		readonly id: string
+		readonly label: string
+		readonly streamLabel: string
+		readonly url: string
+	}[]
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const socketRef = useRef<WebSocket | null>(null)
+	const tabsRef = useRef<readonly AgentBrowserOwnedTab[]>(props.tabs ?? [])
 	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
-	const [state, dispatch] = useReducer(reduceState, emptyState())
+	const viewportRef = useRef({height: 900, width: 1600})
+	const latestFrameRef = useRef<{readonly frame: AgentBrowserFrame; readonly serial: number} | null>(null)
+	const rafRef = useRef<number | null>(null)
+	const drawingRef = useRef(false)
+	const drawnSerialRef = useRef(0)
+	const frameSerialRef = useRef(0)
+	const [activeTabId, setActiveTabId] = useState<string | undefined>()
+	const [hasFrame, setHasFrame] = useState(false)
 	const streamUrl =
 		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
+	const tabs = props.tabs ?? emptyTabs
+
+	useEffect(() => {
+		tabsRef.current = tabs
+	}, [tabs])
+
 	useEffect(() => {
 		onSelectTabRef.current = props.onSelectTab
 	}, [props.onSelectTab])
 
+	function requestDraw() {
+		if (Predicate.isNotNull(rafRef.current) || drawingRef.current) return
+		rafRef.current = requestAnimationFrame(() => {
+			rafRef.current = null
+			if (Predicate.isNotNull(latestFrameRef.current)) void drawFrame(latestFrameRef.current)
+		})
+	}
+
+	async function drawFrame(queued: {readonly frame: AgentBrowserFrame; readonly serial: number}) {
+		drawingRef.current = true
+		try {
+			const bitmap = await decodeFrame(queued.frame)
+			if (Predicate.isNull(latestFrameRef.current) || latestFrameRef.current.serial !== queued.serial) {
+				bitmap.close()
+				return
+			}
+
+			if (Predicate.isNull(canvasRef.current)) {
+				bitmap.close()
+				return
+			}
+
+			const viewport = frameViewport(queued.frame, bitmap)
+			viewportRef.current = viewport
+			canvasRef.current.width = viewport.width
+			canvasRef.current.height = viewport.height
+			canvasRef.current.getContext('2d')?.drawImage(bitmap, 0, 0, viewport.width, viewport.height)
+			bitmap.close()
+			drawnSerialRef.current = queued.serial
+			setHasFrame(true)
+		} finally {
+			drawingRef.current = false
+			if (Predicate.isNotNull(latestFrameRef.current) && latestFrameRef.current.serial > drawnSerialRef.current) {
+				requestDraw()
+			}
+		}
+	}
+
+	function queueFrame(frame: AgentBrowserFrame) {
+		const serial = frameSerialRef.current + 1
+		frameSerialRef.current = serial
+		latestFrameRef.current = {frame, serial}
+		requestDraw()
+	}
+
 	useEffect(() => {
-		dispatch({type: 'reset'})
+		queueMicrotask(() => {
+			setHasFrame(false)
+			setActiveTabId(undefined)
+		})
+		latestFrameRef.current = null
+		drawnSerialRef.current = 0
+		frameSerialRef.current = 0
+		if (Predicate.isNotNull(rafRef.current)) cancelAnimationFrame(rafRef.current)
+		rafRef.current = null
+		if (Predicate.isNull(canvasRef.current)) return
+		canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+	}, [streamUrl])
+
+	useEffect(() => {
 		if (Predicate.isUndefined(streamUrl)) return
 
 		const abort = new AbortController()
@@ -243,10 +320,13 @@ export function AgentBrowser(props: {
 				if (abort.signal.aborted || socketRef.current !== socket) return
 
 				const frame = frameMessage(message)
-				if (Predicate.isNotUndefined(frame)) dispatch({frame, type: 'frame'})
+				if (Predicate.isNotUndefined(frame)) queueFrame(frame)
 
-				const tabs = tabsMessage(message)
-				if (Predicate.isNotUndefined(tabs)) dispatch({tabs, type: 'tabs'})
+				const streamTabs = tabsMessage(message)
+				if (Predicate.isNotUndefined(streamTabs)) {
+					const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current, streamTabs})
+					if (Predicate.isNotUndefined(nextActive)) setActiveTabId(nextActive)
+				}
 			}
 			socket.addEventListener('message', event => {
 				void handleMessage(event.data)
@@ -262,29 +342,17 @@ export function AgentBrowser(props: {
 		}
 	}, [streamUrl])
 
-	useEffect(() => {
-		if (Predicate.isUndefined(state.frame) || Predicate.isNull(canvasRef.current)) return
-
-		const image = new Image()
-		image.onload = () => {
-			if (Predicate.isNull(canvasRef.current) || Predicate.isUndefined(state.frame)) return
-			const width = state.frame.metadata?.deviceWidth ?? image.naturalWidth
-			const height = state.frame.metadata?.deviceHeight ?? image.naturalHeight
-			canvasRef.current.width = width
-			canvasRef.current.height = height
-			canvasRef.current.getContext('2d')?.drawImage(image, 0, 0, width, height)
-		}
-		image.src = `data:image/jpeg;base64,${state.frame.data}`
-	}, [state.frame])
-
-	function send(input: AgentBrowserInput) {
-		sendSocket(socketRef.current, input)
-	}
+	useEffect(
+		() => () => {
+			if (Predicate.isNotNull(rafRef.current)) cancelAnimationFrame(rafRef.current)
+		},
+		[]
+	)
 
 	function pointer(event: PointerEvent<HTMLCanvasElement>, eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased') {
-		const point = scalePoint(event, state.frame)
+		const point = pointerPoint(event, viewportRef.current)
 		if (Predicate.isUndefined(point)) return
-		send({
+		sendSocket(socketRef.current, {
 			button: mouseButton(eventType, event.buttons),
 			clickCount: eventType === 'mousePressed' || eventType === 'mouseReleased' ? 1 : 0,
 			eventType,
@@ -346,18 +414,6 @@ export function AgentBrowser(props: {
 		}
 	}, [])
 
-	const visibleTabs = pipe(state.tabs, Array.filter(visibleTab))
-
-	useEffect(() => {
-		pipe(
-			Option.fromUndefinedOr(props.selectedUrl),
-			Option.map(selectedUrl => Array.findFirst(visibleTabs, candidate => sameTabUrl(candidate.url, selectedUrl))),
-			Option.flatten,
-			Option.filter(tab => tab.active !== true),
-			Option.map(tab => onSelectTabRef.current?.(tab))
-		)
-	}, [props.selectedUrl, visibleTabs])
-
 	if (Predicate.isUndefined(streamUrl)) {
 		return (
 			<div
@@ -375,26 +431,27 @@ export function AgentBrowser(props: {
 		<div className={cn('bg-background flex h-full min-h-0 min-w-0 flex-col overflow-hidden border', props.className)}>
 			<div className="bg-background flex h-9 shrink-0 items-center border-b px-2">
 				<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-					{visibleTabs.length === 0 ? (
+					{tabs.length === 0 ? (
 						<span className="text-muted-foreground text-xs">{props.session ?? 'agent-browser'}</span>
 					) : (
-						Array.map(visibleTabs, tab => (
+						Array.map(tabs, tab => (
 							<button
-								key={tab.tabId}
+								key={tab.id}
 								type="button"
-								aria-current={tab.active === true ? 'page' : undefined}
+								aria-current={activeTabId === tab.id ? 'page' : undefined}
 								className={cn(
 									'border-border h-6 w-fit shrink-0 border px-2 text-left text-xs whitespace-nowrap',
-									tab.active === true
+									activeTabId === tab.id
 										? 'bg-primary/15 text-primary'
 										: 'text-muted-foreground hover:bg-muted hover:text-foreground'
 								)}
-								title={defaultTabTitle(tab)}
+								title={tab.url}
 								onClick={() => {
-									props.onSelectTab?.(tab)
+									setActiveTabId(tab.id)
+									onSelectTabRef.current?.(tab)
 								}}
 							>
-								{props.labelForTab?.(tab) ?? tabValue(tab.label) ?? tab.tabId}
+								{tab.label}
 							</button>
 						))
 					)}
@@ -407,6 +464,7 @@ export function AgentBrowser(props: {
 					className="focus:ring-ring block h-full w-full object-contain outline-none focus:ring-2"
 					onPointerDown={event => {
 						event.currentTarget.focus()
+						event.currentTarget.setPointerCapture(event.pointerId)
 						pointer(event, 'mousePressed')
 					}}
 					onPointerMove={event => {
@@ -414,12 +472,20 @@ export function AgentBrowser(props: {
 					}}
 					onPointerUp={event => {
 						pointer(event, 'mouseReleased')
+						if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+							event.currentTarget.releasePointerCapture(event.pointerId)
+						}
+					}}
+					onPointerCancel={event => {
+						if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+							event.currentTarget.releasePointerCapture(event.pointerId)
+						}
 					}}
 					onWheel={event => {
 						event.preventDefault()
-						const point = scalePoint(event, state.frame)
+						const point = pointerPoint(event, viewportRef.current)
 						if (Predicate.isUndefined(point)) return
-						send({
+						sendSocket(socketRef.current, {
 							button: 'none',
 							clickCount: 0,
 							deltaX: event.deltaX,
@@ -431,10 +497,9 @@ export function AgentBrowser(props: {
 						})
 					}}
 				/>
-				{Predicate.isUndefined(state.frame) && (
-					<div className="text-muted-foreground absolute inset-0 flex items-center justify-center gap-2 text-sm">
+				{!hasFrame && (
+					<div className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm">
 						<RotateCwIcon className="size-4 animate-spin" />
-						Waiting for browser stream.
 					</div>
 				)}
 			</div>

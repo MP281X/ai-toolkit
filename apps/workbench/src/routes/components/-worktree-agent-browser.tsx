@@ -1,57 +1,76 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Option, Predicate, Schema, pipe} from 'effect'
+import {Array, HashMap, Option, Predicate, Schema, pipe} from 'effect'
+
+import {useEffect} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import {activeSidebarAtom, portlessOriginsAtom} from '#lib/state.ts'
+import {activeSidebarAtom} from '#lib/state.ts'
+import {agentBrowserOwnedTabLabels} from '@deslop/agent-browser/schema'
 import {AgentBrowser} from '@deslop/components/agent-browser'
-import type {PortlessOrigin} from '@deslop/portless/schema'
+import {toast} from '@deslop/components/ui/sonner'
+import {formatError} from '@deslop/components/utils'
+import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-function selectedOrigin(origins: readonly PortlessOrigin[], selected: string | undefined) {
-	return pipe(
-		Option.fromUndefinedOr(selected),
-		Option.flatMap(origin => Array.findFirst(origins, candidate => candidate.origin === origin)),
-		Option.orElse(() => Array.head(origins)),
-		Option.getOrUndefined
-	)
-}
-
-function sameOrigin(left: string | undefined, right: string) {
-	if (Predicate.isUndefined(left)) return false
-	try {
-		return new URL(left).origin === new URL(right).origin
-	} catch {
-		return false
-	}
-}
-
-function tabLabel(origins: readonly PortlessOrigin[], url: string | undefined) {
-	return pipe(
-		origins,
-		Array.findFirst(origin => sameOrigin(url, origin.origin)),
-		Option.map(origin => origin.taskId),
-		Option.getOrUndefined
-	)
-}
-
 export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly worktree: string}) {
 	const activeSidebar = useAtomSuspense(activeSidebarAtom(input.worktree))
-	const origins = useAtomSuspense(portlessOriginsAtom(activeSidebar.value.activeWorktree?.root ?? ''))
+	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'), {mode: 'promise'})
 	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'), {mode: 'promise'})
-	const origin = selectedOrigin(origins.value, input.origin)
-	const session = origin?.worktree ?? origins.value[0]?.worktree
+	const origins = pipe(
+		activeSidebar.value.activeWorktree?.portlessRuns ?? [],
+		Array.filter(run => {
+			const status = activeSidebar.value.activeWorktree?.runStatuses[run.script.sessionId] ?? {state: 'idle', title: ''}
+			return terminalStatusActive(status.state) && status.state !== 'idle'
+		}),
+		Array.map(run => run.origin),
+		Array.dedupeWith((left, right) => left.origin === right.origin)
+	)
+	const session = pipe(
+		origins,
+		Array.head,
+		Option.map(origin => origin.worktree),
+		Option.getOrUndefined
+	)
+	const labels = agentBrowserOwnedTabLabels(Array.map(origins, candidate => candidate.origin))
+	const originKey = pipe(
+		Array.map(origins, candidate => candidate.origin),
+		Array.join('\n')
+	)
+	const tabs = Array.map(origins, candidate => ({
+		id: candidate.origin,
+		label: candidate.taskId,
+		streamLabel: pipe(
+			labels,
+			HashMap.get(candidate.origin),
+			Option.getOrElse(() => candidate.origin)
+		),
+		url: candidate.origin
+	}))
+
+	useEffect(() => {
+		async function syncBrowser() {
+			if (origins.length === 0 || Predicate.isUndefined(activeSidebar.value.activeWorktree?.root)) return
+
+			try {
+				await sync({payload: {cwd: activeSidebar.value.activeWorktree.root}})
+			} catch (error) {
+				toast.error(formatError(error))
+			}
+		}
+
+		void syncBrowser()
+	}, [activeSidebar.value.activeWorktree?.root, input.worktree, originKey, origins.length, sync])
 
 	return (
 		<AgentBrowser
 			className="h-full min-h-0 w-full min-w-0"
-			labelForTab={tab => tabLabel(origins.value, tab.url)}
-			selectedUrl={origin?.origin}
 			session={session}
+			tabs={tabs}
 			onSelectTab={tab => {
 				if (Predicate.isUndefined(session)) return
-				void switchTab({payload: {session, tab: tab.tabId}})
+				void switchTab({payload: {origin: tab.id, session}})
 			}}
 		/>
 	)

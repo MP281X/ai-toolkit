@@ -29,6 +29,7 @@ import {Prompt} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
+import {AgentBrowserError} from '@deslop/agent-browser/schema'
 import {AgentBrowser} from '@deslop/agent-browser/service'
 import {type AgentProvider, type AgentUsageProvider} from '@deslop/agent/schema'
 import {Agent, AgentUsage} from '@deslop/agent/service'
@@ -367,27 +368,17 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const portlessBrowsers = yield* RcMap.make({
 			idleTimeToLive: Duration.infinity,
 			lookup: Effect.fnUntraced(function* (cwd: string) {
-				return yield* Effect.gen(function* () {
-					const browser = yield* AgentBrowser.pipe(
-						Effect.provide(AgentBrowser.layer({sessionId: portlessWorktreeId(cwd)}))
-					)
-					return {
-						sync: Effect.fnUntraced(function* (runs: readonly PortlessRun[]) {
-							yield* pipe(
-								runs,
-								Array.filter(run => scriptRouteSegment(scriptName(run.script.sessionId)) !== 'server'),
-								Effect.forEach(
-									run =>
-										browser.openTab({
-											label: `${routeSegment(packageSegment(run.script.sessionId))}-${routeSegment(scriptName(run.script.sessionId))}`,
-											url: run.origin.origin
-										}),
-									{discard: true}
-								)
-							)
-						})
-					}
-				})
+				const context = yield* Layer.buildWithScope(
+					AgentBrowser.layer({closeOnFinalize: true, sessionId: portlessWorktreeId(cwd)}),
+					yield* Effect.scope
+				)
+				const browser = Context.get(context, AgentBrowser)
+				return {
+					switchTab: browser.switchTab,
+					sync: Effect.fnUntraced(function* (runs: readonly PortlessRun[]) {
+						yield* browser.openTabs(Array.map(runs, run => run.origin.origin))
+					})
+				}
 			})
 		})
 		const scriptWorktrees = yield* RcMap.make({
@@ -509,12 +500,28 @@ export const RpcHandlers = RpcContracts.toLayer(
 		})
 		const syncPortlessBrowser = Effect.fnUntraced(function* (cwd: string) {
 			const runs = yield* activePortlessRuns(cwd)
+			if (Array.isReadonlyArrayEmpty(runs)) return
+			yield* pipe(
+				Effect.gen(function* () {
+					const browser = yield* RcMap.get(portlessBrowsers, cwd)
+					yield* browser.sync(runs)
+				}),
+				Effect.scoped
+			)
+		})
+		const syncOrClosePortlessBrowser = Effect.fnUntraced(function* (cwd: string) {
+			const runs = yield* activePortlessRuns(cwd)
 			if (Array.isReadonlyArrayEmpty(runs)) {
 				yield* pipe(RcMap.invalidate(portlessBrowsers, cwd), Effect.ignore)
 				return
 			}
-			const browser = yield* RcMap.get(portlessBrowsers, cwd)
-			yield* pipe(browser.sync(runs), Effect.ignore)
+			yield* pipe(
+				Effect.gen(function* () {
+					const browser = yield* RcMap.get(portlessBrowsers, cwd)
+					yield* browser.sync(runs)
+				}),
+				Effect.scoped
+			)
 		})
 		const watchPortlessRoute = Effect.fnUntraced(function* (
 			input: TerminalPayload,
@@ -544,7 +551,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 							status
 						)
 					)
-					if (terminalStatusRunning(status)) yield* syncPortlessBrowser(script.script.cwd).pipe(Effect.forkDetach)
+					if (terminalStatusRunning(status)) {
+						yield* syncPortlessBrowser(script.script.cwd).pipe(Effect.ignore, Effect.forkDetach)
+					}
 
 					yield* pipe(
 						SubscriptionRef.changes(sessionTerminal.status),
@@ -559,7 +568,9 @@ export const RpcHandlers = RpcContracts.toLayer(
 									)
 								),
 								Effect.andThen(
-									terminalStatusDone(state) ? invalidateTerminal(input) : syncPortlessBrowser(script.script.cwd)
+									terminalStatusDone(state)
+										? invalidateTerminal(input)
+										: syncPortlessBrowser(script.script.cwd).pipe(Effect.ignore)
 								)
 							)
 						)
@@ -665,11 +676,19 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		return RpcContracts.of({
 			'agentBrowser.switchTab': payload =>
-				pipe(
-					AgentBrowser,
-					Effect.provide(AgentBrowser.layer({sessionId: payload.session})),
-					Effect.flatMap(browser => browser.switchTab(payload.tab))
-				),
+				Effect.gen(function* () {
+					const scripts = Array.fromIterable(HashMap.values(yield* Ref.get(portlessScripts)))
+					const run = pipe(
+						scripts,
+						Array.findFirst(script => script.origin.worktree === payload.session)
+					)
+					if (Option.isNone(run)) {
+						return yield* new AgentBrowserError({message: `Unknown agent-browser session: ${payload.session}`})
+					}
+					const browser = yield* RcMap.get(portlessBrowsers, run.value.script.cwd)
+					yield* browser.switchTab(payload.origin)
+				}).pipe(Effect.scoped),
+			'agentBrowser.sync': payload => syncPortlessBrowser(payload.cwd),
 			agents: payload =>
 				pipe(
 					Stream.fromEffect(currentAgentSessions(payload.cwd)),
@@ -919,7 +938,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				if (Predicate.isNotUndefined(input.sessionId)) {
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
-					yield* syncPortlessBrowser(input.cwd).pipe(Effect.forkDetach)
+					yield* syncOrClosePortlessBrowser(input.cwd).pipe(Effect.ignore, Effect.forkDetach)
 				}
 				yield* watchPortlessRoute(input, sessionTerminal)
 				return status
@@ -980,6 +999,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				if (Predicate.isNotUndefined(input.sessionId)) {
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+					yield* syncOrClosePortlessBrowser(input.cwd).pipe(Effect.ignore, Effect.forkDetach)
 				}
 				yield* invalidateTerminal(input)
 				return status
