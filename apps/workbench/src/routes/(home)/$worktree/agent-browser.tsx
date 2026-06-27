@@ -14,7 +14,7 @@ function AgentBrowserPage() {
 	const search = Route.useSearch()
 
 	return (
-		<div className="bg-background h-full min-h-0 min-w-0 border-t p-2">
+		<div className="bg-background h-full min-h-0 min-w-0">
 			<WorktreeAgentBrowser worktree={params.worktree} origin={search.origin} />
 		</div>
 	)

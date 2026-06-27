@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, pipe} from 'effect'
+import {Array, Match, Predicate, String, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
 import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
@@ -197,7 +197,14 @@ function frameViewport(frame: AgentBrowserFrame, bitmap: ImageBitmap) {
 
 function decodeFrame(frame: AgentBrowserFrame) {
 	const binary = atob(frame.data)
-	const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+	const bytes = String.isEmpty(binary)
+		? new Uint8Array()
+		: new Uint8Array(
+				pipe(
+					Array.range(0, binary.length - 1),
+					Array.map(index => binary.charCodeAt(index))
+				)
+			)
 	return createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}))
 }
 
@@ -219,15 +226,18 @@ export function AgentBrowser(props: {
 	}[]
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
+	const contextRef = useRef<CanvasRenderingContext2D | null>(null)
 	const socketRef = useRef<WebSocket | null>(null)
 	const tabsRef = useRef<readonly AgentBrowserOwnedTab[]>(props.tabs ?? [])
 	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
 	const viewportRef = useRef({height: 900, width: 1600})
+	const canvasSizeRef = useRef({height: 0, width: 0})
 	const latestFrameRef = useRef<{readonly frame: AgentBrowserFrame; readonly serial: number} | null>(null)
 	const rafRef = useRef<number | null>(null)
 	const drawingRef = useRef(false)
 	const drawnSerialRef = useRef(0)
 	const frameSerialRef = useRef(0)
+	const hasFrameRef = useRef(false)
 	const [activeTabId, setActiveTabId] = useState<string | undefined>()
 	const [hasFrame, setHasFrame] = useState(false)
 	const streamUrl =
@@ -266,12 +276,21 @@ export function AgentBrowser(props: {
 
 			const viewport = frameViewport(queued.frame, bitmap)
 			viewportRef.current = viewport
-			canvasRef.current.width = viewport.width
-			canvasRef.current.height = viewport.height
-			canvasRef.current.getContext('2d')?.drawImage(bitmap, 0, 0, viewport.width, viewport.height)
+			if (canvasSizeRef.current.width !== viewport.width || canvasSizeRef.current.height !== viewport.height) {
+				canvasRef.current.width = viewport.width
+				canvasRef.current.height = viewport.height
+				canvasSizeRef.current = viewport
+				contextRef.current = null
+			}
+			const context = contextRef.current ?? canvasRef.current.getContext('2d')
+			contextRef.current = context
+			context?.drawImage(bitmap, 0, 0, viewport.width, viewport.height)
 			bitmap.close()
 			drawnSerialRef.current = queued.serial
-			setHasFrame(true)
+			if (!hasFrameRef.current) {
+				hasFrameRef.current = true
+				setHasFrame(true)
+			}
 		} finally {
 			drawingRef.current = false
 			if (Predicate.isNotNull(latestFrameRef.current) && latestFrameRef.current.serial > drawnSerialRef.current) {
@@ -292,13 +311,14 @@ export function AgentBrowser(props: {
 			setHasFrame(false)
 			setActiveTabId(undefined)
 		})
+		hasFrameRef.current = false
 		latestFrameRef.current = null
 		drawnSerialRef.current = 0
 		frameSerialRef.current = 0
 		if (Predicate.isNotNull(rafRef.current)) cancelAnimationFrame(rafRef.current)
 		rafRef.current = null
 		if (Predicate.isNull(canvasRef.current)) return
-		canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+		contextRef.current?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
 	}, [streamUrl])
 
 	useEffect(() => {
@@ -325,7 +345,7 @@ export function AgentBrowser(props: {
 				const streamTabs = tabsMessage(message)
 				if (Predicate.isNotUndefined(streamTabs)) {
 					const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current, streamTabs})
-					if (Predicate.isNotUndefined(nextActive)) setActiveTabId(nextActive)
+					setActiveTabId(current => (current === nextActive ? current : nextActive))
 				}
 			}
 			socket.addEventListener('message', event => {
@@ -416,9 +436,7 @@ export function AgentBrowser(props: {
 
 	if (Predicate.isUndefined(streamUrl)) {
 		return (
-			<div
-				className={cn('bg-background flex h-full min-h-0 min-w-0 items-center justify-center border', props.className)}
-			>
+			<div className={cn('bg-background flex h-full min-h-0 min-w-0 items-center justify-center', props.className)}>
 				<div className="text-muted-foreground flex items-center gap-2 text-sm">
 					<MonitorIcon className="size-4" />
 					No browser session.
@@ -428,8 +446,8 @@ export function AgentBrowser(props: {
 	}
 
 	return (
-		<div className={cn('bg-background flex h-full min-h-0 min-w-0 flex-col overflow-hidden border', props.className)}>
-			<div className="bg-background flex h-9 shrink-0 items-center border-b px-2">
+		<div className={cn('bg-background flex h-full min-h-0 min-w-0 flex-col overflow-hidden', props.className)}>
+			<div className="bg-background flex h-8 shrink-0 items-center border-b px-2">
 				<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
 					{tabs.length === 0 ? (
 						<span className="text-muted-foreground text-xs">{props.session ?? 'agent-browser'}</span>
@@ -457,7 +475,7 @@ export function AgentBrowser(props: {
 					)}
 				</div>
 			</div>
-			<div className="bg-muted/30 relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2">
+			<div className="bg-background relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
 				<canvas
 					ref={canvasRef}
 					tabIndex={0}

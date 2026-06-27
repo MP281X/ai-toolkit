@@ -15,6 +15,7 @@ import {
 	AgentIcon,
 	BotIcon,
 	Braces,
+	ExternalLinkIcon,
 	GitBranch,
 	GitBranchPlus,
 	GlobeIcon,
@@ -205,6 +206,14 @@ function sortScriptRuns(runs: readonly ScriptRun[]) {
 
 function sortPortlessRuns(runs: readonly PortlessRun[]) {
 	return [...runs].toSorted((left, right) => left.script.taskId.localeCompare(right.script.taskId))
+}
+
+function nativeBrowserUrl(origin: string) {
+	try {
+		const url = new URL(origin)
+		return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
+	} catch {}
+	return null
 }
 
 function WorktreeScripts(input: {
@@ -444,9 +453,48 @@ function PortlessRunRow(input: {
 	readonly status: AgentSession['state']
 	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
+	const browserUrl = nativeBrowserUrl(input.run.origin.origin)
+
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
+				actions={
+					<span className="flex h-full items-center justify-end">
+						<Button
+							render={
+								<a
+									href={
+										Predicate.isNull(browserUrl) ||
+										!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+											? undefined
+											: browserUrl
+									}
+									target="_blank"
+									rel="noopener noreferrer"
+									onClick={event => {
+										event.stopPropagation()
+										if (
+											Predicate.isNull(browserUrl) ||
+											!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+										) {
+											event.preventDefault()
+										}
+									}}
+								/>
+							}
+							variant="ghost"
+							size="icon-xs"
+							className="text-muted-foreground hover:text-foreground"
+							disabled={
+								Predicate.isNull(browserUrl) ||
+								!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
+							}
+							title={`Open ${input.run.script.taskId} in browser`}
+						>
+							<ExternalLinkIcon className="size-3" />
+						</Button>
+					</span>
+				}
 				icon={<ProcessStateIcon state={input.status.state} />}
 				selected={false}
 				title={input.run.script.command ?? input.run.script.taskId}

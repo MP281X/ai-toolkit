@@ -28,6 +28,30 @@ function loopDetectedResponse(hops: number) {
 	)
 }
 
+const portlessInstrumentationLoader = `<script>(()=>{if(navigator.webdriver===true)return;const load=src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;(document.head||document.documentElement||document.body).appendChild(script)});void load('https://unpkg.com/react-scan/dist/auto.global.js').then(()=>{window.reactScan?.({allowInIframe:true,_debug:'verbose'});return load('https://unpkg.com/react-grab/dist/index.global.js')}).catch(()=>{})})()</script>`
+
+function htmlContentType(contentType: string | null | undefined) {
+	return pipe(contentType ?? '', String.toLowerCase, String.includes('text/html'))
+}
+
+function rewritePortlessHtml(html: string) {
+	const head = /<head\b[^>]*>/iu.exec(html)
+	if (Predicate.isNotNull(head)) {
+		const index = head.index + head[0].length
+		return `${String.slice(0, index)(html)}${portlessInstrumentationLoader}${String.slice(index)(html)}`
+	}
+	return `${portlessInstrumentationLoader}${html}`
+}
+
+export function rewritePortlessHtmlResponse(input: {
+	readonly contentType?: string | null
+	readonly html: string
+	readonly method: string
+}) {
+	if (input.method !== 'GET' || !htmlContentType(input.contentType)) return
+	return rewritePortlessHtml(input.html)
+}
+
 const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
 	const hops = Number.parseInt(webRequest.headers.get('x-portless-hops') ?? '', 10)
@@ -48,11 +72,27 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 			})
 		)
 	)
-	const responseHeaders = new Headers(upstream.headers)
-	responseHeaders.delete('content-length')
-	responseHeaders.delete('content-encoding')
+	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
+		const responseHeaders = new Headers(upstream.headers)
+		responseHeaders.delete('content-length')
+		responseHeaders.delete('content-encoding')
+		responseHeaders.set('content-type', 'text/html; charset=utf-8')
+		const html = yield* Effect.tryPromise(() => upstream.text())
+		const rewritten = rewritePortlessHtmlResponse({
+			contentType: upstream.headers.get('content-type'),
+			html,
+			method: webRequest.method
+		})
+		return HttpServerResponse.fromWeb(
+			new Response(rewritten ?? html, {
+				headers: responseHeaders,
+				status: upstream.status,
+				statusText: upstream.statusText
+			})
+		)
+	}
 	return HttpServerResponse.fromWeb(
-		new Response(upstream.body, {headers: responseHeaders, status: upstream.status, statusText: upstream.statusText})
+		new Response(upstream.body, {headers: upstream.headers, status: upstream.status, statusText: upstream.statusText})
 	)
 })
 
