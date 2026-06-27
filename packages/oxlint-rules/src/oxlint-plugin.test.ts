@@ -107,6 +107,10 @@ type Local = string
 // oxlint-disable-next-line @deslop/oxlint-rules/no-primitive-const, @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const localValue: Local = 'local'
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-primitive-const -- fixture
+const fixtureSessionPattern = /fixture/u
+void fixtureSessionPattern
+
 type SharedLocal = {value: string}
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-variable-type-annotation -- fixture
@@ -235,6 +239,11 @@ function isFixture(value: string) {
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-helper, @deslop/oxlint-rules/no-single-use-helper -- fixture
 function nulField(value: {field: string}) {
 	return value.field
+}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-single-use-helper -- fixture
+export function exportedSessionHelper(value: string) {
+	return Number(value)
 }
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-helper -- fixture

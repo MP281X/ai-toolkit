@@ -5,13 +5,14 @@ import {fileURLToPath} from 'node:url'
 
 import {NodeHttpServer, NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Array, Config, Layer, Option, Predicate, String, pipe} from 'effect'
+import {Config, Layer, Predicate, String, pipe} from 'effect'
 
 import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
+import {AgentBrowser} from '@deslop/agent-browser/service'
 import {Portless} from '@deslop/portless/service'
 
 const clientRoot = fileURLToPath(new URL('./client', import.meta.url))
@@ -28,14 +29,12 @@ function contentType(file: string) {
 	return 'application/octet-stream'
 }
 
-function localHostname(host: string | undefined) {
-	if (Predicate.isUndefined(host)) return
-	return pipe(host, String.split(':'), Array.head, Option.getOrUndefined)
-}
-
 function localRequest(request: IncomingMessage) {
-	const hostname = localHostname(request.headers.host)
-	return Predicate.isUndefined(hostname) || hostname === 'localhost'
+	return (
+		Predicate.isUndefined(request.headers.host) ||
+		request.headers.host === 'localhost' ||
+		String.startsWith('localhost:')(request.headers.host)
+	)
 }
 
 function staticFile(url: string | undefined) {
@@ -80,6 +79,7 @@ function createWorkbenchServer() {
 				localRequest(request) &&
 				Predicate.isNotUndefined(request.url) &&
 				!String.startsWith('/api/rpc')(request.url) &&
+				!String.startsWith('/api/agent-browser')(request.url) &&
 				(request.method === 'GET' || request.method === 'HEAD')
 			) {
 				serveStatic(request, args[1])
@@ -101,6 +101,7 @@ NodeRuntime.runMain(
 					RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
 					Layer.provide(LiveLayers)
 				),
+				HttpRouter.middleware(AgentBrowser.middleware, {global: true}),
 				HttpRouter.middleware(Portless.middleware, {global: true}),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			),

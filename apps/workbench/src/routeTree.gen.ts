@@ -15,6 +15,7 @@ import { Route as homeWorktreeTerminalRouteImport } from './routes/(home)/$workt
 import { Route as homeWorktreeRunRouteImport } from './routes/(home)/$worktree/run'
 import { Route as homeWorktreePortlessRouteImport } from './routes/(home)/$worktree/portless'
 import { Route as homeWorktreeDiffRouteImport } from './routes/(home)/$worktree/diff'
+import { Route as homeWorktreeAgentBrowserRouteImport } from './routes/(home)/$worktree/agent-browser'
 import { Route as homeWorktreeAgentRouteImport } from './routes/(home)/$worktree/agent'
 
 const homeRouteRoute = homeRouteRouteImport.update({
@@ -46,6 +47,12 @@ const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
   path: '/$worktree/diff',
   getParentRoute: () => homeRouteRoute,
 } as any)
+const homeWorktreeAgentBrowserRoute =
+  homeWorktreeAgentBrowserRouteImport.update({
+    id: '/$worktree/agent-browser',
+    path: '/$worktree/agent-browser',
+    getParentRoute: () => homeRouteRoute,
+  } as any)
 const homeWorktreeAgentRoute = homeWorktreeAgentRouteImport.update({
   id: '/$worktree/agent',
   path: '/$worktree/agent',
@@ -55,6 +62,7 @@ const homeWorktreeAgentRoute = homeWorktreeAgentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof homeIndexRoute
   '/$worktree/agent': typeof homeWorktreeAgentRoute
+  '/$worktree/agent-browser': typeof homeWorktreeAgentBrowserRoute
   '/$worktree/diff': typeof homeWorktreeDiffRoute
   '/$worktree/portless': typeof homeWorktreePortlessRoute
   '/$worktree/run': typeof homeWorktreeRunRoute
@@ -63,6 +71,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof homeIndexRoute
   '/$worktree/agent': typeof homeWorktreeAgentRoute
+  '/$worktree/agent-browser': typeof homeWorktreeAgentBrowserRoute
   '/$worktree/diff': typeof homeWorktreeDiffRoute
   '/$worktree/portless': typeof homeWorktreePortlessRoute
   '/$worktree/run': typeof homeWorktreeRunRoute
@@ -73,6 +82,7 @@ export interface FileRoutesById {
   '/(home)': typeof homeRouteRouteWithChildren
   '/(home)/': typeof homeIndexRoute
   '/(home)/$worktree/agent': typeof homeWorktreeAgentRoute
+  '/(home)/$worktree/agent-browser': typeof homeWorktreeAgentBrowserRoute
   '/(home)/$worktree/diff': typeof homeWorktreeDiffRoute
   '/(home)/$worktree/portless': typeof homeWorktreePortlessRoute
   '/(home)/$worktree/run': typeof homeWorktreeRunRoute
@@ -83,6 +93,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$worktree/agent'
+    | '/$worktree/agent-browser'
     | '/$worktree/diff'
     | '/$worktree/portless'
     | '/$worktree/run'
@@ -91,6 +102,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$worktree/agent'
+    | '/$worktree/agent-browser'
     | '/$worktree/diff'
     | '/$worktree/portless'
     | '/$worktree/run'
@@ -100,6 +112,7 @@ export interface FileRouteTypes {
     | '/(home)'
     | '/(home)/'
     | '/(home)/$worktree/agent'
+    | '/(home)/$worktree/agent-browser'
     | '/(home)/$worktree/diff'
     | '/(home)/$worktree/portless'
     | '/(home)/$worktree/run'
@@ -154,6 +167,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeWorktreeDiffRouteImport
       parentRoute: typeof homeRouteRoute
     }
+    '/(home)/$worktree/agent-browser': {
+      id: '/(home)/$worktree/agent-browser'
+      path: '/$worktree/agent-browser'
+      fullPath: '/$worktree/agent-browser'
+      preLoaderRoute: typeof homeWorktreeAgentBrowserRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
     '/(home)/$worktree/agent': {
       id: '/(home)/$worktree/agent'
       path: '/$worktree/agent'
@@ -167,6 +187,7 @@ declare module '@tanstack/react-router' {
 interface homeRouteRouteChildren {
   homeIndexRoute: typeof homeIndexRoute
   homeWorktreeAgentRoute: typeof homeWorktreeAgentRoute
+  homeWorktreeAgentBrowserRoute: typeof homeWorktreeAgentBrowserRoute
   homeWorktreeDiffRoute: typeof homeWorktreeDiffRoute
   homeWorktreePortlessRoute: typeof homeWorktreePortlessRoute
   homeWorktreeRunRoute: typeof homeWorktreeRunRoute
@@ -176,6 +197,7 @@ interface homeRouteRouteChildren {
 const homeRouteRouteChildren: homeRouteRouteChildren = {
   homeIndexRoute: homeIndexRoute,
   homeWorktreeAgentRoute: homeWorktreeAgentRoute,
+  homeWorktreeAgentBrowserRoute: homeWorktreeAgentBrowserRoute,
   homeWorktreeDiffRoute: homeWorktreeDiffRoute,
   homeWorktreePortlessRoute: homeWorktreePortlessRoute,
   homeWorktreeRunRoute: homeWorktreeRunRoute,

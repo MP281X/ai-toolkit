@@ -67,7 +67,11 @@ export function Terminal({
 					return
 				}
 
-				terminalRef.current.write(data, done)
+				try {
+					terminalRef.current.write(data, done)
+				} catch {
+					done?.()
+				}
 			}
 		}),
 		[]
@@ -161,6 +165,7 @@ export function Terminal({
 			terminal.loadAddon(webgl)
 			webgl.onContextLoss(() => {
 				webgl.dispose()
+				terminal.refresh(0, terminal.rows - 1)
 			})
 		} catch {
 			// Canvas renderer fallback.

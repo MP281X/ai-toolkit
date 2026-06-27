@@ -3,10 +3,6 @@
 	"sideEffects": false,
 	"name": "@deslop/portless",
 
-	"imports": {
-		"#lib/*": "./src/lib/*"
-	},
-
 	"exports": {
 		"./service": "./src/service.ts",
 		"./schema": "./src/schema.ts"

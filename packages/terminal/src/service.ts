@@ -3,7 +3,6 @@ import {
 	Array,
 	Config,
 	Context,
-	Duration,
 	Effect,
 	Layer,
 	Option,
@@ -78,7 +77,20 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const publishFrame = Effect.fnUntraced(function* (frame: TerminalFrame) {
 			const attached = yield* Ref.get(attachedRef)
-			const dropped = yield* Effect.sync(() => attached.filter(queue => !Queue.offerUnsafe(queue, frame)))
+			const results = yield* Effect.forEach(
+				attached,
+				queue =>
+					pipe(
+						Queue.offer(queue, frame),
+						Effect.map(offered => ({offered, queue}))
+					),
+				{concurrency: 'unbounded'}
+			)
+			const dropped = pipe(
+				results,
+				Array.filter(result => !result.offered),
+				Array.map(result => result.queue)
+			)
 			yield* dropQueues(dropped)
 		})
 
@@ -117,6 +129,15 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			)
 		}
+
+		const processOutput = Effect.fnUntraced(function* (output: {readonly data: string; readonly process: IPty}) {
+			const replayProcess = yield* Ref.get(replayProcessRef)
+			if (replayProcess !== output.process) return
+
+			for (const chunk of terminalChunks(output.data)) {
+				yield* pipe(writeOutput(chunk), Semaphore.withPermit(screenLock))
+			}
+		})
 
 		const writeOutput = Effect.fnUntraced(function* (chunk: string) {
 			const updates = yield* Ref.modify(oscRef, carry => {
@@ -286,36 +307,28 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		yield* pipe(
-			Stream.fromQueue(dataQueue),
-			Stream.groupedWithin(128, Duration.millis(16)),
-			Stream.runForEach(items =>
-				Effect.forEach(
-					Array.fromIterable(items),
-					output =>
-						Effect.gen(function* () {
-							const replayProcess = yield* Ref.get(replayProcessRef)
-							if (replayProcess !== output.process) return
-
-							for (const chunk of terminalChunks(output.data)) {
-								yield* pipe(writeOutput(chunk), Semaphore.withPermit(screenLock))
-							}
-						}),
-					{discard: true}
+			Effect.forever(
+				pipe(
+					Queue.takeBetween(dataQueue, 1, 128),
+					Effect.flatMap(items => Effect.forEach(items, processOutput, {discard: true}))
 				)
 			),
 			Effect.forkScoped
 		)
 
 		yield* pipe(
-			Stream.fromQueue(resizeQueue),
-			Stream.groupedWithin(32, Duration.millis(16)),
-			Stream.runForEach(items =>
+			Effect.forever(
 				pipe(
-					Array.last(Array.fromIterable(items)),
-					Option.match({
-						onNone: () => Effect.void,
-						onSome: size => pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
-					})
+					Queue.takeBetween(resizeQueue, 1, 32),
+					Effect.flatMap(items =>
+						pipe(
+							Array.last(items),
+							Option.match({
+								onNone: () => Effect.void,
+								onSome: size => pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
+							})
+						)
+					)
 				)
 			),
 			Effect.forkScoped
