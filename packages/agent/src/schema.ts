@@ -1,7 +1,7 @@
 import {Schema} from 'effect'
 
 export class AgentError extends Schema.TaggedErrorClass<AgentError>()('AgentError', {
-	cause: Schema.optional(Schema.Defect),
+	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}
 
