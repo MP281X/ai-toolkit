@@ -1,9 +1,10 @@
+import {describe} from '@effect/vitest'
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-import-alias -- fixture
-import {Effect, Option, Record as EffectRecord, Schema, String} from 'effect'
+import {Data, Effect, Option, Record as EffectRecord, Schema, String} from 'effect'
 import type {FixtureRegister} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
-import {describe} from 'vite-plus/test'
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-private-workspace-import -- fixture
 import {GitWorkspace} from '../../git/src/service.ts'
@@ -21,6 +22,9 @@ const source = {prefix: 'fixture', value: 'value'} as const
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias, @deslop/oxlint-rules/no-schema-without-type-export -- fixture
 const FixtureSchemaWithoutType = Schema.String
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias, @deslop/oxlint-rules/no-public-raw-domain-string, @deslop/oxlint-rules/no-schema-without-type-export -- fixture
+export const RawPublicStringSchema = Schema.String
+
 type FixtureSchemaWithType = typeof FixtureSchemaWithType.Type
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- fixture
 const FixtureSchemaWithType = Schema.String
@@ -37,6 +41,19 @@ class FixtureSchemaTaggedErrorClass extends Schema.TaggedErrorClass<FixtureSchem
 	'FixtureSchemaTaggedErrorClass',
 	{value: Schema.String}
 ) {}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-data-class -- fixture
+class FixtureDataClass extends Data.Class<{readonly value: string}> {}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-data-class -- fixture
+class FixtureDataTaggedClass extends Data.TaggedClass('FixtureDataTaggedClass')<{readonly value: string}> {}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
+type FixtureDataTagged = {readonly _tag: 'Fixture'; readonly value: string}
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-data-class -- fixture
+const FixtureDataTaggedEnum = Data.taggedEnum<FixtureDataTagged>()
+
 void FixtureSchemaClass
 void FixtureSchemaTaggedClass
 void FixtureSchemaTaggedErrorClass
@@ -58,6 +75,21 @@ const emptyRecord = EffectRecord.empty<string>()
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- fixture
 const accessAlias = source.value
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- fixture
+void JSON.parse('{"value":"fixture"}')
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- fixture
+const jsonStringified = JSON.stringify(source)
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-schema-decoder-alias -- fixture
+const decodeString = Schema.decodeSync(Schema.String)
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-schema-decoder-alias -- fixture
+const decodedString = Schema.decodeSync(Schema.String)('fixture')
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-schema-decoder-alias -- fixture
+const decodeUnknownString = Schema.decodeUnknownOption(Schema.String)
 
 function compare(dynamicValue: string) {
 	// oxlint-disable-next-line @deslop/oxlint-rules/no-condition-alias -- fixture
@@ -104,12 +136,24 @@ const uselessEffectWrapper = Effect.fn('Fixture.useless')(function* () {
 // oxlint-disable-next-line @deslop/oxlint-rules/no-floating-local-type -- fixture
 type Local = string
 
+// oxlint-disable-next-line @deslop/oxlint-rules/no-exported-local-type -- fixture
+export type ExportedLocal = string
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-exported-local-type -- fixture
+export type ExportedLocalShape = {readonly value: string}
+
 // oxlint-disable-next-line @deslop/oxlint-rules/no-primitive-const, @deslop/oxlint-rules/no-variable-type-annotation -- fixture
 const localValue: Local = 'local'
 
 // oxlint-disable-next-line @deslop/oxlint-rules/no-primitive-const -- fixture
 const fixtureSessionPattern = /fixture/u
 void fixtureSessionPattern
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-composed-identity-key -- fixture
+export const composedIdentityTemplate = `${source.prefix}:${source.value}`
+
+// oxlint-disable-next-line @deslop/oxlint-rules/no-composed-identity-key -- fixture
+export const composedIdentityBinary = source.prefix + source.value
 
 type SharedLocal = {value: string}
 
@@ -287,15 +331,22 @@ function trivialHandler() {
 
 void {
 	FakeRefStateFixture,
+	FixtureDataClass,
+	FixtureDataTaggedClass,
+	FixtureDataTaggedEnum,
 	FixtureSchemaWithType,
 	FixtureSchemaWithoutType,
 	GitWorkspace,
+	RawPublicStringSchema,
 	StatePatchFixture,
 	accessAlias,
 	accessField,
 	compare,
 	constructedOption,
 	contextOwnedEffectFunction,
+	decodeString,
+	decodeUnknownString,
+	decodedString,
 	destructuredValue,
 	effectReturningFunction,
 	emptyRecord,
@@ -307,6 +358,7 @@ void {
 	iifeValue,
 	isFixture,
 	joinedValues,
+	jsonStringified,
 	localValue,
 	matchable,
 	mutableHolder,

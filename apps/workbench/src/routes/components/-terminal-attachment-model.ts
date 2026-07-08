@@ -21,12 +21,7 @@ function outputEnd(data: string, start: number, maxLength: number) {
 	return safeEnd === start ? Math.min(start + maxLength, data.length) : safeEnd
 }
 
-function appendOutput(
-	operations: readonly TerminalAttachmentOperation[],
-	data: string,
-	maxOutputLength: number,
-	start = 0
-) {
+function appendOutput(operations: TerminalAttachmentOperation[], data: string, maxOutputLength: number, start = 0) {
 	if (start >= data.length) return operations
 
 	const previous = Array.last(operations)
@@ -66,10 +61,7 @@ export function terminalAttachmentOperations(input: {
 		Array.filter(frame => frame.sequence > input.lastSequence),
 		Array.sortWith(frame => frame.sequence, Order.Number),
 		Array.reduce(
-			{
-				lastSequence: input.lastSequence,
-				operations: Array.empty<TerminalAttachmentOperation>() as readonly TerminalAttachmentOperation[]
-			},
+			{lastSequence: input.lastSequence, operations: Array.empty<TerminalAttachmentOperation>()},
 			(current, frame) => {
 				if (frame.type === 'reset') {
 					return {

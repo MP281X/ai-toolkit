@@ -46,13 +46,13 @@ const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 
 function objectProperty(input: unknown, key: string) {
 	if (!Predicate.isObject(input)) return
-	const value = (input as {[key: string]: unknown})[key]
+	const value = input[key]
 	return Predicate.isObject(value) ? value : undefined
 }
 
 function numberProperty(input: unknown, key: string) {
 	if (!Predicate.isObject(input)) return 0
-	const value = (input as {[key: string]: unknown})[key]
+	const value = input[key]
 	return Predicate.isNumber(value) ? value : 0
 }
 

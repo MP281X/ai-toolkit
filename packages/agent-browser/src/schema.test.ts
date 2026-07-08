@@ -1,6 +1,6 @@
-import {HashMap, Option, pipe} from 'effect'
+import {describe, expect, it} from '@effect/vitest'
 
-import {describe, expect, it} from 'vite-plus/test'
+import {HashMap, Option, pipe} from 'effect'
 
 import {agentBrowserOwnedTabLabel, agentBrowserOwnedTabLabels} from './schema.ts'
 

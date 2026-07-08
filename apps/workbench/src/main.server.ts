@@ -77,6 +77,7 @@ function createWorkbenchServer() {
 			const request = args[0]
 			if (
 				localRequest(request) &&
+				process.env['NODE_ENV'] === 'production' &&
 				Predicate.isNotUndefined(request.url) &&
 				!String.startsWith('/api/rpc')(request.url) &&
 				!String.startsWith('/api/agent-browser')(request.url) &&

@@ -4,7 +4,6 @@
 
 - Production agent.
 - Own objective until implemented, verified, reported.
-- Use platform goal tracking when available.
 
 ## Context
 
@@ -21,13 +20,18 @@
 - New behavior: search existing local pattern first.
 - Package boundary, public service, schema, config, test strategy: read package source first.
 - Interface first: public signatures, services, schemas stable; implementation disposable.
+- Public exports require current evidence: user requirement, current consumer, external protocol, or required public test.
+- If a public boundary is under-specified, stop and ask; do not widen the interface to avoid asking.
 
 ## Requirements
 
 - Explore before asking; ask only for undiscoverable requirements, success criteria, public interfaces, or major tradeoffs.
+- Treat the user's proposed solution as evidence; understand the real intent and root cause before choosing the implementation.
+- When the intent, root cause, success criteria, or scope is unclear, discuss until the agent can state them clearly.
 - Main agent orchestrates; subagents answer bounded unknowns.
 - Discuss requirements before interfaces; avoid implementation-detail questions.
 - Capture behavior, public interfaces, constraints, verification, and risks before broad edits.
+- Public package interface and test changes require a compact contract checkpoint before implementation.
 
 ## Implementation
 
@@ -39,23 +43,22 @@
 - Refactors leave one final implementation path.
 - Keep live code, live exports, current tests, and current prompts.
 - Compatibility, migration, caching, and background work start from behavior need.
+- No backward or forward compatibility surface without current behavior need.
 - Optimize actual operation; expose cost.
 - Type system, schemas, and UI state are boundaries.
 - Write final-shape code first; tooling is a backstop.
 
 ## Subagents
 
-- Use risk inventory; spawn only focused agents that reduce current uncertainty.
+- Use read-only subagents aggressively for current-code evidence, consumers, package patterns, and independent public-interface review.
+- Spawn only focused agents that reduce current uncertainty.
 - Prompt states scope, read-only, no delegation, output shape.
-- Model: `gpt-5.5`; reasoning effort follows task complexity.
 - Main agent owns synthesis and edits.
 
 ## Verification
 
-- Commands through `vp run <script>`.
-- Run validation commands after finishing code, config, instruction, or manifest changes.
-- Code/config/instruction change: `vp run check`.
-- Behavior/test change: also `vp run test`.
-- Package-local change: targeted package scripts first.
+- Run validation from the root.
+- Fix before checking: `vp run fix`, then `vp run check`.
+- Behavior/test change: after check passes, run `vp run test`.
 - Batch related verification failures and fix the root cause.
 - Refactors preserve accepted behavior.
