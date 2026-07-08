@@ -16,11 +16,13 @@ NodeRuntime.runMain(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
-				HttpStaticServer.layer({
-					index: 'index.html',
-					root: fileURLToPath(new URL('./client', import.meta.url)),
-					spa: true
-				}),
+				process.env['NODE_ENV'] === 'production'
+					? HttpStaticServer.layer({
+							index: 'index.html',
+							root: fileURLToPath(new URL('./client', import.meta.url)),
+							spa: true
+						})
+					: Layer.empty,
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			),
 			{disableLogger: true}
