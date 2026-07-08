@@ -20,6 +20,7 @@ description: Use when adding, rewriting, removing, or running tests, including p
 
 - Test breakable public behavior.
 - Test package behavior through public exports only.
+- A test scenario needs current public behavior evidence.
 - Import `service.ts`, `schema.ts`, `utils.ts`, and other public package entrypoints only.
 - No `internal/*` imports.
 - No fake AST/context harness when lint/tool boundary exists.

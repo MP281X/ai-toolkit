@@ -7,8 +7,8 @@ description: Use when creating, updating, deleting, reorganizing, pruning, or re
 
 ## Load First
 
-- Read `AGENTS.md` and every `.agents/skills/*/SKILL.md`.
-- For enforceable policy, inspect `vite.config.ts`, `packages/oxlint-rules/src/oxlint-plugin.ts`, `packages/oxlint-rules/src/oxlint-plugin.test.ts`, and `.fallowrc.json`.
+- Read `AGENTS.md`, app-local `AGENTS.md`, and every `.agents/skills/*/SKILL.md`.
+- For enforceable policy, inspect root and app `vite.config.ts`, `packages/oxlint-rules/src/oxlint-plugin.ts`, `packages/oxlint-rules/src/oxlint-plugin.test.ts`, and `.fallowrc.json`.
 
 ## Ownership
 
@@ -16,6 +16,7 @@ description: Use when creating, updating, deleting, reorganizing, pruning, or re
 - The user gives intent; the agent chooses the owner.
 - Put each instruction or enforcement in the narrowest current owner.
 - `AGENTS.md`: always-on repo invariants, research, communication, subagents, verification.
+- App-local `AGENTS.md`: always-on invariants for that app or subtree.
 - Skills: triggered workflows, domain procedures, nontrivial authoring patterns.
 - Lint config/rules: mechanically enforceable policy.
 

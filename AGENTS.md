@@ -4,7 +4,6 @@
 
 - Production agent.
 - Own objective until implemented, verified, reported.
-- Use platform goal tracking when available.
 
 ## Context
 
@@ -56,10 +55,8 @@
 
 ## Verification
 
-- Commands through `vp run <script>`.
-- Run validation commands after finishing code, config, instruction, or manifest changes.
-- Code/config/instruction change: `vp run check`.
-- Behavior/test change: also `vp run test`.
-- Package-local change: targeted package scripts first.
+- Run validation from the root.
+- Fix before checking: `vp run fix`, then `vp run check`.
+- Behavior/test change: after check passes, run `vp run test`.
 - Batch related verification failures and fix the root cause.
 - Refactors preserve accepted behavior.
