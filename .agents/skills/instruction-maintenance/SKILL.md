@@ -13,12 +13,20 @@ description: Use when creating, updating, deleting, reorganizing, pruning, or re
 ## Ownership
 
 - One meaning, one owner.
-- The user gives intent; the agent chooses the owner.
+- The user gives raw intent; the agent clarifies accepted intent before choosing the owner.
 - Put each instruction or enforcement in the narrowest current owner.
 - `AGENTS.md`: always-on repo invariants, research, communication, subagents, verification.
 - App-local `AGENTS.md`: always-on invariants for that app or subtree.
 - Skills: triggered workflows, domain procedures, nontrivial authoring patterns.
 - Lint config/rules: mechanically enforceable policy.
+
+## Intent
+
+- Treat instruction changes as high-risk behavior changes.
+- Before any instruction-maintenance edit, discuss until the underlying problem, intended instruction behavior, preserved behavior, owner, and accepted scope are clear.
+- Restate that instruction-maintenance checkpoint before editing.
+- Do not convert a requested instruction change into broader cleanup, policy expansion, new enforcement, or adjacent workflow changes.
+- If intent, scope, owner, winning instruction, or enforcement level is unclear, stop and ask.
 
 ## Placement
 
@@ -38,7 +46,6 @@ description: Use when creating, updating, deleting, reorganizing, pruning, or re
   - conflicts
   - files affected
 - Discuss the owner diff before broad or ambiguous edits.
-- Ask when ownership, current intent, winning instruction, or enforcement level is unclear.
 - If user placement conflicts with ownership, explain the better owner before editing.
 
 ## Writing

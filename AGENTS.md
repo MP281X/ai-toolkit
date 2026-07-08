@@ -26,6 +26,8 @@
 ## Requirements
 
 - Explore before asking; ask only for undiscoverable requirements, success criteria, public interfaces, or major tradeoffs.
+- Treat the user's proposed solution as evidence; understand the real intent and root cause before choosing the implementation.
+- When the intent, root cause, success criteria, or scope is unclear, discuss until the agent can state them clearly.
 - Main agent orchestrates; subagents answer bounded unknowns.
 - Discuss requirements before interfaces; avoid implementation-detail questions.
 - Capture behavior, public interfaces, constraints, verification, and risks before broad edits.
