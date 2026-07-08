@@ -6,8 +6,17 @@ import {AgentError, type AgentLayerConfig} from '../schema.ts'
 
 const piCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
-		'vpx',
-		['@earendil-works/pi-coding-agent@latest', '--model', 'openai-codex/gpt-5.5', '--thinking', 'medium', '--approve'],
+		'vp',
+		[
+			'dlx',
+			'--config.ignore-scripts=true',
+			'@earendil-works/pi-coding-agent@latest',
+			'--model',
+			'openai-codex/gpt-5.5',
+			'--thinking',
+			'medium',
+			'--approve'
+		],
 		{cwd: config.cwd}
 	)
 	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'pi command unavailable'})

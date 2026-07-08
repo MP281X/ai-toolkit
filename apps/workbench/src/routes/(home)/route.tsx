@@ -2,7 +2,15 @@ import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
 import {Array, Effect, HashSet, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
-import {Outlet, createFileRoute, useRouterState} from '@tanstack/react-router'
+import {
+	Outlet,
+	createFileRoute,
+	retainSearchParams,
+	stripSearchParams,
+	useLocation,
+	useNavigate,
+	useRouterState
+} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, startTransition, useState} from 'react'
 
@@ -64,7 +72,12 @@ import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const Route = createFileRoute('/(home)')({
 	component: HomeLayout,
-	validateSearch: Schema.toStandardSchemaV1(Schema.Struct({}))
+	search: {
+		middlewares: [retainSearchParams(['filterActiveWorktrees']), stripSearchParams({filterActiveWorktrees: false})]
+	},
+	validateSearch: Schema.toStandardSchemaV1(
+		Schema.Struct({filterActiveWorktrees: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false)))})
+	)
 })
 
 const branchesAtom = Atom.family((cwd: string) =>
@@ -673,6 +686,9 @@ function WorktreeManager(input: {
 	const maintenanceProject = useAtomSet(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})
 	const deleteWorktree = useAtomSet(RpcClient.mutation('projects.deleteWorktree'), {mode: 'promise'})
+	const navigate = useNavigate()
+	const search = Route.useSearch()
+	const pathname = useLocation({select: location => location.pathname})
 	const [state, setState] = useState(() => ({
 		actionsOpen: false,
 		branch: '',
@@ -680,7 +696,6 @@ function WorktreeManager(input: {
 		creatingBranch: '',
 		deleteDialogOpen: false,
 		deletingWorktree: false,
-		filterAgentWorktrees: false,
 		maintainingProject: ''
 	}))
 	const createWorktreeProject =
@@ -795,15 +810,21 @@ function WorktreeManager(input: {
 						type="button"
 						variant="ghost"
 						size="icon"
-						aria-pressed={state.filterAgentWorktrees}
-						aria-label={state.filterAgentWorktrees ? 'Showing agent worktrees' : 'Showing all worktrees'}
-						className={state.filterAgentWorktrees ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
+						aria-pressed={search.filterActiveWorktrees}
+						aria-label={search.filterActiveWorktrees ? 'Showing agent worktrees' : 'Showing all worktrees'}
+						className={search.filterActiveWorktrees ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
 						onClick={() => {
-							setState(current => ({...current, filterAgentWorktrees: !current.filterAgentWorktrees}))
+							startTransition(() => {
+								void navigate({
+									replace: true,
+									search: current => ({...current, filterActiveWorktrees: !search.filterActiveWorktrees}),
+									to: pathname
+								})
+							})
 						}}
-						title={state.filterAgentWorktrees ? 'Show all worktrees' : 'Show agent worktrees'}
+						title={search.filterActiveWorktrees ? 'Show all worktrees' : 'Show agent worktrees'}
 					>
-						{state.filterAgentWorktrees ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
+						{search.filterActiveWorktrees ? <BotIcon className="size-3" /> : <ListTree className="size-3" />}
 					</Button>
 					{input.activeWorktree && input.activeWorktree.root !== input.activeProject?.repository.root && (
 						<Button
@@ -967,7 +988,7 @@ function WorktreeManager(input: {
 			<TreeExplorer className="min-h-0 flex-1 overflow-y-auto px-0 py-1">
 				<TreeExplorerSection>
 					{Array.map(input.projects, project => {
-						const worktrees = state.filterAgentWorktrees
+						const worktrees = search.filterActiveWorktrees
 							? pipe(project.worktrees, Array.filter(worktreeHasAgent))
 							: project.worktrees
 
