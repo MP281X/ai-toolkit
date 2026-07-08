@@ -1,6 +1,6 @@
 import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Effect, FileSystem} from 'effect'
+import {Config, Effect, FileSystem} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
@@ -30,6 +30,13 @@ const repositories = [
 ] as const
 
 const program = Effect.gen(function* () {
+	const githubActions = yield* Config.boolean('GITHUB_ACTIONS').pipe(Config.withDefault(false))
+
+	if (githubActions) {
+		yield* Effect.log('Skipping source repository clone.')
+		return
+	}
+
 	const fs = yield* FileSystem.FileSystem
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 	const git = Effect.fnUntraced(function* (name: string, phase: string, args: readonly string[]) {
