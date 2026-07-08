@@ -321,15 +321,21 @@ const isDirectEffectCall = (node: ESTree.Expression) =>
 	node.callee.property.type === 'Identifier' &&
 	!String.startsWith('run')(node.callee.property.name)
 
-const isDataConstructorCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Data' &&
-	node.callee.property.type === 'Identifier' &&
-	(node.callee.property.name === 'Class' ||
-		node.callee.property.name === 'TaggedClass' ||
-		node.callee.property.name === 'taggedEnum')
+const isDataConstructorExpression = (node: ESTree.Expression) => {
+	const callee = node.type === 'TSInstantiationExpression' ? node.expression : node
+	return (
+		callee.type === 'MemberExpression' &&
+		!callee.computed &&
+		callee.object.type === 'Identifier' &&
+		callee.object.name === 'Data' &&
+		callee.property.type === 'Identifier' &&
+		(callee.property.name === 'Class' ||
+			callee.property.name === 'TaggedClass' ||
+			callee.property.name === 'taggedEnum')
+	)
+}
+
+const isDataConstructorCall = (node: ESTree.CallExpression) => isDataConstructorExpression(node.callee)
 
 const isEffectReturningBody = (node: ESTree.Expression | ESTree.FunctionBody | null) =>
 	Predicate.isNotNull(node) &&
@@ -720,6 +726,21 @@ export default definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (isDataConstructorCall(node)) {
+						context.report({message: 'Use schema-backed data constructors.', node})
+					}
+				},
+				ClassDeclaration: node => {
+					if (Predicate.isNotNull(node.superClass) && isDataConstructorExpression(node.superClass)) {
+						context.report({message: 'Use schema-backed data constructors.', node})
+					}
+				},
+				ClassExpression: node => {
+					if (Predicate.isNotNull(node.superClass) && isDataConstructorExpression(node.superClass)) {
+						context.report({message: 'Use schema-backed data constructors.', node})
+					}
+				},
+				TSInstantiationExpression: node => {
+					if (isDataConstructorExpression(node)) {
 						context.report({message: 'Use schema-backed data constructors.', node})
 					}
 				}
@@ -1142,17 +1163,11 @@ export default definePlugin({
 					if (node.declaration?.type !== 'VariableDeclaration') return
 					for (const declaration of node.declaration.declarations) {
 						if (
-							(declaration.init?.type === 'CallExpression' &&
-								declaration.init.callee.type === 'MemberExpression' &&
-								declaration.init.callee.object.type === 'Identifier' &&
-								declaration.init.callee.object.name === 'Schema' &&
-								declaration.init.callee.property.type === 'Identifier' &&
-								declaration.init.callee.property.name === 'String') ||
-							(declaration.init?.type === 'MemberExpression' &&
-								declaration.init.object.type === 'Identifier' &&
-								declaration.init.object.name === 'Schema' &&
-								declaration.init.property.type === 'Identifier' &&
-								declaration.init.property.name === 'String')
+							declaration.init?.type === 'MemberExpression' &&
+							declaration.init.object.type === 'Identifier' &&
+							declaration.init.object.name === 'Schema' &&
+							declaration.init.property.type === 'Identifier' &&
+							declaration.init.property.name === 'String'
 						) {
 							context.report({message: 'Brand domain string.', node: declaration})
 						}

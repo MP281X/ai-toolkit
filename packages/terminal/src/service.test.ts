@@ -1,10 +1,10 @@
 import {NodeServices} from '@effect/platform-node'
+import {describe, expect, it} from '@effect/vitest'
 
 import type {Scope} from 'effect'
 import {Array, Context, Effect, Fiber, Stream, String, pipe} from 'effect'
 
 import {ChildProcess} from 'effect/unstable/process'
-import {describe, expect, it} from 'vite-plus/test'
 
 import {Terminal} from './service.ts'
 

@@ -5,10 +5,9 @@ import {join} from 'node:path'
 import {setTimeout} from 'node:timers/promises'
 
 import {NodeServices} from '@effect/platform-node'
+import {afterEach, describe, expect, it} from '@effect/vitest'
 
 import {Array, Context, Effect, String, SubscriptionRef, pipe} from 'effect'
-
-import {afterEach, describe, expect, it} from 'vite-plus/test'
 
 import {
 	GitReviewChangesTarget,

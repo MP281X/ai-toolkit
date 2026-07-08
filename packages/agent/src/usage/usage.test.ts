@@ -1,10 +1,9 @@
 import {join} from 'node:path'
 
 import {NodeFileSystem} from '@effect/platform-node'
+import {describe, expect, test} from '@effect/vitest'
 
 import {Effect, FileSystem} from 'effect'
-
-import {describe, expect, test} from 'vite-plus/test'
 
 import {loadClaudeUsageTokens} from './claude.ts'
 import {loadCodexUsageTokens} from './codex.ts'

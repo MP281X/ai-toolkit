@@ -20,7 +20,7 @@ export default defineConfig({
 		outDir: 'dist',
 		outputOptions: {entryFileNames: 'server.js'},
 		platform: 'node',
-		target: 'node24'
+		target: 'node26'
 	},
 	plugins: [
 		tanstackRouter({autoCodeSplitting: true, target: 'react'}),

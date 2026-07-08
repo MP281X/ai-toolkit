@@ -3,11 +3,11 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {NodeServices} from '@effect/platform-node'
+import {afterEach, describe, expect, it} from '@effect/vitest'
 
 import {Array, Context, Effect, HashMap, Option, Order, pipe} from 'effect'
 
 import type {ChildProcess} from 'effect/unstable/process'
-import {afterEach, describe, expect, it} from 'vite-plus/test'
 
 import {Scripts} from './service.ts'
 

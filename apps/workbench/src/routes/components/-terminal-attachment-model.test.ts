@@ -1,6 +1,6 @@
-import {Array} from 'effect'
+import {describe, expect, it} from '@effect/vitest'
 
-import {describe, expect, it} from 'vite-plus/test'
+import {Array} from 'effect'
 
 import {terminalAttachmentOperations} from './-terminal-attachment-model.ts'
 

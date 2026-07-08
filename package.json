@@ -38,13 +38,13 @@
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-
+		
 		"fallow": "latest",
-		"oxlint-plugin-react-doctor": "latest",
+		"@effect/vitest": "^4.0.0-beta",
 		"@deslop/oxlint-rules": "workspace:*",
-
+		"oxlint-plugin-react-doctor": "latest",
+		
 		"vite": "catalog:",
-		"vitest": "catalog:",
 		"vite-plus": "catalog:"
 	}
 }

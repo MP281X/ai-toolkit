@@ -21,8 +21,10 @@ catalogMode: prefer
 catalog:
   vite-plus: latest
   vite: npm:@voidzero-dev/vite-plus-core@latest
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-overrides: {vite: 'catalog:'}
+overrides:
+  vite: 'catalog:'
+  '@aws-sdk/client-bedrock-runtime>@aws-sdk/token-providers': 3.1079.0
+  '@aws-sdk/credential-provider-sso>@aws-sdk/token-providers': 3.1079.0
 peerDependencyRules:
-  allowAny: [vite, vitest]
-  allowedVersions: {vite: '*', vitest: '*'}
+  allowAny: [vite, typescript]
+  allowedVersions: {vite: '*', typescript: '*'}
