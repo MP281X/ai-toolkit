@@ -793,18 +793,27 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return yield* Effect.scoped(
 					Effect.gen(function* () {
 						const changes = yield* RcMap.get(gitChanges, payload.cwd)
-						const metadata = yield* SubscriptionRef.get(changes.metadata)
+						const metadata = yield* pipe(changes.metadata, Stream.runHead, Effect.map(Option.getOrThrow))
 						const checkpointCommits = Array.takeWhile(metadata.localCommits, commit => commit.checkpoint)
-						const changesDiffsRef = yield* changes.diffs(GitReviewChangesTarget.make({}))
-						const changesDiffs = yield* SubscriptionRef.get(changesDiffsRef)
+						const changesDiffs = yield* pipe(
+							changes.diffs(GitReviewChangesTarget.make({})),
+							Effect.flatMap(Stream.runHead),
+							Effect.map(Option.getOrThrow)
+						)
 						const diffs = yield* Effect.gen(function* () {
 							if (!Array.isReadonlyArrayEmpty(changesDiffs)) return changesDiffs
 							if (Array.isReadonlyArrayEmpty(checkpointCommits)) {
-								const branchDiffsRef = yield* changes.diffs(GitReviewBranchTarget.make({}))
-								return yield* SubscriptionRef.get(branchDiffsRef)
+								return yield* pipe(
+									changes.diffs(GitReviewBranchTarget.make({})),
+									Effect.flatMap(Stream.runHead),
+									Effect.map(Option.getOrThrow)
+								)
 							}
-							const localDiffsRef = yield* changes.diffs(GitReviewLocalTarget.make({}))
-							return yield* SubscriptionRef.get(localDiffsRef)
+							return yield* pipe(
+								changes.diffs(GitReviewLocalTarget.make({})),
+								Effect.flatMap(Stream.runHead),
+								Effect.map(Option.getOrThrow)
+							)
 						})
 						const scope =
 							Array.isReadonlyArrayEmpty(changesDiffs) && Array.isReadonlyArrayEmpty(checkpointCommits)
@@ -868,15 +877,14 @@ export const RpcHandlers = RpcContracts.toLayer(
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitChanges, payload.cwd),
-						Effect.flatMap(changes => changes.diffs(payload.target)),
-						Effect.map(SubscriptionRef.changes)
+						Effect.flatMap(changes => changes.diffs(payload.target))
 					)
 				),
 			'review.metadata': payload =>
 				Stream.unwrap(
 					pipe(
 						RcMap.get(gitChanges, payload.cwd),
-						Effect.map(changes => SubscriptionRef.changes(changes.metadata))
+						Effect.map(changes => changes.metadata)
 					)
 				),
 			'review.state': payload =>

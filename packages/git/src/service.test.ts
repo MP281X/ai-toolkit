@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process'
-import {chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs'
+import {chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {setTimeout} from 'node:timers/promises'
@@ -7,7 +7,7 @@ import {setTimeout} from 'node:timers/promises'
 import {NodeServices} from '@effect/platform-node'
 import {afterEach, describe, expect, it} from '@effect/vitest'
 
-import {Array, Context, Effect, String, SubscriptionRef, pipe} from 'effect'
+import {Array, Context, Effect, Option, Ref, Stream, String, SubscriptionRef, pipe} from 'effect'
 
 import {
 	GitReviewChangesTarget,
@@ -52,6 +52,10 @@ function commit(cwd: string, subject: string) {
 	return pipe(git(cwd, ['rev-parse', 'HEAD']), String.trim)
 }
 
+function streamHead<A>(stream: Stream.Stream<A>) {
+	return pipe(Stream.runHead(stream), Effect.map(Option.getOrThrow))
+}
+
 function runChanges<A>(cwd: string, effect: Effect.Effect<A, unknown, GitChanges>) {
 	return Effect.runPromiseWith(Context.empty())(
 		pipe(effect, Effect.provide(GitChanges.layer({cwd})), Effect.provide(NodeServices.layer))
@@ -64,13 +68,13 @@ function metadata(cwd: string) {
 		Effect.gen(function* () {
 			const changes = yield* GitChanges
 			for (const _ of Array.range(0, 40)) {
-				const snapshot = yield* SubscriptionRef.get(changes.metadata)
+				const snapshot = yield* streamHead(changes.metadata)
 				if (!Array.isReadonlyArrayEmpty(snapshot.localCommits) || !Array.isReadonlyArrayEmpty(snapshot.branchCommits)) {
 					return snapshot
 				}
 				yield* Effect.promise(() => setTimeout(50))
 			}
-			return yield* SubscriptionRef.get(changes.metadata)
+			return yield* streamHead(changes.metadata)
 		})
 	)
 }
@@ -92,8 +96,8 @@ function changesDiffs(cwd: string) {
 		cwd,
 		Effect.gen(function* () {
 			const changes = yield* GitChanges
-			const ref = yield* changes.diffs(GitReviewChangesTarget.make({}))
-			return yield* SubscriptionRef.get(ref)
+			const diffs = yield* changes.diffs(GitReviewChangesTarget.make({}))
+			return yield* streamHead(diffs)
 		})
 	)
 }
@@ -105,6 +109,54 @@ afterEach(() => {
 })
 
 describe('GitChanges', () => {
+	it.effect('does not emit unchanged metadata and diff snapshots for redundant filesystem events', () => {
+		const cwd = repository()
+		write(cwd, 'file.txt', 'base\n')
+		commit(cwd, 'base')
+		write(cwd, 'file.txt', 'changed\n')
+
+		return pipe(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const changes = yield* GitChanges
+					const diffs = yield* changes.diffs(GitReviewChangesTarget.make({}))
+
+					for (const _ of Array.range(0, 40)) {
+						const snapshot = yield* streamHead(changes.metadata)
+						if (!Array.isReadonlyArrayEmpty(snapshot.branchCommits)) break
+						yield* Effect.promise(() => setTimeout(50))
+					}
+
+					const metadataEmissions = yield* Ref.make(0)
+					const diffEmissions = yield* Ref.make(0)
+					yield* Effect.forkScoped(
+						pipe(
+							changes.metadata,
+							Stream.runForEach(() => Ref.update(metadataEmissions, count => count + 1))
+						)
+					)
+					yield* Effect.forkScoped(
+						pipe(
+							diffs,
+							Stream.runForEach(() => Ref.update(diffEmissions, count => count + 1))
+						)
+					)
+					yield* Effect.promise(() => setTimeout(100))
+					const before = yield* Effect.all({diffs: Ref.get(diffEmissions), metadata: Ref.get(metadataEmissions)})
+
+					const now = new Date()
+					utimesSync(join(cwd, 'file.txt'), now, now)
+					yield* Effect.promise(() => setTimeout(500))
+
+					const after = yield* Effect.all({diffs: Ref.get(diffEmissions), metadata: Ref.get(metadataEmissions)})
+					expect(after).toEqual(before)
+				})
+			),
+			Effect.provide(GitChanges.layer({cwd})),
+			Effect.provide(NodeServices.layer)
+		)
+	})
+
 	it('returns one combined ready diff snapshot for working changes', async () => {
 		const cwd = repository()
 		write(cwd, 'staged.txt', 'base\n')
@@ -176,8 +228,8 @@ describe('GitChanges', () => {
 			cwd,
 			Effect.gen(function* () {
 				const changes = yield* GitChanges
-				const ref = yield* changes.diffs(GitReviewCommitTarget.make({hash: changed}))
-				return yield* SubscriptionRef.get(ref)
+				const stream = yield* changes.diffs(GitReviewCommitTarget.make({hash: changed}))
+				return yield* streamHead(stream)
 			})
 		)
 
@@ -205,18 +257,18 @@ describe('GitChanges', () => {
 			cwd,
 			Effect.gen(function* () {
 				const changes = yield* GitChanges
-				const ref = yield* changes.diffs(GitReviewChangesTarget.make({}))
-				expect((yield* SubscriptionRef.get(ref))[0]?.fileContent).toBe('const value = 2\n')
+				const diffs = yield* changes.diffs(GitReviewChangesTarget.make({}))
+				expect((yield* streamHead(diffs))[0]?.fileContent).toBe('const value = 2\n')
 				yield* Effect.promise(() => setTimeout(100))
 				write(cwd, 'space.txt', 'const   value   =   2\n')
 
 				for (const _ of Array.range(0, 20)) {
-					const current = yield* SubscriptionRef.get(ref)
+					const current = yield* streamHead(diffs)
 					if (current[0]?.fileContent === 'const   value   =   2\n') return current[0].fileContent
 					yield* Effect.promise(() => setTimeout(50))
 				}
 
-				return (yield* SubscriptionRef.get(ref))[0]?.fileContent
+				return (yield* streamHead(diffs))[0]?.fileContent
 			})
 		)
 
@@ -250,8 +302,8 @@ describe('GitChanges', () => {
 			cwd,
 			Effect.gen(function* () {
 				const changes = yield* GitChanges
-				const ref = yield* changes.diffs(GitReviewCommitTarget.make({hash: merge}))
-				return yield* SubscriptionRef.get(ref)
+				const stream = yield* changes.diffs(GitReviewCommitTarget.make({hash: merge}))
+				return yield* streamHead(stream)
 			})
 		)
 

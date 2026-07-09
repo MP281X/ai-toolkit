@@ -391,20 +391,6 @@ function untrackedDiffFromContent(filePath: string, content: string) {
 	)}`
 	return GitDiff.make({changeHash: changeHash(patch), filePath, patch, status: 'added'})
 }
-function sameDiffs(left: readonly GitDiff[], right: readonly GitDiff[]) {
-	return (
-		Array.length(left) === Array.length(right) &&
-		Array.every(
-			left,
-			(leftDiff, index) =>
-				Predicate.isNotUndefined(right[index]) &&
-				leftDiff.filePath === right[index].filePath &&
-				leftDiff.status === right[index].status &&
-				leftDiff.changeHash === right[index].changeHash &&
-				leftDiff.fileContent === right[index].fileContent
-		)
-	)
-}
 function targetKey(target: GitReviewTarget) {
 	return target._tag === 'commit' ? `commit:${target.hash}` : target._tag
 }
@@ -1108,7 +1094,13 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 		)
 		const statusSnapshot = Effect.gen(function* () {
 			return porcelainBranchStatus(
-				yield* git.lines(config.cwd, ['status', '--porcelain=v2', '--branch', '--untracked-files=normal'])
+				yield* git.lines(config.cwd, [
+					'--no-optional-locks',
+					'status',
+					'--porcelain=v2',
+					'--branch',
+					'--untracked-files=normal'
+				])
 			)
 		})
 		const branchDiffBase = Effect.gen(function* () {
@@ -1310,8 +1302,7 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 		const refreshMetadata = pipe(
 			metadataSnapshot,
 			Effect.flatMap(next => SubscriptionRef.set(metadata, next)),
-			Semaphore.withPermit(metadataRefreshLock),
-			Effect.asVoid
+			Semaphore.withPermit(metadataRefreshLock)
 		)
 		const worktreeEvents = yield* pipe(
 			fs.watch(config.cwd),
@@ -1358,11 +1349,7 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 									if (target._tag === 'commit') return Effect.void
 									return pipe(
 										computeDiffs(target),
-										Effect.flatMap(next =>
-											SubscriptionRef.update(entry.ref, currentDiffs =>
-												sameDiffs(currentDiffs, next) ? currentDiffs : next
-											)
-										),
+										Effect.flatMap(next => SubscriptionRef.set(entry.ref, next)),
 										Effect.ignore
 									)
 								},
@@ -1374,7 +1361,13 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 				Stream.runDrain
 			)
 		)
-		return {diffs: ensureDiffRef, metadata}
+		return {
+			diffs: flow(
+				ensureDiffRef,
+				Effect.map(ref => pipe(SubscriptionRef.changes(ref), Stream.changes))
+			),
+			metadata: pipe(SubscriptionRef.changes(metadata), Stream.changes)
+		}
 	})
 }) {
 	public static layer = flow(this.make, layer => pipe(Layer.effect(this, layer), Layer.provide(GitCommand.layer)))
