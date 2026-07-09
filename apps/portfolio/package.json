@@ -15,7 +15,7 @@
 
 		"build": "rm -rf dist && vp build && vp pack",
 
-		"preview": "vp run build && NODE_ENV=production PORT=7000 node ./dist/server.js"
+		"preview": "vp run build && PORT=7000 node ./dist/server.js"
 	},
 
 	"devDependencies": {

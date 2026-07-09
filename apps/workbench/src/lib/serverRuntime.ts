@@ -1,10 +1,6 @@
-import {homedir} from 'node:os'
-import path from 'node:path'
-
-import {Config, Effect, Layer, pipe} from 'effect'
+import {Layer, pipe} from 'effect'
 
 import {FetchHttpClient} from 'effect/unstable/http'
-import {KeyValueStore} from 'effect/unstable/persistence'
 import {RpcSerialization} from 'effect/unstable/rpc'
 
 import {RpcHandlers} from '#rpcs/handlers.ts'
@@ -19,15 +15,6 @@ export const LiveLayers = pipe(
 	// Application layers
 	Layer.provideMerge(GitWorkspace.layer),
 	Layer.provideMerge(Os.layer),
-	Layer.provideMerge(
-		Layer.unwrap(
-			pipe(
-				Config.string('HOME'),
-				Config.withDefault(homedir()),
-				Effect.map(home => KeyValueStore.layerFileSystem(path.join(home, '.deslop')))
-			)
-		)
-	),
 	// Base layers
 	Layer.provideMerge(OtelLayer('workbench-server')),
 	Layer.provideMerge(FetchHttpClient.layer),
