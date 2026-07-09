@@ -141,6 +141,7 @@ function makeAgentSession(input: {
 		args: [...input.preparedCommand.args],
 		command: input.preparedCommand.command,
 		cwd: input.cwd,
+		...(Predicate.isUndefined(input.preparedCommand.options.env) ? {} : {env: input.preparedCommand.options.env}),
 		icon: input.profile.icon,
 		label: `${input.profile.label} ${labelCount + 1}`,
 		profileId: input.profile.id,
@@ -644,6 +645,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				args: session.args,
 				command: session.command,
 				cwd: session.cwd,
+				...(Predicate.isUndefined(session.env) ? {} : {env: session.env}),
 				sessionId: session.uuid
 			})
 			yield* pipe(
@@ -704,7 +706,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 				const agentSessionWithEnv = {
 					...agentSession,
-					env: {AGENT_BROWSER_ENABLE: 'react-devtools', AGENT_BROWSER_SESSION: portlessWorktreeId(agentSession.cwd)}
+					env: {
+						...agentSession.env,
+						AGENT_BROWSER_ENABLE: 'react-devtools',
+						AGENT_BROWSER_SESSION: portlessWorktreeId(agentSession.cwd)
+					}
 				} satisfies AgentSession
 				const input = yield* terminalSession(
 					TerminalPayload.make({

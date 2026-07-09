@@ -8,7 +8,9 @@ const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
 		'vpx',
 		[
+			'--package',
 			'@anthropic-ai/claude-code@latest',
+			'claude',
 			'--model',
 			'claude-opus-4-8',
 			'--permission-mode',
@@ -16,7 +18,7 @@ const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 			'--effort',
 			'high'
 		],
-		{cwd: config.cwd, env: {CLAUDE_CODE_NO_FLICKER: '1'}, extendEnv: true}
+		{cwd: config.cwd, env: {CLAUDE_CODE_NO_FLICKER: '1', PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}, extendEnv: true}
 	)
 	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'claude command unavailable'})
 	return command
