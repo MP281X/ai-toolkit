@@ -25,7 +25,7 @@ import {
 	pipe
 } from 'effect'
 
-import {Prompt} from 'effect/unstable/ai'
+import {Prompt, Toolkit} from 'effect/unstable/ai'
 import {ChildProcess} from 'effect/unstable/process'
 
 import {RpcContracts, TerminalPayload, type AgentProfile, type AgentSession} from '#rpcs/contracts.ts'
@@ -33,8 +33,8 @@ import {AgentBrowserError} from '@deslop/agent-browser/schema'
 import {AgentBrowser} from '@deslop/agent-browser/service'
 import {type AgentProvider, type AgentUsageProvider} from '@deslop/agent/schema'
 import {Agent, AgentUsage} from '@deslop/agent/service'
-import {AiError} from '@deslop/ai/schema'
 import {Ai} from '@deslop/ai/service'
+import {finalTextMessage} from '@deslop/ai/utils'
 import {GitError, GitReviewBranchTarget, GitReviewChangesTarget, GitReviewLocalTarget} from '@deslop/git/schema'
 import {GitChanges, GitPublish, GitReview, GitWorkspace} from '@deslop/git/service'
 import {Os} from '@deslop/os/service'
@@ -210,25 +210,6 @@ const GitPublishSessions = RcMap.make({
 	})
 })
 
-const PublishAgentSessions = RcMap.make({
-	idleTimeToLive: Duration.minutes(5),
-	lookup: Effect.fnUntraced(function* (cwd: string) {
-		const context = yield* Layer.buildWithScope(
-			Ai.layer({
-				agent: 'pi',
-				cwd,
-				systemPrompt: Prompt.makeMessage('system', {
-					content:
-						'You write minimal, useful git commit messages. Return only commit message text. Do not use markdown fences, quotes, or explanations.'
-				})
-			}),
-			yield* Effect.scope
-		)
-
-		return Context.get(context, Ai)
-	})
-})
-
 const agentProfiles = [
 	{icon: 'codex', id: 'codex', label: 'codex'},
 	{icon: 'claude', id: 'claude', label: 'claude'},
@@ -303,7 +284,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 		const gitChanges = yield* GitChangesSessions
 		const gitReviews = yield* GitReviewSessions
 		const gitPublishes = yield* GitPublishSessions
-		const publishAgents = yield* PublishAgentSessions
 		const providerAgents = yield* ProviderAgents
 		const agentUsages = yield* AgentUsageSessions
 		const portless = yield* Portless
@@ -837,28 +817,27 @@ export const RpcHandlers = RpcContracts.toLayer(
 							Array.take(10),
 							Array.map(commit => commit.subject)
 						)
-						const agent = yield* RcMap.get(publishAgents, payload.cwd)
-						const text = yield* pipe(
-							agent.prompt({
-								messages: [
-									Prompt.makeMessage('user', {
-										content: [
-											Prompt.makePart('text', {text: draftCommitPrompt({diffs: promptDiffs, recentSubjects, scope})})
-										]
-									})
-								],
-								model: 'gpt-5.5',
-								provider: 'openai-codex',
-								thinkingLevel: 'low'
+						const agent = yield* Ai.make({
+							agent: 'pi',
+							cwd: payload.cwd,
+							model: {id: 'gpt-5.5', provider: 'openai-codex', reasoning: 'low'},
+							systemPrompt: Prompt.makeMessage('system', {
+								content:
+									'You write minimal, useful git commit messages. Return only commit message text. Do not use markdown fences, quotes, or explanations.'
 							}),
-							Stream.runFold(
-								() => '',
-								(message, part) => (part.type === 'text-delta' ? `${message}${part.delta}` : message)
+							toolkit: Toolkit.empty
+						})
+						const text = yield* pipe(
+							agent.prompt(
+								Prompt.makeMessage('user', {
+									content: [
+										Prompt.makePart('text', {text: draftCommitPrompt({diffs: promptDiffs, recentSubjects, scope})})
+									]
+								})
 							),
-							Effect.map(message => String.trim(message))
+							finalTextMessage
 						)
 
-						if (String.isEmpty(text)) return yield* new AiError({message: 'Generated commit message was empty.'})
 						return text
 					})
 				)

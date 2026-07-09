@@ -24,6 +24,9 @@ description: Use when defining or changing package public APIs, service contract
 
 - Expose one public way to perform or observe a behavior.
 - Public signatures satisfy current requirements only; no speculative options, aliases, overloads, or convenience surfaces.
+- Do not export helper types for implementation environments, internal requirements, or convenience aliases unless a current public caller names them.
+- Prefer inferred return types when TypeScript preserves the public contract.
+- Keep public config types colocated with the public service when the config only constructs that service.
 - Refactor consumers to the approved canonical API instead of keeping compatibility paths.
 - Shared/service-instance values belong in layer/config; one-operation values belong in method input.
 - Public methods expose `R = never` unless the method creates a caller-owned scoped resource.
@@ -32,6 +35,10 @@ description: Use when defining or changing package public APIs, service contract
 
 - `service.ts` contains the service tag/contract and public layer constructors.
 - Implementations live under named `internal/*` modules.
+- `Context.Service` tags are runtime identities first; if an instance-specific generic cannot survive service lookup, keep the tag broad and put the generic on constructors or exact identity helpers.
+- Use the built-in `Service["Service"]` shape before restating every method in a second public type.
+- Do not pass service static helpers into implementation constructors just to avoid an import; prefer a deliberate service-to-implementation dependency or a real architectural split.
+- If a service module intentionally participates in implementation constructor dispatch, resolve the dead-code cycle explicitly and narrowly with current tool support.
 - Mutable current values use one `SubscriptionRef` read path.
 - Event/incremental output with no meaningful current value may use `Stream`.
 - Cleanup uses `Scope` and finalizers; do not expose cleanup methods unless stopping is current domain behavior.

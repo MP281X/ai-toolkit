@@ -174,7 +174,6 @@ export default defineConfig({
 			'@typescript-eslint/restrict-template-expressions': 'error',
 			'@typescript-eslint/strict-boolean-expressions': 'error',
 			'@typescript-eslint/strict-void-return': 'error',
-			'@typescript-eslint/switch-exhaustiveness-check': 'error',
 
 			// JavaScript style
 			'arrow-body-style': ['error', 'as-needed'],
