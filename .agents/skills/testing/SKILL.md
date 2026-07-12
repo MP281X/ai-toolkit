@@ -1,37 +1,32 @@
 ---
 name: testing
-description: Use when adding, rewriting, removing, or running tests, including public package tests, Effect tests, and mocked Effect layers.
+description: 'Test creation, execution, removal; Effect harnesses; public seams; test-first changes.'
 ---
 
-# Testing
+Tests protect breakable behavior at public seams. They survive implementation replacement because they do not observe internals.
 
-## Tooling
+## Harness
 
-- Use `@effect/vitest` for tests.
-- Import `assert`, `describe`, and `it` from `@effect/vitest`.
-- Use `it.effect` for Effect tests.
-- Use normal `it` for pure synchronous tests.
-- Do not use manual `Effect.runPromise`, `Effect.runSync`, or custom Effect test harnesses.
-- Tooling fixes happen in root Vite Plus config.
-- Colocated tests: `name.test.ts` / `name.test.tsx`.
-- Apps no tests by default; app tests allowed for real behavior.
+```ts
+import {assert, describe, it} from '@effect/vitest'
 
-## Scope
+it.effect('behavior', () => Effect.void)
+it('pure behavior', () => assert.strictEqual(1, 1))
+```
 
-- Test breakable public behavior.
-- Test package behavior through public exports only.
-- A test scenario needs current public behavior evidence.
-- Import `service.ts`, `schema.ts`, `utils.ts`, and other public package entrypoints only.
-- No `internal/*` imports.
-- No fake AST/context harness when lint/tool boundary exists.
-- No RPC contract tests.
-- No type, schema, framework, method-existence, or library-shape tests.
-- No tests for behavior already enforced by TypeScript or Schema.
-- No historical removal, deprecation, or compatibility tests unless they prove a current public invariant.
-- Delete low-value tests for removed private behavior.
+Use `it.effect` for Effect and synchronous `it` for pure behavior. Manual Effect runtimes and custom test harnesses are outside the test boundary.
 
-## Boundaries
+Colocate tests as `name.test.ts` or `name.test.tsx`.
 
-- External command/API/CLI/network: fake, mock, layer, in-memory boundary.
-- Package public API behavior and pure public transforms are valid test targets.
-- Mock at boundary, not inside implementation mechanics.
+## Seams
+
+- Test packages through public exports.
+- Test app behavior only when a current requirement justifies it.
+- Mock commands, APIs, CLIs, and networks at their system boundary through a fake, layer, or in-memory implementation.
+- Keep mocks outside implementation mechanics.
+
+A test scenario needs a current requirement, consumer, protocol, or regression risk. Type shape, schema shape, framework shape, method existence, RPC contracts, library behavior, and compile-time guarantees are not test targets.
+
+## Test-first branch
+
+For red-green work, read `references/test-first.md`.

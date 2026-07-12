@@ -67,7 +67,7 @@ describe('Agent', () => {
 				'@earendil-works/pi-coding-agent@latest',
 				'pi',
 				'--model',
-				'openai-codex/gpt-5.5',
+				'openai-codex/gpt-5.6-sol',
 				'--thinking',
 				'medium',
 				'--approve'
