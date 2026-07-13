@@ -1,5 +1,6 @@
 /* oxlint-disable @deslop/oxlint-rules/no-function-return-type */
-import {Array, Config, Context, Effect, Layer, Predicate, Schema, Semaphore, Stream, SubscriptionRef} from 'effect'
+import type {Stream} from 'effect'
+import {Array, Config, Context, Effect, Layer, Predicate, Schema, Semaphore, SubscriptionRef} from 'effect'
 
 import {KeyValueStore} from 'effect/unstable/persistence'
 
@@ -102,7 +103,7 @@ export class TeamStore extends Context.Service<
 							teams.map(team => (team.id === id ? {...team, count: Math.max(0, team.count + amount)} : team))
 						)
 					}),
-				changes: Stream.make(initial).pipe(Stream.concat(SubscriptionRef.changes(state))),
+				changes: SubscriptionRef.changes(state),
 				remove: id =>
 					mutate(teams =>
 						teams.some(team => team.id === id)
