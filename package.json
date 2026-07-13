@@ -8,8 +8,6 @@
 	
 	"deslop": {
 		"dev": [
-			"@deslop/beer-counter#dev:client",
-			"@deslop/beer-counter#dev:server",
 			"@deslop/portfolio#dev:client",
 			"@deslop/portfolio#dev:server",
 			"@deslop/workbench#dev:client",
