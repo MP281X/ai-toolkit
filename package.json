@@ -10,6 +10,8 @@
 		"dev": [
 			"@deslop/portfolio#dev:client",
 			"@deslop/portfolio#dev:server",
+			"@deslop/beer-counter#dev:client",
+			"@deslop/beer-counter#dev:server",
 			"@deslop/workbench#dev:client",
 			"@deslop/workbench#dev:server"
 		]
