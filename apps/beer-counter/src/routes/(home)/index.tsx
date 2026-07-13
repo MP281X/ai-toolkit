@@ -1,29 +1,32 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {Effect} from 'effect'
-
 import {createFileRoute} from '@tanstack/react-router'
-import {Suspense} from 'react'
 
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {Loading} from '@deslop/components/fallbacks'
+import {teamsAtom} from '#lib/teams.ts'
+import {Beer} from '@deslop/components/icons'
 
-const appNameAtom = RpcClient.runtime.atom(Effect.flatMap(RpcClient, client => client('app.name', {})))
+export const Route = createFileRoute('/(home)/')({component: Scoreboard})
 
-export const Route = createFileRoute('/(home)/')({component: HomeRoute})
-
-function AppName() {
-	const appName = useAtomSuspense(appNameAtom)
-
-	return <h1 className="font-mono text-3xl font-bold">{appName.value}</h1>
+export function rankedTeams<T extends {readonly count: number; readonly order: number}>(teams: readonly T[]) {
+	return [...teams].toSorted((left, right) => right.count - left.count || left.order - right.order)
 }
 
-function HomeRoute() {
+function Scoreboard() {
+	const teams = rankedTeams(useAtomSuspense(teamsAtom).value)
+
 	return (
-		<main className="flex min-h-0 flex-1 items-center justify-center p-6">
-			<Suspense fallback={<Loading />}>
-				<AppName />
-			</Suspense>
+		<main className="scoreboard">
+			{teams.map((team, index) => (
+				<article className="scoreboard-team" key={team.id}>
+					<span className="scoreboard-rank">{index + 1}</span>
+					<div className="min-w-0">
+						<h2 className="truncate font-bold">{team.name}</h2>
+						<div className="scoreboard-count">
+							<Beer aria-hidden="true" /> {team.count}
+						</div>
+					</div>
+				</article>
+			))}
 		</main>
 	)
 }
