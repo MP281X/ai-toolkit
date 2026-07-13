@@ -6,7 +6,7 @@ import {createFileRoute, Link} from '@tanstack/react-router'
 import type {FormEvent} from 'react'
 import {useState} from 'react'
 
-import {BeerMark, ReconnectingNotice, ThemeButton, positions, useStableCounter} from '../-shared.tsx'
+import {ReconnectingNotice, ThemeButton, positions, useStableCounter} from '../-shared.tsx'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import type {Team} from '#rpcs/contracts.ts'
@@ -47,75 +47,70 @@ function AdminRoute() {
 	}
 
 	return (
-		<main className="bg-background text-foreground h-dvh w-dvw overflow-x-hidden overflow-y-auto p-3 sm:p-4">
-			<header className="mb-4 flex items-center justify-between gap-3 border-b pb-4">
-				<div className="flex min-w-0 items-center gap-3">
-					<BeerMark className="size-7" />
-					<div className="min-w-0">
-						<h1 className="truncate text-2xl font-black uppercase">Beer admin</h1>
-						<p className="text-muted-foreground text-xs uppercase">server-verified commands</p>
+		<main className="admin-shell">
+			<div className="admin-frame">
+				<header className="admin-header">
+					<div>
+						<p className="eyebrow">Control desk</p>
+						<h1>Team roster</h1>
 					</div>
+					<div className="scoreboard-actions">
+						<Link className="admin-link" to="/">
+							Standings
+						</Link>
+						<ThemeButton />
+					</div>
+				</header>
+
+				<form className="admin-toolbar" onSubmit={event => void submitAdd(event)}>
+					<label className="admin-field">
+						Username
+						<Input
+							value={username}
+							autoComplete="username"
+							onChange={event => {
+								setUsername(event.target.value)
+							}}
+						/>
+					</label>
+					<label className="admin-field">
+						Password
+						<Input
+							value={password}
+							type="password"
+							autoComplete="current-password"
+							placeholder="beer-counter"
+							onChange={event => {
+								setPassword(event.target.value)
+							}}
+						/>
+					</label>
+					<label className="admin-field">
+						New team
+						<Input
+							value={newTeam}
+							placeholder="Team name"
+							onChange={event => {
+								setNewTeam(event.target.value)
+							}}
+						/>
+					</label>
+					<Button disabled={addState.pending} type="submit">
+						Add team
+					</Button>
+					{Predicate.isNotNull(addState.error) && <p className="admin-feedback">{addState.error}</p>}
+				</form>
+
+				<div className="roster-heading">
+					<h2>Current standings</h2>
+					<span>{counter.teams.length} teams</span>
 				</div>
-				<div className="flex items-center gap-2">
-					<Link
-						className="border-border text-muted-foreground hover:text-foreground border px-3 py-2 text-xs uppercase"
-						to="/"
-					>
-						scoreboard
-					</Link>
-					<ThemeButton />
-				</div>
-			</header>
-
-			<section className="bg-card mb-4 grid gap-3 border p-3 sm:grid-cols-[1fr_1fr]">
-				<label className="grid gap-1 text-xs uppercase">
-					Username
-					<Input
-						value={username}
-						autoComplete="username"
-						onChange={event => {
-							setUsername(event.target.value)
-						}}
-					/>
-				</label>
-				<label className="grid gap-1 text-xs uppercase">
-					Password
-					<Input
-						value={password}
-						type="password"
-						autoComplete="current-password"
-						placeholder="beer-counter"
-						onChange={event => {
-							setPassword(event.target.value)
-						}}
-					/>
-				</label>
-			</section>
-
-			<form
-				className="bg-card mb-4 grid gap-2 border p-3 sm:grid-cols-[1fr_auto]"
-				onSubmit={event => void submitAdd(event)}
-			>
-				<Input
-					value={newTeam}
-					placeholder="New team name"
-					onChange={event => {
-						setNewTeam(event.target.value)
-					}}
-				/>
-				<Button disabled={addState.pending} type="submit">
-					Add team
-				</Button>
-				{Predicate.isNotNull(addState.error) && (
-					<p className="text-destructive text-xs sm:col-span-2">{addState.error}</p>
-				)}
-			</form>
-
-			<section className="grid gap-2">
-				{Array.map(positions(counter.teams), item => (
-					<TeamRow key={item.team.id} credentials={credentials} position={item.position} team={item.team} />
-				))}
-			</section>
+				<section aria-label="Team controls">
+					{Array.map(positions(counter.teams), item => (
+						<TeamRow key={item.team.id} credentials={credentials} position={item.position} team={item.team} />
+					))}
+				</section>
+			</div>
 			<ReconnectingNotice connected={counter.connected} />
 		</main>
 	)
@@ -159,10 +154,10 @@ function TeamRow(props: {
 	}
 
 	return (
-		<article className="bg-card grid gap-3 border p-3 lg:grid-cols-[4rem_1fr_7rem_14rem_5rem] lg:items-center">
-			<div className="text-primary text-2xl font-black">#{props.position}</div>
-			<label className="grid gap-1 text-xs uppercase">
-				Name
+		<article className="admin-row">
+			<div className="admin-rank">{props.position < 10 ? `0${props.position}` : props.position}</div>
+			<label className="admin-cell">
+				<span className="sr-only">Team name</span>
 				<Input
 					value={Predicate.isNull(draftName) ? props.team.name : draftName}
 					onChange={event => {
@@ -173,49 +168,51 @@ function TeamRow(props: {
 					}}
 				/>
 			</label>
-			<div>
-				<div className="text-muted-foreground text-xs uppercase">Count</div>
-				<div className="text-3xl font-black tabular-nums">{props.team.count}</div>
+			<div className="admin-cell admin-count" aria-label={`${props.team.count} beers`}>
+				{props.team.count}
 			</div>
-			<div className="grid grid-cols-[1fr_auto_auto] gap-2">
-				<Input
-					min={1}
-					step={1}
-					inputMode="numeric"
-					value={amount}
-					type="number"
-					aria-label={`${props.team.name} update amount`}
-					onChange={event => {
-						setAmount(event.target.value)
-					}}
-				/>
-				<Button
-					variant="outline"
-					disabled={isPending}
-					aria-label={`Subtract from ${props.team.name}`}
-					onClick={() =>
-						void run('subtract', () =>
-							adjust({
-								payload: {...props.credentials, amount: Number(amount), direction: 'subtract', id: props.team.id}
-							})
-						)
-					}
-				>
-					<Minus className="size-4" />
-				</Button>
-				<Button
-					disabled={isPending}
-					aria-label={`Add to ${props.team.name}`}
-					onClick={() =>
-						void run('add', () =>
-							adjust({payload: {...props.credentials, amount: Number(amount), direction: 'add', id: props.team.id}})
-						)
-					}
-				>
-					<Plus className="size-4" />
-				</Button>
+			<div className="admin-cell admin-cell--delta">
+				<div className="admin-delta">
+					<Input
+						min={1}
+						step={1}
+						inputMode="numeric"
+						value={amount}
+						type="number"
+						aria-label={`${props.team.name} update amount`}
+						onChange={event => {
+							setAmount(event.target.value)
+						}}
+					/>
+					<Button
+						variant="outline"
+						disabled={isPending}
+						aria-label={`Subtract from ${props.team.name}`}
+						onClick={() =>
+							void run('subtract', () =>
+								adjust({
+									payload: {...props.credentials, amount: Number(amount), direction: 'subtract', id: props.team.id}
+								})
+							)
+						}
+					>
+						<Minus className="size-4" />
+					</Button>
+					<Button
+						disabled={isPending}
+						aria-label={`Add to ${props.team.name}`}
+						onClick={() =>
+							void run('add', () =>
+								adjust({payload: {...props.credentials, amount: Number(amount), direction: 'add', id: props.team.id}})
+							)
+						}
+					>
+						<Plus className="size-4" />
+					</Button>
+				</div>
 			</div>
 			<Button
+				className="admin-cell--remove"
 				variant="destructive"
 				disabled={isPending}
 				onClick={() => {
@@ -226,7 +223,7 @@ function TeamRow(props: {
 			>
 				<Trash2 className="size-4" />
 			</Button>
-			{Predicate.isNotNull(feedback) && <p className="text-muted-foreground text-xs lg:col-span-5">{feedback}</p>}
+			{Predicate.isNotNull(feedback) && <p className="admin-feedback">{feedback}</p>}
 		</article>
 	)
 }
