@@ -1,3 +1,371 @@
 @import 'tailwindcss';
 @import '@deslop/components/theme.css';
 @source '../../../../packages/components/src/**/*.tsx';
+
+:root {
+	--background: oklch(0.965 0.018 84);
+	--foreground: oklch(0.16 0.01 50);
+	--card: oklch(1 0 0);
+	--card-foreground: var(--foreground);
+	--popover: var(--card);
+	--popover-foreground: var(--foreground);
+	--primary: oklch(0.56 0.22 27);
+	--primary-foreground: oklch(0.98 0.01 80);
+	--secondary: oklch(0.92 0.025 80);
+	--secondary-foreground: var(--foreground);
+	--muted: oklch(0.91 0.02 80);
+	--muted-foreground: oklch(0.43 0.02 50);
+	--accent: var(--muted);
+	--accent-foreground: var(--foreground);
+	--destructive: oklch(0.56 0.22 27);
+	--border: oklch(0.25 0.015 50);
+	--input: oklch(0.7 0.02 70);
+}
+
+:root.dark {
+	--background: oklch(0.16 0.006 285);
+	--foreground: oklch(0.92 0.005 285);
+	--card: oklch(0.205 0.006 285);
+	--card-foreground: var(--foreground);
+	--popover: var(--card);
+	--popover-foreground: var(--foreground);
+	--primary: oklch(0.61 0.21 27);
+	--primary-foreground: oklch(0.96 0.005 285);
+	--secondary: oklch(0.24 0.006 285);
+	--secondary-foreground: var(--foreground);
+	--muted: oklch(0.245 0.006 285);
+	--muted-foreground: oklch(0.69 0.01 285);
+	--accent: oklch(0.28 0.007 285);
+	--accent-foreground: var(--foreground);
+	--border: oklch(0.38 0.008 285);
+	--input: oklch(0.34 0.008 285);
+}
+
+html,
+body,
+#root {
+	margin: 0;
+	min-height: 100%;
+}
+body {
+	background: var(--background);
+	color: var(--foreground);
+}
+button,
+input {
+	border-radius: 0;
+}
+
+.scoreboard-shell {
+	height: 100dvh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	padding: clamp(0.65rem, 1.3vw, 1.3rem);
+	gap: clamp(0.6rem, 1vw, 1rem);
+}
+.scoreboard-header,
+.admin-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 3px solid var(--foreground);
+	padding-bottom: 0.55rem;
+	flex: none;
+}
+h1 {
+	font-size: clamp(1.45rem, 3vw, 2.8rem);
+	line-height: 0.95;
+	font-weight: 900;
+	letter-spacing: -0.07em;
+	text-transform: uppercase;
+}
+.eyebrow {
+	color: var(--primary);
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	margin-bottom: 0.25rem;
+}
+.header-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+.admin-link {
+	color: var(--muted-foreground);
+	font-size: 0.72rem;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	text-transform: uppercase;
+}
+.scoreboard-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-auto-rows: minmax(0, 1fr);
+	flex: 1;
+	min-height: 0;
+	gap: clamp(0.4rem, 0.8vw, 0.8rem);
+	list-style: none;
+}
+.scoreboard-grid:has(li:nth-child(13)) {
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.scoreboard-grid:has(li:nth-child(21)) {
+	grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.score-card {
+	position: relative;
+	min-width: 0;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-top: 4px solid var(--foreground);
+	background: var(--card);
+	padding: clamp(0.45rem, 1.1vw, 1rem);
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto 1fr;
+	gap: 0.2rem 0.6rem;
+}
+.rank {
+	color: var(--primary);
+	font-size: clamp(0.75rem, 1.4vw, 1.2rem);
+	font-weight: 900;
+}
+.team-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: clamp(0.8rem, 1.5vw, 1.35rem);
+	font-weight: 800;
+	text-transform: uppercase;
+}
+.beer-count {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: end;
+	justify-content: space-between;
+	color: var(--primary);
+}
+.beer-count svg {
+	width: clamp(1.2rem, 2.5vw, 2.4rem);
+	height: auto;
+	margin-bottom: 0.25rem;
+}
+.beer-count strong {
+	color: var(--foreground);
+	font-size: clamp(2rem, 5.2vw, 5rem);
+	line-height: 0.8;
+	letter-spacing: -0.1em;
+	font-variant-numeric: tabular-nums;
+}
+.scoreboard-grid:has(li:nth-child(13)) .beer-count strong {
+	font-size: clamp(1.7rem, 4vw, 3.7rem);
+}
+.scoreboard-loading {
+	display: grid;
+	flex: 1;
+	place-items: center;
+	color: var(--muted-foreground);
+}
+.reconnecting {
+	position: fixed;
+	right: 0.75rem;
+	bottom: 0.75rem;
+	z-index: 20;
+	border: 1px solid var(--border);
+	background: var(--card);
+	padding: 0.35rem 0.55rem;
+	color: var(--primary);
+	font-size: 0.72rem;
+}
+
+.admin-shell {
+	min-height: 100dvh;
+	padding: clamp(0.75rem, 2vw, 1.5rem);
+}
+.admin-header {
+	max-width: 72rem;
+	margin: 0 auto 1rem;
+}
+.login-panel {
+	width: min(100%, 24rem);
+	margin: 8vh auto 0;
+	border: 1px solid var(--border);
+	border-top: 4px solid var(--primary);
+	background: var(--card);
+	padding: 1rem;
+	display: grid;
+	gap: 0.8rem;
+}
+.login-panel h2,
+.add-team h2 {
+	font-size: 1rem;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+.login-panel label {
+	display: grid;
+	gap: 0.3rem;
+	color: var(--muted-foreground);
+	font-size: 0.72rem;
+	text-transform: uppercase;
+}
+.roster {
+	max-width: 72rem;
+	margin: 0 auto;
+}
+.add-team {
+	display: grid;
+	grid-template-columns: 1fr minmax(12rem, 22rem) auto;
+	align-items: end;
+	gap: 0.5rem;
+	padding: 0.75rem;
+	border: 1px solid var(--border);
+	background: var(--card);
+}
+.add-team p {
+	color: var(--muted-foreground);
+	font-size: 0.72rem;
+}
+.form-error {
+	color: var(--destructive);
+	font-size: 0.72rem;
+}
+.add-team .form-error {
+	grid-column: 2 / -1;
+}
+.roster-list {
+	border: 1px solid var(--border);
+	border-top: 0;
+}
+.team-row {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(12rem, 1fr) auto;
+	align-items: center;
+	gap: 0.6rem;
+	min-height: 4rem;
+	padding: 0.55rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--card);
+}
+.team-row:last-child {
+	border-bottom: 0;
+}
+.team-identity {
+	display: grid;
+	grid-template-columns: 4.2rem minmax(0, 1fr);
+	align-items: center;
+	gap: 0.5rem;
+}
+.current-count {
+	color: var(--primary);
+	font-size: 1.6rem;
+	line-height: 1;
+	font-weight: 900;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.counter-controls {
+	display: flex;
+	gap: 0.35rem;
+}
+.amount-input {
+	width: 5rem;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+.row-status,
+.row-error {
+	position: absolute;
+	left: 5.3rem;
+	bottom: 0.05rem;
+	font-size: 0.65rem;
+}
+.row-status {
+	color: var(--muted-foreground);
+}
+
+@media (max-width: 640px) {
+	.scoreboard-shell {
+		height: 100dvh;
+		overflow: hidden;
+		padding: 0.6rem;
+	}
+	.scoreboard-header {
+		border-bottom-width: 2px;
+	}
+	.scoreboard-grid,
+	.scoreboard-grid:has(li:nth-child(13)),
+	.scoreboard-grid:has(li:nth-child(21)) {
+		display: flex;
+		flex-direction: column;
+		overflow-x: hidden;
+		overflow-y: auto;
+		gap: 0.35rem;
+		padding-bottom: 0.2rem;
+	}
+	.score-card {
+		min-height: 4.4rem;
+		flex: none;
+		grid-template-columns: 2rem minmax(0, 1fr) auto;
+		grid-template-rows: 1fr;
+		align-items: center;
+		border-top-width: 1px;
+		padding: 0.55rem;
+	}
+	.rank {
+		font-size: 0.8rem;
+	}
+	.team-name {
+		font-size: 0.9rem;
+	}
+	.beer-count {
+		grid-column: 3;
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.beer-count svg {
+		width: 1rem;
+		margin: 0;
+	}
+	.beer-count strong,
+	.scoreboard-grid:has(li:nth-child(13)) .beer-count strong {
+		font-size: 1.7rem;
+	}
+	.admin-shell {
+		padding: 0.6rem;
+		overflow-x: hidden;
+	}
+	.admin-header h1 {
+		font-size: 1.15rem;
+		letter-spacing: -0.05em;
+	}
+	.add-team {
+		grid-template-columns: 1fr auto;
+	}
+	.add-team > div {
+		grid-column: 1 / -1;
+	}
+	.add-team .form-error {
+		grid-column: 1 / -1;
+	}
+	.team-row {
+		grid-template-columns: 1fr;
+		padding-bottom: 1.1rem;
+	}
+	.team-identity {
+		grid-template-columns: 3.2rem minmax(0, 1fr);
+	}
+	.counter-controls {
+		justify-content: flex-end;
+	}
+	.row-status,
+	.row-error {
+		left: 0.55rem;
+	}
+}

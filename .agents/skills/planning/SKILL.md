@@ -9,6 +9,8 @@ Planning resolves desired state, not implementation sequence. Writable artifacts
 
 Treat proposed solutions as hypotheses. Establish the root cause, desired behavior, scope, interfaces, acceptance, constraints, and material risks.
 
+Keep desired behavior within the user's request. Repository conventions and design guidance shape requested behavior; they do not authorize additional features, controls, states, configuration, deployment options, or speculative resilience. Ask when an addition materially changes user-visible behavior or scope.
+
 Ask one question at a time, and only when undiscoverable input changes the desired state. Once evidence is sufficient, recommend a direction rather than surveying options that will not be pursued.
 
 ## Checkpoint

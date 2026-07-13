@@ -1,3 +1,5 @@
+import {Predicate} from 'effect'
+
 import {RouterProvider, createRouter} from '@tanstack/react-router'
 import {StrictMode} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -22,6 +24,12 @@ declare module '@tanstack/react-router' {
 		readonly router: typeof router
 	}
 }
+
+const storedTheme = localStorage.getItem('beer-counter.theme')
+document.documentElement.classList.toggle(
+	'dark',
+	storedTheme === 'dark' || (Predicate.isNull(storedTheme) && matchMedia('(prefers-color-scheme: dark)').matches)
+)
 
 const root = document.querySelector('#root')
 

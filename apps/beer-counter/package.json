@@ -3,6 +3,12 @@
 	"sideEffects": false,
 	"name": "@deslop/beer-counter",
 
+	"imports": {
+		"#lib/*": "./src/lib/*",
+		"#rpcs/*": "./src/rpcs/*",
+		"#routes/*": "./src/routes/*"
+	},
+
 	"scripts": {
 		"dev:client": "vp dev",
 		"dev:server": "node --watch ./src/main.server.ts",

@@ -11,7 +11,7 @@ Read the existing system before composing:
 - icons: `packages/components/src/components/icons.tsx`
 - tokens: `packages/components/src/theme.css`
 
-Use `@deslop/components` exports before custom UI. Discover and add missing primitives with:
+Primitives are the first implementation choice for controls, forms, validation, dialogs, feedback, and interaction states. Compose `@deslop/components` exports before writing custom UI or local equivalents. Discover and add missing primitives with:
 
 ```bash
 vp run shadcn list @shadcn
@@ -24,7 +24,7 @@ Generated primitives under `packages/components/src/components/ui/*` change only
 
 Compose primitives at the feature boundary. An adapter must own layout policy, domain behavior, local state, a repeated interaction, or cross-screen consistency. Keep its API narrow, slot-friendly, and explicit about overrides.
 
-One action has one local, discoverable entrypoint. One visualization has one representation unless comparison is the task.
+One action has one local, discoverable entrypoint. One visualization has one representation unless comparison is the task. Omit controls, indicators, settings, labels, and explanatory UI that current behavior does not require.
 
 ## Loading and mutation
 
@@ -46,6 +46,8 @@ Use icons for repeated, dense, constrained, or secondary actions. Use text for p
 Icon buttons require `aria-label` or `title`; unfamiliar icons require a tooltip. Controls stay beside affected data, and repeated state indicators share a visual column.
 
 ## Styling
+
+Inherit the shared theme and its system-theme behavior. Override only requirement-specific tokens; do not recreate the theme or add theme controls without a current requirement.
 
 Theme tokens and primitive variants own color, spacing, borders, radius, hover, and focus. Local classes express layout, containment, truncation, overflow, and state.
 
