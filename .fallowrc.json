@@ -7,6 +7,7 @@
 		"@effect/atom-react",
 		"@effect/platform-node",
 		"@effect/vitest",
+		"@lydell/node-pty",
 		"agent-browser",
 		"effect",
 		"vite-plus"

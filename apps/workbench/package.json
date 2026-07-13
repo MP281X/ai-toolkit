@@ -25,7 +25,7 @@
 	},
 
 	"dependencies": {
-		"@deslop/terminal": "workspace:*"
+		"@lydell/node-pty": "latest"
 	},
 
 	"devDependencies": {
@@ -43,6 +43,7 @@
 		"@deslop/portless": "workspace:*",
 		"@deslop/scripts": "workspace:*",
 		"@deslop/os": "workspace:*",
+		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 

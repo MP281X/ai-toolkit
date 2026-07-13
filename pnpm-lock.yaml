@@ -101,9 +101,9 @@ importers:
 
   apps/workbench:
     dependencies:
-      '@deslop/terminal':
-        specifier: workspace:*
-        version: link:../../packages/terminal
+      '@lydell/node-pty':
+        specifier: latest
+        version: 1.2.0-beta.12
     devDependencies:
       '@deslop/agent':
         specifier: workspace:*
@@ -132,6 +132,9 @@ importers:
       '@deslop/scripts':
         specifier: workspace:*
         version: link:../../packages/scripts
+      '@deslop/terminal':
+        specifier: workspace:*
+        version: link:../../packages/terminal
       '@rolldown/plugin-babel':
         specifier: latest
         version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@26.1.0)(jiti@2.7.0)(typescript@7.0.1-rc)(yaml@2.9.0))(rolldown@1.1.4)
