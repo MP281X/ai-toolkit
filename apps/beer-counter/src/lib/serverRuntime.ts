@@ -9,10 +9,9 @@ import {TeamStore} from '#lib/teamStore.ts'
 import {RpcHandlers} from '#rpcs/handlers.ts'
 import {OtelLayer} from '@deslop/opentelemetry/server'
 
-const PersistenceLive = KeyValueStore.layerFileSystem('/data').pipe(
-	Layer.provide(NodeFileSystem.layer),
-	Layer.provide(NodePath.layer)
-)
+const PersistenceLive = KeyValueStore.layerFileSystem(
+	process.env['NODE_ENV'] === 'production' ? '/data' : '.data'
+).pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
 
 const TeamStoreLive = TeamStore.layer.pipe(Layer.provide(PersistenceLive))
 

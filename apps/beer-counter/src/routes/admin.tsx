@@ -11,17 +11,6 @@ import {teamsAtom} from '#lib/teams.ts'
 import type {Team} from '#rpcs/contracts.ts'
 import {Beer, Minus, Plus, Trash2} from '@deslop/components/icons'
 import {Button} from '@deslop/components/ui/button'
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger
-} from '@deslop/components/ui/dialog'
-import {Input} from '@deslop/components/ui/input'
 
 export const Route = createFileRoute('/admin')({component: Admin})
 
@@ -49,14 +38,16 @@ function Admin() {
 				</h1>
 			</header>
 			<section className="admin-auth" aria-label="Admin credentials">
-				<Input
+				<input
+					className="admin-input"
 					aria-label="Username"
 					value={credentials.username}
 					onChange={event => {
 						setCredentials({...credentials, username: event.target.value})
 					}}
 				/>
-				<Input
+				<input
+					className="admin-input"
 					aria-label="Password"
 					type="password"
 					placeholder="Password"
@@ -80,7 +71,8 @@ function Admin() {
 						})
 				}}
 			>
-				<Input
+				<input
+					className="admin-input"
 					aria-label="New team name"
 					placeholder="Team name"
 					value={newName}
@@ -107,6 +99,7 @@ function TeamRow({credentials, team}: {readonly credentials: Credentials; readon
 	const [amount, setAmount] = useState('1')
 	const [name, setName] = useState(team.name)
 	const [pending, setPending] = useState(false)
+	const [confirmingRemove, setConfirmingRemove] = useState(false)
 	const [error, setError] = useState('')
 
 	function run(command: () => Promise<unknown>) {
@@ -127,7 +120,8 @@ function TeamRow({credentials, team}: {readonly credentials: Credentials; readon
 	return (
 		<article className="admin-row">
 			<div className="admin-team">
-				<Input
+				<input
+					className="admin-input"
 					aria-label={`Name for ${team.name}`}
 					disabled={pending}
 					value={name}
@@ -143,7 +137,8 @@ function TeamRow({credentials, team}: {readonly credentials: Credentials; readon
 				</strong>
 			</div>
 			<div className="admin-actions">
-				<Input
+				<input
+					className="admin-input"
 					aria-label={`Amount for ${team.name}`}
 					inputMode="numeric"
 					min="1"
@@ -175,34 +170,40 @@ function TeamRow({credentials, team}: {readonly credentials: Credentials; readon
 				>
 					<Plus />
 				</Button>
-				<Dialog>
-					<DialogTrigger
-						render={<Button aria-label={`Remove ${team.name}`} disabled={pending} size="icon" variant="destructive" />}
+				{confirmingRemove ? (
+					<>
+						<span className="remove-confirmation">Delete count?</span>
+						<Button
+							variant="outline"
+							onClick={() => {
+								setConfirmingRemove(false)
+							}}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="destructive"
+							onClick={() => {
+								setConfirmingRemove(false)
+								run(() => remove({payload: {...credentials, id: team.id}}))
+							}}
+						>
+							Remove
+						</Button>
+					</>
+				) : (
+					<Button
+						aria-label={`Remove ${team.name}`}
+						disabled={pending}
+						size="icon"
+						variant="destructive"
+						onClick={() => {
+							setConfirmingRemove(true)
+						}}
 					>
 						<Trash2 />
-					</DialogTrigger>
-					<DialogContent>
-						<DialogHeader>
-							<DialogTitle>Remove {team.name}?</DialogTitle>
-							<DialogDescription>Its count of {team.count} will be deleted.</DialogDescription>
-						</DialogHeader>
-						<DialogFooter>
-							<DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-							<DialogClose
-								render={
-									<Button
-										variant="destructive"
-										onClick={() => {
-											run(() => remove({payload: {...credentials, id: team.id}}))
-										}}
-									/>
-								}
-							>
-								Remove team
-							</DialogClose>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+					</Button>
+				)}
 			</div>
 			{pending && <p className="command-pending">Saving…</p>}
 			{error && <p className="command-error">{error}</p>}

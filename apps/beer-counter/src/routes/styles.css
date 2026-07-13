@@ -74,6 +74,20 @@ body {
 .admin-team strong svg {
 	color: var(--primary);
 }
+.admin-input {
+	height: 2rem;
+	min-width: 0;
+	border: 1px solid var(--input);
+	background: transparent;
+	padding: 0.25rem 0.625rem;
+	outline: none;
+}
+.admin-input:focus-visible {
+	border-color: var(--ring);
+}
+.admin-input:disabled {
+	opacity: 0.5;
+}
 .admin-auth,
 .admin-add,
 .admin-actions {
@@ -114,6 +128,11 @@ body {
 }
 .admin-actions input {
 	width: 5rem;
+}
+.remove-confirmation {
+	align-self: center;
+	color: var(--destructive);
+	font-size: 0.75rem;
 }
 .command-error {
 	width: 100%;
