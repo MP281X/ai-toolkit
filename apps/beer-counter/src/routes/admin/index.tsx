@@ -11,7 +11,7 @@ import {RpcClient} from '#lib/atomRuntime.ts'
 import {counterStateAtom} from '#lib/state.ts'
 import {CounterError, type Team} from '#rpcs/contracts.ts'
 import {Form, useForm} from '@deslop/components/form'
-import {LogOut, Minus, Pencil, Plus, Save, Trash2} from '@deslop/components/icons'
+import {Minus, Plus, Trash2} from '@deslop/components/icons'
 import {Button} from '@deslop/components/ui/button'
 import {
 	Dialog,
@@ -64,19 +64,15 @@ function AuthDialog(input: {readonly open: boolean}) {
 	)
 }
 
-type TeamAction = 'add' | 'subtract' | 'rename' | 'remove'
+type TeamAction = 'add' | 'subtract' | 'remove'
 
 function TeamCard(input: {readonly onAuthenticationRequired: () => void; readonly team: Team}) {
 	const adjust = useAtomSet(RpcClient.mutation('admin.adjust'), {mode: 'promise'})
-	const rename = useAtomSet(RpcClient.mutation('admin.rename'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('admin.remove'), {mode: 'promise'})
 	const [delta, setDelta] = useState('1')
-	const [nameDraft, setNameDraft] = useState<string>()
 	const [pending, setPending] = useState<TeamAction | null>(null)
 	const [error, setError] = useState('')
 	const [confirmingDelete, setConfirmingDelete] = useState(false)
-	const name = nameDraft ?? input.team.name
-
 	async function run(action: TeamAction, command: () => Promise<unknown>) {
 		if (Predicate.isNotNull(pending)) return false
 		setPending(action)
@@ -93,11 +89,6 @@ function TeamCard(input: {readonly onAuthenticationRequired: () => void; readonl
 		}
 	}
 
-	async function renameTeam() {
-		const succeeded = await run('rename', () => rename({payload: {id: input.team.id, name}}))
-		if (succeeded) setNameDraft(undefined)
-	}
-
 	async function deleteTeam() {
 		const succeeded = await run('remove', () => remove({payload: {id: input.team.id}}))
 		if (succeeded) setConfirmingDelete(false)
@@ -110,37 +101,10 @@ function TeamCard(input: {readonly onAuthenticationRequired: () => void; readonl
 		if (succeeded) setDelta('1')
 	}
 
-	function renameIcon() {
-		if (pending === 'rename') return <Spinner />
-		if (name === input.team.name) return <Pencil />
-		return <Save />
-	}
-
 	return (
 		<li className="bg-card border-border flex min-h-32 flex-col justify-between gap-3 border p-3">
-			<div className="flex min-w-0 items-center gap-2">
-				<Input
-					aria-label={`Name for ${input.team.name}`}
-					className="bg-background min-w-0 text-base font-medium"
-					disabled={pending === 'rename'}
-					value={name}
-					onChange={event => {
-						setNameDraft(event.target.value)
-					}}
-				/>
-				<Button
-					aria-label={`Save name for ${input.team.name}`}
-					disabled={Predicate.isNotNull(pending) || name === input.team.name}
-					onClick={() => void renameTeam()}
-					size="icon"
-					title="Save team name"
-					type="button"
-					variant="ghost"
-				>
-					{renameIcon()}
-				</Button>
-			</div>
-			<div className="grid grid-cols-[minmax(4rem,1fr)_5rem_auto] items-end gap-3">
+			<h2 className="truncate text-base font-medium">{input.team.name}</h2>
+			<div className="grid grid-cols-[minmax(4rem,1fr)_auto] items-end gap-3">
 				<div className="min-w-0">
 					<p className="text-muted-foreground text-xs">Beers</p>
 					<strong
@@ -150,56 +114,57 @@ function TeamCard(input: {readonly onAuthenticationRequired: () => void; readonl
 						{input.team.count}
 					</strong>
 				</div>
-				<label className="grid gap-1">
+				<div className="grid gap-1">
 					<span className="text-muted-foreground text-center text-xs">Amount</span>
-					<Input
-						aria-label={`Delta for ${input.team.name}`}
-						className="bg-background text-center tabular-nums"
-						inputMode="numeric"
-						pattern="[0-9]*"
-						type="text"
-						value={delta}
-						onChange={event => {
-							if (/^\d*$/.test(event.target.value)) setDelta(event.target.value)
-						}}
-					/>
-				</label>
-				<div className="flex items-center gap-1">
-					<Button
-						aria-label={`Subtract from ${input.team.name}`}
-						disabled={Predicate.isNotNull(pending)}
-						onClick={() => {
-							void adjustTeam('subtract')
-						}}
-						size="icon"
-						type="button"
-						variant="outline"
-					>
-						{pending === 'subtract' ? <Spinner /> : <Minus />}
-					</Button>
-					<Button
-						aria-label={`Add to ${input.team.name}`}
-						disabled={Predicate.isNotNull(pending)}
-						onClick={() => {
-							void adjustTeam('add')
-						}}
-						size="icon"
-						type="button"
-					>
-						{pending === 'add' ? <Spinner /> : <Plus />}
-					</Button>
-					<Button
-						aria-label={`Delete ${input.team.name}`}
-						disabled={Predicate.isNotNull(pending)}
-						onClick={() => {
-							setConfirmingDelete(true)
-						}}
-						size="icon"
-						type="button"
-						variant="destructive"
-					>
-						<Trash2 />
-					</Button>
+					<div className="flex items-center gap-1">
+						<Button
+							aria-label={`Subtract from ${input.team.name}`}
+							disabled={Predicate.isNotNull(pending)}
+							onClick={() => {
+								void adjustTeam('subtract')
+							}}
+							size="icon"
+							type="button"
+							variant="outline"
+						>
+							{pending === 'subtract' ? <Spinner /> : <Minus />}
+						</Button>
+						<Input
+							aria-label={`Delta for ${input.team.name}`}
+							className="bg-background w-16 text-center tabular-nums"
+							inputMode="numeric"
+							pattern="[0-9]*"
+							type="text"
+							value={delta}
+							onChange={event => {
+								if (/^\d*$/.test(event.target.value)) setDelta(event.target.value)
+							}}
+						/>
+						<Button
+							aria-label={`Add to ${input.team.name}`}
+							disabled={Predicate.isNotNull(pending)}
+							onClick={() => {
+								void adjustTeam('add')
+							}}
+							size="icon"
+							type="button"
+						>
+							{pending === 'add' ? <Spinner /> : <Plus />}
+						</Button>
+						<Button
+							aria-label={`Delete ${input.team.name}`}
+							className="ml-1"
+							disabled={Predicate.isNotNull(pending)}
+							onClick={() => {
+								setConfirmingDelete(true)
+							}}
+							size="icon"
+							type="button"
+							variant="destructive"
+						>
+							<Trash2 />
+						</Button>
+					</div>
 				</div>
 			</div>
 			{error && (
@@ -243,7 +208,6 @@ function Admin() {
 	const [authenticationRequired, setAuthenticationRequired] = useState(false)
 	const [name, setName] = useState('')
 	const [pending, setPending] = useState(false)
-	const [signingOut, setSigningOut] = useState(false)
 	const [error, setError] = useState('')
 
 	async function addTeam(event: React.FormEvent) {
@@ -262,33 +226,13 @@ function Admin() {
 		}
 	}
 
-	async function signOut() {
-		if (signingOut) return
-		setSigningOut(true)
-		try {
-			const response = await fetch(apiUrl('/api/admin/logout'), {credentials: 'include', method: 'POST'})
-			if (!response.ok) throw new Error('Could not sign out.')
-			location.reload()
-		} catch (cause) {
-			setError(formatError(cause))
-			setSigningOut(false)
-		}
-	}
-
 	return (
 		<>
 			<main className="bg-background text-foreground flex h-dvh w-full flex-col overflow-hidden p-3 sm:p-5">
 				<header className="border-border flex shrink-0 flex-col gap-3 border-b pb-3 sm:flex-row sm:items-end sm:justify-between">
-					<div className="flex items-center gap-3">
-						<div>
-							<h1 className="text-xl font-medium">Teams</h1>
-							<p className="text-muted-foreground text-xs">{state.value.teams.length} total</p>
-						</div>
-						{AsyncResult.isSuccess(adminStatus) && (
-							<Button type="button" variant="ghost" size="sm" disabled={signingOut} onClick={() => void signOut()}>
-								{signingOut ? <Spinner /> : <LogOut />} Sign out
-							</Button>
-						)}
+					<div>
+						<h1 className="text-xl font-medium">Teams</h1>
+						<p className="text-muted-foreground text-xs">{state.value.teams.length} total</p>
 					</div>
 					<form
 						className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:max-w-xl"

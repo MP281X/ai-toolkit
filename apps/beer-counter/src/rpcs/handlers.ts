@@ -22,7 +22,6 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'admin.add': payload => counter.add(payload.name),
 			'admin.adjust': payload => counter.adjust(payload.id, payload.amount, payload.direction),
 			'admin.remove': payload => counter.remove(payload.id),
-			'admin.rename': payload => counter.rename(payload.id, payload.name),
 			'auth.status': () => Effect.void,
 			'counter.watch': () => counter.changes
 		})

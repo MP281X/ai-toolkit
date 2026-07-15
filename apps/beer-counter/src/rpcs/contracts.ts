@@ -41,11 +41,6 @@ const AdminAdd = Rpc.make('admin.add', {error: CounterError, payload: Schema.Str
 	AdminAuthorization
 )
 
-const AdminRename = Rpc.make('admin.rename', {
-	error: CounterError,
-	payload: Schema.Struct({id: Schema.String, name: Schema.String})
-}).middleware(AdminAuthorization)
-
 const AdminRemove = Rpc.make('admin.remove', {
 	error: CounterError,
 	payload: Schema.Struct({id: Schema.String})
@@ -56,6 +51,5 @@ export class RpcContracts extends RpcGroup.make(
 	Rpc.make('counter.watch', {stream: true, success: Schema.Union([CounterSnapshot, CounterChanged])}),
 	AdminAdjust,
 	AdminAdd,
-	AdminRename,
 	AdminRemove
 ) {}

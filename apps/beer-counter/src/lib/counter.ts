@@ -16,15 +16,12 @@ function initialState() {
 	})
 }
 
-function requireName(state: CounterState, name: string, ownId?: string) {
+function requireName(state: CounterState, name: string) {
 	const trimmed = pipe(name, String.trim)
 	if (String.isEmpty(trimmed)) return Effect.fail(validationError('Team name is required.'))
 
 	const normalized = pipe(trimmed, String.toLowerCase)
-	const duplicate = Array.some(
-		state.teams,
-		team => team.id !== ownId && pipe(team.name, String.toLowerCase) === normalized
-	)
+	const duplicate = Array.some(state.teams, team => pipe(team.name, String.toLowerCase) === normalized)
 
 	return duplicate ? Effect.fail(validationError('Team names must be unique.')) : Effect.succeed(trimmed)
 }
@@ -44,7 +41,6 @@ export class Counter extends Context.Service<
 		readonly adjust: (id: string, amount: number, direction: 'add' | 'subtract') => Effect.Effect<void, CounterError>
 		readonly changes: Stream.Stream<CounterSnapshot | CounterChanged>
 		readonly remove: (id: string) => Effect.Effect<void, CounterError>
-		readonly rename: (id: string, name: string) => Effect.Effect<void, CounterError>
 		readonly snapshot: Effect.Effect<CounterState>
 	}
 >()('beer-counter/Counter') {}
@@ -111,16 +107,6 @@ export const makeCounter = Effect.gen(function* () {
 				Effect.gen(function* () {
 					yield* requireTeam(current, id)
 					return CounterState.make({teams: Array.filter(current.teams, team => team.id !== id)})
-				})
-			),
-		rename: (id, name) =>
-			serialized(current =>
-				Effect.gen(function* () {
-					yield* requireTeam(current, id)
-					const validName = yield* requireName(current, name, id)
-					return CounterState.make({
-						teams: Array.map(current.teams, team => (team.id === id ? Team.make({...team, name: validName}) : team))
-					})
 				})
 			),
 		snapshot: Ref.get(state)

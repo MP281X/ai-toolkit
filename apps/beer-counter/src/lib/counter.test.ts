@@ -52,14 +52,15 @@ describe('Counter', () => {
 			const duplicateError = yield* Effect.flip(counter.add(' team 01 '))
 			assert.strictEqual(duplicateError.message, 'Team names must be unique.')
 
-			yield* counter.rename(team.id, '  Front Row  ')
+			yield* counter.add('  Front Row  ')
+			const front = pipe((yield* counter.snapshot).teams, Array.last, Option.getOrThrow)
 			yield* counter.add('Back Row')
 			const added = pipe((yield* counter.snapshot).teams, Array.last, Option.getOrThrow)
-			assert.strictEqual((yield* counter.snapshot).teams[0]!.name, 'Front Row')
+			assert.strictEqual(front.name, 'Front Row')
 			assert.strictEqual(added.name, 'Back Row')
 
 			yield* counter.remove(added.id)
-			assert.strictEqual((yield* counter.snapshot).teams.length, 12)
+			assert.strictEqual((yield* counter.snapshot).teams.length, 13)
 		})
 	)
 

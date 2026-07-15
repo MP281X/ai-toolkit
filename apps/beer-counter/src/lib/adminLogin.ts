@@ -34,11 +34,5 @@ export const AdminLoginRoute = Layer.effectDiscard(
 				)
 			}).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 401}))))
 		)
-
-		yield* router.add(
-			'POST',
-			'/api/admin/logout',
-			HttpServerResponse.expireCookie(HttpServerResponse.empty(), 'beer-counter-admin-token', cookieOptions)
-		)
 	})
 )
