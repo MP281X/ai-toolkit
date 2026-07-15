@@ -1,9 +1,7 @@
-import {Schema} from 'effect'
-
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {useState} from 'react'
 
-import {apiUrl} from '#lib/api.ts'
+import {createAdminSession} from '#lib/adminSessionClient.ts'
 import {Button} from '@deslop/components/ui/button'
 import {Input} from '@deslop/components/ui/input'
 import {Spinner} from '@deslop/components/ui/spinner'
@@ -24,13 +22,7 @@ function AdminLogin() {
 		setPending(true)
 		setError('')
 		try {
-			const response = await fetch(apiUrl('/api/admin/session'), {
-				body: Schema.encodeUnknownSync(Schema.UnknownFromJsonString)({password, username}),
-				credentials: 'include',
-				headers: {'content-type': 'application/json'},
-				method: 'POST'
-			})
-			if (response.status !== 204) {
+			if (!(await createAdminSession({password, username}))) {
 				setError('Invalid username or password.')
 				return
 			}

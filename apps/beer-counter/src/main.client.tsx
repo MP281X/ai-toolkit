@@ -4,7 +4,16 @@ import {createRoot} from 'react-dom/client'
 
 import {routeTree} from './routeTree.gen.ts'
 
-import {Error, Loading, NotFound} from '@deslop/components/fallbacks'
+import {Error, NotFound} from '@deslop/components/fallbacks'
+import {Spinner} from '@deslop/components/ui/spinner'
+
+function Loading() {
+	return (
+		<main className="bg-background text-foreground grid h-dvh w-dvw place-items-center">
+			<Spinner className="text-muted-foreground size-9 border-2 opacity-60" />
+		</main>
+	)
+}
 
 const router = createRouter({
 	defaultErrorComponent: Error,

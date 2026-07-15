@@ -5,7 +5,7 @@ import {Array, Predicate, pipe} from 'effect'
 import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useState} from 'react'
 
-import {apiUrl} from '#lib/api.ts'
+import {hasAdminSession} from '#lib/adminSessionClient.ts'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {counterStateAtom} from '#lib/state.ts'
 import type {Team} from '#rpcs/contracts.ts'
@@ -27,8 +27,7 @@ import {formatError} from '@deslop/components/utils'
 export const Route = createFileRoute('/admin/')({
 	beforeLoad: async () => {
 		try {
-			const response = await fetch(apiUrl('/api/admin/session'), {credentials: 'include'})
-			if (response.status === 204) return
+			if (await hasAdminSession()) return
 		} catch {
 			// A failed session check is unauthenticated from the route's perspective.
 		}

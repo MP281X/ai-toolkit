@@ -11,6 +11,7 @@ export default defineConfig({
 		outDir: 'dist/client',
 		rolldownOptions: {experimental: {lazyBarrel: true}}
 	},
+	optimizeDeps: {include: ['react', 'react-dom', 'react/jsx-dev-runtime', 'react/jsx-runtime']},
 	pack: {
 		banner: '#!/usr/bin/env -S node --max-old-space-size=16384 --heapsnapshot-near-heap-limit=3 --report-on-fatalerror',
 		clean: false,
@@ -27,5 +28,6 @@ export default defineConfig({
 		babel({parserOpts: {plugins: ['jsx', 'typescript']}, presets: [reactCompilerPreset()]}),
 		tailwindcss({optimize: true})
 	],
+	resolve: {dedupe: ['react', 'react-dom']},
 	server: {forwardConsole: true}
 })
