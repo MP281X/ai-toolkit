@@ -1,3 +1,27 @@
 @import 'tailwindcss';
 @import '@deslop/components/theme.css';
 @source '../../../../packages/components/src/**/*.tsx';
+
+:root {
+	--primary: oklch(0.57 0.245 28);
+	--primary-foreground: oklch(0.98 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--primary: oklch(0.68 0.22 26);
+		--primary-foreground: oklch(0.16 0.01 26);
+	}
+}
+
+.scoreboard-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+	.scoreboard-grid {
+		display: grid;
+	}
+}
