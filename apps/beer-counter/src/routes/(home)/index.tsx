@@ -68,23 +68,24 @@ function Crest(input: {readonly mobile?: boolean}) {
 function Home() {
 	const state = useAtomSuspense(counterStateAtom)
 	const teams = rankedTeams(state.value.teams)
-	const split = Math.ceil(teams.length / 2)
+	const split = Math.min(6, teams.length)
 	const left = Array.take(teams, split)
 	const right = Array.drop(teams, split)
 	const leader = teams[0]?.count ?? 0
-	const rowStyle = {gridTemplateRows: `repeat(${Math.max(1, split)}, minmax(0, 1fr))`}
+	const leftRows = {gridTemplateRows: `repeat(${Math.max(1, left.length)}, minmax(0, 1fr))`}
+	const rightRows = {gridTemplateRows: `repeat(${Math.max(1, right.length)}, minmax(0, 1fr))`}
 
 	return (
 		<main className="bg-background text-foreground flex h-dvh w-dvw flex-col overflow-hidden">
 			<Crest mobile />
 			<section className="min-h-0 flex-1 overflow-y-auto sm:grid sm:grid-cols-[1fr_19%_1fr] sm:overflow-hidden">
-				<ol className="divide-border grid divide-y sm:h-full" style={rowStyle}>
+				<ol className="divide-border grid divide-y sm:h-full" style={leftRows}>
 					{Array.map(left, (team, index) => (
 						<TeamRow key={team.id} leader={leader} rank={index + 1} team={team} leftWing />
 					))}
 				</ol>
 				<Crest />
-				<ol className="divide-border grid divide-y sm:h-full" style={rowStyle}>
+				<ol className="divide-border grid divide-y sm:h-full" style={rightRows}>
 					{Array.map(right, (team, index) => (
 						<TeamRow key={team.id} leader={leader} rank={split + index + 1} team={team} leftWing={false} />
 					))}
