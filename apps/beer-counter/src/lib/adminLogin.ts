@@ -11,6 +11,12 @@ export const AdminLoginRoute = Layer.effectDiscard(
 		const auth = yield* AdminAuth
 		const router = yield* HttpRouter.HttpRouter
 		const environment = yield* pipe(Config.string('NODE_ENV'), Config.withDefault('development'))
+		const cookieOptions = {
+			httpOnly: true,
+			path: '/',
+			sameSite: 'strict',
+			secure: environment !== 'development'
+		} as const
 
 		yield* router.add(
 			'POST',
@@ -24,9 +30,15 @@ export const AdminLoginRoute = Layer.effectDiscard(
 					HttpServerResponse.empty(),
 					'beer-counter-admin-token',
 					input.token,
-					{httpOnly: true, path: '/', sameSite: 'strict', secure: environment !== 'development'}
+					cookieOptions
 				)
 			}).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 401}))))
+		)
+
+		yield* router.add(
+			'POST',
+			'/api/admin/logout',
+			HttpServerResponse.expireCookie(HttpServerResponse.empty(), 'beer-counter-admin-token', cookieOptions)
 		)
 	})
 )

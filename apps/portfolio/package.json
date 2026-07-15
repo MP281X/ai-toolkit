@@ -11,11 +11,11 @@
 
 	"scripts": {
 		"dev:client": "vp dev",
-		"dev:server": "node --watch ./src/main.server.ts",
+		"dev:server": "node --env-file-if-exists=.env --watch ./src/main.server.ts",
 
 		"build": "rm -rf dist && vp build && vp pack",
 
-		"preview": "vp run build && PORT=7000 node ./dist/server.js"
+		"preview": "vp run build && PORT=7000 node --env-file-if-exists=.env ./dist/server.js"
 	},
 
 	"devDependencies": {

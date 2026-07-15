@@ -11,7 +11,7 @@ import {RpcClient} from '#lib/atomRuntime.ts'
 import {counterStateAtom} from '#lib/state.ts'
 import {CounterError, type Team} from '#rpcs/contracts.ts'
 import {Form, useForm} from '@deslop/components/form'
-import {Minus, Pencil, Plus, Save, Trash2} from '@deslop/components/icons'
+import {LogOut, Minus, Pencil, Plus, Save, Trash2} from '@deslop/components/icons'
 import {Button} from '@deslop/components/ui/button'
 import {
 	Dialog,
@@ -66,7 +66,7 @@ function AuthDialog(input: {readonly open: boolean}) {
 
 type TeamAction = 'add' | 'subtract' | 'rename' | 'remove'
 
-function TeamRow(input: {readonly onAuthenticationRequired: () => void; readonly team: Team}) {
+function TeamCard(input: {readonly onAuthenticationRequired: () => void; readonly team: Team}) {
 	const adjust = useAtomSet(RpcClient.mutation('admin.adjust'), {mode: 'promise'})
 	const rename = useAtomSet(RpcClient.mutation('admin.rename'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('admin.remove'), {mode: 'promise'})
@@ -117,11 +117,11 @@ function TeamRow(input: {readonly onAuthenticationRequired: () => void; readonly
 	}
 
 	return (
-		<li className="border-border grid min-h-12 grid-cols-[3rem_4.5rem_repeat(3,2rem)] items-center gap-1 border-b py-1 sm:grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_auto_auto_auto]">
-			<div className="col-span-full flex min-w-0 items-center gap-1 sm:col-span-1">
+		<li className="bg-card border-border flex min-h-32 flex-col justify-between gap-3 border p-3">
+			<div className="flex min-w-0 items-center gap-2">
 				<Input
 					aria-label={`Name for ${input.team.name}`}
-					className="min-w-0"
+					className="bg-background min-w-0 text-base font-medium"
 					disabled={pending === 'rename'}
 					value={name}
 					onChange={event => {
@@ -140,58 +140,70 @@ function TeamRow(input: {readonly onAuthenticationRequired: () => void; readonly
 					{renameIcon()}
 				</Button>
 			</div>
-			<strong className="text-center text-lg tabular-nums" aria-label={`${input.team.count} confirmed`}>
-				{input.team.count}
-			</strong>
-			<Input
-				aria-label={`Delta for ${input.team.name}`}
-				className="text-center tabular-nums"
-				inputMode="numeric"
-				min="1"
-				step="1"
-				type="number"
-				value={delta}
-				onChange={event => {
-					setDelta(event.target.value)
-				}}
-			/>
-			<Button
-				aria-label={`Subtract from ${input.team.name}`}
-				disabled={Predicate.isNotNull(pending)}
-				onClick={() => {
-					void adjustTeam('subtract')
-				}}
-				size="icon"
-				type="button"
-				variant="outline"
-			>
-				{pending === 'subtract' ? <Spinner /> : <Minus />}
-			</Button>
-			<Button
-				aria-label={`Add to ${input.team.name}`}
-				disabled={Predicate.isNotNull(pending)}
-				onClick={() => {
-					void adjustTeam('add')
-				}}
-				size="icon"
-				type="button"
-			>
-				{pending === 'add' ? <Spinner /> : <Plus />}
-			</Button>
-			<Button
-				aria-label={`Delete ${input.team.name}`}
-				disabled={Predicate.isNotNull(pending)}
-				onClick={() => {
-					setConfirmingDelete(true)
-				}}
-				size="icon"
-				type="button"
-				variant="destructive"
-			>
-				<Trash2 />
-			</Button>
+			<div className="grid grid-cols-[minmax(4rem,1fr)_5rem_auto] items-end gap-3">
+				<div className="min-w-0">
+					<p className="text-muted-foreground text-xs">Beers</p>
+					<strong
+						className="block truncate text-3xl leading-none tabular-nums"
+						aria-label={`${input.team.count} confirmed`}
+					>
+						{input.team.count}
+					</strong>
+				</div>
+				<label className="grid gap-1">
+					<span className="text-muted-foreground text-center text-xs">Amount</span>
+					<Input
+						aria-label={`Delta for ${input.team.name}`}
+						className="bg-background text-center tabular-nums"
+						inputMode="numeric"
+						pattern="[0-9]*"
+						type="text"
+						value={delta}
+						onChange={event => {
+							if (/^\d*$/.test(event.target.value)) setDelta(event.target.value)
+						}}
+					/>
+				</label>
+				<div className="flex items-center gap-1">
+					<Button
+						aria-label={`Subtract from ${input.team.name}`}
+						disabled={Predicate.isNotNull(pending)}
+						onClick={() => {
+							void adjustTeam('subtract')
+						}}
+						size="icon"
+						type="button"
+						variant="outline"
+					>
+						{pending === 'subtract' ? <Spinner /> : <Minus />}
+					</Button>
+					<Button
+						aria-label={`Add to ${input.team.name}`}
+						disabled={Predicate.isNotNull(pending)}
+						onClick={() => {
+							void adjustTeam('add')
+						}}
+						size="icon"
+						type="button"
+					>
+						{pending === 'add' ? <Spinner /> : <Plus />}
+					</Button>
+					<Button
+						aria-label={`Delete ${input.team.name}`}
+						disabled={Predicate.isNotNull(pending)}
+						onClick={() => {
+							setConfirmingDelete(true)
+						}}
+						size="icon"
+						type="button"
+						variant="destructive"
+					>
+						<Trash2 />
+					</Button>
+				</div>
+			</div>
 			{error && (
-				<p className="text-destructive col-span-full text-xs" role="alert">
+				<p className="text-destructive text-xs" role="alert">
 					{error}
 				</p>
 			)}
@@ -231,6 +243,7 @@ function Admin() {
 	const [authenticationRequired, setAuthenticationRequired] = useState(false)
 	const [name, setName] = useState('')
 	const [pending, setPending] = useState(false)
+	const [signingOut, setSigningOut] = useState(false)
 	const [error, setError] = useState('')
 
 	async function addTeam(event: React.FormEvent) {
@@ -249,35 +262,61 @@ function Admin() {
 		}
 	}
 
+	async function signOut() {
+		if (signingOut) return
+		setSigningOut(true)
+		try {
+			const response = await fetch(apiUrl('/api/admin/logout'), {credentials: 'include', method: 'POST'})
+			if (!response.ok) throw new Error('Could not sign out.')
+			location.reload()
+		} catch (cause) {
+			setError(formatError(cause))
+			setSigningOut(false)
+		}
+	}
+
 	return (
 		<>
-			<main className="bg-background text-foreground mx-auto flex h-dvh w-full max-w-7xl flex-col overflow-hidden p-2 sm:p-4">
-				<form
-					className="border-border grid shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-1 border-b pb-2"
-					onSubmit={event => void addTeam(event)}
-				>
-					<Input
-						aria-label="New team name"
-						placeholder="Team name"
-						value={name}
-						onChange={event => {
-							setName(event.target.value)
-						}}
-					/>
-					<Button type="submit" disabled={pending}>
-						{pending ? <Spinner /> : <Plus />} Add team
-					</Button>
-					{error && (
-						<p className="text-destructive col-span-full text-xs" role="alert">
-							{error}
-						</p>
-					)}
-				</form>
-				<ul className="min-h-0 flex-1 overflow-y-auto sm:grid sm:auto-rows-fr">
+			<main className="bg-background text-foreground flex h-dvh w-full flex-col overflow-hidden p-3 sm:p-5">
+				<header className="border-border flex shrink-0 flex-col gap-3 border-b pb-3 sm:flex-row sm:items-end sm:justify-between">
+					<div className="flex items-center gap-3">
+						<div>
+							<h1 className="text-xl font-medium">Teams</h1>
+							<p className="text-muted-foreground text-xs">{state.value.teams.length} total</p>
+						</div>
+						{AsyncResult.isSuccess(adminStatus) && (
+							<Button type="button" variant="ghost" size="sm" disabled={signingOut} onClick={() => void signOut()}>
+								{signingOut ? <Spinner /> : <LogOut />} Sign out
+							</Button>
+						)}
+					</div>
+					<form
+						className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:max-w-xl"
+						onSubmit={event => void addTeam(event)}
+					>
+						<Input
+							aria-label="New team name"
+							placeholder="New team name"
+							value={name}
+							onChange={event => {
+								setName(event.target.value)
+							}}
+						/>
+						<Button type="submit" disabled={pending}>
+							{pending ? <Spinner /> : <Plus />} Add team
+						</Button>
+						{error && (
+							<p className="text-destructive col-span-full text-xs" role="alert">
+								{error}
+							</p>
+						)}
+					</form>
+				</header>
+				<ul className="grid min-h-0 flex-1 grid-cols-1 content-start gap-2 overflow-y-auto pt-3 md:grid-cols-2 xl:grid-cols-3">
 					{pipe(
 						state.value.teams,
 						Array.map(team => (
-							<TeamRow
+							<TeamCard
 								key={team.id}
 								onAuthenticationRequired={() => {
 									setAuthenticationRequired(true)

@@ -23,7 +23,7 @@ function TeamRow(input: {
 	const width = input.leader === 0 ? 0 : (input.team.count / input.leader) * 100
 
 	return (
-		<li className="relative grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_4rem] items-center gap-2 overflow-hidden px-3 sm:min-h-0 sm:grid-cols-[3.75rem_minmax(0,1fr)_6.25rem] sm:gap-3 sm:px-4">
+		<li className="relative grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_5rem] items-center gap-2 overflow-hidden px-3 sm:min-h-0 sm:grid-cols-[3.75rem_minmax(0,1fr)_9rem] sm:gap-3 sm:px-4">
 			<div
 				aria-hidden="true"
 				className={
@@ -37,8 +37,8 @@ function TeamRow(input: {
 				{pipe(input.rank, String.String, String.padStart(2, '0'))}
 			</b>
 			<span className="relative truncate font-medium sm:text-xl">{input.team.name}</span>
-			<strong className="relative flex items-center justify-end gap-1.5 text-xl tabular-nums sm:text-4xl">
-				{input.team.count} <Beer aria-hidden="true" className="text-primary size-3 sm:size-5" />
+			<strong className="relative flex min-w-0 items-center justify-end gap-1.5 text-xl whitespace-nowrap tabular-nums sm:text-4xl">
+				{input.team.count} <Beer aria-hidden="true" className="text-primary size-3 shrink-0 sm:size-6" />
 			</strong>
 		</li>
 	)
