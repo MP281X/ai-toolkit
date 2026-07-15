@@ -24,30 +24,35 @@ export class CounterError extends Schema.TaggedErrorClass<CounterError>()('Count
 	reason: Schema.Literals(['auth', 'validation'])
 }) {}
 
-export class AdminSession extends RpcMiddleware.Service<AdminSession>()('beer-counter/AdminSession', {
+export class AdminAuthorization extends RpcMiddleware.Service<AdminAuthorization>()('beer-counter/AdminAuthorization', {
 	error: CounterError
 }) {}
+
+const AuthStatus = Rpc.make('auth.status', {error: CounterError, payload: Schema.Struct({})}).middleware(
+	AdminAuthorization
+)
 
 const AdminAdjust = Rpc.make('admin.adjust', {
 	error: CounterError,
 	payload: Schema.Struct({amount: Schema.Number, direction: Schema.Literals(['add', 'subtract']), id: Schema.String})
-}).middleware(AdminSession)
+}).middleware(AdminAuthorization)
 
 const AdminAdd = Rpc.make('admin.add', {error: CounterError, payload: Schema.Struct({name: Schema.String})}).middleware(
-	AdminSession
+	AdminAuthorization
 )
 
 const AdminRename = Rpc.make('admin.rename', {
 	error: CounterError,
 	payload: Schema.Struct({id: Schema.String, name: Schema.String})
-}).middleware(AdminSession)
+}).middleware(AdminAuthorization)
 
 const AdminRemove = Rpc.make('admin.remove', {
 	error: CounterError,
 	payload: Schema.Struct({id: Schema.String})
-}).middleware(AdminSession)
+}).middleware(AdminAuthorization)
 
 export class RpcContracts extends RpcGroup.make(
+	AuthStatus,
 	Rpc.make('counter.watch', {stream: true, success: Schema.Union([CounterSnapshot, CounterChanged])}),
 	AdminAdjust,
 	AdminAdd,

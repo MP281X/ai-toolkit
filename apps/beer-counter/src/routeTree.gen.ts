@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as homeIndexRouteImport } from './routes/(home)/index'
-import { Route as AdminLoginRouteImport } from './routes/admin/login'
 
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
@@ -23,38 +22,29 @@ const homeIndexRoute = homeIndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminLoginRoute = AdminLoginRouteImport.update({
-  id: '/admin/login',
-  path: '/admin/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
-  '/admin/login': typeof AdminLoginRoute
   '/': typeof homeIndexRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
-  '/admin/login': typeof AdminLoginRoute
   '/': typeof homeIndexRoute
   '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/admin/login': typeof AdminLoginRoute
   '/(home)/': typeof homeIndexRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/admin/login' | '/' | '/admin/'
+  fullPaths: '/' | '/admin/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/admin/login' | '/' | '/admin'
-  id: '__root__' | '/admin/login' | '/(home)/' | '/admin/'
+  to: '/' | '/admin'
+  id: '__root__' | '/(home)/' | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AdminLoginRoute: typeof AdminLoginRoute
   homeIndexRoute: typeof homeIndexRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -75,18 +65,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/login': {
-      id: '/admin/login'
-      path: '/admin/login'
-      fullPath: '/admin/login'
-      preLoaderRoute: typeof AdminLoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  AdminLoginRoute: AdminLoginRoute,
   homeIndexRoute: homeIndexRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

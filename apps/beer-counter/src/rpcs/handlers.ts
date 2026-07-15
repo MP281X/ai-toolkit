@@ -1,15 +1,15 @@
 import {Effect, Layer} from 'effect'
 
+import {AdminAuth} from '#lib/adminAuth.ts'
 import {Counter} from '#lib/counter.ts'
-import {AdminSessions} from '#lib/sessions.ts'
-import {AdminSession, RpcContracts} from '#rpcs/contracts.ts'
+import {AdminAuthorization, RpcContracts} from '#rpcs/contracts.ts'
 
-export const AdminSessionLive = Layer.effect(
-	AdminSession,
+export const AdminAuthorizationLive = Layer.effect(
+	AdminAuthorization,
 	Effect.gen(function* () {
-		const sessions = yield* AdminSessions
-		return AdminSession.of((effect, options) =>
-			Effect.andThen(sessions.requireCookieHeader(options.headers['cookie']), effect)
+		const auth = yield* AdminAuth
+		return AdminAuthorization.of((effect, options) =>
+			Effect.andThen(auth.requireCookieHeader(options.headers['cookie']), effect)
 		)
 	})
 )
@@ -23,6 +23,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			'admin.adjust': payload => counter.adjust(payload.id, payload.amount, payload.direction),
 			'admin.remove': payload => counter.remove(payload.id),
 			'admin.rename': payload => counter.rename(payload.id, payload.name),
+			'auth.status': () => Effect.void,
 			'counter.watch': () => counter.changes
 		})
 	})

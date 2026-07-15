@@ -56,7 +56,9 @@ function Crest(input: {readonly mobile?: boolean}) {
 			<img
 				src="/farabus-logo.png"
 				alt="Chiosco Dai Farabus Martignacco"
-				className={input.mobile === true ? 'h-14 w-14 object-contain' : 'w-[78%] max-w-36 object-contain'}
+				className={
+					input.mobile === true ? 'h-14 w-14 object-contain dark:invert' : 'w-[78%] max-w-36 object-contain dark:invert'
+				}
 			/>
 			<p className="text-[10px] leading-relaxed font-medium tracking-wider uppercase">
 				Chiosco Dai Farabus · Martignacco.
@@ -68,7 +70,7 @@ function Crest(input: {readonly mobile?: boolean}) {
 function Home() {
 	const state = useAtomSuspense(counterStateAtom)
 	const teams = rankedTeams(state.value.teams)
-	const split = Math.min(6, teams.length)
+	const split = Math.ceil(teams.length / 2)
 	const left = Array.take(teams, split)
 	const right = Array.drop(teams, split)
 	const leader = teams[0]?.count ?? 0

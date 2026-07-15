@@ -2,8 +2,8 @@ import {assert, describe, it} from '@effect/vitest'
 
 import {Array, Deferred, Effect, Fiber, Option, Stream, pipe} from 'effect'
 
+import {makeAdminAuth} from '#lib/adminAuth.ts'
 import {makeCounter} from '#lib/counter.ts'
-import {makeAdminSessions} from '#lib/sessions.ts'
 
 describe('Counter', () => {
 	it.effect('seeds every process with the fixed zero-count roster', _context =>
@@ -87,19 +87,17 @@ describe('Counter', () => {
 	)
 })
 
-describe('AdminSessions', () => {
-	it.effect('creates opaque browser sessions and validates the cookie header', _context =>
+describe('AdminAuth', () => {
+	it.effect('validates login tokens and RPC cookie headers', _context =>
 		Effect.gen(function* () {
-			const sessions = makeAdminSessions('secret')
-			const invalid = yield* Effect.flip(sessions.authenticate({password: 'wrong', username: 'admin'}))
+			const auth = makeAdminAuth('secret')
+			const invalid = yield* Effect.flip(auth.requireToken('wrong'))
 			assert.strictEqual(invalid.reason, 'auth')
 
-			const token = yield* sessions.authenticate({password: 'secret', username: 'admin'})
-			assert.notStrictEqual(token, 'secret')
-			assert.isTrue(sessions.valid(token))
-			yield* sessions.requireCookieHeader(`beer-counter-session=${token}`)
+			yield* auth.requireToken('secret')
+			yield* auth.requireCookieHeader('beer-counter-admin-token=secret')
 
-			const missing = yield* Effect.flip(sessions.requireCookieHeader())
+			const missing = yield* Effect.flip(auth.requireCookieHeader())
 			assert.strictEqual(missing.reason, 'auth')
 		})
 	)
