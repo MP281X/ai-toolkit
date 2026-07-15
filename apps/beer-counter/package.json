@@ -11,7 +11,7 @@
 
 	"scripts": {
 		"dev:client": "vp dev",
-		"dev:server": "node --watch ./src/main.server.ts",
+		"dev:server": "node --env-file-if-exists=.env --watch ./src/main.server.ts",
 
 		"build": "rm -rf dist && vp build && vp pack",
 
