@@ -1,13 +1,7 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/workbench",
-
-	"version": "0.0.0",
-	"files": ["dist"],
-	"publishConfig": {"access": "public"},
-	"bin": {"workbench": "dist/server.js"},
-	"repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
+	"name": "@deslop/beer-counter",
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
@@ -21,11 +15,7 @@
 
 		"build": "rm -rf dist && vp build && vp pack",
 
-		"preview": "vp run build && PORT=7010 node --env-file-if-exists=.env ./dist/server.js"
-	},
-
-	"dependencies": {
-		"@lydell/node-pty": "latest"
+		"preview": "vp run build && PORT=7000 node --env-file-if-exists=.env ./dist/server.js"
 	},
 
 	"devDependencies": {
@@ -34,16 +24,7 @@
 
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
-		"@tanstack/react-hotkeys": "latest",
 
-		"@deslop/ai": "workspace:*",
-		"@deslop/agent": "workspace:*",
-		"@deslop/agent-browser": "workspace:*",
-		"@deslop/git": "workspace:*",
-		"@deslop/portless": "workspace:*",
-		"@deslop/scripts": "workspace:*",
-		"@deslop/os": "workspace:*",
-		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 

@@ -1,6 +1,8 @@
 import {createServer} from 'node:net'
 import path from 'node:path'
 
+import {NodeSocket} from '@effect/platform-node'
+
 import {Array, Context, Effect, HashMap, Layer, Option, Predicate, Ref, Semaphore, String, pipe} from 'effect'
 
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
@@ -61,16 +63,16 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	const headers = new Headers(webRequest.headers)
 	headers.set('host', new URL(origin).host)
 	headers.set('x-portless-hops', `${(Number.isFinite(hops) ? hops : 0) + 1}`)
+	const requestInit = {
+		body: webRequest.body,
+		duplex: 'half',
+		headers,
+		method: webRequest.method,
+		redirect: webRequest.redirect,
+		signal: webRequest.signal
+	} satisfies RequestInit & {readonly duplex: 'half'}
 	const upstream = yield* Effect.tryPromise(() =>
-		fetch(
-			new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, {
-				body: webRequest.body,
-				headers,
-				method: webRequest.method,
-				redirect: webRequest.redirect,
-				signal: webRequest.signal
-			})
-		)
+		fetch(new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, requestInit))
 	)
 	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
 		const responseHeaders = new Headers(upstream.headers)
@@ -104,9 +106,20 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	upstreamUrl.search = search
 
 	const inbound = yield* request.upgrade
-	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString()).pipe(
-		Effect.provide(Socket.layerWebSocketConstructorGlobal)
+	const webSocketConstructor = Layer.succeed(Socket.WebSocketConstructor)(
+		(url, protocols) =>
+			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Effect's constructor uses the DOM WebSocket shape; ws is the Node transport that supports forwarded headers.
+			new NodeSocket.NodeWS.WebSocket(url, protocols, {
+				headers: pipe(
+					request.headers['cookie'],
+					Option.fromUndefinedOr,
+					Option.filter(String.isNonEmpty),
+					Option.map(cookie => ({cookie})),
+					Option.getOrUndefined
+				)
+			}) as unknown as globalThis.WebSocket
 	)
+	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString()).pipe(Effect.provide(webSocketConstructor))
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
 
