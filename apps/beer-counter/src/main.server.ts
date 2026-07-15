@@ -3,11 +3,12 @@ import {fileURLToPath} from 'node:url'
 
 import {NodeHttpServer, NodeRuntime} from '@effect/platform-node'
 
-import {Config, Layer, pipe} from 'effect'
+import {Config, Layer, String, pipe} from 'effect'
 
 import {HttpMiddleware, HttpRouter, HttpStaticServer} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
 
+import {AdminSessionRoutes} from '#lib/httpRoutes.ts'
 import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
 
@@ -16,11 +17,28 @@ NodeRuntime.runMain(
 		HttpRouter.serve(
 			Layer.mergeAll(
 				RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
+				AdminSessionRoutes,
 				HttpStaticServer.layer({
 					index: 'index.html',
 					root: fileURLToPath(new URL('./client', import.meta.url)),
 					spa: true
 				}),
+				HttpRouter.middleware(
+					HttpMiddleware.cors({
+						allowedOrigins: origin => {
+							try {
+								return (
+									new URL(origin).hostname === 'localhost' ||
+									pipe(new URL(origin).hostname, String.endsWith('.localhost'))
+								)
+							} catch {
+								return false
+							}
+						},
+						credentials: true
+					}),
+					{global: true}
+				),
 				HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 			),
 			{disableLogger: true}

@@ -1,10 +1,11 @@
-import {Array, Config, ConfigProvider, Effect, Layer, Option, String, pipe} from 'effect'
+import {ConfigProvider, Effect, Layer, pipe} from 'effect'
 
 import {FetchHttpClient} from 'effect/unstable/http'
 import {AtomRpc} from 'effect/unstable/reactivity'
 import * as Rpc from 'effect/unstable/rpc'
 import {Socket} from 'effect/unstable/socket'
 
+import {apiUrl} from '#lib/api.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import {OtelLayer} from '@deslop/opentelemetry/client'
 
@@ -33,46 +34,7 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 	group: RpcContracts,
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
-		Layer.provideMerge(
-			Socket.layerWebSocket(
-				pipe(
-					Effect.all({
-						base: Config.option(Config.string('VITE_PORTLESS_BASE_ORIGIN')),
-						origin: Config.option(Config.string('VITE_PORTLESS_ORIGIN'))
-					}),
-					Effect.map(config =>
-						pipe(
-							config.base,
-							Option.map(baseOrigin => {
-								const url = new URL(baseOrigin)
-								url.hostname = `server.${url.hostname}`
-
-								return url.origin
-							}),
-							Option.orElse(() =>
-								Option.map(config.origin, origin => {
-									const url = new URL(origin)
-									url.hostname = pipe(
-										url.hostname,
-										String.split('.'),
-										Array.drop(1),
-										Array.prepend('server'),
-										Array.join('.')
-									)
-
-									return url.origin
-								})
-							),
-							Option.match({
-								onNone: () => `${location.origin}/api/rpc`,
-								onSome: serverOrigin => `${serverOrigin}/api/rpc`
-							})
-						)
-					),
-					Effect.orDie
-				)
-			)
-		),
+		Layer.provideMerge(Socket.layerWebSocket(Effect.sync(() => apiUrl('/api/rpc')))),
 		Layer.provideMerge(Socket.layerWebSocketConstructorGlobal),
 		Layer.provideMerge(LiveLayers)
 	)
