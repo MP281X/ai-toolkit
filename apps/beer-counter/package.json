@@ -1,0 +1,38 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/beer-counter",
+
+	"imports": {
+		"#lib/*": "./src/lib/*",
+		"#rpcs/*": "./src/rpcs/*",
+		"#routes/*": "./src/routes/*"
+	},
+
+	"scripts": {
+		"dev:client": "vp dev",
+		"dev:server": "node --watch ./src/main.server.ts",
+
+		"build": "rm -rf dist && vp build && vp pack",
+
+		"preview": "vp run build && PORT=7000 node ./dist/server.js"
+	},
+
+	"devDependencies": {
+		"react": "^19",
+		"react-dom": "^19",
+
+		"@tanstack/react-router": "latest",
+		"@tanstack/router-plugin": "latest",
+
+		"@deslop/components": "workspace:*",
+		"@deslop/opentelemetry": "workspace:*",
+
+		"@vitejs/plugin-react": "latest",
+		"@rolldown/plugin-babel": "latest",
+		"babel-plugin-react-compiler": "latest",
+
+		"tailwindcss": "latest",
+		"@tailwindcss/vite": "latest"
+	}
+}
