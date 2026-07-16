@@ -70,8 +70,8 @@ function workbenchOrigin(request: HttpServerRequest.HttpServerRequest, session: 
 	}
 }
 
-function proxyStream(session: string) {
-	return pipe(
+const proxyStream = Effect.fn('AgentBrowser.proxyStream')(function* (session: string) {
+	return yield* pipe(
 		Effect.gen(function* () {
 			const request = yield* HttpServerRequest.HttpServerRequest
 			if (!workbenchOrigin(request, session)) return HttpServerResponse.empty({status: 403})
@@ -104,7 +104,7 @@ function proxyStream(session: string) {
 		}),
 		Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 404})))
 	)
-}
+})
 
 const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly string[]) {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
@@ -155,10 +155,8 @@ const AgentBrowserCliTabs = Schema.Struct({
 
 function decodeAgentBrowserTabs(output: string) {
 	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser CLI JSON output
-		const decoded = JSON.parse(output) as unknown
 		return pipe(
-			Schema.decodeUnknownSync(AgentBrowserCliTabs)(decoded).data.tabs,
+			Schema.decodeUnknownSync(Schema.fromJsonString(AgentBrowserCliTabs))(output).data.tabs,
 			Array.map(tab => ({label: Predicate.isNull(tab.label) ? undefined : tab.label, tabId: tab.tabId, url: tab.url}))
 		)
 	} catch {

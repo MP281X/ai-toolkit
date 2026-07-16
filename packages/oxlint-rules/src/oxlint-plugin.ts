@@ -1,184 +1,26 @@
-import {Array, Match, Predicate, String, pipe} from 'effect'
+import {Array, Predicate, String, pipe} from 'effect'
 
 import {definePlugin} from '@oxlint/plugins'
-import type {Context, ESTree} from '@oxlint/plugins'
+import type {Context, Definition, ESTree, Scope, Variable} from '@oxlint/plugins'
 
-const sourceReferenceCount = (
-	context: Context,
-	node: {
-		readonly body?: {readonly end: number; readonly start: number} | null
-		readonly id?: {readonly name: string} | null
+type FunctionNode = ESTree.ArrowFunctionExpression | ESTree.Function
+
+function definitionVariableDeclarator(definition: Definition) {
+	if (definition.node.type === 'VariableDeclarator') return definition.node
+	if (definition.name.parent.type === 'VariableDeclarator') return definition.name.parent
+	if (
+		definition.name.parent.type === 'Property' &&
+		definition.name.parent.parent.type === 'ObjectPattern' &&
+		definition.name.parent.parent.parent.type === 'VariableDeclarator'
+	) {
+		return definition.name.parent.parent.parent
 	}
-) =>
-	Predicate.isNotNullish(node.id) && Predicate.isNotNullish(node.body)
-		? [
-				...pipe(context.sourceCode.text, String.slice(node.body.start, node.body.end)).matchAll(
-					new RegExp(`\\b${node.id.name}\\s*\\(`, 'gu')
-				)
-			].length
-		: 0
-
-const isEffectMemberCall = (node: ESTree.Expression, name: string) =>
-	node.type === 'CallExpression' &&
-	node.callee.type === 'MemberExpression' &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Effect' &&
-	node.callee.property.type === 'Identifier' &&
-	node.callee.property.name === name
-
-const isEffectGenCall = (node: ESTree.Expression) => isEffectMemberCall(node, 'gen')
-
-const isEffectRunCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Effect' &&
-	node.callee.property.type === 'Identifier' &&
-	(node.callee.property.name === 'runPromise' || node.callee.property.name === 'runSync')
-
-function isUndefinedType(node: ESTree.TSType): boolean {
-	return (
-		node.type === 'TSUndefinedKeyword' ||
-		(node.type === 'TSUnionType' && Array.some(node.types, typeNode => isUndefinedType(typeNode)))
-	)
+	return void 0
 }
 
-const isCallArgument = (node: {readonly parent: {readonly type: string}}) =>
-	node.parent.type === 'CallExpression' ||
-	node.parent.type === 'NewExpression' ||
-	node.parent.type === 'ArrayExpression' ||
-	node.parent.type === 'JSXExpressionContainer'
-
-const isAtomFamilyCallback = (node: ESTree.ArrowFunctionExpression | ESTree.Function) =>
-	node.parent.type === 'CallExpression' &&
-	node.parent.callee.type === 'MemberExpression' &&
-	node.parent.callee.object.type === 'Identifier' &&
-	node.parent.callee.object.name === 'Atom' &&
-	node.parent.callee.property.type === 'Identifier' &&
-	node.parent.callee.property.name === 'family'
-
-const isNamedFunctionRecursive = (context: Context, node: ESTree.Function) =>
-	node.type === 'FunctionDeclaration' && Predicate.isNotNull(node.id) && sourceReferenceCount(context, node) > 0
-
-const isBoundaryTypeName = (name: string) =>
-	/(?:Schema|Contract|Request|Response|Error|Props|Event|Command|Config|Id|Options|Params|Result|Payload|Handle)$/u.test(
-		name
-	)
-
-const isPublicHandleName = (name: string) => /Handle$/u.test(name)
-
-const isSchemaTypeAlias = (node: ESTree.TSTypeAliasDeclaration) =>
-	node.typeAnnotation.type === 'TSTypeQuery' &&
-	node.typeAnnotation.exprName.type === 'TSQualifiedName' &&
-	node.typeAnnotation.exprName.left.type === 'Identifier' &&
-	node.typeAnnotation.exprName.left.name === node.id.name &&
-	node.typeAnnotation.exprName.right.name === 'Type'
-
-const isUppercaseName = (name: string) => /^[A-Z]/u.test(name)
-
-const isHookName = (name: string) => /^use[A-Z]/u.test(name)
-
-const isRecursiveFunction = (context: Context, node: ESTree.Function) =>
-	Predicate.isNotNull(node.id) && sourceReferenceCount(context, node) > 0
-
-const typeReferenceCount = (context: Context, name: string) =>
-	[...context.sourceCode.text.matchAll(new RegExp(`\\b${name}\\b`, 'gu'))].length
-
-const isFloatingLocalType = (context: Context, node: ESTree.TSInterfaceDeclaration | ESTree.TSTypeAliasDeclaration) =>
-	node.parent.type !== 'ExportNamedDeclaration' &&
-	node.parent.type !== 'TSModuleBlock' &&
-	(node.type !== 'TSTypeAliasDeclaration' || !isSchemaTypeAlias(node)) &&
-	!isBoundaryTypeName(node.id.name) &&
-	typeReferenceCount(context, node.id.name) <= 2
-
-const reportFloatingLocalType = (
-	context: Context,
-	node: ESTree.TSInterfaceDeclaration | ESTree.TSTypeAliasDeclaration
-) => {
-	if (isFloatingLocalType(context, node)) {
-		context.report({
-			message:
-				'Inline local implementation type; keep a named type only for public boundaries or multiple real consumers.',
-			node
-		})
-	}
-}
-
-const isSimpleSingleUseFunction = (node: ESTree.Function) =>
-	Predicate.isNotNull(node.body) &&
-	node.body.body.length === 1 &&
-	node.body.body[0]?.type === 'ReturnStatement' &&
-	Predicate.isNotNull(node.body.body[0].argument) &&
-	(node.body.body[0].argument.type === 'Identifier' ||
-		node.body.body[0].argument.type === 'MemberExpression' ||
-		node.body.body[0].argument.type === 'Literal' ||
-		node.body.body[0].argument.type === 'TemplateLiteral')
-
-const isAtomFamilyReturnWrapper = (node: ESTree.Function) =>
-	node.type === 'FunctionDeclaration' &&
-	Predicate.isNotNull(node.id) &&
-	String.endsWith('Atom')(node.id.name) &&
-	Predicate.isNotNull(node.body) &&
-	node.body.body.length === 1 &&
-	node.body.body[0]?.type === 'ReturnStatement' &&
-	node.body.body[0].argument?.type === 'CallExpression' &&
-	node.body.body[0].argument.callee.type === 'Identifier' &&
-	String.endsWith('AtomFamily')(node.body.body[0].argument.callee.name)
-
-const isForwardingCallWrapper = (node: ESTree.Function) =>
-	node.type === 'FunctionDeclaration' &&
-	Predicate.isNotNull(node.id) &&
-	String.includes('Session')(node.id.name) &&
-	Predicate.isNotNull(node.body) &&
-	node.params.length > 0 &&
-	Array.every(node.params, parameter => parameter.type === 'Identifier') &&
-	node.body.body.length === 1 &&
-	node.body.body[0]?.type === 'ReturnStatement' &&
-	node.body.body[0].argument?.type === 'CallExpression' &&
-	node.body.body[0].argument.arguments.length === node.params.length &&
-	pipe(
-		Array.zip(node.body.body[0].argument.arguments, node.params),
-		Array.every(([argument, parameter]) => (argument.type === 'Identifier' ? argument.name === parameter.name : false))
-	)
-
-const isNullishLiteral = (node: ESTree.Expression) =>
-	(node.type === 'Literal' && Predicate.isNull(node.value)) ||
-	(node.type === 'Identifier' && node.name === 'undefined') ||
-	(node.type === 'UnaryExpression' && node.operator === 'void')
-
-const reportsNullishComparison = (node: ESTree.BinaryExpression) =>
-	(node.operator === '===' || node.operator === '!==' || node.operator === '==' || node.operator === '!=') &&
-	(isNullishLiteral(node.left) || isNullishLiteral(node.right))
-
-const reportsTypeofComparison = (node: ESTree.BinaryExpression) =>
-	(node.operator === '===' || node.operator === '!==' || node.operator === '==' || node.operator === '!=') &&
-	((node.left.type === 'UnaryExpression' && node.left.operator === 'typeof' && node.right.type === 'Literal') ||
-		(node.right.type === 'UnaryExpression' && node.right.operator === 'typeof' && node.left.type === 'Literal'))
-
-const conditionAliasBinaryOperators = ['===', '!==', '==', '!=', '<', '<=', '>', '>=', 'in', 'instanceof'] as const
-
-const reportsConditionAlias = (node: ESTree.Expression) =>
-	(node.type === 'BinaryExpression' && Array.contains(conditionAliasBinaryOperators, node.operator)) ||
-	(node.type === 'LogicalExpression' && node.operator !== '??') ||
-	(node.type === 'UnaryExpression' && node.operator === '!')
-
-const optionConstructors = [
-	'fromIterable',
-	'fromNullable',
-	'fromPredicate',
-	'liftNullable',
-	'liftPredicate',
-	'none',
-	'some',
-	'try'
-] as const
-
-const nativeMutableCollections = ['Map', 'Set', 'WeakMap', 'WeakSet'] as const
-
-const nativePrototypeMethods = [
+const arrayMethods = [
 	'at',
 	'concat',
-	'endsWith',
 	'every',
 	'filter',
 	'find',
@@ -192,10 +34,18 @@ const nativePrototypeMethods = [
 	'map',
 	'reduce',
 	'reduceRight',
+	'slice',
+	'some'
+] as const
+
+const stringMethods = [
+	'at',
+	'concat',
+	'endsWith',
+	'includes',
 	'replace',
 	'replaceAll',
 	'slice',
-	'some',
 	'split',
 	'startsWith',
 	'toLowerCase',
@@ -205,377 +55,547 @@ const nativePrototypeMethods = [
 	'trimStart'
 ] as const
 
-const isIdentifierMemberCall = (node: ESTree.CallExpression, name: string, objectName?: string) =>
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.property.type === 'Identifier' &&
-	node.callee.property.name === name &&
-	(Predicate.isUndefined(objectName) ||
-		(node.callee.object.type === 'Identifier' && node.callee.object.name === objectName))
+const mutableCollections = ['Map', 'Set', 'WeakMap', 'WeakSet'] as const
+const effectValueMethods = [
+	'die',
+	'dieMessage',
+	'fail',
+	'failCause',
+	'fromEither',
+	'fromNullable',
+	'fromOption',
+	'gen',
+	'interrupt',
+	'interruptWith',
+	'never',
+	'promise',
+	'succeed',
+	'suspend',
+	'sync',
+	'try',
+	'tryPromise',
+	'void'
+] as const
+const mutatingMethods = [
+	'add',
+	'clear',
+	'copyWithin',
+	'delete',
+	'fill',
+	'pop',
+	'push',
+	'reverse',
+	'set',
+	'shift',
+	'sort',
+	'splice',
+	'unshift'
+] as const
+const schemaDecoderMethods = ['decodeOption', 'decodeSync', 'decodeUnknownOption', 'decodeUnknownSync'] as const
 
-const isOptionConstructorCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Option' &&
-	node.callee.property.type === 'Identifier' &&
-	Array.contains(optionConstructors, node.callee.property.name)
-
-const isPromiseCallbackCall = (node: ESTree.CallExpression) =>
-	(isIdentifierMemberCall(node, 'then') ||
-		isIdentifierMemberCall(node, 'catch') ||
-		isIdentifierMemberCall(node, 'finally')) &&
-	Array.some(
-		node.arguments,
-		argument => argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression'
-	) &&
-	!(
-		node.callee.type === 'MemberExpression' &&
-		node.callee.object.type === 'Identifier' &&
-		/^[A-Z]/u.test(node.callee.object.name)
-	)
-
-const isNativeMutableCollection = (node: ESTree.NewExpression) =>
-	node.callee.type === 'Identifier' && Array.contains(nativeMutableCollections, node.callee.name)
-
-const isReactLocalCollection = (node: ESTree.NewExpression) =>
-	node.parent.type === 'CallExpression' &&
-	node.parent.callee.type === 'Identifier' &&
-	(node.parent.callee.name === 'useRef' || node.parent.callee.name === 'useState')
-
-const isUseStateCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'Identifier' && node.callee.name === 'useState'
-
-function functionObjectExpression(node: ESTree.ArrowFunctionExpression | ESTree.Function) {
-	if (node.type === 'ArrowFunctionExpression' && node.body.type === 'ObjectExpression') return [node.body]
-	if (
-		node.body?.type === 'BlockStatement' &&
-		node.body.body.length === 1 &&
-		node.body.body[0]?.type === 'ReturnStatement' &&
-		node.body.body[0].argument?.type === 'ObjectExpression'
-	) {
-		return [node.body.body[0].argument]
+function variableFor(context: Context, node: ESTree.IdentifierReference) {
+	let scope: Scope | null = context.sourceCode.getScope(node)
+	while (Predicate.isNotNull(scope)) {
+		const variable = scope.set.get(node.name)
+		if (Predicate.isNotUndefined(variable)) return variable
+		scope = scope.upper
 	}
-	return []
+	return void 0
 }
 
-const isFakeRefStateInitializer = (node: ESTree.Expression | ESTree.SpreadElement | null | undefined) => {
-	if (Predicate.isNullish(node)) return false
-	if (!(node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression')) return false
-
-	const object = functionObjectExpression(node)
+function importedBinding(
+	context: Context,
+	node: ESTree.IdentifierReference,
+	source: string,
+	imported: string,
+	namespace = false,
+	seen = new Set<Variable>()
+): boolean {
+	const variable = variableFor(context, node)
+	if (Predicate.isUndefined(variable) || seen.has(variable)) return false
+	seen.add(variable)
 	return (
-		Predicate.isNotUndefined(object[0]) &&
-		Array.some(
-			object[0].properties,
-			property =>
-				property.type === 'Property' &&
-				!property.computed &&
-				((property.key.type === 'Identifier' && property.key.name === 'current') ||
-					(property.key.type === 'Literal' && property.key.value === 'current'))
-		)
-	)
-}
-
-const hasPartialStateParameter = (context: Context, node: ESTree.Function) =>
-	/\bPartial\s*<\s*\w*State\b/u.test(pipe(context.sourceCode.text, String.slice(node.start, node.end)))
-
-const isGenericStatePatchFunction = (context: Context, node: ESTree.Function) =>
-	node.params.length === 1 &&
-	hasPartialStateParameter(context, node) &&
-	Predicate.isNotNull(node.body) &&
-	/patch|update|merge/u.test(node.id?.name ?? '')
-
-const isNativePrototypeMethodCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'MemberExpression' &&
-	!node.callee.computed &&
-	node.callee.object.type !== 'Identifier' &&
-	node.callee.property.type === 'Identifier' &&
-	Array.contains(nativePrototypeMethods, node.callee.property.name)
-
-const isZeroArgEffectGenWrapperBody = (node: ESTree.Expression | ESTree.FunctionBody | null) =>
-	Predicate.isNotNull(node) &&
-	(node.type === 'BlockStatement'
-		? node.body.length === 1 &&
-			node.body[0]?.type === 'ReturnStatement' &&
-			Predicate.isNotNull(node.body[0].argument) &&
-			isEffectGenCall(node.body[0].argument)
-		: isEffectGenCall(node))
-
-const hasParameterTypeAnnotation = (parameter: ESTree.ParamPattern) =>
-	Predicate.hasProperty(parameter, 'typeAnnotation') && Predicate.isNotNullish(parameter.typeAnnotation)
-
-const reportTypedParameters = (context: Context, node: ESTree.ArrowFunctionExpression | ESTree.Function) => {
-	for (const parameter of node.params) {
-		if (hasParameterTypeAnnotation(parameter)) {
-			context.report({message: 'Infer callback parameter type.', node: parameter})
-		}
-	}
-}
-
-const isDirectEffectCall = (node: ESTree.Expression) =>
-	node.type === 'CallExpression' &&
-	node.callee.type === 'MemberExpression' &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Effect' &&
-	node.callee.property.type === 'Identifier' &&
-	!String.startsWith('run')(node.callee.property.name)
-
-const isDataConstructorExpression = (node: ESTree.Expression) => {
-	const callee = node.type === 'TSInstantiationExpression' ? node.expression : node
-	return (
-		callee.type === 'MemberExpression' &&
-		!callee.computed &&
-		callee.object.type === 'Identifier' &&
-		callee.object.name === 'Data' &&
-		callee.property.type === 'Identifier' &&
-		(callee.property.name === 'Class' ||
-			callee.property.name === 'TaggedClass' ||
-			callee.property.name === 'taggedEnum')
-	)
-}
-
-const isDataConstructorCall = (node: ESTree.CallExpression) => isDataConstructorExpression(node.callee)
-
-const isEffectReturningBody = (node: ESTree.Expression | ESTree.FunctionBody | null) =>
-	Predicate.isNotNull(node) &&
-	(node.type === 'BlockStatement'
-		? node.body.length === 1 &&
-			node.body[0]?.type === 'ReturnStatement' &&
-			Predicate.isNotNull(node.body[0].argument) &&
-			isDirectEffectCall(node.body[0].argument)
-		: isDirectEffectCall(node))
-
-const isSingleYieldFunction = (node: ESTree.Expression | ESTree.SpreadElement | null | undefined) =>
-	(node?.type === 'FunctionExpression' || node?.type === 'ArrowFunctionExpression') &&
-	Predicate.isNotNull(node.body) &&
-	node.body.type === 'BlockStatement' &&
-	node.body.body.length === 1 &&
-	node.body.body[0]?.type === 'ExpressionStatement' &&
-	node.body.body[0].expression.type === 'YieldExpression'
-
-const isSingleYieldEffectGen = (node: ESTree.CallExpression) =>
-	isEffectGenCall(node) && isSingleYieldFunction(node.arguments[0])
-
-const isNamedEffectFnCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'CallExpression' &&
-	node.callee.callee.type === 'MemberExpression' &&
-	node.callee.callee.object.type === 'Identifier' &&
-	node.callee.callee.object.name === 'Effect' &&
-	node.callee.callee.property.type === 'Identifier' &&
-	node.callee.callee.property.name === 'fn'
-
-const isUselessEffectWrapper = (node: ESTree.CallExpression) =>
-	(isNamedEffectFnCall(node) && isSingleYieldFunction(node.arguments[0])) || isSingleYieldEffectGen(node)
-
-const isEffectFnUntracedCall = (node: ESTree.CallExpression) =>
-	node.callee.type === 'MemberExpression' &&
-	node.callee.object.type === 'Identifier' &&
-	node.callee.object.name === 'Effect' &&
-	node.callee.property.type === 'Identifier' &&
-	node.callee.property.name === 'fnUntraced'
-
-const isEffectFnGenerator = (node: ESTree.Function) =>
-	node.generator &&
-	node.parent.type === 'CallExpression' &&
-	(isNamedEffectFnCall(node.parent) || isEffectFnUntracedCall(node.parent))
-
-const isContextOwnedContainer = (node: {readonly type: string} | null) =>
-	Predicate.isNotNull(node) &&
-	(node.type === 'CallExpression' ||
-		node.type === 'NewExpression' ||
-		node.type === 'ArrayExpression' ||
-		node.type === 'JSXExpressionContainer' ||
-		node.type === 'ReturnStatement')
-
-const isContextOwnedEffectFnGenerator = (node: ESTree.Function) =>
-	isEffectFnGenerator(node) && isContextOwnedContainer(node.parent.parent)
-
-const isTrivialHandlerFunction = (context: Context, node: ESTree.Function) =>
-	node.type === 'FunctionDeclaration' &&
-	Predicate.isNotNull(node.id) &&
-	Predicate.isNotNull(node.body) &&
-	[...context.sourceCode.text.matchAll(new RegExp(`\\b${node.id.name}\\b`, 'gu'))].length <= 2 &&
-	node.body.body.length <= 2 &&
-	Array.every(node.body.body, statement => statement.type === 'ExpressionStatement')
-
-function isStaticReturnExpression(node: ESTree.Expression): boolean {
-	return Match.value(node).pipe(
-		Match.when({type: 'ArrayExpression'}, array =>
-			Array.every(
-				array.elements,
-				element => Predicate.isNull(element) || (element.type !== 'SpreadElement' && isStaticReturnExpression(element))
+		Array.some(variable.defs, definition => {
+			const binding = definition.node
+			if (binding.type === 'ImportNamespaceSpecifier') {
+				return namespace && binding.parent.type === 'ImportDeclaration' && binding.parent.source.value === source
+			}
+			if (
+				binding.type !== 'ImportSpecifier' ||
+				binding.parent.type !== 'ImportDeclaration' ||
+				binding.parent.source.value !== source
+			) {
+				return false
+			}
+			if (binding.imported.type === 'Identifier' && binding.imported.name === imported) return true
+			return false
+		}) ||
+		Array.some(variable.defs, definition => {
+			const binding = definitionVariableDeclarator(definition)
+			return (
+				Predicate.isNotUndefined(binding) &&
+				!Array.some(variable.references, reference => reference.isWrite() && !reference.init) &&
+				((binding.init?.type === 'Identifier' &&
+					importedBinding(context, binding.init, source, imported, namespace, seen)) ||
+					(binding.init?.type === 'MemberExpression' &&
+						binding.init.object.type === 'Identifier' &&
+						memberName(binding.init) === imported &&
+						importedBinding(context, binding.init.object, source, imported, true, seen)) ||
+					(binding.id.type === 'ObjectPattern' &&
+						binding.init?.type === 'Identifier' &&
+						Array.some(
+							binding.id.properties,
+							property =>
+								property.type === 'Property' &&
+								property.key.type === 'Identifier' &&
+								property.key.name === imported &&
+								property.value.type === 'Identifier' &&
+								property.value.name === variable.name
+						) &&
+						importedBinding(context, binding.init, source, imported, true, seen)))
 			)
-		),
-		Match.when({type: 'Literal'}, () => true),
-		Match.when({type: 'ObjectExpression'}, object =>
-			Array.every(
-				object.properties,
-				property => property.type === 'Property' && isStaticReturnExpression(property.value)
-			)
-		),
-		Match.when({type: 'TemplateLiteral'}, template => Array.isReadonlyArrayEmpty(template.expressions)),
-		Match.orElse(() => false)
+		})
 	)
 }
 
-const isStaticReturnFunction = (node: {
-	readonly body: ESTree.Expression | ESTree.FunctionBody | null
-	readonly generator?: boolean
-	readonly parent: {readonly type: string} | null
-	readonly params: readonly ESTree.ParamPattern[]
-}) =>
-	node.generator !== true &&
-	node.parent?.type !== 'MethodDefinition' &&
-	Predicate.isNotNull(node.body) &&
-	node.body.type === 'BlockStatement' &&
-	node.params.length === 0 &&
-	node.body.body.length === 1 &&
-	node.body.body[0]?.type === 'ReturnStatement' &&
-	Predicate.isNotNull(node.body.body[0].argument) &&
-	isStaticReturnExpression(node.body.body[0].argument)
-
-const isReactRefPropsParameter = (node: ESTree.ObjectPattern) =>
-	(node.parent.type === 'FunctionDeclaration' ||
-		node.parent.type === 'FunctionExpression' ||
-		node.parent.type === 'ArrowFunctionExpression') &&
-	Array.some(
-		node.properties,
-		property => property.type === 'Property' && property.key.type === 'Identifier' && property.key.name === 'ref'
-	) &&
-	Array.some(node.properties, property => property.type === 'RestElement')
-
-const objectBoxMutationPattern = (name: string) => new RegExp(`\\b${name}\\s*\\.\\s*[^=\\s.]+\\s*=`, 'u')
-
-const isMutableHolderDeclaration = (context: Context, node: ESTree.VariableDeclarator) =>
-	node.id.type === 'Identifier' &&
-	node.init?.type === 'ObjectExpression' &&
-	node.init.properties.length === 1 &&
-	Predicate.isNotNull(node.parent.parent) &&
-	node.parent.parent.type !== 'Program' &&
-	objectBoxMutationPattern(node.id.name).test(context.sourceCode.text)
-
-const isLiteralConstValue = (node: ESTree.Expression) =>
-	node.type === 'Literal' &&
-	(Predicate.isString(node.value) ||
-		Predicate.isNumber(node.value) ||
-		Predicate.isBoolean(node.value) ||
-		Predicate.isNull(node.value))
-
-const isPrimitiveConstDeclaration = (node: ESTree.VariableDeclarator) =>
-	node.parent.type === 'VariableDeclaration' &&
-	node.parent.kind === 'const' &&
-	node.id.type === 'Identifier' &&
-	Predicate.isNotNullish(node.init) &&
-	(isLiteralConstValue(node.init) ||
-		(String.includes('Session')(node.id.name) &&
-			node.init.type === 'Literal' &&
-			Predicate.hasProperty(node.init, 'regex')))
-
-const isComputedStringAccess = (node: ESTree.MemberExpression) =>
-	node.computed && node.property.type === 'Literal' && Predicate.isString(node.property.value)
-
-const isAccessExpression = (node: ESTree.Expression) =>
-	node.type === 'MemberExpression' || (node.type === 'ChainExpression' && node.expression.type === 'MemberExpression')
-
-const isSchemaDecoderMember = (node: ESTree.MemberExpression) =>
-	!node.computed &&
-	node.object.type === 'Identifier' &&
-	node.object.name === 'Schema' &&
-	node.property.type === 'Identifier' &&
-	(node.property.name === 'decodeSync' ||
-		node.property.name === 'decodeUnknownSync' ||
-		node.property.name === 'decodeOption' ||
-		node.property.name === 'decodeUnknownOption')
-
-function isSchemaDecoderExpression(node: ESTree.Expression): boolean {
-	return (
-		(node.type === 'CallExpression' &&
-			((node.callee.type === 'MemberExpression' && isSchemaDecoderMember(node.callee)) ||
-				(node.callee.type === 'CallExpression' && isSchemaDecoderExpression(node.callee)))) ||
-		(node.type === 'MemberExpression' && isSchemaDecoderMember(node))
-	)
-}
-
-const isAccessHelperBody = (node: ESTree.FunctionBody | null) =>
-	Predicate.isNotNull(node) &&
-	node.body.length === 1 &&
-	node.body[0]?.type === 'ReturnStatement' &&
-	Predicate.isNotNull(node.body[0].argument) &&
-	(isAccessExpression(node.body[0].argument) ||
-		(node.body[0].argument.type === 'LogicalExpression' &&
-			node.body[0].argument.operator === '??' &&
-			isAccessExpression(node.body[0].argument.left)))
-
-const isIifeCallee = (node: ESTree.Expression) =>
-	node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression'
-
-const isMatchPatternObject = (node: ESTree.ObjectExpression) =>
-	node.parent.type === 'CallExpression' &&
-	node.parent.callee.type === 'MemberExpression' &&
-	node.parent.callee.object.type === 'Identifier' &&
-	node.parent.callee.object.name === 'Match'
-
-const isSchemaStructObject = (node: ESTree.ObjectExpression) =>
-	node.parent.type === 'CallExpression' &&
-	node.parent.callee.type === 'MemberExpression' &&
-	node.parent.callee.object.type === 'Identifier' &&
-	node.parent.callee.object.name === 'Schema' &&
-	node.parent.callee.property.type === 'Identifier' &&
-	(node.parent.callee.property.name === 'Struct' ||
-		node.parent.callee.property.name === 'TaggedClass' ||
-		node.parent.callee.property.name === 'TaggedErrorClass')
-
-function isSchemaClassCall(node: ESTree.Expression): boolean {
-	return (
-		node.type === 'CallExpression' &&
-		((node.callee.type === 'MemberExpression' &&
-			!node.callee.computed &&
-			node.callee.object.type === 'Identifier' &&
-			node.callee.object.name === 'Schema' &&
-			node.callee.property.type === 'Identifier' &&
-			(node.callee.property.name === 'Class' || node.callee.property.name === 'TaggedClass')) ||
-			(node.callee.type === 'CallExpression' && isSchemaClassCall(node.callee)))
-	)
-}
-
-function isSchemaExpression(node: ESTree.Expression): boolean {
-	return (
-		(node.type === 'CallExpression' &&
-			((node.callee.type === 'MemberExpression' &&
-				!node.callee.computed &&
-				node.callee.object.type === 'Identifier' &&
-				node.callee.object.name === 'Schema') ||
-				(node.callee.type === 'CallExpression' && isSchemaExpression(node.callee)))) ||
-		(node.type === 'MemberExpression' &&
-			!node.computed &&
-			node.object.type === 'Identifier' &&
-			node.object.name === 'Schema')
-	)
-}
-
-const isMatchingSchemaTypeAliasStatement = (
-	statement: ESTree.Statement | undefined,
-	name: string,
-	exported: boolean
-) => {
-	if (
-		statement?.type === 'ExportNamedDeclaration' &&
-		statement.declaration?.type === 'TSTypeAliasDeclaration' &&
-		isSchemaTypeAlias(statement.declaration)
-	) {
-		return statement.declaration.id.name === name
+const memberName = (node: ESTree.MemberExpression) => {
+	if (!node.computed && node.property.type === 'Identifier') return node.property.name
+	if (node.computed && node.property.type === 'Literal' && Predicate.isString(node.property.value)) {
+		return node.property.value
 	}
-	if (!exported && statement?.type === 'TSTypeAliasDeclaration' && isSchemaTypeAlias(statement)) {
-		return statement.id.name === name
+	return void 0
+}
+
+const objectPropertyName = (property: ESTree.ObjectExpression['properties'][number]) => {
+	if (property.type !== 'Property' || property.computed) return
+	if (property.key.type === 'Identifier') return property.key.name
+	if (property.key.type === 'Literal' && Predicate.isString(property.key.value)) return property.key.value
+	return void 0
+}
+
+function reactOwns(node: ESTree.NewExpression, range: {readonly end: number; readonly start: number}) {
+	if (node.start === range.start && node.end === range.end) return true
+	let current: ESTree.Node | null = node.parent
+	while (Predicate.isNotNull(current) && range.start <= current.start && range.end >= current.end) {
+		if (current.type === 'CallExpression') return false
+		if (current.start === range.start && current.end === range.end) return true
+		current = current.parent
 	}
 	return false
 }
 
-const precedingStatement = (body: readonly ESTree.Statement[], statement: ESTree.Statement) =>
-	body[body.indexOf(statement) - 1]
+function importedObject(context: Context, node: ESTree.Expression, source: string, imported: string): boolean {
+	if (node.type === 'Identifier') return importedBinding(context, node, source, imported)
+	return (
+		node.type === 'MemberExpression' &&
+		node.object.type === 'Identifier' &&
+		memberName(node) === imported &&
+		importedBinding(context, node.object, source, imported, true)
+	)
+}
 
-const statementVariableDeclarations = (statement: ESTree.Statement) => {
+function importedFunction(context: Context, node: ESTree.Expression, source: string, name: string): boolean {
+	return (
+		(node.type === 'Identifier' && importedBinding(context, node, source, name)) ||
+		(node.type === 'MemberExpression' &&
+			node.object.type === 'Identifier' &&
+			memberName(node) === name &&
+			importedBinding(context, node.object, source, name, true))
+	)
+}
+
+function importedMethod(
+	context: Context,
+	node: ESTree.Expression,
+	source: string,
+	imported: string,
+	method: string
+): boolean {
+	if (node.type === 'MemberExpression' && node.object.type !== 'Super') {
+		return memberName(node) === method && importedObject(context, node.object, source, imported)
+	}
+	if (node.type !== 'Identifier') return false
+	const variable = variableFor(context, node)
+	if (
+		Predicate.isUndefined(variable) ||
+		Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+	) {
+		return false
+	}
+	return Array.some(variable.defs, definition => {
+		const binding = definitionVariableDeclarator(definition)
+		return (
+			Predicate.isNotUndefined(binding) &&
+			((binding.init?.type === 'MemberExpression' &&
+				binding.init.object.type !== 'Super' &&
+				memberName(binding.init) === method &&
+				importedObject(context, binding.init.object, source, imported)) ||
+				(binding.id.type === 'ObjectPattern' &&
+					Predicate.isNotNull(binding.init) &&
+					Array.some(
+						binding.id.properties,
+						property =>
+							property.type === 'Property' &&
+							property.key.type === 'Identifier' &&
+							property.key.name === method &&
+							property.value.type === 'Identifier' &&
+							property.value.name === variable.name
+					) &&
+					importedObject(context, binding.init, source, imported)))
+		)
+	})
+}
+
+function importedMethodName(context: Context, node: ESTree.Expression, source: string, imported: string) {
+	if (
+		node.type === 'MemberExpression' &&
+		node.object.type !== 'Super' &&
+		importedObject(context, node.object, source, imported)
+	) {
+		return memberName(node)
+	}
+	if (node.type !== 'Identifier') return void 0
+	const variable = variableFor(context, node)
+	if (
+		Predicate.isUndefined(variable) ||
+		Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+	) {
+		return void 0
+	}
+	const definition = variable.defs[0]
+	const declaration = Predicate.isNotUndefined(definition) ? definitionVariableDeclarator(definition) : undefined
+	if (declaration?.init?.type === 'MemberExpression' && declaration.init.object.type !== 'Super') {
+		return importedObject(context, declaration.init.object, source, imported) ? memberName(declaration.init) : undefined
+	}
+	if (
+		declaration?.id.type === 'ObjectPattern' &&
+		Predicate.isNotNull(declaration.init) &&
+		importedObject(context, declaration.init, source, imported)
+	) {
+		const property = Array.findFirst(
+			declaration.id.properties,
+			item => item.type === 'Property' && item.value.type === 'Identifier' && item.value.name === variable.name
+		)
+		if (property._tag === 'Some' && property.value.type === 'Property') {
+			const key = property.value.key
+			if (key.type === 'Identifier') return key.name
+			if (key.type === 'Literal' && Predicate.isString(key.value)) return key.value
+		}
+	}
+	return void 0
+}
+
+const effectTerminal = (context: Context, node: ESTree.Expression | ESTree.SpreadElement) =>
+	node.type !== 'SpreadElement' &&
+	(importedMethod(context, node, 'effect', 'Effect', 'runPromise') ||
+		importedMethod(context, node, 'effect', 'Effect', 'runSync'))
+
+const isCallArgument = (node: FunctionNode) =>
+	node.parent.type === 'CallExpression' ||
+	node.parent.type === 'NewExpression' ||
+	(node.parent.type === 'Property' &&
+		node.parent.parent.type === 'ObjectExpression' &&
+		node.parent.parent.parent.type === 'CallExpression')
+
+function directReturnedExpression(node: FunctionNode): ESTree.Expression | undefined {
+	if (node.body?.type !== 'BlockStatement') return node.body ?? undefined
+	if (node.body.body.length !== 1 || node.body.body[0]?.type !== 'ReturnStatement') return
+	return node.body.body[0].argument ?? undefined
+}
+
+function returnedExpressions(node: ESTree.ArrowFunctionExpression | ESTree.Function) {
+	if (node.body?.type !== 'BlockStatement') return Predicate.isNotNullish(node.body) ? [node.body] : []
+	const expressions: ESTree.Expression[] = []
+	const visit = (statement: ESTree.Statement) => {
+		if (statement.type === 'ReturnStatement' && Predicate.isNotNull(statement.argument)) {
+			expressions.push(statement.argument)
+		} else if (statement.type === 'BlockStatement') {
+			for (const child of statement.body) visit(child)
+		} else if (statement.type === 'IfStatement') {
+			visit(statement.consequent)
+			if (Predicate.isNotNull(statement.alternate)) visit(statement.alternate)
+		} else if (statement.type === 'SwitchStatement') {
+			for (const switchCase of statement.cases) {
+				for (const child of switchCase.consequent) visit(child)
+			}
+		} else if (statement.type === 'TryStatement') {
+			visit(statement.block)
+			if (Predicate.isNotNull(statement.handler)) visit(statement.handler.body)
+			if (Predicate.isNotNull(statement.finalizer)) visit(statement.finalizer)
+		}
+	}
+	for (const statement of node.body.body) visit(statement)
+	return expressions
+}
+
+function reactHook(context: Context, node: ESTree.Expression, hook: 'useRef' | 'useState'): boolean {
+	if (node.type === 'Identifier' && importedBinding(context, node, 'react', hook)) return true
+	if (
+		node.type === 'MemberExpression' &&
+		node.object.type === 'Identifier' &&
+		memberName(node) === hook &&
+		importedBinding(context, node.object, 'react', 'React', true)
+	) {
+		return true
+	}
+	if (node.type !== 'Identifier') return false
+	const variable = variableFor(context, node)
+	if (
+		Predicate.isUndefined(variable) ||
+		Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+	) {
+		return false
+	}
+	const definition = variable.defs[0]
+	const declaration = Predicate.isNotUndefined(definition) ? definitionVariableDeclarator(definition) : undefined
+	return (
+		declaration?.id.type === 'ObjectPattern' &&
+		declaration.init?.type === 'Identifier' &&
+		importedBinding(context, declaration.init, 'react', 'React', true) &&
+		Array.some(
+			declaration.id.properties,
+			property =>
+				property.type === 'Property' &&
+				property.key.type === 'Identifier' &&
+				property.key.name === hook &&
+				property.value.type === 'Identifier' &&
+				property.value.name === variable.name
+		)
+	)
+}
+
+function directEffectCall(
+	context: Context,
+	node: ESTree.Expression | undefined,
+	aliases?: ReadonlySet<Variable>,
+	methods?: ReadonlySet<Variable>
+) {
+	if (Predicate.isUndefined(node)) return false
+	const expression = unwrapExpression(node)
+	if (expression.type !== 'CallExpression') return false
+	if (
+		expression.callee.type === 'MemberExpression' &&
+		memberName(expression.callee) === 'pipe' &&
+		expression.callee.object.type !== 'Super'
+	) {
+		if (Array.some(expression.arguments, argument => effectTerminal(context, argument))) return false
+		return directEffectCall(context, expression.callee.object, aliases, methods)
+	}
+	if (
+		expression.callee.type !== 'Super' &&
+		importedFunction(context, expression.callee, 'effect', 'pipe') &&
+		expression.arguments[0]?.type !== 'SpreadElement'
+	) {
+		if (Array.some(expression.arguments, (argument, index) => index > 0 && effectTerminal(context, argument))) {
+			return false
+		}
+		return directEffectCall(context, expression.arguments[0], aliases, methods)
+	}
+	const effectObject = expression.callee.type === 'MemberExpression' ? expression.callee.object : undefined
+	const aliasVariable = effectObject?.type === 'Identifier' ? variableFor(context, effectObject) : undefined
+	const methodVariable = expression.callee.type === 'Identifier' ? variableFor(context, expression.callee) : undefined
+	if (expression.callee.type === 'Super') return false
+	const methodName = importedMethodName(context, expression.callee, 'effect', 'Effect')
+	const inferredMethodName =
+		methodName ?? (expression.callee.type === 'MemberExpression' ? memberName(expression.callee) : undefined)
+	return (
+		(Predicate.isNotUndefined(methodName) ||
+			(Predicate.isNotUndefined(methodVariable) && Predicate.isNotUndefined(methods) && methods.has(methodVariable)) ||
+			(Predicate.isNotUndefined(aliasVariable) && Predicate.isNotUndefined(aliases) && aliases.has(aliasVariable))) &&
+		Predicate.isNotUndefined(inferredMethodName) &&
+		Array.contains(effectValueMethods, inferredMethodName)
+	)
+}
+
+function atomFamilyCallback(context: Context, node: FunctionNode) {
+	return (
+		node.parent.type === 'CallExpression' &&
+		importedMethod(context, node.parent.callee, 'effect/unstable/reactivity', 'Atom', 'family')
+	)
+}
+
+const hasTypeAnnotation = (node: ESTree.ParamPattern): boolean =>
+	(Predicate.hasProperty(node, 'typeAnnotation') && Predicate.isNotNullish(node.typeAnnotation)) ||
+	(node.type === 'AssignmentPattern' && hasTypeAnnotation(node.left))
+
+function isUndefinedType(node: ESTree.TSType): boolean {
+	if (node.type === 'TSUndefinedKeyword') return true
+	if (node.type === 'TSUnionType') return Array.some(node.types, isUndefinedType)
+	if (node.type === 'TSParenthesizedType') return isUndefinedType(node.typeAnnotation)
+	return false
+}
+
+function isGlobalMutableCollection(context: Context, node: ESTree.NewExpression) {
+	return (
+		node.callee.type === 'Identifier' &&
+		Array.contains(mutableCollections, node.callee.name) &&
+		context.sourceCode.isGlobalReference(node.callee)
+	)
+}
+
+function unwrapExpression(node: ESTree.Expression): ESTree.Expression {
+	if (
+		node.type === 'ParenthesizedExpression' ||
+		node.type === 'TSAsExpression' ||
+		node.type === 'TSNonNullExpression' ||
+		node.type === 'TSSatisfiesExpression' ||
+		node.type === 'TSTypeAssertion'
+	) {
+		return unwrapExpression(node.expression)
+	}
+	return node
+}
+
+function receiverKind(context: Context, node: ESTree.Expression): 'array' | 'string' | undefined {
+	const expression = unwrapExpression(node)
+	if (expression !== node) return receiverKind(context, expression)
+	if (node.type === 'ArrayExpression') return 'array'
+	if (node.type === 'TemplateLiteral' || (node.type === 'Literal' && Predicate.isString(node.value))) return 'string'
+	if (node.type !== 'Identifier') return undefined
+	const variable = variableFor(context, node)
+	if (Array.some(variable?.references ?? [], reference => reference.isWrite() && !reference.init)) return undefined
+	const firstDefinition = variable?.defs[0]
+	const definition = Predicate.isNotUndefined(firstDefinition)
+		? definitionVariableDeclarator(firstDefinition)
+		: undefined
+	if (definition?.type !== 'VariableDeclarator' || Predicate.isNull(definition.init)) return undefined
+	if (definition.id.type === 'ObjectPattern' && definition.init.type === 'ObjectExpression') {
+		const binding = Array.findFirst(
+			definition.id.properties,
+			property =>
+				property.type === 'Property' && property.value.type === 'Identifier' && property.value.name === node.name
+		)
+		if (binding._tag === 'Some' && binding.value.type === 'Property') {
+			const key = binding.value.key
+			const value = Array.findFirst(
+				definition.init.properties,
+				property =>
+					property.type === 'Property' &&
+					property.key.type === key.type &&
+					((property.key.type === 'Identifier' && key.type === 'Identifier' && property.key.name === key.name) ||
+						(property.key.type === 'Literal' && key.type === 'Literal' && property.key.value === key.value))
+			)
+			if (value._tag === 'Some' && value.value.type === 'Property') return receiverKind(context, value.value.value)
+		}
+	}
+	return receiverKind(context, definition.init)
+}
+
+function nativePrototypeCall(context: Context, node: ESTree.CallExpression) {
+	if (node.callee.type !== 'MemberExpression') return false
+	const method = memberName(node.callee)
+	if (Predicate.isUndefined(method) || node.callee.object.type === 'Super') return false
+	const kind = receiverKind(context, node.callee.object)
+	return kind === 'array'
+		? Array.contains(arrayMethods, method)
+		: kind === 'string' && Array.contains(stringMethods, method)
+}
+
+const isNullish = (context: Context, node: ESTree.Expression) =>
+	(node.type === 'Literal' && Predicate.isNull(node.value)) ||
+	(node.type === 'UnaryExpression' && node.operator === 'void') ||
+	(node.type === 'Identifier' && node.name === 'undefined' && context.sourceCode.isGlobalReference(node))
+
+const comparisonOperator = (operator: string) =>
+	operator === '===' || operator === '!==' || operator === '==' || operator === '!='
+
+function schemaDecoderFactory(context: Context, node: ESTree.Expression) {
+	const callee = node.type === 'CallExpression' ? node.callee : node
+	return (
+		callee.type !== 'Super' &&
+		Array.some(schemaDecoderMethods, method => importedMethod(context, callee, 'effect', 'Schema', method))
+	)
+}
+
+function schemaExpression(context: Context, node: ESTree.Expression): boolean {
+	if (schemaDecoderFactory(context, node)) return false
+	if (node.type === 'Identifier') {
+		const variable = variableFor(context, node)
+		if (
+			Predicate.isNotUndefined(variable) &&
+			!Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+		) {
+			const definition = variable.defs[0]
+			const declaration = Predicate.isNotUndefined(definition) ? definitionVariableDeclarator(definition) : undefined
+			if (
+				declaration?.id.type === 'ObjectPattern' &&
+				Predicate.isNotNull(declaration.init) &&
+				importedObject(context, declaration.init, 'effect', 'Schema') &&
+				Array.some(
+					declaration.id.properties,
+					property =>
+						property.type === 'Property' && property.value.type === 'Identifier' && property.value.name === node.name
+				)
+			) {
+				const property = Array.findFirst(
+					declaration.id.properties,
+					item => item.type === 'Property' && item.value.type === 'Identifier' && item.value.name === node.name
+				)
+				return property._tag === 'Some' &&
+					property.value.type === 'Property' &&
+					property.value.key.type === 'Identifier'
+					? /^[A-Z]/u.test(property.value.key.name) &&
+							property.value.key.name !== 'Class' &&
+							property.value.key.name !== 'TaggedClass'
+					: false
+			}
+			if (
+				Predicate.isNotUndefined(declaration) &&
+				Predicate.isNotNull(declaration.init) &&
+				!(declaration.init.type === 'Identifier' && declaration.init.name === node.name) &&
+				schemaExpression(context, declaration.init)
+			) {
+				return true
+			}
+		}
+	}
+	const firstArgument = node.type === 'CallExpression' ? node.arguments[0] : undefined
+	if (
+		node.type === 'CallExpression' &&
+		node.callee.type !== 'Super' &&
+		importedFunction(context, node.callee, 'effect', 'pipe') &&
+		Predicate.isNotUndefined(firstArgument) &&
+		firstArgument.type !== 'SpreadElement'
+	) {
+		if (
+			Array.some(
+				node.arguments,
+				(argument, index) => index > 0 && argument.type !== 'SpreadElement' && schemaDecoderFactory(context, argument)
+			)
+		) {
+			return false
+		}
+		return schemaExpression(context, firstArgument)
+	}
+	if (
+		node.type === 'MemberExpression' &&
+		node.object.type !== 'Super' &&
+		importedObject(context, node.object, 'effect', 'Schema')
+	) {
+		const property = memberName(node)
+		return (
+			Predicate.isNotUndefined(property) &&
+			((/^[A-Z]/u.test(property) && property !== 'Class' && property !== 'TaggedClass') ||
+				property === 'declare' ||
+				property === 'suspend' ||
+				property === 'transform')
+		)
+	}
+	if (node.type === 'MemberExpression' && node.object.type !== 'Super') {
+		return (memberName(node) === 'pipe' || memberName(node) === 'annotate') && schemaExpression(context, node.object)
+	}
+	if (
+		node.type === 'CallExpression' &&
+		node.callee.type === 'MemberExpression' &&
+		memberName(node.callee) === 'pipe' &&
+		Array.some(node.arguments, argument => argument.type !== 'SpreadElement' && schemaDecoderFactory(context, argument))
+	) {
+		return false
+	}
+	return node.type === 'CallExpression' && node.callee.type !== 'Super' && schemaExpression(context, node.callee)
+}
+
+const statementDeclarations = (statement: ESTree.Statement) => {
 	if (statement.type === 'VariableDeclaration') return statement.declarations
 	if (statement.type === 'ExportNamedDeclaration' && statement.declaration?.type === 'VariableDeclaration') {
 		return statement.declaration.declarations
@@ -583,10 +603,28 @@ const statementVariableDeclarations = (statement: ESTree.Statement) => {
 	return []
 }
 
-const isSchemaModule = (path: string) =>
-	/(?:^|\/)schema\.ts$/u.test(path) || /(?:^|\/)oxlint-plugin\.test\.ts$/u.test(path)
+const schemaTypeName = (statement: ESTree.Statement) => {
+	let declaration: ESTree.TSTypeAliasDeclaration | undefined
+	if (statement.type === 'ExportNamedDeclaration' && statement.declaration?.type === 'TSTypeAliasDeclaration') {
+		declaration = statement.declaration
+	} else if (statement.type === 'TSTypeAliasDeclaration') {
+		declaration = statement
+	}
+	if (
+		declaration?.typeAnnotation.type === 'TSTypeQuery' &&
+		declaration.typeAnnotation.exprName.type === 'TSQualifiedName' &&
+		declaration.typeAnnotation.exprName.left.type === 'Identifier' &&
+		declaration.typeAnnotation.exprName.left.name === declaration.id.name &&
+		declaration.typeAnnotation.exprName.right.name === 'Type'
+	) {
+		return {exported: statement.type === 'ExportNamedDeclaration', name: declaration.id.name}
+	}
+	return void 0
+}
 
-const hasRawTagProperty = (node: ESTree.ObjectExpression) =>
+const isSchemaModule = (filename: string) => /(?:^|\/)(?:[^/]+\.)?schema\.ts$/u.test(filename)
+
+const rawTag = (node: ESTree.ObjectExpression) =>
 	Array.some(
 		node.properties,
 		property =>
@@ -598,159 +636,163 @@ const hasRawTagProperty = (node: ESTree.ObjectExpression) =>
 			Predicate.isString(property.value.value)
 	)
 
-const isMutableModuleStateInit = (node: ESTree.Expression) =>
-	node.type === 'ObjectExpression' ||
-	(node.type === 'NewExpression' &&
-		node.callee.type === 'Identifier' &&
-		(node.callee.name === 'Map' ||
-			node.callee.name === 'Set' ||
-			node.callee.name === 'WeakMap' ||
-			node.callee.name === 'WeakSet'))
+function insideTaggedConstruction(context: Context, node: ESTree.ObjectExpression) {
+	let crossedFunction = false
+	for (let parent = node.parent; parent.type !== 'Program'; parent = parent.parent) {
+		if (
+			parent.type === 'ArrowFunctionExpression' ||
+			parent.type === 'FunctionDeclaration' ||
+			parent.type === 'FunctionExpression'
+		) {
+			crossedFunction = true
+		}
+		if (
+			parent.type === 'CallExpression' &&
+			parent.callee.type === 'MemberExpression' &&
+			parent.callee.object.type !== 'Super' &&
+			importedObject(context, parent.callee.object, 'effect', 'Schema') &&
+			(memberName(parent.callee) === 'Struct' ||
+				memberName(parent.callee) === 'TaggedStruct' ||
+				memberName(parent.callee) === 'TaggedError') &&
+			!crossedFunction
+		) {
+			return true
+		}
+		if (
+			parent.type === 'CallExpression' &&
+			parent.callee.type !== 'Super' &&
+			(importedMethod(context, parent.callee, 'effect', 'Match', 'when') ||
+				importedMethod(context, parent.callee, 'effect', 'Match', 'not'))
+		) {
+			const pattern = parent.arguments[0]
+			return Predicate.isNotUndefined(pattern) && pattern.start <= node.start && pattern.end >= node.end
+		}
+		if (parent.type.endsWith('Statement') || parent.type.endsWith('Declaration')) return false
+	}
+	return false
+}
 
-const isMutatedModuleState = (context: Context, name: string) =>
-	new RegExp(`\\b${name}\\.[A-Za-z_$][\\w$]*\\s*=|\\b${name}\\.(?:add|clear|delete|set)\\s*\\(`, 'u').test(
-		context.sourceCode.text
-	)
-
-const comparedExpressionSource = (context: Context, node: ESTree.Expression) =>
-	node.type === 'BinaryExpression' &&
-	(node.operator === '===' || node.operator === '!==') &&
-	node.right.type === 'Literal'
-		? pipe(context.sourceCode.text, String.slice(node.left.start, node.left.end))
-		: undefined
-
-const hasSameDiscriminantElseIf = (context: Context, node: ESTree.IfStatement) => {
-	const source = comparedExpressionSource(context, node.test)
+const effectMemberCall = (context: Context, node: ESTree.Expression, member: string) => {
+	const expression = unwrapExpression(node)
 	return (
-		Predicate.isNotUndefined(source) &&
-		node.alternate?.type === 'IfStatement' &&
-		comparedExpressionSource(context, node.alternate.test) === source
+		expression.type === 'CallExpression' &&
+		expression.callee.type !== 'Super' &&
+		importedMethod(context, expression.callee, 'effect', 'Effect', member)
 	)
 }
 
-const hasSameDiscriminantNextIf = (context: Context, left: ESTree.Statement, right: ESTree.Statement | undefined) =>
-	left.type === 'IfStatement' &&
-	right?.type === 'IfStatement' &&
-	Predicate.isNotUndefined(comparedExpressionSource(context, left.test)) &&
-	comparedExpressionSource(context, left.test) === comparedExpressionSource(context, right.test)
+const effectFnCallback = (context: Context, node: ESTree.CallExpression) => {
+	if (effectMemberCall(context, node, 'fn')) return node.arguments[0]
+	if (node.callee.type === 'CallExpression' && effectMemberCall(context, node.callee, 'fn')) return node.arguments[0]
+	return void 0
+}
 
-const isModuleAugmentationExport = (node: ESTree.ExportNamedDeclaration) =>
-	node.parent.type === 'TSModuleBlock' &&
-	Predicate.hasProperty(node.parent.parent, 'id') &&
-	Predicate.hasProperty(node.parent.parent.id, 'type') &&
-	node.parent.parent.id.type === 'Literal'
+const isFunctionExpression = (
+	node: ESTree.Expression | ESTree.SpreadElement | null | undefined
+): node is ESTree.ArrowFunctionExpression | ESTree.Function =>
+	node?.type === 'ArrowFunctionExpression' || node?.type === 'FunctionExpression'
+
+const directGenWrapper = (context: Context, node: FunctionNode) => {
+	const body = directReturnedExpression(node)
+	return node.params.length === 0 && Predicate.isNotUndefined(body) && effectMemberCall(context, body, 'gen')
+}
+
+function topLevelVariable(node: ESTree.VariableDeclarator) {
+	const declaration = node.parent
+	return (
+		declaration.type === 'VariableDeclaration' &&
+		(declaration.parent.type === 'Program' ||
+			(declaration.parent.type === 'ExportNamedDeclaration' && declaration.parent.parent.type === 'Program'))
+	)
+}
+
+const mutableInitializer = (node: ESTree.Expression) => {
+	const expression = unwrapExpression(node)
+	return expression.type === 'ObjectExpression' || expression.type === 'ArrayExpression'
+}
+
+function methodMutableInitializer(context: Context, node: ESTree.Expression): boolean {
+	const expression = unwrapExpression(node)
+	if (expression !== node) return methodMutableInitializer(context, expression)
+	if (node.type === 'ArrayExpression') return true
+	if (node.type === 'NewExpression') return isGlobalMutableCollection(context, node)
+	return (
+		node.type === 'ObjectExpression' &&
+		Array.some(
+			node.properties,
+			property => property.type === 'Property' && methodMutableInitializer(context, property.value)
+		)
+	)
+}
+
+function rootIdentifier(node: ESTree.Expression | ESTree.AssignmentTarget) {
+	let current = node
+	while (current.type === 'MemberExpression' && current.object.type !== 'Super') current = current.object
+	return current.type === 'Identifier' ? current : undefined
+}
+
+const comparedSource = (context: Context, node: ESTree.Expression) => {
+	if (
+		node.type !== 'BinaryExpression' ||
+		!(node.operator === '===' || node.operator === '!==') ||
+		(node.left.type !== 'Literal' && node.right.type !== 'Literal')
+	) {
+		return void 0
+	}
+	const discriminant = node.left.type === 'Literal' ? node.right : node.left
+	if (!stableDiscriminant(discriminant)) return void 0
+	return pipe(context.sourceCode.text, String.slice(discriminant.start, discriminant.end))
+}
+
+function stableDiscriminant(node: ESTree.Expression): boolean {
+	return (
+		node.type === 'Identifier' ||
+		(node.type === 'MemberExpression' && node.object.type !== 'Super' && stableDiscriminant(node.object))
+	)
+}
+
+const outerDiscriminantChain = (context: Context, node: ESTree.IfStatement) => {
+	if (node.parent.type === 'IfStatement' && node.parent.alternate === node) return false
+	const source = comparedSource(context, node.test)
+	if (Predicate.isUndefined(source)) return false
+	let alternate = node.alternate
+	let repeats = 0
+	while (alternate?.type === 'IfStatement') {
+		if (comparedSource(context, alternate.test) !== source) return false
+		repeats += 1
+		alternate = alternate.alternate
+	}
+	return repeats > 0
+}
 
 export default definePlugin({
 	meta: {name: '@deslop/oxlint-rules'},
 	rules: {
-		'no-access-alias': {
-			create: context => ({
-				VariableDeclarator: node => {
-					if (
-						node.id.type === 'Identifier' &&
-						Predicate.isNotNull(node.init) &&
-						((node.init.type === 'MemberExpression' && (!node.init.computed || isComputedStringAccess(node.init))) ||
-							(node.init.type === 'ChainExpression' &&
-								node.init.expression.type === 'MemberExpression' &&
-								(!node.init.expression.computed || isComputedStringAccess(node.init.expression))))
-					) {
-						context.report({message: 'Inline access alias.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline access alias.'}, type: 'problem'}
-		},
-		'no-access-helper': {
-			create: context => ({
-				FunctionDeclaration: node => {
-					if (isAccessHelperBody(node.body)) {
-						context.report({message: 'Inline access helper.', node})
-					}
-				},
-				FunctionExpression: node => {
-					if (isAccessHelperBody(node.body)) {
-						context.report({message: 'Inline access helper.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline access helper.'}, type: 'problem'}
-		},
 		'no-atom-family-inferred-arg': {
 			create: context => ({
 				ArrowFunctionExpression: node => {
-					if (isAtomFamilyCallback(node)) {
-						for (const parameter of node.params) {
-							if (!hasParameterTypeAnnotation(parameter)) {
-								context.report({message: 'Type Atom.family argument.', node: parameter})
-							}
-						}
+					if (!atomFamilyCallback(context, node)) return
+					for (const parameter of node.params) {
+						if (!hasTypeAnnotation(parameter)) context.report({message: 'Type Atom.family argument.', node: parameter})
 					}
 				},
 				FunctionExpression: node => {
-					if (isAtomFamilyCallback(node)) {
-						for (const parameter of node.params) {
-							if (!hasParameterTypeAnnotation(parameter)) {
-								context.report({message: 'Type Atom.family argument.', node: parameter})
-							}
-						}
+					if (!atomFamilyCallback(context, node)) return
+					for (const parameter of node.params) {
+						if (!hasTypeAnnotation(parameter)) context.report({message: 'Type Atom.family argument.', node: parameter})
 					}
 				}
 			}),
 			meta: {messages: {default: 'Type Atom.family argument.'}, type: 'problem'}
 		},
-		'no-composed-identity-key': {
-			create: context => ({
-				ExportNamedDeclaration: node => {
-					if (node.declaration?.type === 'VariableDeclaration') {
-						for (const declaration of node.declaration.declarations) {
-							if (declaration.init?.type === 'TemplateLiteral' || declaration.init?.type === 'BinaryExpression') {
-								context.report({message: 'Use structured identity.', node: declaration})
-							}
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use structured identity.'}, type: 'problem'}
-		},
-		'no-condition-alias': {
-			create: context => ({
-				VariableDeclarator: node => {
-					if (node.id.type === 'Identifier' && Predicate.isNotNull(node.init) && reportsConditionAlias(node.init)) {
-						context.report({message: 'Inline condition alias.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline condition alias.'}, type: 'problem'}
-		},
-		'no-data-class': {
-			create: context => ({
-				CallExpression: node => {
-					if (isDataConstructorCall(node)) {
-						context.report({message: 'Use schema-backed data constructors.', node})
-					}
-				},
-				ClassDeclaration: node => {
-					if (Predicate.isNotNull(node.superClass) && isDataConstructorExpression(node.superClass)) {
-						context.report({message: 'Use schema-backed data constructors.', node})
-					}
-				},
-				ClassExpression: node => {
-					if (Predicate.isNotNull(node.superClass) && isDataConstructorExpression(node.superClass)) {
-						context.report({message: 'Use schema-backed data constructors.', node})
-					}
-				},
-				TSInstantiationExpression: node => {
-					if (isDataConstructorExpression(node)) {
-						context.report({message: 'Use schema-backed data constructors.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use schema-backed data constructors.'}, type: 'problem'}
-		},
 		'no-declare-module-export': {
 			create: context => ({
 				ExportNamedDeclaration: node => {
-					if (isModuleAugmentationExport(node)) {
+					if (
+						node.parent.type === 'TSModuleBlock' &&
+						node.parent.parent.type === 'TSModuleDeclaration' &&
+						node.parent.parent.id.type === 'Literal'
+					) {
 						context.report({message: 'Keep module augmentation declarations local.', node})
 					}
 				}
@@ -758,302 +800,450 @@ export default definePlugin({
 			meta: {messages: {default: 'Keep module augmentation declarations local.'}, type: 'problem'}
 		},
 		'no-effect-returning-function': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
+			create: context => {
+				const destructuredAliases = new Set<Variable>()
+				const destructuredMethods = new Set<Variable>()
+				const check = (node: FunctionNode) => {
 					if (
-						!isCallArgument(node) &&
-						!isAtomFamilyCallback(node) &&
-						Predicate.isNotNull(node.parent) &&
+						!node.async &&
+						!node.generator &&
 						node.params.length > 0 &&
-						isEffectReturningBody(node.body)
+						!isCallArgument(node) &&
+						!atomFamilyCallback(context, node) &&
+						directEffectCall(context, directReturnedExpression(node), destructuredAliases, destructuredMethods)
 					) {
 						context.report({message: 'Use Effect.fn for functions returning Effect.', node})
 					}
-				},
-				FunctionDeclaration: node => {
-					if (node.params.length > 0 && isEffectReturningBody(node.body)) {
-						context.report({message: 'Use Effect.fn for functions returning Effect.', node})
-					}
-				},
-				FunctionExpression: node => {
-					if (!isCallArgument(node) && node.params.length > 0 && isEffectReturningBody(node.body)) {
-						context.report({message: 'Use Effect.fn for functions returning Effect.', node})
+				}
+				return {
+					ArrowFunctionExpression: check,
+					FunctionDeclaration: check,
+					FunctionExpression: check,
+					VariableDeclarator: node => {
+						if (
+							node.id.type === 'ObjectPattern' &&
+							Predicate.isNotNull(node.init) &&
+							importedObject(context, node.init, 'effect', 'Effect')
+						) {
+							for (const property of node.id.properties) {
+								if (
+									property.type !== 'Property' ||
+									property.key.type !== 'Identifier' ||
+									String.startsWith('run')(property.key.name) ||
+									property.value.type !== 'Identifier'
+								) {
+									continue
+								}
+								for (const variable of context.sourceCode.getDeclaredVariables(node)) {
+									if (
+										variable.name === property.value.name &&
+										!Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+									) {
+										destructuredMethods.add(variable)
+									}
+								}
+							}
+						}
+						if (
+							node.id.type !== 'ObjectPattern' ||
+							node.init?.type !== 'Identifier' ||
+							!importedBinding(context, node.init, 'effect', 'Effect', true)
+						) {
+							return
+						}
+						for (const property of node.id.properties) {
+							if (
+								property.type !== 'Property' ||
+								property.key.type !== 'Identifier' ||
+								property.key.name !== 'Effect' ||
+								property.value.type !== 'Identifier'
+							) {
+								continue
+							}
+							for (const variable of context.sourceCode.getDeclaredVariables(node)) {
+								if (variable.name === property.value.name) destructuredAliases.add(variable)
+							}
+						}
 					}
 				}
-			}),
+			},
 			meta: {messages: {default: 'Use Effect.fn for functions returning Effect.'}, type: 'problem'}
-		},
-		'no-effect-run-entrypoint': {
-			create: context => ({
-				CallExpression: node => {
-					if (isEffectRunCall(node)) {
-						context.report({message: 'Use runtime or atom entrypoints.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use runtime or atom entrypoints.'}, type: 'problem'}
-		},
-		'no-exported-local-type': {
-			create: context => ({
-				ExportNamedDeclaration: node => {
-					if (
-						(node.declaration?.type === 'TSInterfaceDeclaration' ||
-							node.declaration?.type === 'TSTypeAliasDeclaration') &&
-						node.parent.type !== 'TSModuleBlock' &&
-						(node.declaration.type !== 'TSTypeAliasDeclaration' || !isSchemaTypeAlias(node.declaration)) &&
-						!isPublicHandleName(node.declaration.id.name) &&
-						!isBoundaryTypeName(node.declaration.id.name)
-					) {
-						context.report({message: 'Keep local implementation types private.', node: node.declaration})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Keep local implementation types private.'}, type: 'problem'}
 		},
 		'no-fake-ref-state': {
 			create: context => ({
 				CallExpression: node => {
-					if (isUseStateCall(node) && isFakeRefStateInitializer(node.arguments[0])) {
+					const useState = node.callee.type !== 'Super' && reactHook(context, node.callee, 'useState')
+					const initializer = node.arguments[0]
+					if (!useState || !isFunctionExpression(initializer)) return
+					const value = directReturnedExpression(initializer)
+					if (
+						value?.type === 'ObjectExpression' &&
+						value.properties.length === 1 &&
+						value.properties[0]?.type === 'Property' &&
+						!value.properties[0].computed &&
+						((value.properties[0].key.type === 'Identifier' && value.properties[0].key.name === 'current') ||
+							(value.properties[0].key.type === 'Literal' && value.properties[0].key.value === 'current'))
+					) {
 						context.report({message: 'Use a real ref or the lazy ref/value pattern.', node})
 					}
 				}
 			}),
 			meta: {messages: {default: 'Use a real ref or the lazy ref/value pattern.'}, type: 'problem'}
 		},
-		'no-floating-local-type': {
-			create: context => ({
-				TSInterfaceDeclaration: node => {
-					reportFloatingLocalType(context, node)
-				},
-				TSTypeAliasDeclaration: node => {
-					reportFloatingLocalType(context, node)
-				}
-			}),
-			meta: {
-				messages: {
-					default:
-						'Inline local implementation type; keep a named type only for public boundaries or multiple real consumers.'
-				},
-				type: 'problem'
-			}
-		},
-		'no-function-return-type': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (Predicate.isNotNullish(node.returnType)) {
-						context.report({message: 'Infer function return type.', node})
-					}
-				},
-				FunctionDeclaration: node => {
-					if (Predicate.isNotNullish(node.returnType) && !isNamedFunctionRecursive(context, node)) {
-						context.report({message: 'Infer function return type.', node})
-					}
-				},
-				FunctionExpression: node => {
-					if (Predicate.isNotNullish(node.returnType)) {
-						context.report({message: 'Infer function return type.', node})
-					}
-				},
-				MethodDefinition: node => {
-					if (Predicate.isNotNullish(node.value.returnType)) {
-						context.report({message: 'Infer function return type.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Infer function return type.'}, type: 'problem'}
-		},
-		'no-generic-state-patch': {
-			create: context => ({
-				FunctionDeclaration: node => {
-					if (isGenericStatePatchFunction(context, node)) {
-						context.report({message: 'Use inline functional state updates.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use inline functional state updates.'}, type: 'problem'}
-		},
-		'no-identity-callback': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (
-						isCallArgument(node) &&
-						node.params[0]?.type === 'Identifier' &&
-						node.params.length === 1 &&
-						node.body.type === 'Identifier' &&
-						node.body.name === node.params[0].name
-					) {
-						context.report({message: 'Use Function.identity.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Function.identity.'}, type: 'problem'}
-		},
-		'no-iife': {
-			create: context => ({
-				CallExpression: node => {
-					if (isIifeCallee(node.callee)) {
-						context.report({message: 'Use direct expressions.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use direct expressions.'}, type: 'problem'}
-		},
-		'no-import-alias': {
-			create: context => ({
-				ImportSpecifier: node => {
-					if (node.imported.type === 'Identifier' && node.imported.name !== node.local.name) {
-						context.report({message: 'Use imported names directly.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use imported names directly.'}, type: 'problem'}
-		},
-		'no-json-global': {
-			create: context => ({
-				CallExpression: node => {
-					if (
-						node.callee.type === 'MemberExpression' &&
-						!node.callee.computed &&
-						node.callee.object.type === 'Identifier' &&
-						node.callee.object.name === 'JSON' &&
-						node.callee.property.type === 'Identifier' &&
-						(node.callee.property.name === 'parse' || node.callee.property.name === 'stringify')
-					) {
-						context.report({message: 'Use Schema JSON decoding/encoding.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Schema JSON decoding/encoding.'}, type: 'problem'}
-		},
-		'no-let': {
-			create: context => ({
-				VariableDeclaration: node => {
-					if (node.kind === 'let') {
-						context.report({message: 'Use expression-oriented values.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use expression-oriented values.'}, type: 'problem'}
-		},
-		'no-local-mutable-holder': {
-			create: context => ({
-				VariableDeclarator: node => {
-					if (isMutableHolderDeclaration(context, node)) {
-						context.report({message: 'Use direct local state.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use direct local state.'}, type: 'problem'}
-		},
 		'no-module-mutable-state': {
-			createOnce: context => ({
-				Program: node => {
-					for (const statement of node.body) {
-						if (statement.type !== 'VariableDeclaration') continue
-						for (const declaration of statement.declarations) {
-							if (
-								declaration.id.type === 'Identifier' &&
-								Predicate.isNotNull(declaration.init) &&
-								isMutableModuleStateInit(declaration.init) &&
-								isMutatedModuleState(context, declaration.id.name)
-							) {
-								context.report({message: 'Keep mutable state inside a runtime owner.', node: declaration})
+			create: context => {
+				const aliases = new Map<Variable, {readonly nested: boolean; readonly target: Variable}>()
+				const candidates = new Map<
+					Variable,
+					{readonly array: boolean; readonly nestedMutable: boolean; readonly node: ESTree.VariableDeclarator}
+				>()
+				const methodMutatedDirect = new Set<Variable>()
+				const methodMutatedNested = new Set<Variable>()
+				const mutated = new Set<Variable>()
+				const aliasFor = (variable: Variable) => {
+					const definition = variable.defs[0]
+					const declaration = Predicate.isNotUndefined(definition)
+						? definitionVariableDeclarator(definition)
+						: undefined
+					if (declaration?.id.type !== 'ObjectPattern' || declaration.init?.type !== 'Identifier') {
+						return aliases.get(variable)
+					}
+					const target = variableFor(context, declaration.init)
+					return Predicate.isNotUndefined(target) ? {nested: true, target} : aliases.get(variable)
+				}
+				const aliasIsNested = (variable: Variable) => {
+					const visited = new Set<Variable>()
+					let current = variable
+					while (Predicate.isNotUndefined(aliasFor(current)) && !visited.has(current)) {
+						visited.add(current)
+						const alias = aliasFor(current)
+						if (alias?.nested === true) return true
+						current = alias?.target ?? current
+					}
+					return false
+				}
+				const initializerFor = (
+					expression: ESTree.Expression,
+					seen = new Set<Variable>()
+				): ESTree.Expression | undefined => {
+					const unwrapped = unwrapExpression(expression)
+					if (unwrapped.type === 'Identifier') {
+						const variable = variableFor(context, unwrapped)
+						if (Predicate.isUndefined(variable) || seen.has(variable)) return
+						seen.add(variable)
+						const definition = variable.defs[0]
+						const declaration = Predicate.isNotUndefined(definition)
+							? definitionVariableDeclarator(definition)
+							: undefined
+						if (
+							declaration?.id.type === 'ObjectPattern' &&
+							(declaration.init?.type === 'Identifier' || declaration.init?.type === 'MemberExpression')
+						) {
+							const property = Array.findFirst(
+								declaration.id.properties,
+								item =>
+									item.type === 'Property' && item.value.type === 'Identifier' && item.value.name === unwrapped.name
+							)
+							const source = initializerFor(declaration.init, seen)
+							if (property._tag === 'Some' && source?.type === 'ObjectExpression') {
+								const key =
+									property.value.type === 'Property' && property.value.key.type === 'Identifier'
+										? property.value.key.name
+										: undefined
+								const value = Array.findFirst(source.properties, item => objectPropertyName(item) === key)
+								if (value._tag === 'Some' && value.value.type === 'Property') return value.value.value
 							}
+						}
+						return Predicate.isNotNullish(declaration?.init) ? initializerFor(declaration.init, seen) : undefined
+					}
+					if (unwrapped.type === 'MemberExpression' && unwrapped.object.type !== 'Super') {
+						const source = initializerFor(unwrapped.object, seen)
+						if (source?.type !== 'ObjectExpression') return
+						const property = memberName(unwrapped)
+						const value = Array.findFirst(source.properties, item => objectPropertyName(item) === property)
+						if (value._tag === 'Some' && value.value.type === 'Property') return value.value.value
+						return
+					}
+					return unwrapped
+				}
+				const mutableMethodReceiver = (expression: ESTree.Expression) => {
+					const initializer = initializerFor(expression)
+					if (Predicate.isUndefined(initializer)) return false
+					const unwrapped = unwrapExpression(initializer)
+					return (
+						unwrapped.type === 'ArrayExpression' ||
+						(unwrapped.type === 'NewExpression' && isGlobalMutableCollection(context, unwrapped))
+					)
+				}
+				const mark = (expression: ESTree.Expression | ESTree.AssignmentTarget, method = false) => {
+					const root = rootIdentifier(expression)
+					if (Predicate.isUndefined(root)) return
+					const variable = variableFor(context, root)
+					if (Predicate.isUndefined(variable)) return
+					if (!method) mutated.add(variable)
+					else if (expression.type === 'MemberExpression' || aliasIsNested(variable)) methodMutatedNested.add(variable)
+					else methodMutatedDirect.add(variable)
+				}
+				const aliasRoot = (variable: Variable) => {
+					const visited = new Set<Variable>()
+					let current = variable
+					while (Predicate.isNotUndefined(aliasFor(current)) && !visited.has(current)) {
+						visited.add(current)
+						current = aliasFor(current)?.target ?? current
+					}
+					return current
+				}
+				return {
+					AssignmentExpression: node => {
+						mark(node.left)
+					},
+					CallExpression: node => {
+						if (
+							node.callee.type === 'MemberExpression' &&
+							Array.contains(mutatingMethods, memberName(node.callee) ?? '') &&
+							node.callee.object.type !== 'Super' &&
+							mutableMethodReceiver(node.callee.object)
+						) {
+							mark(node.callee.object, true)
+						}
+						if (
+							node.callee.type === 'MemberExpression' &&
+							node.callee.object.type === 'Identifier' &&
+							node.callee.object.name === 'Object' &&
+							context.sourceCode.isGlobalReference(node.callee.object) &&
+							(memberName(node.callee) === 'assign' || memberName(node.callee) === 'defineProperty')
+						) {
+							const target = node.arguments[0]
+							if (Predicate.isNotUndefined(target) && target.type !== 'SpreadElement') mark(target)
+						}
+					},
+					'Program:exit': () => {
+						for (const [variable, candidate] of candidates) {
+							if (
+								Array.some([...mutated], mutation => aliasRoot(mutation) === variable) ||
+								(candidate.array &&
+									Array.some([...methodMutatedDirect], mutation => aliasRoot(mutation) === variable)) ||
+								(candidate.nestedMutable &&
+									Array.some([...methodMutatedNested], mutation => aliasRoot(mutation) === variable))
+							) {
+								context.report({message: 'Keep mutable state inside a runtime owner.', node: candidate.node})
+							}
+						}
+					},
+					UnaryExpression: node => {
+						if (node.operator === 'delete') mark(node.argument)
+					},
+					UpdateExpression: node => {
+						mark(node.argument)
+					},
+					VariableDeclarator: node => {
+						const variable = context.sourceCode.getDeclaredVariables(node)[0]
+						if (
+							node.id.type === 'ObjectPattern' &&
+							(node.init?.type === 'Identifier' || node.init?.type === 'MemberExpression')
+						) {
+							const root = rootIdentifier(node.init)
+							const target = Predicate.isNotUndefined(root) ? variableFor(context, root) : undefined
+							if (Predicate.isNotUndefined(target)) {
+								for (const property of node.id.properties) {
+									if (property.type !== 'Property' || property.value.type !== 'Identifier') continue
+									const propertyName = property.value.name
+									const declared = Array.findFirst(
+										context.sourceCode.getDeclaredVariables(node),
+										item => item.name === propertyName
+									)
+									if (
+										declared._tag === 'Some' &&
+										!Array.some(declared.value.references, reference => reference.isWrite() && !reference.init)
+									) {
+										aliases.set(declared.value, {nested: true, target})
+									}
+								}
+							}
+						}
+						if (
+							Predicate.isNotUndefined(variable) &&
+							(node.init?.type === 'Identifier' || node.init?.type === 'MemberExpression')
+						) {
+							const root = rootIdentifier(node.init)
+							const target = Predicate.isNotUndefined(root) ? variableFor(context, root) : undefined
+							if (
+								Predicate.isNotUndefined(target) &&
+								!Array.some(variable.references, reference => reference.isWrite() && !reference.init)
+							) {
+								aliases.set(variable, {nested: node.init.type === 'MemberExpression', target})
+							}
+						}
+						if (
+							topLevelVariable(node) &&
+							Predicate.isNotUndefined(variable) &&
+							Predicate.isNotNull(node.init) &&
+							mutableInitializer(node.init)
+						) {
+							candidates.set(variable, {
+								array: unwrapExpression(node.init).type === 'ArrayExpression',
+								nestedMutable:
+									unwrapExpression(node.init).type === 'ObjectExpression' &&
+									methodMutableInitializer(context, node.init),
+								node
+							})
 						}
 					}
 				}
-			}),
+			},
 			meta: {messages: {default: 'Keep mutable state inside a runtime owner.'}, type: 'problem'}
 		},
 		'no-native-mutable-collection': {
-			create: context => ({
-				NewExpression: node => {
-					if (isNativeMutableCollection(node) && !isReactLocalCollection(node)) {
-						context.report({message: 'Use Effect data structures or domain state.', node})
+			create: context => {
+				const candidates: ESTree.NewExpression[] = []
+				const reactNamespaces = new Set<Variable>()
+				const reactOwnedRanges: {readonly end: number; readonly start: number}[] = []
+				const reactOwners = new Set<Variable>()
+				return {
+					CallExpression: node => {
+						const calleeVariable = node.callee.type === 'Identifier' ? variableFor(context, node.callee) : undefined
+						const namespaceVariable =
+							node.callee.type === 'MemberExpression' && node.callee.object.type === 'Identifier'
+								? variableFor(context, node.callee.object)
+								: undefined
+						const owned =
+							(Predicate.isNotUndefined(calleeVariable) && reactOwners.has(calleeVariable)) ||
+							(node.callee.type === 'MemberExpression' &&
+								node.callee.object.type === 'Identifier' &&
+								Predicate.isNotUndefined(namespaceVariable) &&
+								reactNamespaces.has(namespaceVariable) &&
+								(memberName(node.callee) === 'useRef' || memberName(node.callee) === 'useState'))
+						if (!owned) return
+						for (const argument of node.arguments) {
+							if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
+								for (const returned of returnedExpressions(argument)) {
+									const expression = unwrapExpression(returned)
+									if (expression.type === 'Identifier') {
+										const definition = variableFor(context, expression)?.defs[0]?.node
+										if (
+											definition?.type === 'VariableDeclarator' &&
+											!topLevelVariable(definition) &&
+											Predicate.isNotNull(definition.init)
+										) {
+											const initializer = unwrapExpression(definition.init)
+											if (
+												initializer.type === 'ArrayExpression' ||
+												initializer.type === 'NewExpression' ||
+												initializer.type === 'ObjectExpression'
+											) {
+												reactOwnedRanges.push(initializer)
+											}
+										}
+									} else {
+										reactOwnedRanges.push(expression)
+									}
+								}
+							} else if (argument.type !== 'SpreadElement') {
+								const expression = unwrapExpression(argument)
+								if (
+									expression.type === 'ArrayExpression' ||
+									expression.type === 'NewExpression' ||
+									expression.type === 'ObjectExpression'
+								) {
+									reactOwnedRanges.push(expression)
+								}
+							}
+						}
+					},
+					ImportDeclaration: node => {
+						if (node.source.value !== 'react') return
+						for (const specifier of node.specifiers) {
+							const variable = context.sourceCode.getDeclaredVariables(specifier)[0]
+							if (Predicate.isUndefined(variable)) continue
+							if (specifier.type === 'ImportNamespaceSpecifier') reactNamespaces.add(variable)
+							if (
+								specifier.type === 'ImportSpecifier' &&
+								specifier.imported.type === 'Identifier' &&
+								(specifier.imported.name === 'useRef' || specifier.imported.name === 'useState')
+							) {
+								reactOwners.add(variable)
+							}
+						}
+					},
+					NewExpression: node => {
+						if (isGlobalMutableCollection(context, node)) candidates.push(node)
+					},
+					'Program:exit': () => {
+						for (const node of candidates) {
+							const owned = Array.some(reactOwnedRanges, range => reactOwns(node, range))
+							if (!owned) context.report({message: 'Use Effect data structures or domain state.', node})
+						}
+					},
+					VariableDeclarator: node => {
+						if (node.id.type === 'ObjectPattern' && node.init?.type === 'Identifier') {
+							const source = variableFor(context, node.init)
+							if (Predicate.isNotUndefined(source) && reactNamespaces.has(source)) {
+								for (const property of node.id.properties) {
+									if (
+										property.type !== 'Property' ||
+										property.key.type !== 'Identifier' ||
+										!(property.key.name === 'useRef' || property.key.name === 'useState') ||
+										property.value.type !== 'Identifier'
+									) {
+										continue
+									}
+									for (const declared of context.sourceCode.getDeclaredVariables(node)) {
+										if (
+											declared.name === property.value.name &&
+											!Array.some(declared.references, reference => reference.isWrite() && !reference.init)
+										) {
+											reactOwners.add(declared)
+										}
+									}
+								}
+							}
+						}
+						if (node.id.type !== 'Identifier' || Predicate.isNull(node.init)) return
+						const target = context.sourceCode.getDeclaredVariables(node)[0]
+						if (Predicate.isUndefined(target)) return
+						const identifierSource = node.init.type === 'Identifier' ? variableFor(context, node.init) : undefined
+						const namespaceSource =
+							node.init.type === 'MemberExpression' && node.init.object.type === 'Identifier'
+								? variableFor(context, node.init.object)
+								: undefined
+						const reassigned = Array.some(target.references, reference => reference.isWrite() && !reference.init)
+						if (!reassigned && Predicate.isNotUndefined(identifierSource) && reactOwners.has(identifierSource)) {
+							reactOwners.add(target)
+						}
+						if (!reassigned && Predicate.isNotUndefined(identifierSource) && reactNamespaces.has(identifierSource)) {
+							reactNamespaces.add(target)
+						}
+						if (
+							!reassigned &&
+							node.init.type === 'MemberExpression' &&
+							Predicate.isNotUndefined(namespaceSource) &&
+							reactNamespaces.has(namespaceSource) &&
+							(memberName(node.init) === 'useRef' || memberName(node.init) === 'useState')
+						) {
+							reactOwners.add(target)
+						}
 					}
 				}
-			}),
+			},
 			meta: {messages: {default: 'Use Effect data structures or domain state.'}, type: 'problem'}
 		},
 		'no-native-prototype-method': {
 			create: context => ({
 				CallExpression: node => {
-					if (isNativePrototypeMethodCall(node)) {
-						context.report({message: 'Use Effect module functions.', node})
-					}
+					if (nativePrototypeCall(context, node)) context.report({message: 'Use Effect module functions.', node})
 				}
 			}),
 			meta: {messages: {default: 'Use Effect module functions.'}, type: 'problem'}
 		},
-		'no-nullary-effect-fn': {
-			create: context => ({
-				CallExpression: node => {
-					if (
-						node.callee.type === 'CallExpression' &&
-						node.callee.callee.type === 'MemberExpression' &&
-						node.callee.callee.object.type === 'Identifier' &&
-						node.callee.callee.object.name === 'Effect' &&
-						node.callee.callee.property.type === 'Identifier' &&
-						node.callee.callee.property.name === 'fn' &&
-						(node.arguments[0]?.type === 'FunctionExpression' ||
-							node.arguments[0]?.type === 'ArrowFunctionExpression') &&
-						node.arguments[0].params.length === 0
-					) {
-						context.report({message: 'Use Effect.gen for nullary work.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Effect.gen for nullary work.'}, type: 'problem'}
-		},
-		'no-nullary-effect-wrapper': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (node.params.length === 0 && isZeroArgEffectGenWrapperBody(node.body)) {
-						context.report({message: 'Use an Effect.gen value for nullary work.', node})
-					}
-				},
-				FunctionDeclaration: node => {
-					if (node.params.length === 0 && isZeroArgEffectGenWrapperBody(node.body)) {
-						context.report({message: 'Use an Effect.gen value for nullary work.', node})
-					}
-				},
-				FunctionExpression: node => {
-					if (node.params.length === 0 && isZeroArgEffectGenWrapperBody(node.body)) {
-						context.report({message: 'Use an Effect.gen value for nullary work.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use an Effect.gen value for nullary work.'}, type: 'problem'}
-		},
 		'no-nullish-comparison': {
 			create: context => ({
 				BinaryExpression: node => {
-					if (reportsNullishComparison(node) || reportsTypeofComparison(node)) {
+					if (comparisonOperator(node.operator) && (isNullish(context, node.left) || isNullish(context, node.right))) {
 						context.report({message: 'Use Predicate for nullish checks.', node})
 					}
 				}
 			}),
 			meta: {messages: {default: 'Use Predicate for nullish checks.'}, type: 'problem'}
-		},
-		'no-object-destructure': {
-			create: context => ({
-				ObjectPattern: node => {
-					if (isReactRefPropsParameter(node)) return
-
-					context.report({message: 'Use property access.', node})
-				}
-			}),
-			meta: {messages: {default: 'Use property access.'}, type: 'problem'}
-		},
-		'no-option-constructor': {
-			create: context => ({
-				CallExpression: node => {
-					if (isOptionConstructorCall(node)) {
-						context.report({message: 'Consume existing Options.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Consume existing Options.'}, type: 'problem'}
 		},
 		'no-optional-undefined-property': {
 			create: context => ({
@@ -1063,83 +1253,29 @@ export default definePlugin({
 						Predicate.isNotNullish(node.typeAnnotation) &&
 						isUndefinedType(node.typeAnnotation.typeAnnotation)
 					) {
-						context.report({message: 'Inline type.', node})
+						context.report({message: 'Use exact optional properties.', node})
 					}
 				}
 			}),
 			meta: {messages: {default: 'Use exact optional properties.'}, type: 'problem'}
 		},
-		'no-pass-through-wrapper': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (
-						(node.params[0]?.type === 'Identifier' &&
-							node.params.length === 1 &&
-							node.body.type === 'Identifier' &&
-							node.body.name === node.params[0].name) ||
-						(node.params[0]?.type === 'Identifier' &&
-							node.params.length === 1 &&
-							node.body.type === 'BlockStatement' &&
-							node.body.body.length === 1 &&
-							node.body.body[0]?.type === 'ReturnStatement' &&
-							node.body.body[0].argument?.type === 'Identifier' &&
-							node.body.body[0].argument.name === node.params[0].name)
-					) {
-						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
-					}
-				},
-				FunctionDeclaration: node => {
-					if (
-						node.params[0]?.type === 'Identifier' &&
-						node.params.length === 1 &&
-						node.body?.body.length === 1 &&
-						node.body.body[0]?.type === 'ReturnStatement' &&
-						node.body.body[0].argument?.type === 'Identifier' &&
-						node.body.body[0].argument.name === node.params[0].name
-					) {
-						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
-					}
-					if (isTrivialHandlerFunction(context, node)) {
-						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
-					}
-					if (isAtomFamilyReturnWrapper(node)) {
-						context.report({message: 'Inline single-use wrapper unless it owns policy or lifecycle.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline single-use wrapper unless it owns policy or lifecycle.'}, type: 'problem'}
-		},
-		'no-primitive-const': {
-			create: context => ({
-				VariableDeclarator: node => {
-					if (isPrimitiveConstDeclaration(node)) {
-						context.report({message: 'Inline primitive const.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline primitive const.'}, type: 'problem'}
-		},
-		'no-private-test-import': {
-			create: context => ({
-				ImportDeclaration: node => {
-					if (
-						/\.test\.[cm]?[jt]sx?$/.test(context.filename) &&
-						(String.startsWith('../src/')(node.source.value) ||
-							String.includes('/src/lib/')(node.source.value) ||
-							String.includes('/lib/')(node.source.value))
-					) {
-						context.report({message: 'Test public export.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Test public export.'}, type: 'problem'}
-		},
 		'no-private-workspace-import': {
 			create: context => ({
-				ImportDeclaration: node => {
+				ImportExpression: node => {
+					let source: string | undefined
+					if (node.source.type === 'Literal' && Predicate.isString(node.source.value)) source = node.source.value
 					if (
-						/^@deslop\/[^/]+\/(?:src|lib)(?:\/|$)/.test(node.source.value) ||
-						/^(?:\.\.\/)+[^/]+\/(?:src|lib)(?:\/|$)/.test(node.source.value)
+						node.source.type === 'TemplateLiteral' &&
+						Array.isReadonlyArrayEmpty(node.source.expressions) &&
+						Predicate.isNotUndefined(node.source.quasis[0])
+					) {
+						const cooked = node.source.quasis[0].value.cooked
+						if (Predicate.isString(cooked)) source = cooked
+					}
+					if (
+						Predicate.isString(source) &&
+						(/^@deslop\/[^/]+\/(?:src|lib)(?:\/|$)/u.test(source) ||
+							/^(?:\.\.\/)+(?:packages\/)?[^/]+\/(?:src|lib)(?:\/|$)/u.test(source))
 					) {
 						context.report({message: 'Use public package exports.', node})
 					}
@@ -1147,59 +1283,122 @@ export default definePlugin({
 			}),
 			meta: {messages: {default: 'Use public package exports.'}, type: 'problem'}
 		},
-		'no-promise-callback': {
-			create: context => ({
-				CallExpression: node => {
-					if (isPromiseCallbackCall(node)) {
-						context.report({message: 'Use Effect or direct async flow.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Effect or direct async flow.'}, type: 'problem'}
-		},
-		'no-public-raw-domain-string': {
-			create: context => ({
-				ExportNamedDeclaration: node => {
-					if (node.declaration?.type !== 'VariableDeclaration') return
-					for (const declaration of node.declaration.declarations) {
-						if (
-							declaration.init?.type === 'MemberExpression' &&
-							declaration.init.object.type === 'Identifier' &&
-							declaration.init.object.name === 'Schema' &&
-							declaration.init.property.type === 'Identifier' &&
-							declaration.init.property.name === 'String'
-						) {
-							context.report({message: 'Brand domain string.', node: declaration})
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Brand domain string.'}, type: 'problem'}
-		},
 		'no-raw-tagged-object': {
 			create: context => ({
 				ObjectExpression: node => {
-					if (hasRawTagProperty(node) && !isSchemaStructObject(node) && !isMatchPatternObject(node)) {
+					if (rawTag(node) && !insideTaggedConstruction(context, node)) {
 						context.report({message: 'Use schema constructors for tagged values.', node})
 					}
 				}
 			}),
 			meta: {messages: {default: 'Use schema constructors for tagged values.'}, type: 'problem'}
 		},
-		'no-schema-class': {
+		'no-restricted-library-api': {
 			create: context => ({
 				CallExpression: node => {
-					if (isSchemaClassCall(node)) {
-						context.report({message: 'Use Schema.Struct or Schema.TaggedStruct for schema models.', node})
+					if (node.callee.type !== 'Identifier') return
+					const definition = variableFor(context, node.callee)?.defs[0]
+					const declaration = Predicate.isNotUndefined(definition)
+						? definitionVariableDeclarator(definition)
+						: undefined
+					if (declaration?.init?.type === 'MemberExpression') return
+					let message: string | undefined
+					if (
+						importedMethod(context, node.callee, 'effect', 'Effect', 'runPromise') ||
+						importedMethod(context, node.callee, 'effect', 'Effect', 'runSync')
+					) {
+						message = 'Use runtime or atom entrypoints.'
 					}
+					if (
+						importedMethod(context, node.callee, 'effect', 'Data', 'Class') ||
+						importedMethod(context, node.callee, 'effect', 'Data', 'TaggedClass') ||
+						importedMethod(context, node.callee, 'effect', 'Data', 'taggedEnum')
+					) {
+						message = 'Use schema-backed data constructors.'
+					}
+					if (
+						importedMethod(context, node.callee, 'effect', 'Schema', 'Class') ||
+						importedMethod(context, node.callee, 'effect', 'Schema', 'TaggedClass')
+					) {
+						message = 'Use Schema.Struct or Schema.TaggedStruct.'
+					}
+					if (Predicate.isNotUndefined(message)) context.report({message, node})
+				},
+				MemberExpression: node => {
+					if (node.object.type === 'Super') return
+					const property = memberName(node)
+					let message: string | undefined
+					if (
+						node.object.type === 'Identifier' &&
+						node.object.name === 'JSON' &&
+						context.sourceCode.isGlobalReference(node.object) &&
+						(property === 'parse' || property === 'stringify')
+					) {
+						message = 'Use Schema JSON decoding/encoding.'
+					}
+					if (
+						importedObject(context, node.object, 'effect', 'Data') &&
+						(property === 'Class' || property === 'TaggedClass' || property === 'taggedEnum')
+					) {
+						message = 'Use schema-backed data constructors.'
+					}
+					if (
+						importedObject(context, node.object, 'effect', 'Effect') &&
+						(property === 'runPromise' || property === 'runSync')
+					) {
+						message = 'Use runtime or atom entrypoints.'
+					}
+					if (
+						importedObject(context, node.object, 'effect', 'Schema') &&
+						(property === 'Class' || property === 'TaggedClass')
+					) {
+						message = 'Use Schema.Struct or Schema.TaggedStruct.'
+					}
+					if (Predicate.isNotUndefined(message)) context.report({message, node})
 				}
 			}),
-			meta: {messages: {default: 'Use Schema.Struct or Schema.TaggedStruct for schema models.'}, type: 'problem'}
+			meta: {messages: {default: 'Use an approved library API.'}, type: 'problem'}
+		},
+		'no-redundant-effect-wrapper': {
+			create: context => {
+				const checkFunction = (node: FunctionNode) => {
+					const ownedByEffectFn =
+						node.parent.type === 'CallExpression' && effectFnCallback(context, node.parent) === node
+					if (directGenWrapper(context, node) && !ownedByEffectFn && !isCallArgument(node)) {
+						context.report({message: 'Use the Effect value directly.', node})
+					}
+				}
+				return {
+					ArrowFunctionExpression: checkFunction,
+					CallExpression: node => {
+						const callback = effectFnCallback(context, node)
+						if (isFunctionExpression(callback) && callback.params.length === 0) {
+							context.report({message: 'Use Effect.gen for nullary work.', node})
+						}
+					},
+					FunctionDeclaration: checkFunction,
+					FunctionExpression: checkFunction
+				}
+			},
+			meta: {messages: {default: 'Remove the redundant Effect wrapper.'}, type: 'problem'}
 		},
 		'no-schema-decoder-alias': {
 			create: context => ({
 				VariableDeclarator: node => {
-					if (node.id.type === 'Identifier' && Predicate.isNotNull(node.init) && isSchemaDecoderExpression(node.init)) {
+					const destructuredDecoder =
+						node.id.type === 'ObjectPattern' &&
+						Predicate.isNotNull(node.init) &&
+						importedObject(context, node.init, 'effect', 'Schema') &&
+						Array.some(node.id.properties, property => {
+							if (property.type !== 'Property') return false
+							let name: string | undefined
+							if (property.key.type === 'Identifier') name = property.key.name
+							if (property.key.type === 'Literal' && Predicate.isString(property.key.value)) {
+								name = property.key.value
+							}
+							return Array.contains(schemaDecoderMethods, name ?? '')
+						})
+					if (destructuredDecoder || (Predicate.isNotNull(node.init) && schemaDecoderFactory(context, node.init))) {
 						context.report({message: 'Inline schema decoding.', node})
 					}
 				}
@@ -1210,21 +1409,22 @@ export default definePlugin({
 			createOnce: context => ({
 				Program: node => {
 					if (!isSchemaModule(context.filename)) return
+					const types = new Map<string, boolean>()
 					for (const statement of node.body) {
-						for (const declaration of statementVariableDeclarations(statement)) {
+						const type = schemaTypeName(statement)
+						if (Predicate.isNotUndefined(type)) types.set(type.name, type.exported)
+					}
+					for (const statement of node.body) {
+						for (const declaration of statementDeclarations(statement)) {
 							if (
 								declaration.id.type === 'Identifier' &&
-								isUppercaseName(declaration.id.name) &&
+								/^[A-Z]/u.test(declaration.id.name) &&
 								Predicate.isNotNull(declaration.init) &&
-								isSchemaExpression(declaration.init) &&
-								!isMatchingSchemaTypeAliasStatement(
-									precedingStatement(node.body, statement),
-									declaration.id.name,
-									statement.type === 'ExportNamedDeclaration'
-								)
+								schemaExpression(context, declaration.init) &&
+								types.get(declaration.id.name) !== (statement.type === 'ExportNamedDeclaration')
 							) {
 								context.report({
-									message: 'Place the matching schema type alias immediately before the schema value.',
+									message: 'Add a matching schema type alias with the same export visibility.',
 									node: declaration
 								})
 							}
@@ -1232,139 +1432,12 @@ export default definePlugin({
 					}
 				}
 			}),
-			meta: {
-				messages: {default: 'Place the matching schema type alias immediately before the schema value.'},
-				type: 'problem'
-			}
-		},
-		'no-single-use-guard': {
-			createOnce: context => ({
-				Program: node => {
-					for (const statement of node.body) {
-						const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
-						if (
-							declaration?.type === 'FunctionDeclaration' &&
-							Predicate.isNotNullish(declaration.id) &&
-							String.startsWith('is')(declaration.id.name) &&
-							[...context.sourceCode.text.matchAll(new RegExp(`\\b${declaration.id.name}\\b`, 'gu'))].length <= 2
-						) {
-							context.report({message: 'Inline guard.', node: declaration})
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline guard.'}, type: 'problem'}
-		},
-		'no-single-use-helper': {
-			createOnce: context => ({
-				Program: node => {
-					for (const statement of node.body) {
-						const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
-						if (
-							declaration?.type === 'FunctionDeclaration' &&
-							Predicate.isNotNull(declaration.id) &&
-							!isUppercaseName(declaration.id.name) &&
-							!isHookName(declaration.id.name) &&
-							!isRecursiveFunction(context, declaration) &&
-							((statement.type !== 'ExportNamedDeclaration' && isSimpleSingleUseFunction(declaration)) ||
-								isForwardingCallWrapper(declaration)) &&
-							[...context.sourceCode.text.matchAll(new RegExp(`\\b${declaration.id.name}\\b`, 'gu'))].length <= 2
-						) {
-							context.report({message: 'Inline one-use helper.', node: declaration})
-						}
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline one-use helper.'}, type: 'problem'}
-		},
-		'no-static-return-function': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (isStaticReturnFunction(node)) {
-						context.report({message: 'Inline static return function.', node})
-					}
-				},
-				FunctionDeclaration: node => {
-					if (isStaticReturnFunction(node)) {
-						context.report({message: 'Inline static return function.', node})
-					}
-				},
-				FunctionExpression: node => {
-					if (isStaticReturnFunction(node)) {
-						context.report({message: 'Inline static return function.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline static return function.'}, type: 'problem'}
-		},
-		'no-typed-callback-params': {
-			create: context => ({
-				ArrowFunctionExpression: node => {
-					if (isCallArgument(node) && !isAtomFamilyCallback(node)) {
-						reportTypedParameters(context, node)
-					}
-				},
-				FunctionExpression: node => {
-					if (isCallArgument(node) && !isAtomFamilyCallback(node) && !node.generator) {
-						reportTypedParameters(context, node)
-					}
-					if (isContextOwnedEffectFnGenerator(node)) {
-						reportTypedParameters(context, node)
-					}
-				}
-			}),
-			meta: {messages: {default: 'Infer callback parameter type.'}, type: 'problem'}
-		},
-		'no-useless-effect-wrapper': {
-			create: context => ({
-				CallExpression: node => {
-					if (isUselessEffectWrapper(node)) {
-						context.report({message: 'Inline Effect wrapper.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Inline Effect wrapper.'}, type: 'problem'}
-		},
-		'no-variable-type-annotation': {
-			create: context => ({
-				VariableDeclarator: node => {
-					if (Predicate.hasProperty(node.id, 'typeAnnotation') && Predicate.isNotNullish(node.id.typeAnnotation)) {
-						context.report({message: 'Infer variable type.', node: node.id})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Infer variable type.'}, type: 'problem'}
-		},
-		'no-zero-arg-effect-fn': {
-			create: context => ({
-				CallExpression: node => {
-					if (
-						node.callee.type === 'MemberExpression' &&
-						node.callee.object.type === 'Identifier' &&
-						node.callee.object.name === 'Effect' &&
-						node.callee.property.type === 'Identifier' &&
-						node.callee.property.name === 'fn' &&
-						(node.arguments[0]?.type === 'FunctionExpression' ||
-							node.arguments[0]?.type === 'ArrowFunctionExpression') &&
-						node.arguments[0].params.length === 0
-					) {
-						context.report({message: 'Use Effect.gen for nullary work.', node})
-					}
-				}
-			}),
-			meta: {messages: {default: 'Use Effect.gen for nullary work.'}, type: 'problem'}
+			meta: {messages: {default: 'Add a matching schema type alias with the same export visibility.'}, type: 'problem'}
 		},
 		'prefer-match': {
 			create: context => ({
-				BlockStatement: node => {
-					for (const [index, statement] of node.body.entries()) {
-						if (hasSameDiscriminantNextIf(context, statement, node.body[index + 1])) {
-							context.report({message: 'Use Match for repeated discriminant branches.', node: statement})
-						}
-					}
-				},
 				IfStatement: node => {
-					if (hasSameDiscriminantElseIf(context, node)) {
+					if (outerDiscriminantChain(context, node)) {
 						context.report({message: 'Use Match for repeated discriminant branches.', node})
 					}
 				}

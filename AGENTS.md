@@ -11,6 +11,8 @@
 - Use package APIs rather than remembered signatures.
 - Reuse established evidence until its source changes.
 - For new behavior, find the nearest current pattern before choosing a shape.
+- Prefer maintained library, component, native-rule, and platform capabilities that satisfy the material outcome.
+- The main agent orchestrates broad discovery and bounded delegated work while retaining authority for integration and completion.
 
 ## Change Boundary
 
@@ -19,14 +21,14 @@
 - Add compatibility, migration, caching, or background work only for current behavior.
 - Act when evidence is sufficient. Reopen settled decisions only when new evidence contradicts them.
 - Questions, plans, and reviews remain read-only unless the user requests a change.
-- Requested changes include in-scope local edits and validation. External writes, destructive actions, and material scope expansion require an explicit request.
+- Requested changes include in-scope local edits and validation. Invoking implementation or requesting end-to-end delivery explicitly authorizes its commit, push, and pull-request tail. Other external writes, destructive actions, and material scope expansion require an explicit request.
 
 ## Verification
 
 After changing the repository, run:
 
 ```bash
-vp run fix && vp run check
+vp run fix && vp run check && vp run test
 ```
 
 Resolve related failures together and fix their shared cause.

@@ -16,7 +16,7 @@ export class AdminAuth extends Context.Service<
 	}
 >()('beer-counter/AdminAuth') {}
 
-export function makeAdminAuth(expectedToken: string) {
+function makeAdminAuth(expectedToken: string) {
 	function requireToken(token: string) {
 		return token === expectedToken ? Effect.void : Effect.fail(authError())
 	}

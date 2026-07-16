@@ -65,59 +65,33 @@ export default defineConfig({
 			{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}},
 			{
 				files: ['packages/oxlint-rules/src/oxlint-plugin.ts'],
-				rules: {'func-style': 'off', 'import/no-default-export': 'off'}
+				rules: {
+					'@deslop/oxlint-rules/no-native-mutable-collection': 'off',
+					'func-style': 'off',
+					'import/no-default-export': 'off',
+					'sort-keys': 'off'
+				}
 			},
 			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
 		],
 		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// Deslop repo policy
-			'@deslop/oxlint-rules/no-access-alias': 'error',
-			'@deslop/oxlint-rules/no-access-helper': 'error',
 			'@deslop/oxlint-rules/no-atom-family-inferred-arg': 'error',
-			'@deslop/oxlint-rules/no-composed-identity-key': 'error',
-			'@deslop/oxlint-rules/no-condition-alias': 'error',
-			'@deslop/oxlint-rules/no-data-class': 'error',
 			'@deslop/oxlint-rules/no-declare-module-export': 'error',
 			'@deslop/oxlint-rules/no-effect-returning-function': 'error',
-			'@deslop/oxlint-rules/no-effect-run-entrypoint': 'error',
-			'@deslop/oxlint-rules/no-exported-local-type': 'error',
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
-			'@deslop/oxlint-rules/no-floating-local-type': 'error',
-			'@deslop/oxlint-rules/no-function-return-type': 'error',
-			'@deslop/oxlint-rules/no-generic-state-patch': 'error',
-			'@deslop/oxlint-rules/no-identity-callback': 'error',
-			'@deslop/oxlint-rules/no-iife': 'error',
-			'@deslop/oxlint-rules/no-import-alias': 'error',
-			'@deslop/oxlint-rules/no-json-global': 'error',
-			'@deslop/oxlint-rules/no-let': 'error',
-			'@deslop/oxlint-rules/no-local-mutable-holder': 'error',
 			'@deslop/oxlint-rules/no-module-mutable-state': 'error',
 			'@deslop/oxlint-rules/no-native-mutable-collection': 'error',
 			'@deslop/oxlint-rules/no-native-prototype-method': 'error',
-			'@deslop/oxlint-rules/no-nullary-effect-fn': 'error',
-			'@deslop/oxlint-rules/no-nullary-effect-wrapper': 'error',
 			'@deslop/oxlint-rules/no-nullish-comparison': 'error',
-			'@deslop/oxlint-rules/no-object-destructure': 'error',
-			'@deslop/oxlint-rules/no-option-constructor': 'error',
 			'@deslop/oxlint-rules/no-optional-undefined-property': 'error',
-			'@deslop/oxlint-rules/no-pass-through-wrapper': 'error',
-			'@deslop/oxlint-rules/no-primitive-const': 'error',
-			'@deslop/oxlint-rules/no-private-test-import': 'error',
 			'@deslop/oxlint-rules/no-private-workspace-import': 'error',
-			'@deslop/oxlint-rules/no-promise-callback': 'error',
-			'@deslop/oxlint-rules/no-public-raw-domain-string': 'error',
 			'@deslop/oxlint-rules/no-raw-tagged-object': 'error',
-			'@deslop/oxlint-rules/no-schema-class': 'error',
+			'@deslop/oxlint-rules/no-redundant-effect-wrapper': 'error',
+			'@deslop/oxlint-rules/no-restricted-library-api': 'error',
 			'@deslop/oxlint-rules/no-schema-decoder-alias': 'error',
 			'@deslop/oxlint-rules/no-schema-without-type-export': 'error',
-			'@deslop/oxlint-rules/no-single-use-guard': 'error',
-			'@deslop/oxlint-rules/no-single-use-helper': 'error',
-			'@deslop/oxlint-rules/no-static-return-function': 'error',
-			'@deslop/oxlint-rules/no-typed-callback-params': 'error',
-			'@deslop/oxlint-rules/no-useless-effect-wrapper': 'error',
-			'@deslop/oxlint-rules/no-variable-type-annotation': 'error',
-			'@deslop/oxlint-rules/no-zero-arg-effect-fn': 'error',
 			'@deslop/oxlint-rules/prefer-match': 'error',
 
 			// TypeScript type shape
@@ -202,6 +176,15 @@ export default defineConfig({
 			'no-param-reassign': ['error', {props: true}],
 			'no-prototype-builtins': 'error',
 			'no-restricted-globals': ['error', 'global', 'globalThis', 'String', 'Boolean', 'Array', 'Object', 'Reflect'],
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{message: 'Use public package exports.', regex: '^@deslop/[^/]+/(?:src|lib)(?:/|$)'},
+						{message: 'Use public package exports.', regex: '^(?:\\.\\./)+(?:packages/)?[^/]+/(?:src|lib)(?:/|$)'}
+					]
+				}
+			],
 			'no-shadow': [
 				'error',
 				{allow: ['Array', 'Boolean', 'Console', 'Effect', 'HashMap', 'Number', 'Option', 'Schema', 'String']}

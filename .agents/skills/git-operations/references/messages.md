@@ -12,4 +12,4 @@ A small diff needs only the subject. Otherwise add a blank line and at most five
 
 ## Pull request
 
-Apply the commit-body selection rules to the complete pull-request diff. Keep the body brief and outcome-first. Explain product intent only when the diff cannot. Include a closing issue reference.
+Apply the commit-body selection rules to the complete pull-request diff. Keep the body brief and outcome-first. Explain product intent only when the diff cannot. Include a closing reference when the work is issue-backed.

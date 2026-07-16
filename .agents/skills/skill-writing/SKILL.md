@@ -1,11 +1,11 @@
 ---
 name: skill-writing
-description: 'Repository instructions; skill metadata, bodies, references; agent workflows; static enforcement.'
+description: 'Repository instructions; skill metadata, bodies, references; composition, pruning, and enforcement placement.'
 ---
 
 Predictability is the goal: the same decision process across runs, not identical output.
 
-With no target, audit and rewrite the complete instruction system: implicit root and subtree guidance, every skill's metadata, body, sibling references, and static enforcement. With a named target, include only the semantic owners needed to leave the system consistent.
+Audit the affected semantic owner, composed dependents, executable enforcement, and proof. Expand to the complete instruction system only when ownership changes or evidence reveals broader drift.
 
 ## Invocation
 

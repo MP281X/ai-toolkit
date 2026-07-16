@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, String, pipe} from 'effect'
+import {Array, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
 import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
@@ -34,12 +34,7 @@ function messageText(source: unknown) {
 
 async function decodeMessage(source: unknown) {
 	const text = await Promise.resolve(messageText(source))
-	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
-		return JSON.parse(text) as unknown
-	} catch {
-		return null
-	}
+	return pipe(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(text), Option.getOrNull)
 }
 
 function sendSocket(
@@ -67,8 +62,7 @@ function sendSocket(
 		  }
 ) {
 	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
-	// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
-	socket.send(JSON.stringify(input))
+	socket.send(Schema.encodeSync(Schema.UnknownFromJsonString)(input))
 }
 
 function modifiers(event: {

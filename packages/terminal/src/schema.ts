@@ -16,7 +16,7 @@ export function terminalStatusActive(state: TerminalStatus['state']) {
 }
 
 export type TerminalSize = typeof TerminalSize.Type
-const TerminalSize = Schema.Struct({cols: Schema.Number, rows: Schema.Number})
+export const TerminalSize = Schema.Struct({cols: Schema.Number, rows: Schema.Number})
 
 export type TerminalInput = typeof TerminalInput.Type
 export const TerminalInput = Schema.Union([

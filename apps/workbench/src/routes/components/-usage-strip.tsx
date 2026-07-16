@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {DateTime, Option, Predicate, pipe} from 'effect'
+import {Array, DateTime, Option, Predicate, pipe} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 
@@ -208,7 +208,7 @@ export function UsageStripFallback() {
 				<LoadingValue />
 				<LoadingValue />
 			</div>
-			{providers.map(layer => (
+			{Array.map(providers, layer => (
 				<div key={layer} className="flex h-14 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
@@ -240,7 +240,7 @@ export function UsageStrip() {
 				</span>
 				<SystemWindows />
 			</div>
-			{providers.map(layer => (
+			{Array.map(providers, layer => (
 				<div key={layer} className="flex h-14 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
