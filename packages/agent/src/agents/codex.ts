@@ -8,9 +8,7 @@ const codexCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
 		'vpx',
 		[
-			'--package',
 			'@openai/codex@latest',
-			'codex',
 			'--model',
 			'gpt-5.6-sol',
 			'-c',

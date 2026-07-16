@@ -6,7 +6,7 @@ import type {ChildProcess} from 'effect/unstable/process'
 
 import {Agent} from './service.ts'
 
-function commandFor(provider: 'claude' | 'codex' | 'pi') {
+function commandFor(provider: 'claude' | 'codex' | 'opencode') {
 	return Effect.runPromiseWith(Context.empty())(
 		pipe(
 			Effect.gen(function* () {
@@ -26,9 +26,7 @@ describe('Agent', () => {
 	it('runs Codex through the latest package and executable bin', async () => {
 		await expect(commandFor('codex').then(commandSnapshot)).resolves.toEqual({
 			args: [
-				'--package',
 				'@openai/codex@latest',
-				'codex',
 				'--model',
 				'gpt-5.6-sol',
 				'-c',
@@ -44,9 +42,7 @@ describe('Agent', () => {
 	it('runs Claude through the latest package and executable bin with install scripts enabled', async () => {
 		await expect(commandFor('claude').then(commandSnapshot)).resolves.toEqual({
 			args: [
-				'--package',
 				'@anthropic-ai/claude-code@latest',
-				'claude',
 				'--model',
 				'claude-opus-4-8',
 				'--permission-mode',
@@ -60,21 +56,12 @@ describe('Agent', () => {
 		})
 	})
 
-	it('runs Pi through the latest package and executable bin', async () => {
-		await expect(commandFor('pi').then(commandSnapshot)).resolves.toEqual({
-			args: [
-				'--package',
-				'@earendil-works/pi-coding-agent@latest',
-				'pi',
-				'--model',
-				'openai-codex/gpt-5.6-sol',
-				'--thinking',
-				'medium',
-				'--approve'
-			],
+	it('runs OpenCode through the latest package with permissions auto-approved', async () => {
+		await expect(commandFor('opencode').then(commandSnapshot)).resolves.toEqual({
+			args: ['opencode-ai@latest', '--auto', '--model', 'openai/gpt-5.6-sol'],
 			command: 'vpx',
 			cwd: '/tmp/deslop-agent',
-			env: {PNPM_CONFIG_IGNORE_SCRIPTS: 'true', PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
+			env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
 		})
 	})
 })

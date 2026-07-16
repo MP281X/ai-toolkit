@@ -8,9 +8,7 @@ const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
 		'vpx',
 		[
-			'--package',
 			'@anthropic-ai/claude-code@latest',
-			'claude',
 			'--model',
 			'claude-opus-4-8',
 			'--permission-mode',
