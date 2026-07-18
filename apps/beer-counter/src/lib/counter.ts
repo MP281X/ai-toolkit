@@ -7,13 +7,7 @@ function validationError(message: string) {
 }
 
 function initialState() {
-	return CounterState.make({
-		teams: Array.makeBy(12, index => {
-			const number = index + 1
-			const suffix = number.toString().padStart(2, '0')
-			return Team.make({count: 0, createdOrder: index, id: `team-${suffix}`, name: `Team ${suffix}`})
-		})
-	})
+	return CounterState.make({teams: []})
 }
 
 function requireName(state: CounterState, name: string) {

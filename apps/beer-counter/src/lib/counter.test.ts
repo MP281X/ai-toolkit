@@ -6,28 +6,23 @@ import {makeAdminAuth} from '#lib/adminAuth.ts'
 import {makeCounter} from '#lib/counter.ts'
 
 describe('Counter', () => {
-	it.effect('seeds every process with the fixed zero-count roster', _context =>
+	it.effect('starts every process with an empty roster', _context =>
 		Effect.gen(function* () {
 			const counter = yield* makeCounter
 			const first = yield* counter.snapshot
 
-			assert.deepStrictEqual(
-				Array.map(first.teams, team => [team.id, team.name, team.count]),
-				Array.makeBy(12, index => {
-					const suffix = (index + 1).toString().padStart(2, '0')
-					return [`team-${suffix}`, `Team ${suffix}`, 0]
-				})
-			)
+			assert.deepStrictEqual(first.teams, [])
 
-			yield* counter.adjust(first.teams[0]!.id, 12, 'add')
+			yield* counter.add('Front Row')
 			const restarted = yield* makeCounter
-			assert.strictEqual((yield* restarted.snapshot).teams[0]!.count, 0)
+			assert.deepStrictEqual((yield* restarted.snapshot).teams, [])
 		})
 	)
 
 	it.effect('serializes concurrent deltas and never subtracts below zero', _context =>
 		Effect.gen(function* () {
 			const counter = yield* makeCounter
+			yield* counter.add('Front Row')
 			const team = (yield* counter.snapshot).teams[0]!
 
 			yield* Effect.all(
@@ -44,6 +39,7 @@ describe('Counter', () => {
 	it.effect('validates deltas and trimmed case-insensitive team names', _context =>
 		Effect.gen(function* () {
 			const counter = yield* makeCounter
+			yield* counter.add('Team 01')
 			const team = (yield* counter.snapshot).teams[0]!
 
 			const amountError = yield* Effect.flip(counter.adjust(team.id, 1.5, 'add'))
@@ -60,13 +56,14 @@ describe('Counter', () => {
 			assert.strictEqual(added.name, 'Back Row')
 
 			yield* counter.remove(added.id)
-			assert.strictEqual((yield* counter.snapshot).teams.length, 13)
+			assert.strictEqual((yield* counter.snapshot).teams.length, 2)
 		})
 	)
 
 	it.effect('sends a fresh snapshot before live changes', _context =>
 		Effect.gen(function* () {
 			const counter = yield* makeCounter
+			yield* counter.add('Front Row')
 			const ready = yield* Deferred.make<boolean>()
 			const eventsFiber = yield* pipe(
 				counter.changes,
