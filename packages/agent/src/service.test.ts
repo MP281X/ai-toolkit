@@ -56,12 +56,21 @@ describe('Agent', () => {
 		})
 	})
 
-	it('runs OpenCode through the latest package with permissions auto-approved', async () => {
-		await expect(commandFor('opencode').then(commandSnapshot)).resolves.toEqual({
-			args: ['opencode-ai@latest', '--auto', '--model', 'openai/gpt-5.6-sol'],
-			command: 'vpx',
-			cwd: '/tmp/deslop-agent',
-			env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
-		})
-	})
+	it.effect('runs OpenCode V2 interactively through its CLI package', _context =>
+		pipe(
+			Effect.gen(function* () {
+				const agent = yield* Agent
+				const command = yield* agent.create
+
+				expect(commandSnapshot(command)).toEqual({
+					args: ['@opencode-ai/cli@next'],
+					command: 'vpx',
+					cwd: '/tmp/deslop-agent',
+					env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
+				})
+				expect(command.options.extendEnv).toBe(true)
+			}),
+			Effect.provide(Agent.layer({cwd: '/tmp/deslop-agent', provider: 'opencode'}))
+		)
+	)
 })

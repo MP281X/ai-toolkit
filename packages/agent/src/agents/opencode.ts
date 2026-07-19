@@ -5,7 +5,7 @@ import {ChildProcess} from 'effect/unstable/process'
 import {AgentError, type AgentLayerConfig} from '../schema.ts'
 
 const opencodeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
-	const command = ChildProcess.make('vpx', ['opencode-ai@latest', '--auto', '--model', 'openai/gpt-5.6-sol'], {
+	const command = ChildProcess.make('vpx', ['@opencode-ai/cli@next'], {
 		cwd: config.cwd,
 		env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'},
 		extendEnv: true
