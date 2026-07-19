@@ -1,6 +1,7 @@
 ---
 name: git-operations
 description: 'Branches, worktrees, commits, issues, Projects, pull requests, stacks, synchronization, conflicts.'
+slash: false
 ---
 
 ## Safety
@@ -15,11 +16,13 @@ Resolve conflicts from intended final behavior and current source, never by mech
 
 Infer the repository from the checkout. Discover the current-branch pull request with `gh pr view`; require a URL only for another target.
 
-Create and edit real issues with `gh issue create|edit`. Add each created issue to the repository Project with `gh project item-add`; Project membership is the only Project mutation. Keep the issue open until its linked pull request merges.
+Create or update the real issue only after the user approves the latest visualized plan. Material requirement changes require a replacement visualization, renewed approval, and an issue update before implementation resumes. Add each created issue to the repository Project with `gh project item-add`; Project membership is the only Project mutation. Keep the issue open until its linked pull request merges.
 
 ## Branches
 
 One issue maps to one branch and one pull request. Create implementation branches from current default-branch state. Keep independent work on independent branches; use a stack only when one item depends on another item's unmerged changes.
+
+After every required gate passes, publish automatically by committing, pushing, creating or updating the pull request, and marking it ready. Only the human merges.
 
 ## Conditional reference
 

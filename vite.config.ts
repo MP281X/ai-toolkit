@@ -54,7 +54,7 @@ export default defineConfig({
 			suspicious: 'off'
 		},
 		env: {browser: true, builtin: true, node: true},
-		ignorePatterns: ['.agents/repos/**', '**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
+		ignorePatterns: ['**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
 			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},

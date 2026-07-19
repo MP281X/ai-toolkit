@@ -15,9 +15,9 @@ The workbench backend (node) leaks memory badly with multiple long-running termi
 
 **History:** commit `c8794c4` "fix: memory leaks" removed a previous `@xterm/headless` + serialize architecture. Its leaks were the unbounded queues + PubSub event log, **not** the emulator. This rewrite reinstates the emulator under the current bounded-queue discipline.
 
-**Chosen direction (user-approved):** one headless xterm per session server-side; on attach, serialize screen+scrollback once and send as a snapshot, then stream live bytes. No raw-byte transcript, no replay. App-lifetime persistence (no tmux). User requirements: full rewrite, battle-tested, glitch-free for codex/claude-code TUIs, maximally Effect-native per AGENTS.md + `.agents/skills/{effect,testing,react,packages}`.
+**Chosen direction (user-approved):** one headless xterm per session server-side; on attach, serialize screen+scrollback once and send as a snapshot, then stream live bytes. No raw-byte transcript, no replay. App-lifetime persistence (no tmux). User requirements: full rewrite, battle-tested, glitch-free for codex/claude-code TUIs, maximally Effect-native per AGENTS.md and the `effect` and `frontend` skills.
 
-## Effect architecture (v4, per `.agents/repos/effect/LLMS.md` + skills)
+## Effect architecture (v4, per the configured Effect Git reference and skills)
 
 Verified against the Effect source ref (not node_modules):
 
@@ -113,7 +113,7 @@ Emulator backpressure: awaiting the screen.write callback slows the writer → d
 
 A standalone node script spawned inside the PTY by tests, emitting phased patterns that mimic claude code / codex rendering: plain scrolling output → ink-style repaint loops (cursor-up + erase-line redraws of a box-drawing "plan block") → DECSET 2026 synchronized-update blocks → alt-screen enter/exit (codex-style full-screen) → scroll regions (DECSTBM) → wide chars/emoji straddling chunk sizes → cursor save/restore + SGR storms. Phases are timed so tests can attach mid-phase. Each phase prints a sentinel marker.
 
-Testing follows `.agents/skills/testing`: colocated vitest via `vite-plus/test`, breakable behavior only, structural/asymptotic assertions over timing, representative fixtures (the torture fixture stands in for the external claude/codex CLIs, which are never invoked in tests).
+Testing uses colocated Vitest through `vite-plus/test`, targets breakable behavior at public seams, prefers structural or asymptotic assertions over timing, and uses representative fixtures instead of invoking external Claude or Codex CLIs.
 
 ### 6b. Equivalence property tests — `packages/terminal/src/service.test.ts`
 

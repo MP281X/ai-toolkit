@@ -25,9 +25,7 @@
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
-		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
-		
-		"postinstall": "node scripts/clone-source-repos.ts"
+		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'"
 	},
 	
 	"dependencies": {

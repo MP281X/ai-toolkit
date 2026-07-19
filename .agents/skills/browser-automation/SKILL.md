@@ -1,6 +1,7 @@
 ---
 name: browser-automation
 description: 'Rendered-page interaction; frontend checks; screenshots, recordings; console/network inspection; browser state.'
+slash: false
 ---
 
 ## Session
@@ -31,6 +32,6 @@ Use snapshot refs first, semantic locators second, CSS last. Wait for the expect
 
 ## Evidence
 
-Inspect requests before routing or mocking; mock only the state under test. Enable React DevTools before component, hook, suspense, or render inspection.
+Inspect requests before routing or mocking; mock only the state under test.
 
 Frontend checks cover every materially distinct success, failure, empty, loading, mobile, console, and network state. Record temporal behavior from before the interaction through its result, then stop recording.

@@ -1,6 +1,7 @@
 ---
 name: workspace-configuration
 description: 'Manifests; dependencies; export wiring; Vite Plus; lint/test/build config; scripts; lockfiles; automation.'
+slash: false
 ---
 
 ## Topology

@@ -1,6 +1,7 @@
 ---
 name: frontend
 description: 'React routes, atoms, RPC state; UI layout, controls, loading, mutation feedback, visual design.'
+slash: false
 ---
 
 Frontend work has two branches. Load only the branch the change reaches:

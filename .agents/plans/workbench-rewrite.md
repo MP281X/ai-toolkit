@@ -37,10 +37,10 @@ Out of scope:
 
 ## Reference Repos
 
-Use `.agents/repos/*` only when a local reference answers the implementation question.
+Use configured OpenCode Git references only when external source answers the implementation question.
 
 - `opencode`, `t3code`: multi-session coding-agent UX, terminal/session performance.
-- `localterm`, `xterm.js`, `node-pty`, `lydell-node-pty`: terminal lifecycle, buffering, resize, attach.
+- `localterm`, `xterm-js`, `node-pty`, `lydell-node-pty`: terminal lifecycle, buffering, resize, attach.
 - `portless`: preview/proxy behavior.
 - `effect`, `effect-lsp`: Effect APIs, schemas, streams, layers, tracing.
 - `pi`, `codex`, `opencode`: SDK/CLI agent command surfaces.

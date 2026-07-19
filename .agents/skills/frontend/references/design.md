@@ -53,12 +53,6 @@ Keep corners square unless the primitive owns radius. Gradients, shadows, blur, 
 
 Match surrounding size, icon scale, density, border, placement, pending state, and disabled behavior.
 
-## Exploration
-
-When the interaction model or layout is unresolved, create 2–3 implementation-equivalent options with `DevTools.Variants`; use `DevTools.Navigation` for screen-level alternatives. Options differ by interaction or layout, never decoration.
-
-Keep the simplest option that preserves density, scan speed, state clarity, adjacency, primitive reuse, and a single flow. Remove the others.
-
 ## Copy
 
 Use the shortest clear label and complete user-facing language. Omit implementation, shortcut, and feature explanations. Copy must fit mobile and desktop; heading scale follows its container.
