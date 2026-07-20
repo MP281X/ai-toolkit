@@ -1,15 +1,22 @@
 ---
 name: visualization
-description: 'Stable-theme HTML plans and visual explanations for user validation.'
-slash: false
+description: 'Use for user-validatable visual communication; return a self-contained HTML plan, explanation, mock, or prototype.'
 ---
 
-Turn a completed, question-free plan or requested visual explanation into one self-contained HTML document and open it immediately. For implementation planning this checkpoint is automatic and precedes approval.
+## Artifact
 
-Read `assets/template.html` and replace `<!-- COMPLETE_PLAN -->` with the complete document. Write to a random `/tmp/deslop-plan-<random>.html` for plans or `/tmp/deslop-visual-<random>.html` for explanations. Keep the template's explicit theme stable across refreshes and replacement documents; never derive it from system theme or time.
+- Self-contained HTML: plan, explanation, mock, prototype.
+- Template: read `assets/template.html`; replace `<!-- COMPLETE_PLAN -->`.
+- Path: `/tmp/deslop-plan-<random>.html` or `/tmp/deslop-visual-<random>.html`; open immediately.
 
-Use a compact, mobile-first, scroll-only composition. Lead with the thesis and dominant decision visual. Include only user-validatable behavior, states, interfaces, decisions, acceptance, constraints, and material risks. Keep all information visible: no tabs, accordions, decorative navigation, nested cards, repeated content, or viewport-filling whitespace.
+## Content
 
-Mocks are local, responsive, resettable, and self-contained. Use repository-native components only when real components decide behavior. A revised plan replaces the complete document rather than adding a delta.
-
-After opening a plan checkpoint, stop for explicit user approval. Approval applies only to that exact task, candidate plan, and base.
+- Plan: only intended changes and resulting behavior. No current state, retrospective, validation ceremony, or implementation narration.
+- Explanation: concepts. Mock/prototype: interaction.
+- Lead with thesis and dominant decision.
+- Use icons and spatial relationships to carry meaning. Prefer diagrams and prototypes to styled prose.
+- Desktop-first compact density. Scroll only for useful detail. Intentional line breaks; short labels stay intact.
+- One shared grid, alignment, spacing, type, and surface system.
+- First pass self-check: composition has a clear reading order; containment makes relationships visible; no element needs prose to explain its position.
+- User-validatable behavior, states, interfaces, acceptance, constraints, risks only.
+- Responsive, resettable, theme-stable.

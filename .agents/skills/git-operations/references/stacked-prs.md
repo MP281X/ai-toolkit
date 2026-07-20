@@ -2,7 +2,8 @@
 
 ## Topology
 
-- The root targets the default branch.
+- Apply this reference only to an orchestrator-approved stack; a stack is never the default shape.
+- The root targets the read-only base.
 - Each later branch targets its preceding stack branch.
 - Every pull request remains independently understandable and reviewable against its immediate base.
 

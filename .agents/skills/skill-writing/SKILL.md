@@ -1,49 +1,39 @@
 ---
 name: skill-writing
-description: 'Placement across agents, AGENTS.md, skills, TypeScript, native and custom Oxlint, Fallow, tests, and review.'
-slash: false
+description: 'Use for agent, instruction, skill, rule, or artifact semantics; return one semantic owner and concise durable guidance.'
 ---
 
-Predictability is the goal: the same decision process across runs, not identical output.
+One meaning, one semantic owner.
 
-Audit the affected semantic owner, composed dependents, executable enforcement, and proof. Expand to the complete instruction system only when ownership changes or evidence reveals broader drift.
+## Placement
 
-## Invocation
+| Audience                          | Owner            |
+| --------------------------------- | ---------------- |
+| Every task before routing         | root `AGENTS.md` |
+| User dialogue, approval, contract | orchestrator     |
+| One role                          | agent            |
+| One loaded domain                 | skill            |
+| One task                          | packet or issue  |
+| Detectable behavior               | named tooling    |
 
-A model-invoked skill needs an independent leading concept. Its name carries identity; its description adds only trigger branches the name does not already imply. Name plus description must reliably match every required invocation.
+Smallest audience wins. Move; never mirror. Local `AGENTS.md`: subtree behavior.
 
-The body starts with owned behavior. It does not repeat the title, description, invocation condition, or implicit repository context. Skills never name, load, or point to other skills.
+## Shape
 
-## Information hierarchy
-
-Keep rules every branch needs in `SKILL.md`. Move branch-only reference behind a precise pointer to source, tool help, or a sibling file. Keep a concept's definition, rules, and exceptions together.
-
-Ordered workflows use steps with observable completion criteria. Reference skills use flat rules. Do not force one format across both.
-
-## Ownership
-
-Each meaning has one narrow owner:
-
-- universal behavior: implicit root guidance
-- subtree behavior: implicit local guidance
-- independently invoked workflow or domain: skill
-- detectable regression: Vite Plus or Oxlint
-- dead-code or security ownership: Fallow
-
-Every combination of loaded guidance must yield one compatible answer per decision.
+- Descriptions: trigger, outcome, material boundary.
+- Bodies: positive owned behavior; default, invariants, decision-changing branches.
+- Schematic labels, fragments, lists. Prose only when structure loses meaning.
+- Commands remain when they prevent guessing.
+- Conditional detail: source or sibling reference only when it changes a decision.
 
 ## Pruning
 
-Keep accepted current behavior only. Delete superseded, opposite, historical, compatibility, migration, rationale, and partial-mirror residue.
-
-Every sentence must change behavior beyond model defaults. Remove no-ops, low-value examples, repeated caveats, and unused branches. Semantic equivalence has one owner regardless of wording.
-
-## Language
-
-Use a pretrained leading concept when it replaces explanation. Grammar may yield to concision; meaning may not. State the accepted behavior first and reserve prohibition for hard safety boundaries.
-
-Use absolutes for invariants. Encode judgment as a decision rule. Use minimal code when prose leaves ambiguity.
+- Delete first: duplicate, historical, tutorial, partial mirror, compatibility residue, unused branch.
+- Retain only unrecoverable decisions. Examples and rationale: reconstruction or decision value.
+- Defaults: judgment rules. Invariants: absolutes.
 
 ## Completion
 
-Every retained word has current behavior, invocation, ownership, or precision value. Precedence, exceptions, blockers, and completion criteria have one interpretation.
+- Compose: root + agent + loaded skills + packet.
+- Prove one owner, one compatible answer, cold-context sufficiency.
+- Every retained word changes behavior, precision, or invocation.

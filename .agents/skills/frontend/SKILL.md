@@ -1,12 +1,11 @@
 ---
 name: frontend
-description: 'React routes, atoms, RPC state; UI layout, controls, loading, mutation feedback, visual design.'
-slash: false
+description: 'Use for approved React UI behavior; return coherent routes, components, interactions, states, and presentation.'
 ---
 
-Frontend work has two branches. Load only the branch the change reaches:
+## UI
 
-- State, async behavior, routes, atoms, RPC, or component boundaries: `references/dataflow.md`.
-- Layout, interaction, visual states, controls, styling, or copy: `references/design.md`.
+- `references/dataflow.md`: UI state, async behavior, routes, atoms, RPC, component boundaries.
+- `references/design.md`: layout, interaction, visual states, controls, styling, copy.
 
-Changes that reach both branches must compose around one user-facing interaction and one source of backend truth.
+One interaction; one backend source of truth.

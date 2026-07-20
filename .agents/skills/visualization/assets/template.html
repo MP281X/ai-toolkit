@@ -1,33 +1,54 @@
 <!doctype html>
-<html lang="en" class="bg-background" style="color-scheme: dark; font-size: 14px">
+<html lang="en" class="bg-background" style="color-scheme: dark; font-size: 14px; line-height: 1.25">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Plan</title>
 		<link
-			href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap"
 			rel="stylesheet"
 		/>
 		<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 		<script src="https://unpkg.com/lucide@latest"></script>
 		<style type="text/tailwindcss">
 			@theme {
-				--font-mono: 'JetBrains Mono', monospace;
+				--font-sans: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+				--font-mono: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
 				--color-background: oklch(0.18 0.006 285.885);
 				--color-foreground: oklch(0.965 0.002 285.823);
 				--color-card: oklch(0.22 0.007 285.885);
+				--color-card-foreground: oklch(0.965 0.002 285.823);
+				--color-popover: oklch(0.23 0.007 285.885);
+				--color-popover-foreground: oklch(0.965 0.002 285.823);
 				--color-primary: oklch(0.7214 0.1337 49.9802);
 				--color-primary-foreground: oklch(0.1797 0.0043 308.1928);
+				--color-secondary: oklch(0.26 0.006 286.033);
+				--color-secondary-foreground: oklch(0.965 0.002 285.823);
 				--color-muted: oklch(0.25 0.006 286.033);
 				--color-muted-foreground: oklch(0.75 0.012 286.067);
 				--color-accent: oklch(0.31 0.007 286.033);
 				--color-accent-foreground: oklch(0.965 0.002 285.823);
 				--color-border: oklch(1 0 0 / 12%);
+				--color-input: oklch(1 0 0 / 18%);
+				--color-ring: transparent;
 				--color-destructive: oklch(0.704 0.191 22.216);
+				--color-chart-1: oklch(0.837 0.128 66.29);
+				--color-chart-2: oklch(0.7214 0.1337 49.9802);
+				--color-chart-3: oklch(0.646 0.222 41.116);
+				--color-chart-4: oklch(0.553 0.195 38.402);
+				--color-chart-5: oklch(0.47 0.157 37.304);
+				--color-sidebar: oklch(0.16 0.006 285.885);
+				--color-sidebar-foreground: oklch(0.965 0.002 285.823);
+				--color-sidebar-primary: oklch(0.7214 0.1337 49.9802);
+				--color-sidebar-primary-foreground: oklch(0.98 0.016 73.684);
+				--color-sidebar-accent: oklch(0.25 0.006 286.033);
+				--color-sidebar-accent-foreground: oklch(0.965 0.002 285.823);
+				--color-sidebar-border: oklch(1 0 0 / 12%);
+				--color-sidebar-ring: oklch(0.7214 0.1337 49.9802);
 			}
 		</style>
 	</head>
-	<body class="bg-background text-foreground min-h-screen font-mono antialiased">
+	<body class="bg-background text-foreground min-h-screen font-sans antialiased">
 		<main class="mx-auto w-full max-w-6xl p-4"><!-- COMPLETE_PLAN --></main>
 		<script>
 			lucide.createIcons()

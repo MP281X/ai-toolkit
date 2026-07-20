@@ -1,13 +1,22 @@
 ---
 name: effect
-description: 'Effect architecture and application model; services, schemas, streams, layers, and public package contracts.'
-slash: false
+description: 'Use for approved Effect application behavior and external boundaries; return direct, concrete Effect code.'
 ---
 
-Use Effect as the application model; keep non-Effect code at boundary interop. For nontrivial API or architecture questions, inspect the configured `effect` Git reference rather than relying on memory.
+## Model and boundaries
 
-Entrypoints use platform or Atom runtimes. Decode unknown boundary data with Schema. Schemas live in schema modules.
+- Application behavior: Effect. Foreign APIs: explicit boundaries.
+- Unknown input: `Schema`; configuration: `Config`; expected failures: typed errors.
+- Resources: layers and finalizers. Pure transformations stay local until they own policy or change together.
 
-Keep code at its use site. A helper earns a name only when it owns domain policy, lifecycle, an external boundary, recursion, or behavior that changes as one unit. Use Effect modules, `pipe`, `Match`, and early returns. Wrappers and config objects must own behavior.
+## Direct-concrete ladder
 
-When a change affects exported services, schemas, utilities, layers, or package behavior, read `references/package-contract.md`.
+remove unnecessary code → reuse current code → maintained Effect/platform capability → direct local composition → abstraction for domain policy, lifecycle, external boundary, public contract, or proven shared behavior
+
+Genericity: real second behavior.
+
+## References
+
+- Configured `effect`: nontrivial API or architecture decisions.
+- `references/package-contract.md`: exported services, schemas, utilities, layers, package behavior.
+- `references/testing.md`: Effect test behavior.

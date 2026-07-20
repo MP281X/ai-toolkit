@@ -1,30 +1,22 @@
 ---
 name: git-operations
-description: 'Branches, worktrees, commits, issues, Projects, pull requests, stacks, synchronization, conflicts.'
-slash: false
+description: 'Use for approved Git history and pull-request state; return safe commits, pushes, and pull requests.'
 ---
 
-## Safety
+## Invariant
 
-Inspect status, current branch, default branch, remotes, and the relevant pull request before mutation. Preserve unrelated changes and untracked files.
+- `main`: read-only.
+- The current user-provided task branch is the expected topology for implementation, commits, pushes, and history changes.
+- Human merges.
 
-The default branch is read-only for commits, pushes, history rewrites, and destructive Git mutations. Outside it, reset, discard, branch/worktree deletion, and shared-history rewrite require an explicit request. Use `--force-with-lease` only for an accepted stack rebase.
+## State
 
-Resolve conflicts from intended final behavior and current source, never by mechanically choosing a side. Integrate the default branch into feature or stack branches, never the reverse. The user merges pull requests.
+- Inspect repository state, task branch, remotes, named target; preserve unrelated work.
+- Resolve conflicts from intended behavior and current source.
+- Branch, worktree, or stack topology changes require explicit task-packet authority; they are not a routine fallback.
+- Publish to the named target only after required gates and authorization.
 
-## GitHub
+## References
 
-Infer the repository from the checkout. Discover the current-branch pull request with `gh pr view`; require a URL only for another target.
-
-Create or update the real issue only after the user approves the latest visualized plan. Material requirement changes require a replacement visualization, renewed approval, and an issue update before implementation resumes. Add each created issue to the repository Project with `gh project item-add`; Project membership is the only Project mutation. Keep the issue open until its linked pull request merges.
-
-## Branches
-
-One issue maps to one branch and one pull request. Create implementation branches from current default-branch state. Keep independent work on independent branches; use a stack only when one item depends on another item's unmerged changes.
-
-After every required gate passes, publish automatically by committing, pushing, creating or updating the pull request, and marking it ready. Only the human merges.
-
-## Conditional reference
-
-- Before writing commit or pull-request text, read `references/messages.md`.
-- Before stack mutation or recovery, read `references/stacked-prs.md`.
+- `references/messages.md`: commit or pull-request text.
+- `references/stacked-prs.md`: use only when explicit task-packet authority names stacked work.
