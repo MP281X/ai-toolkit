@@ -2,7 +2,7 @@
 
 ## System
 
-Deslop surfaces are dense, bordered, high-contrast, and scan-first.
+Surfaces are dense, bordered, high-contrast, and scan-first.
 
 Read the existing system before composing:
 
