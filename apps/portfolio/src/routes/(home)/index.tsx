@@ -11,7 +11,16 @@ import {RpcClient} from '#lib/atomRuntime.ts'
 import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
 import {PortfolioState} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
-import {Boxes, Database, FlaskConical, Monitor, MousePointer2, Server, Sparkles} from '@deslop/components/icons'
+import {
+	ArrowUpRight,
+	Boxes,
+	Database,
+	FlaskConical,
+	Monitor,
+	MousePointer2,
+	Server,
+	Sparkles
+} from '@deslop/components/icons'
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {cn} from '@deslop/components/utils'
 
@@ -118,27 +127,62 @@ const portfolioAtom = Atom.keepAlive(
 )
 
 const SUMMARY_LINES = [
-	"I'm a frontend TypeScript developer with production experience building real-time, type-safe web applications using React and modern frontend tooling.",
-	'I deliver features end-to-end, from gathering user requirements to deploying containerized services, working effectively in fast-paced, cross-functional teams.',
-	'I use AI coding agents daily to accelerate development, refactoring, and testing while maintaining manual code review to ensure consistency and quality.'
+	"I'm a full-stack TypeScript developer specializing in Effect, React, and AI agents, with experience building and shipping full-stack applications.",
+	'Currently, I’m focusing on building stable, reusable primitives that coding agents can compose to build high-quality applications with minimal effort, while specialized skills, lint rules, and feedback loops steer the agent toward consistent patterns and rigorous review.'
 ]
 
 const TECHNICAL_SKILLS = [
 	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
-	{area: 'Backend', icon: Server, items: 'Node.js, Effect-TS (functional TypeScript library), RESTful API'},
+	{area: 'Backend', icon: Server, items: 'Effect, Node.js, type-safe RPC, REST APIs'},
 	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
 	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
 	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
+	{area: 'AI Tooling', icon: Sparkles, items: 'Codex, OpenCode, Github Copilot, Claude Code'}
+]
+
+const FEATURED_PROJECT = {
+	currentWork:
+		'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
+	description:
+		'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
+	href: 'https://github.com/MP281X/deslop',
+	name: 'deslop',
+	role: 'Full-Stack TypeScript Monorepo',
+	stack: 'Effect · React · TypeScript · WebSockets · PostgreSQL · Docker'
+}
+
+const SUPPORTING_PROJECTS = [
+	{
+		description:
+			'A starter for React and Kotlin/Spring applications with generated API types, PostgreSQL migrations, real-time sync, authentication, and reusable UI components.',
+		href: 'https://github.com/MP281X/kotlin-react-template',
+		name: 'Kotlin React Template',
+		role: 'Full-Stack Starter',
+		stack: 'React · Kotlin · Spring · Effect · PostgreSQL · ElectricSQL'
+	},
+	{
+		description:
+			'An open-source video platform with FFmpeg/HLS processing, background jobs, real-time upload progress, PostgreSQL, Redis, S3-compatible storage, and Kubernetes deployment.',
+		href: 'https://github.com/MP281X/blixter_video',
+		name: 'Blixter',
+		role: 'Video Streaming Platform',
+		stack: 'TypeScript · FFmpeg · PostgreSQL · Redis · Kubernetes'
+	}
 ]
 
 const WORK_EXPERIENCE = [
 	{
 		company: 'Humans.Tech',
-		highlights: [],
+		highlights: [
+			'Built the shared frontend foundation used to start new products, defining reusable architecture, tooling, and development conventions',
+			'Developed reusable messaging interfaces for person-to-person and AI-agent conversations',
+			'Created reusable data-display primitives, including tables and virtualized lists for large datasets',
+			'Collaborated closely with backend engineers to design, integrate, and refine product functionality',
+			'Introduced AI-assisted development workflows that accelerated implementation for both individual and team delivery'
+		],
 		location: 'Frosinone, Italy',
 		note: '',
-		period: 'Apr 2026 – Present',
+		period: 'Apr 2026 – Jul 2026',
 		role: 'Frontend Developer'
 	},
 	{
@@ -462,7 +506,7 @@ function CursorEl(input: {
 	return (
 		<div
 			ref={nodeRef}
-			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
+			className="pointer-events-none fixed top-0 left-0 z-5 will-change-transform"
 			style={{transform: `translate3d(${initialMotion.x}px, ${initialMotion.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">
@@ -492,7 +536,7 @@ function Section(input: {
 			}}
 			data-section={input.id}
 			className={cn(
-				'relative z-10 flex min-h-dvh snap-start flex-col items-center justify-center overflow-hidden px-4 py-16 sm:px-6',
+				'relative z-10 flex flex-col items-center overflow-hidden px-4 py-20 sm:px-6 sm:py-24',
 				input.className
 			)}
 		>
@@ -503,7 +547,7 @@ function Section(input: {
 
 function SectionLabel(input: {readonly title: string}) {
 	return (
-		<div className="mb-8 flex w-full max-w-5xl items-center gap-4 sm:mb-10">
+		<div className="mb-6 flex w-full max-w-5xl items-center gap-4 sm:mb-8">
 			<div className="bg-primary/25 h-px flex-1" />
 			<h2 className="border-primary/30 bg-background/88 text-primary border px-5 py-2 font-mono text-xs font-bold tracking-[0.35em] uppercase backdrop-blur-sm sm:text-sm">
 				{input.title}
@@ -515,7 +559,7 @@ function SectionLabel(input: {readonly title: string}) {
 
 function HeroSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={0} registerSection={input.registerSection}>
+		<Section id={0} registerSection={input.registerSection} className="min-h-dvh justify-center py-16">
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
 				<div className="space-y-1 text-center">
 					<h1 className="text-foreground font-mono text-4xl font-black tracking-[0.15em] uppercase sm:text-5xl md:text-6xl">
@@ -585,9 +629,66 @@ function SkillsSection(input: {readonly registerSection: (id: number, node: HTML
 	)
 }
 
-function ExperienceSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ProjectCard(input: {
+	readonly project: {
+		readonly currentWork?: string
+		readonly description: string
+		readonly href: string
+		readonly name: string
+		readonly role: string
+		readonly stack: string
+	}
+}) {
+	return (
+		<Panel className="flex h-full flex-col p-4 sm:p-5">
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.08em] uppercase">
+						{input.project.name}
+					</h3>
+					<p className="text-muted-foreground mt-1 font-mono text-xs">{input.project.role}</p>
+				</div>
+				<a
+					href={input.project.href}
+					target="_blank"
+					rel="noopener noreferrer"
+					aria-label={`View ${input.project.name} on GitHub`}
+					className="text-primary hover:text-primary/80 transition-colors"
+				>
+					<ArrowUpRight className="size-4" />
+				</a>
+			</div>
+			<p className="text-foreground/90 mt-4 font-mono text-xs leading-6 sm:text-sm">{input.project.description}</p>
+			{Predicate.isNotUndefined(input.project.currentWork) && (
+				<p className="text-muted-foreground mt-4 font-mono text-[11px] leading-5">
+					<span className="text-foreground/80">Working on:</span> {input.project.currentWork}
+				</p>
+			)}
+			<p className="text-muted-foreground/80 mt-auto pt-4 font-mono text-[10px]">{input.project.stack}</p>
+		</Panel>
+	)
+}
+
+function ProjectsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={3} registerSection={input.registerSection}>
+			<SectionLabel title="Personal Projects" />
+			<div className="flex w-full max-w-5xl flex-col gap-4">
+				<ProjectCard project={FEATURED_PROJECT} />
+
+				<div className="grid gap-4 md:grid-cols-2">
+					{Array.map(SUPPORTING_PROJECTS, project => (
+						<ProjectCard key={project.name} project={project} />
+					))}
+				</div>
+			</div>
+		</Section>
+	)
+}
+
+function ExperienceSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+	return (
+		<Section id={4} registerSection={input.registerSection}>
 			<SectionLabel title="Experience" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				{Array.map(WORK_EXPERIENCE, job => (
@@ -628,7 +729,7 @@ function ExperienceSection(input: {readonly registerSection: (id: number, node: 
 
 function EducationSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={4} registerSection={input.registerSection}>
+		<Section id={5} registerSection={input.registerSection}>
 			<SectionLabel title="Education & Languages" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				{Array.map(EDUCATION_DATA, entry => (
@@ -659,7 +760,7 @@ function EducationSection(input: {readonly registerSection: (id: number, node: H
 
 function ContactSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
-		<Section id={5} registerSection={input.registerSection}>
+		<Section id={6} registerSection={input.registerSection}>
 			<SectionLabel title="Contact" />
 			<div className="flex w-full max-w-5xl flex-col gap-3">
 				{Array.map(CONTACT_ITEMS, item => (
@@ -699,7 +800,7 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 				<div className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-xs sm:gap-x-8">
 					<span className="text-foreground">j / k</span>
 					<span>next / prev section</span>
-					<span className="text-foreground">1 – 6</span>
+					<span className="text-foreground">1 – 7</span>
 					<span>jump to section</span>
 					<span className="text-foreground">r</span>
 					<span>change cursor color</span>
@@ -757,7 +858,7 @@ function PortfolioRoute() {
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
 	function getSectionRefs() {
-		sectionRefs.current ??= Array.makeBy(6, () => null)
+		sectionRefs.current ??= Array.makeBy(7, () => null)
 		return sectionRefs.current
 	}
 
@@ -834,7 +935,7 @@ function PortfolioRoute() {
 	}
 
 	useHotkey('J', () => {
-		scrollTo(Math.min(currentSectionRef.current + 1, 5))
+		scrollTo(Math.min(currentSectionRef.current + 1, 6))
 	})
 	useHotkey('K', () => {
 		scrollTo(Math.max(currentSectionRef.current - 1, 0))
@@ -857,6 +958,9 @@ function PortfolioRoute() {
 	useHotkey('6', () => {
 		scrollTo(5)
 	})
+	useHotkey('7', () => {
+		scrollTo(6)
+	})
 	useHotkey('R', updateColor)
 	useHotkey({key: '?', shift: true}, () => {
 		setShowShortcuts(show => !show)
@@ -871,17 +975,23 @@ function PortfolioRoute() {
 
 	return (
 		<div
-			className="relative min-h-0 flex-1 cursor-none snap-y snap-mandatory overflow-x-hidden overflow-y-scroll"
+			className="relative min-h-0 flex-1 cursor-none overflow-x-hidden overflow-y-scroll"
 			onPointerMove={event => {
 				updatePointer(event.clientX, event.clientY)
 			}}
 			onScroll={event => {
-				currentSectionRef.current = Math.round(event.currentTarget.scrollTop / event.currentTarget.clientHeight)
+				const viewportMiddle = event.currentTarget.scrollTop + event.currentTarget.clientHeight / 2
+				currentSectionRef.current = pipe(
+					getSectionRefs(),
+					Array.findLastIndex(section => Predicate.isNotNull(section) && section.offsetTop <= viewportMiddle),
+					Option.getOrElse(() => 0)
+				)
 			}}
 		>
 			<HeroSection registerSection={registerSection} />
 			<AboutSection registerSection={registerSection} />
 			<SkillsSection registerSection={registerSection} />
+			<ProjectsSection registerSection={registerSection} />
 			<ExperienceSection registerSection={registerSection} />
 			<EducationSection registerSection={registerSection} />
 			<ContactSection registerSection={registerSection} />
