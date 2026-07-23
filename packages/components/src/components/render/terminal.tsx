@@ -77,7 +77,6 @@ export function Terminal({
 		[]
 	)
 
-	// oxlint-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup owns every timer, listener, observer, frame, and terminal allocation below.
 	useEffect(() => {
 		if (Predicate.isNullish(elementRef.current)) return
 

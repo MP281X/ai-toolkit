@@ -11,15 +11,11 @@ default_subagent_model = "gpt-5.6-sol"
 default_subagent_reasoning_effort = "medium"
 
 [agents.manager]
-description = "Questions-first manager that turns explicit approval into one canonical issue contract."
+description = "Remote-worktree launcher that forwards one user brief."
 config_file = "./agents/manager.toml"
 
-[agents.orchestrator]
-description = "Persistent issue-worktree owner that coordinates implementation, acceptance, review, and publication."
-config_file = "./agents/orchestrator.toml"
-
 [agents.implementation]
-description = "Persistent issue implementation owner and sole writer."
+description = "Resumable issue implementation owner and sole writer."
 config_file = "./agents/implementation.toml"
 
 [agents.tester]

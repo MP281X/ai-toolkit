@@ -10,7 +10,7 @@ One meaning, one semantic owner.
 | Audience                          | Owner            |
 | --------------------------------- | ---------------- |
 | Every task before routing         | root `AGENTS.md` |
-| User dialogue, approval, contract | orchestrator     |
+| User dialogue, approval, contract | root task        |
 | One role                          | agent            |
 | One loaded domain                 | skill            |
 | One task                          | packet or issue  |

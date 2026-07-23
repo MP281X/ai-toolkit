@@ -19,15 +19,3 @@ remote_plugin = false
 [mcp_servers.openaiDeveloperDocs]
 enabled = false
 url = "https://developers.openai.com/mcp"
-
-[[skills.config]]
-path = "/proc/self/cwd/.agents/skills/browser-automation/SKILL.md"
-enabled = false
-
-[[skills.config]]
-path = "/proc/self/cwd/.agents/skills/git-operations/SKILL.md"
-enabled = false
-
-[[skills.config]]
-path = "/proc/self/cwd/.agents/skills/visualization/SKILL.md"
-enabled = false
