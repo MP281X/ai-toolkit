@@ -213,8 +213,7 @@ const GitPublishSessions = RcMap.make({
 
 const agentProfiles = [
 	{icon: 'codex', id: 'codex', label: 'codex'},
-	{icon: 'claude', id: 'claude', label: 'claude'},
-	{icon: 'opencode', id: 'opencode', label: 'opencode'}
+	{icon: 'claude', id: 'claude', label: 'claude'}
 ] satisfies readonly AgentProfile[]
 
 const ProviderAgents = RcMap.make({

@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, String, pipe} from 'effect'
+import {Match, Predicate, String, pipe} from 'effect'
 
 import {ClipboardAddon} from '@xterm/addon-clipboard'
 import {FitAddon} from '@xterm/addon-fit'
@@ -77,12 +77,11 @@ export function Terminal({
 		[]
 	)
 
+	// oxlint-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup owns every timer, listener, observer, frame, and terminal allocation below.
 	useEffect(() => {
 		if (Predicate.isNullish(elementRef.current)) return
 
 		disposedRef.current = false
-		const timeouts = Array.empty<ReturnType<typeof setTimeout>>()
-
 		const style = getComputedStyle(elementRef.current)
 		const rootStyle = getComputedStyle(elementRef.current.ownerDocument.documentElement)
 		const fontSize = Number.parseFloat(style.fontSize)
@@ -175,9 +174,11 @@ export function Terminal({
 		})
 
 		resize()
-		for (const delay of [16, 50, 100, 250, 500]) {
-			timeouts.push(setTimeout(resize, delay))
-		}
+		const resize16 = setTimeout(resize, 16)
+		const resize50 = setTimeout(resize, 50)
+		const resize100 = setTimeout(resize, 100)
+		const resize250 = setTimeout(resize, 250)
+		const resize500 = setTimeout(resize, 500)
 		terminalRef.current = terminal
 
 		function paste(event: ClipboardEvent) {
@@ -201,7 +202,11 @@ export function Terminal({
 		return () => {
 			disposedRef.current = true
 			terminalRef.current = null
-			for (const timeout of timeouts) clearTimeout(timeout)
+			clearTimeout(resize16)
+			clearTimeout(resize50)
+			clearTimeout(resize100)
+			clearTimeout(resize250)
+			clearTimeout(resize500)
 			if (Predicate.isNotNull(animationFrameRef.current)) cancelAnimationFrame(animationFrameRef.current)
 			animationFrameRef.current = null
 			terminal.element?.ownerDocument.defaultView?.removeEventListener('resize', resize)

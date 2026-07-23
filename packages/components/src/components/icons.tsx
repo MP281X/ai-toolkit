@@ -8,7 +8,6 @@ import {CodexDark} from './svgs/codexDark.tsx'
 import {EffectDark} from './svgs/effectDark.tsx'
 import {MarkdownDark} from './svgs/markdownDark.tsx'
 import {OpenaiDark} from './svgs/openaiDark.tsx'
-import {OpencodeDark} from './svgs/opencodeDark.tsx'
 import {OpenrouterDark} from './svgs/openrouterDark.tsx'
 import {ReactDark} from './svgs/reactDark.tsx'
 import {Spinner} from './ui/spinner.tsx'
@@ -18,16 +17,12 @@ import {cn} from '#lib/utils.ts'
 
 export * from 'lucide-react'
 
-export function AgentIcon(props: {
-	readonly layer: 'claude' | 'codex' | 'effect' | 'opencode'
-	readonly className?: string
-}) {
+export function AgentIcon(props: {readonly layer: 'claude' | 'codex' | 'effect'; readonly className?: string}) {
 	return pipe(
 		Match.value(props.layer),
 		Match.when('claude', () => <ClaudeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('codex', () => <CodexDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.when('effect', () => <EffectDark className={cn('size-3 shrink-0', props.className)} />),
-		Match.when('opencode', () => <OpencodeDark className={cn('size-3 shrink-0', props.className)} />),
 		Match.exhaustive
 	)
 }

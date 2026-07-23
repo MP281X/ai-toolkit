@@ -1,6 +1,6 @@
 import {describe, expect, it} from '@effect/vitest'
 
-import {agentBrowserActiveOwnedTabId, agentBrowserCanvasPoint} from './agent-browser.tsx'
+import {agentBrowserActiveOwnedTabId, agentBrowserCanvasPoint, agentBrowserReconnectState} from './agent-browser.tsx'
 
 const ownedTabs = [
 	{
@@ -58,5 +58,20 @@ describe('agentBrowserCanvasPoint', () => {
 				viewport: {height: 900, width: 1600}
 			})
 		).toBeUndefined()
+	})
+})
+
+describe('agentBrowserReconnectState', () => {
+	it('resets retries on URL changes and ignores a stale timer from the previous URL', () => {
+		const socketA = {attempt: 2, streamUrl: 'ws://a.example/stream'}
+		const socketB = agentBrowserReconnectState(socketA, {streamUrl: 'ws://b.example/stream', type: 'stream-url'})
+		const afterStaleTimer = agentBrowserReconnectState(socketB, {streamUrl: 'ws://a.example/stream', type: 'retry'})
+
+		expect(socketB).toEqual({attempt: 0, streamUrl: 'ws://b.example/stream'})
+		expect(afterStaleTimer).toBe(socketB)
+		expect(agentBrowserReconnectState(socketB, {streamUrl: 'ws://b.example/stream', type: 'retry'})).toEqual({
+			attempt: 1,
+			streamUrl: 'ws://b.example/stream'
+		})
 	})
 })

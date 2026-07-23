@@ -12,7 +12,7 @@
 		"effect",
 		"vite-plus"
 	],
-	"ignorePatterns": ["**/*.gen.ts"],
+	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
 	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
 	"publicPackages": [
 		"@deslop/agent",

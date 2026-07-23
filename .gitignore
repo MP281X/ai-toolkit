@@ -13,6 +13,7 @@
 **/node_modules
 
 # tools
+.agents/repos/*
 .fallow
 .motel-data
 

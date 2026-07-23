@@ -1,0 +1,43 @@
+name = "git_operations"
+description = "Ephemeral owner of approved Git history and pull-request state."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "low"
+developer_instructions = """
+Load only git-operations. Act only after the orchestrator reports clean local acceptance and one clean complete-branch review. Own issues, branches, commits, pushes, pull requests, and stack topology exactly as authorized. Use GitHub tools only for this owned state; do not automate review comments or CI polling. Keep main read-only, preserve unrelated work, write concise outcome-only commit and pull-request text, and leave the pull request ready for human review. Never merge.
+"""
+
+web_search = "disabled"
+
+[features]
+browser_use = false
+browser_use_external = false
+in_app_browser = false
+remote_plugin = false
+
+[mcp_servers.openaiDeveloperDocs]
+enabled = false
+url = "https://developers.openai.com/mcp"
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/browser-automation/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/effect/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/frontend/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/skill-writing/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/visualization/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "/proc/self/cwd/.agents/skills/workspace-configuration/SKILL.md"
+enabled = false

@@ -54,7 +54,7 @@ export default defineConfig({
 			suspicious: 'off'
 		},
 		env: {browser: true, builtin: true, node: true},
-		ignorePatterns: ['**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
+		ignorePatterns: ['.agents/repos/**', '**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
 			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},
@@ -336,5 +336,9 @@ export default defineConfig({
 		},
 		settings: {react: {version: '19.0'}}
 	},
-	test: {environment: 'node', include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], pool: 'forks'}
+	test: {
+		environment: 'node',
+		include: ['apps/*/src/**/*.test.{ts,tsx}', 'packages/*/src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
+		pool: 'forks'
+	}
 })

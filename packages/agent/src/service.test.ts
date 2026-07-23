@@ -6,7 +6,7 @@ import type {ChildProcess} from 'effect/unstable/process'
 
 import {Agent} from './service.ts'
 
-function commandFor(provider: 'claude' | 'codex' | 'opencode') {
+function commandFor(provider: 'claude' | 'codex') {
 	return Effect.runPromiseWith(Context.empty())(
 		pipe(
 			Effect.gen(function* () {
@@ -55,22 +55,4 @@ describe('Agent', () => {
 			env: {CLAUDE_CODE_NO_FLICKER: '1', PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
 		})
 	})
-
-	it.effect('runs OpenCode V2 interactively through its CLI package', _context =>
-		pipe(
-			Effect.gen(function* () {
-				const agent = yield* Agent
-				const command = yield* agent.create
-
-				expect(commandSnapshot(command)).toEqual({
-					args: ['@opencode-ai/cli@next'],
-					command: 'vpx',
-					cwd: '/tmp/deslop-agent',
-					env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}
-				})
-				expect(command.options.extendEnv).toBe(true)
-			}),
-			Effect.provide(Agent.layer({cwd: '/tmp/deslop-agent', provider: 'opencode'}))
-		)
-	)
 })

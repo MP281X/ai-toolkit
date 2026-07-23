@@ -129,7 +129,7 @@ const TECHNICAL_SKILLS = [
 	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
 	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
 	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{area: 'AI Tooling', icon: Sparkles, items: 'OpenCode, Github Copilot, Claude Code'}
+	{area: 'AI Tooling', icon: Sparkles, items: 'Codex, Github Copilot, Claude Code'}
 ]
 
 const WORK_EXPERIENCE = [
@@ -462,7 +462,7 @@ function CursorEl(input: {
 	return (
 		<div
 			ref={nodeRef}
-			className="pointer-events-none fixed top-0 left-0 z-50 will-change-transform"
+			className="pointer-events-none fixed top-0 left-0 z-50"
 			style={{transform: `translate3d(${initialMotion.x}px, ${initialMotion.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">

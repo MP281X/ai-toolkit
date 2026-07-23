@@ -1,7 +1,7 @@
 import {Array, Match, Predicate, String, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
-import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
+import {useEffect, useReducer, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
 
 import {cn} from '#lib/utils.ts'
 
@@ -191,6 +191,18 @@ export function agentBrowserActiveOwnedTabId(input: {
 	return owned._tag === 'Some' ? owned.value.id : undefined
 }
 
+export function agentBrowserReconnectState(
+	state: {readonly attempt: number; readonly streamUrl: string | undefined},
+	event: {readonly streamUrl: string | undefined; readonly type: 'retry' | 'stream-url'}
+) {
+	if (event.type === 'stream-url') {
+		if (state.streamUrl === event.streamUrl && state.attempt === 0) return state
+		return {attempt: 0, streamUrl: event.streamUrl}
+	}
+	if (state.streamUrl !== event.streamUrl) return state
+	return {attempt: state.attempt + 1, streamUrl: state.streamUrl}
+}
+
 function frameViewport(frame: AgentBrowserFrame, bitmap: ImageBitmap) {
 	return {height: frame.metadata?.deviceHeight ?? bitmap.height, width: frame.metadata?.deviceWidth ?? bitmap.width}
 }
@@ -225,6 +237,9 @@ export function AgentBrowser(props: {
 		readonly url: string
 	}[]
 }) {
+	const streamUrl =
+		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
+	const tabs = props.tabs ?? emptyTabs
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const contextRef = useRef<CanvasRenderingContext2D | null>(null)
 	const socketRef = useRef<WebSocket | null>(null)
@@ -234,15 +249,15 @@ export function AgentBrowser(props: {
 	const canvasSizeRef = useRef({height: 0, width: 0})
 	const latestFrameRef = useRef<{readonly frame: AgentBrowserFrame; readonly serial: number} | null>(null)
 	const rafRef = useRef<number | null>(null)
+	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const drawingRef = useRef(false)
 	const drawnSerialRef = useRef(0)
 	const frameSerialRef = useRef(0)
 	const hasFrameRef = useRef(false)
 	const [activeTabId, setActiveTabId] = useState<string | undefined>()
 	const [hasFrame, setHasFrame] = useState(false)
-	const streamUrl =
-		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
-	const tabs = props.tabs ?? emptyTabs
+	const [reconnectState, dispatchReconnect] = useReducer(agentBrowserReconnectState, {attempt: 0, streamUrl})
+	const reconnectAttempt = reconnectState.streamUrl === streamUrl ? reconnectState.attempt : 0
 
 	useEffect(() => {
 		tabsRef.current = tabs
@@ -310,6 +325,7 @@ export function AgentBrowser(props: {
 		queueMicrotask(() => {
 			setHasFrame(false)
 			setActiveTabId(undefined)
+			dispatchReconnect({streamUrl, type: 'stream-url'})
 		})
 		hasFrameRef.current = false
 		latestFrameRef.current = null
@@ -325,42 +341,45 @@ export function AgentBrowser(props: {
 		if (Predicate.isUndefined(streamUrl)) return
 
 		const abort = new AbortController()
-
-		function connect() {
-			if (abort.signal.aborted || Predicate.isUndefined(streamUrl)) return
-
-			const socket = new WebSocket(streamUrl)
-			socketRef.current = socket
-			socket.addEventListener('close', () => {
+		const socket = new WebSocket(streamUrl)
+		socketRef.current = socket
+		function scheduleReconnect() {
+			if (abort.signal.aborted || socketRef.current !== socket || Predicate.isNotNull(reconnectTimerRef.current)) return
+			reconnectTimerRef.current = setTimeout(() => {
 				if (abort.signal.aborted || socketRef.current !== socket) return
-				setTimeout(connect, 750)
-			})
-			async function handleMessage(data: unknown) {
-				const message = await decodeMessage(data)
-				if (abort.signal.aborted || socketRef.current !== socket) return
-
-				const frame = frameMessage(message)
-				if (Predicate.isNotUndefined(frame)) queueFrame(frame)
-
-				const streamTabs = tabsMessage(message)
-				if (Predicate.isNotUndefined(streamTabs)) {
-					const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current, streamTabs})
-					setActiveTabId(current => (current === nextActive ? current : nextActive))
-				}
-			}
-			socket.addEventListener('message', event => {
-				void handleMessage(event.data)
-			})
+				reconnectTimerRef.current = null
+				dispatchReconnect({streamUrl, type: 'retry'})
+			}, 750)
 		}
+		async function handleMessage(data: unknown) {
+			const message = await decodeMessage(data)
+			if (abort.signal.aborted || socketRef.current !== socket) return
 
-		connect()
+			const frame = frameMessage(message)
+			if (Predicate.isNotUndefined(frame)) queueFrame(frame)
+
+			const streamTabs = tabsMessage(message)
+			if (Predicate.isNotUndefined(streamTabs)) {
+				const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current, streamTabs})
+				setActiveTabId(current => (current === nextActive ? current : nextActive))
+			}
+		}
+		function handleMessageEvent(event: MessageEvent) {
+			void handleMessage(event.data)
+		}
+		socket.addEventListener('close', scheduleReconnect)
+		socket.addEventListener('message', handleMessageEvent)
 
 		return () => {
 			abort.abort()
-			socketRef.current?.close()
-			socketRef.current = null
+			if (Predicate.isNotNull(reconnectTimerRef.current)) clearTimeout(reconnectTimerRef.current)
+			reconnectTimerRef.current = null
+			socket.removeEventListener('close', scheduleReconnect)
+			socket.removeEventListener('message', handleMessageEvent)
+			socket.close()
+			if (socketRef.current === socket) socketRef.current = null
 		}
-	}, [streamUrl])
+	}, [reconnectAttempt, streamUrl])
 
 	useEffect(
 		() => () => {

@@ -1,0 +1,35 @@
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+
+[features]
+fast_mode = false
+
+[agents]
+enabled = true
+default_subagent_model = "gpt-5.6-sol"
+default_subagent_reasoning_effort = "medium"
+
+[agents.manager]
+description = "Questions-first manager that turns explicit approval into one canonical issue contract."
+config_file = "./agents/manager.toml"
+
+[agents.orchestrator]
+description = "Persistent issue-worktree owner that coordinates implementation, acceptance, review, and publication."
+config_file = "./agents/orchestrator.toml"
+
+[agents.implementation]
+description = "Persistent issue implementation owner and sole writer."
+config_file = "./agents/implementation.toml"
+
+[agents.tester]
+description = "Ephemeral local acceptance evaluator."
+config_file = "./agents/tester.toml"
+
+[agents.reviewer]
+description = "Ephemeral blind complete-branch reviewer."
+config_file = "./agents/reviewer.toml"
+
+[agents.git_operations]
+description = "Ephemeral owner of Git and GitHub publication state."
+config_file = "./agents/git-operations.toml"

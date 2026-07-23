@@ -25,13 +25,15 @@
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
-		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'"
+		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
+
+		"postinstall": "node scripts/clone-source-repos.ts"
 	},
 	
 	"dependencies": {
-		"effect": "^4.0.0-beta",
+		"effect": "4.0.0-beta.98",
 		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta"
+		"@effect/platform-node": "4.0.0-beta.98"
 	},
 	"devDependencies": {
 		"typescript": "rc",
