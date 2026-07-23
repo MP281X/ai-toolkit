@@ -77,6 +77,8 @@ function Variants(props: {readonly children: readonly React.ReactNode[]}) {
 		move(1)
 	})
 
+	if (Array.length(props.children) === 0) return null
+
 	return (
 		<>
 			{props.children[value] ?? props.children[0]}

@@ -55,9 +55,5 @@
 
 		"shadcn": "^4",
 		"tailwindcss": "^4"
-	},
-
-	"devDependencies": {
-		"vitest": "latest"
 	}
 }

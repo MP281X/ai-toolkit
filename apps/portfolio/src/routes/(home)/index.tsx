@@ -142,7 +142,7 @@ const TECHNICAL_SKILLS = [
 
 const FEATURED_PROJECT = {
 	currentWork:
-		'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
+		'A Codex desktop workflow that plans with the user, then delegates implementation, independent acceptance, blind review, and publication to role-owned agents, with failure evidence routed into self-improvement.',
 	description:
 		'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
 	href: 'https://github.com/MP281X/deslop',

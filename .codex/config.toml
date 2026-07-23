@@ -10,10 +10,6 @@ enabled = true
 default_subagent_model = "gpt-5.6-sol"
 default_subagent_reasoning_effort = "medium"
 
-[agents.manager]
-description = "Remote-worktree launcher that forwards one user brief."
-config_file = "./agents/manager.toml"
-
 [agents.implementation]
 description = "Resumable issue implementation owner and sole writer."
 config_file = "./agents/implementation.toml"
@@ -29,3 +25,7 @@ config_file = "./agents/reviewer.toml"
 [agents.git_operations]
 description = "Ephemeral owner of Git and GitHub publication state."
 config_file = "./agents/git-operations.toml"
+
+[agents.self_improvement]
+description = "Ephemeral read-only workflow root-cause analyst."
+config_file = "./agents/self-improvement.toml"

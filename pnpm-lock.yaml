@@ -308,10 +308,6 @@ importers:
       tw-animate-css:
         specifier: latest
         version: 1.4.0
-    devDependencies:
-      vitest:
-        specifier: latest
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.0)(@vitest/browser-preview@4.1.9)(@voidzero-dev/vite-plus-core@0.2.2(@types/node@26.1.0)(jiti@2.7.0)(typescript@7.0.1-rc)(yaml@2.9.0))
 
   packages/git: {}
 

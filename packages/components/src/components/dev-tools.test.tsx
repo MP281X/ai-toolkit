@@ -9,6 +9,7 @@ describe('DevTools.Variants', () => {
 		const markup = renderToStaticMarkup(<DevTools.Variants>{[]}</DevTools.Variants>)
 
 		expect(markup).not.toContain('<button')
+		expect(markup).not.toContain('<nav')
 	})
 
 	it('renders one selector for each child', () => {
