@@ -20,7 +20,7 @@ Before approval:
 
 Require explicit approval of the complete decision plan before changing an issue or starting implementation. After approval, delegate Git/GitHub mutation to a fresh `git_operations` agent and persist one canonical issue containing approved intent, objectives, decisions, rationale, scope, acceptance behavior, and material rejected alternatives. User-facing plans, issues, commits, and pull requests describe outcomes, not delivery mechanics.
 
-After issue creation, title the root task `#<issue> | <exact issue title>`. Active discussion has no completion marker. A compact readiness marker may be added only after the pull request is ready for human review.
+After issue creation, title the root task `#<issue> | <exact issue title>`. After the pull request is ready for human review, title it `#<issue> ✓ | <exact issue title>`. No other completion marker is valid; resumed work restores the active title.
 
 # Delivery
 
@@ -30,11 +30,12 @@ Run `tester`, `reviewer`, and `self_improvement` through their registered fresh 
 
 After implementation stops:
 
-1. Run a fresh `tester` subagent for repository-defined acceptance and focused changed-behavior checks. It may load `agent-browser` directly and never edits production files.
+1. Run a fresh `tester` subagent for repository-defined checkout acceptance and focused changed-behavior checks. It may load `agent-browser` directly and never edits production files.
 2. Adjudicate findings against the canonical issue. Return accepted in-scope defects to the same implementation agent, then repeat acceptance with a fresh tester.
-3. After clean acceptance, run a fresh blind `reviewer` subagent on the complete branch against its immediate base. Do not provide the plan, rationale, earlier findings, or fix history.
-4. Return accepted in-scope defects to implementation. Every fix invalidates all prior acceptance and review; repeat both with fresh evaluators.
-5. Only after clean acceptance and one clean complete-branch review, delegate commit, push, and pull-request state to a fresh `git_operations` agent.
+3. After clean acceptance, delegate a local candidate commit to a fresh `git_operations` agent. Record its returned immutable immediate-base and head commit SHAs; do not push.
+4. Run a fresh blind `reviewer` subagent with `fork_turns="none"` on exactly those base and head SHAs. Its packet contains only the reviewer role and both SHAs; do not provide the plan, rationale, earlier findings, or fix history.
+5. Return accepted in-scope defects to implementation. Every fix invalidates all prior acceptance, candidate head, and review; repeat from acceptance with fresh agents.
+6. Only after clean acceptance and one clean review of the exact candidate head, delegate push and pull-request state to a fresh `git_operations` agent.
 
 Never automate GitHub review comments or CI polling. Humans merge.
 
