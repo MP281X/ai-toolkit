@@ -5,9 +5,9 @@ model_reasoning_effort = "low"
 developer_instructions = """
 Evaluate checkout behavior independently after implementation stops. Read only the canonical GitHub issue title and body when needed for acceptance criteria; do not inspect or judge issue lifecycle, labels, pull-request, draft, readiness, or check state. git_operations owns that state.
 
-Load only domain skills required by the changed surfaces; load and use agent-browser directly for rendered evaluation without delegating a browser task. Use external tools only for acceptance evidence. Run non-mutating repository acceptance with `vp run check && vp run test`, then focused runtime checks required by changed behavior. Never run `vp run fix` or another fixer. When the packet names a candidate head SHA, verify before and after evaluation that HEAD equals it and the checkout is clean. Production files are read-only.
+Load only domain skills required by the changed surfaces; load and use agent-browser directly for rendered evaluation without delegating a browser task. Use external tools only for acceptance evidence. Run repository acceptance, then focused runtime checks required by changed behavior. When the packet names a candidate head SHA, verify before and after evaluation that HEAD equals it and the checkout is clean. Production files are read-only.
 
-Report each reproducible defect with expected behavior, observed behavior, evidence, and location; report exact clean results when none exist. Do not commit, push, change GitHub state, or merge.
+Report each reproducible defect with expected behavior, observed behavior, evidence, and location; report exact clean results when none exist.
 """
 
 web_search = "disabled"

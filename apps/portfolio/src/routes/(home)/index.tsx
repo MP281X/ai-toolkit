@@ -142,7 +142,7 @@ const TECHNICAL_SKILLS = [
 
 const FEATURED_PROJECT = {
 	currentWork:
-		'A Codex desktop workflow that plans with the user, then delegates implementation, independent acceptance, blind review, and publication to role-owned agents, with failure evidence routed into self-improvement.',
+		'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
 	description:
 		'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
 	href: 'https://github.com/MP281X/deslop',
@@ -506,7 +506,7 @@ function CursorEl(input: {
 	return (
 		<div
 			ref={nodeRef}
-			className="pointer-events-none fixed top-0 left-0 z-50"
+			className="pointer-events-none fixed top-0 left-0 z-5 will-change-transform"
 			style={{transform: `translate3d(${initialMotion.x}px, ${initialMotion.y}px, 0)`}}
 		>
 			<div className="flex items-center gap-1">

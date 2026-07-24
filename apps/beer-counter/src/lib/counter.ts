@@ -39,7 +39,7 @@ export class Counter extends Context.Service<
 	}
 >()('beer-counter/Counter') {}
 
-export const makeCounter = Effect.gen(function* () {
+const makeCounter = Effect.gen(function* () {
 	const state = yield* Ref.make(initialState())
 	const changes = yield* PubSub.unbounded<CounterChanged>({replay: 1})
 	const mutationLock = yield* Semaphore.make(1)

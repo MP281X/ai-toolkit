@@ -31,9 +31,9 @@
 	},
 	
 	"dependencies": {
-		"effect": "4.0.0-beta.98",
+		"effect": "^4.0.0-beta",
 		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "4.0.0-beta.98"
+		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
 		"typescript": "rc",

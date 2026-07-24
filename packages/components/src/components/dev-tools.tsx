@@ -63,10 +63,8 @@ function Navigation<const Route extends string>(props: {
 
 function Variants(props: {readonly children: readonly React.ReactNode[]}) {
 	const [value, setValue] = useState(0)
-	const variants = Array.length(props.children) === 0 ? [] : Array.range(1, Array.length(props.children))
 
 	function move(delta: number) {
-		if (Array.length(props.children) === 0) return
 		setValue(prev => (prev + delta + Array.length(props.children)) % Array.length(props.children))
 	}
 
@@ -77,30 +75,28 @@ function Variants(props: {readonly children: readonly React.ReactNode[]}) {
 		move(1)
 	})
 
-	if (Array.length(props.children) === 0) return null
-
 	return (
 		<>
 			{props.children[value] ?? props.children[0]}
 			<nav className={cn('fixed bottom-4 left-1/2 z-50 -translate-x-1/2')}>
 				<div className="border-border bg-background flex items-center gap-1 border px-1.5 py-1.5">
-					{Array.map(variants, variant => (
+					{Array.map(props.children, (_child, index) => (
 						<Button
-							key={`variant-${variant}`}
+							key={`variant-${index + 1}`}
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-current={variant - 1 === value ? 'page' : undefined}
+							aria-current={index === value ? 'page' : undefined}
 							onClick={() => {
-								setValue(variant - 1)
+								setValue(index)
 							}}
 							className={cn(
 								'h-7 w-auto min-w-7 px-2',
-								variant - 1 === value && 'bg-primary/15 text-primary',
-								variant - 1 !== value && 'text-muted-foreground hover:bg-muted hover:text-foreground'
+								index === value && 'bg-primary/15 text-primary',
+								index !== value && 'text-muted-foreground hover:bg-muted hover:text-foreground'
 							)}
 						>
-							{`${variant}`}
+							{`${index + 1}`}
 						</Button>
 					))}
 				</div>

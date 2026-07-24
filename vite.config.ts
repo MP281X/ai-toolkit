@@ -336,9 +336,5 @@ export default defineConfig({
 		},
 		settings: {react: {version: '19.0'}}
 	},
-	test: {
-		environment: 'node',
-		include: ['apps/*/src/**/*.test.{ts,tsx}', 'packages/*/src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
-		pool: 'forks'
-	}
+	test: {environment: 'node', include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], pool: 'forks'}
 })

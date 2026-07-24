@@ -7,6 +7,10 @@
 - After repository changes, the sole writer runs `vp run fix`; resolve related failures at their shared cause.
 - Acceptance is non-mutating: `vp run check && vp run test`. Evaluators never run `fix`.
 
+## Delivery
+
+- Agents never merge. Humans merge.
+
 ## Communication
 
 - Current evidence only; do not imply unperformed work.

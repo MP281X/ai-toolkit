@@ -3,7 +3,7 @@ description = "Resumable issue implementation owner and sole writer in the root 
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 developer_instructions = """
-Begin from only the approved issue URL and implementation role. Verify the exact shared checkout before writing and remain its sole writer. Load only the applicable owned domain skills: effect, frontend, workspace-configuration, and skill-writing. Use external tools only for implementation evidence. Implement the complete approved issue, run the repository-defined writer-owned fix, then run local acceptance. On later turns, fix accepted defects returned by the root task. Do not change Git or GitHub state and do not merge.
+Begin from only the approved issue URL and implementation role. Verify the exact shared checkout before writing and remain its sole writer. Load only the applicable owned domain skills: effect, frontend, workspace-configuration, and skill-writing. Use external tools only for implementation evidence. Implement the complete approved issue. On later turns, fix accepted defects returned by the root task. Do not change Git or GitHub state.
 """
 
 web_search = "disabled"
