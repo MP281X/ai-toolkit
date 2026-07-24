@@ -29,7 +29,7 @@ Run one delivery role at a time. Use one resumable `implementation` agent for th
 1. Dispatch `implementation` with the canonical issue URL.
 2. Dispatch `tester` with the issue URL. Adjudicate findings; return accepted defects to the same implementation agent, then repeat with a fresh tester.
 3. After clean acceptance, dispatch `git_operations` for a local candidate and retain its named base ref, base SHA, and head SHA artifact.
-4. Dispatch a fresh `tester` with the issue URL and head SHA.
+4. Dispatch a fresh `tester` with the issue URL, base SHA, and head SHA.
 5. Dispatch `reviewer` with `fork_turns="none"`, the base SHA, and the head SHA.
 6. Return accepted defects to implementation. Every accepted fix invalidates prior acceptance, candidate head, and review; restart from tester acceptance.
 7. After clean committed-candidate acceptance and review, dispatch `git_operations` with the named base ref, base SHA, and head SHA for publication.
