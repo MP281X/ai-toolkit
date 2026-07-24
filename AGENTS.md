@@ -4,7 +4,8 @@
 
 ## Verification
 
-- After repository changes: `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause.
+- After repository changes, the sole writer runs `vp run fix`; resolve related failures at their shared cause.
+- Acceptance is non-mutating: `vp run check && vp run test`. Evaluators never run `fix`.
 
 ## Communication
 

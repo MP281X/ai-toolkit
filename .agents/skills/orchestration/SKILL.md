@@ -30,10 +30,10 @@ Run `tester`, `reviewer`, and `self_improvement` through their registered fresh 
 
 After implementation stops:
 
-1. Run a fresh `tester` subagent for repository-defined checkout acceptance and focused changed-behavior checks. It may load `agent-browser` directly and never edits production files.
+1. Run a fresh `tester` subagent under its non-mutating acceptance contract, followed by focused changed-behavior checks. It may load `agent-browser` directly and never edits production files.
 2. Adjudicate findings against the canonical issue. Return accepted in-scope defects to the same implementation agent, then repeat acceptance with a fresh tester.
 3. After clean acceptance, delegate a local candidate commit to a fresh `git_operations` agent. Record its returned named base ref, immutable base SHA, and immutable head SHA; do not push.
-4. Run a fresh `tester` subagent for complete acceptance of the committed candidate. Its packet contains the tester role, canonical issue URL, and head SHA. Require the checkout to remain clean at that exact head.
+4. Run a fresh `tester` subagent for complete non-mutating acceptance of the committed candidate. Its packet contains the tester role, canonical issue URL, and head SHA. Require the checkout to remain clean at that exact head.
 5. Run a fresh blind `reviewer` subagent with `fork_turns="none"` on exactly those base and head SHAs. Its packet contains only the reviewer role and both SHAs; do not provide the plan, rationale, earlier findings, or fix history.
 6. Return accepted in-scope defects to implementation. Every fix invalidates all prior acceptance, candidate head, and review; repeat from acceptance with fresh agents.
 7. Only after clean committed-candidate acceptance and one clean review of the exact base/head pair, delegate push and pull-request state to a fresh `git_operations` agent. The named base ref must still resolve to the reviewed base SHA.
