@@ -1,13 +1,13 @@
 ---
 name: orchestration
-description: 'Manually invoke for a new deslop brief; return an approved canonical issue and role-owned delivery through independent acceptance and review without implementing, evaluating, or changing Git/GitHub state.'
+description: 'Invoke only as `$orchestration` for a new deslop brief; return an approved canonical issue and role-owned delivery without implementing, evaluating, or changing Git/GitHub state.'
 ---
 
 # Ownership
 
-The root worktree task owns user dialogue, research synthesis, decisions, approval, phase order, role dispatch and concurrency, named artifact flow, finding adjudication, invalidation and retry, task titles, and final self-review collection. It does not implement, evaluate, or change Git/GitHub state.
+The root owns dialogue, research synthesis, decisions, approval, phase order, role dispatch and concurrency, named artifact flow, finding adjudication, invalidation and retry, task titles, and final self-review collection. It does not implement, evaluate, or change Git/GitHub state.
 
-Keep the root as primary advisor. Delegate repository reads aggressively to `explorer`; delegate independent or output-heavy external research to fresh general agents. Run independent investigations in parallel. For consequential choices, material uncertainty, or likely anchoring, a fresh general agent may challenge the current answer. No permanent advisor role; no routine adversarial call.
+Use explorers for repository facts and fresh general agents for independent external research or consequential challenge. Run independent work in parallel. No permanent delivery or advisory tasks.
 
 # Approval
 
@@ -18,29 +18,27 @@ Before approval:
 - Present material alternatives, tradeoffs, compatible combinations, and a recommendation.
 - Ask only questions whose answers change the decision.
 
-Require explicit approval of the complete decision plan before changing an issue or starting implementation. After approval, dispatch `git_operations` with the approved plan to create or update one canonical issue containing approved intent, objectives, decisions, rationale, scope, acceptance behavior, and material rejected alternatives.
+Require explicit approval of the complete decision plan before issue mutation or implementation. Then dispatch `git_operations` to create or update one canonical issue with approved intent, decisions, rationale, scope, acceptance, and material rejected alternatives.
 
 After issue creation, title the root task `#<issue> | <exact issue title>`. After the pull request is ready for human review, title it `#<issue> ✓ | <exact issue title>`. No other completion marker is valid; resumed work restores the active title.
 
 # Delivery
 
-Run one delivery role at a time. Use one resumable `implementation` agent for the issue; all other delivery roles are fresh.
-
-Every initial packet-owned `implementation`, `tester`, `reviewer`, and `self_improvement` dispatch uses `fork_turns="none"`. Resume only the named implementation agent, and only for accepted fixes.
+Run one delivery role at a time. Every initial `implementation`, `tester`, `reviewer`, and `self_improvement` dispatch uses `fork_turns="none"` and passes only named artifacts and authority not recoverable from the checkout; never include the registered agent role. Keep one named implementation agent; resume it only for accepted fixes. All other delivery roles are fresh.
 
 1. Dispatch `implementation` with the canonical issue URL.
 2. Dispatch `tester` with the issue URL. Adjudicate findings; return accepted defects to the named implementation agent, then repeat with a fresh tester.
-3. After clean acceptance, dispatch `git_operations` for a local candidate and retain its named base ref, base SHA, and head SHA artifact.
-4. Dispatch a fresh `tester` with the issue URL, base SHA, and head SHA.
-5. Dispatch `reviewer` with the base SHA and the head SHA.
-6. Return accepted defects to the named implementation agent. Every accepted fix invalidates prior acceptance, candidate head, and review; restart from tester acceptance.
-7. After clean committed-candidate acceptance and review, dispatch `git_operations` with the named base ref, base SHA, and head SHA for publication.
+3. Before candidate freeze, consolidate workflow findings and complete-scope evidence once; dispatch `self_improvement`. Apply accepted findings through the named implementation agent and repeat acceptance.
+4. Dispatch `git_operations` for a local candidate; retain its named base ref, base SHA, and head SHA.
+5. Dispatch a fresh `tester` with the issue URL, base SHA, and head SHA.
+6. Dispatch `reviewer` with the base SHA and head SHA.
+7. Return accepted defects to the named implementation agent. Every accepted fix invalidates acceptance, candidate head, and review; restart from tester acceptance.
+8. After clean committed-candidate acceptance and review, dispatch `git_operations` with the named base ref, base SHA, and head SHA for publication.
 
-A user finding dispatches `git_operations` to return the pull request to draft, then resumes the same root and implementation tasks. Restore a resolved root task when work resumes. Archive merged or otherwise resolved root tasks; delivery roles are not permanent sidebar tasks.
+Product defects, candidate drift, changed base identity, checkout mutation, acceptance failures, and review defects invalidate the delivery cycle. Later process observations that do not affect product behavior, candidate identity, acceptance evidence, or review findings become follow-up evidence without restarting publication.
+
+A user finding dispatches `git_operations` to return the pull request to draft, then resumes the root and named implementation agent.
 
 # Self-review
 
-Collect every agent's `Self-review`, add root-observed user corrections or frustration and the root's own findings, and deduplicate once at the end of the session.
-
-- Product defects: return to the active implementation agent.
-- Workflow defects: send the single deduplicated set once to a fresh `self_improvement` subagent.
+Collect every agent's `Self-review`, root-observed user corrections or frustration, and the root's own findings. The pre-freeze audit owns the delivery's single deduplication; retain later non-invalidating observations as follow-up evidence.

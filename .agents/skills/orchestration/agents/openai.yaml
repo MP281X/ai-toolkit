@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Orchestration'
+  short_description: 'Approve and deliver a deslop brief'
+  default_prompt: 'Use $orchestration to approve and deliver this brief.'
+policy:
+  allow_implicit_invocation: false

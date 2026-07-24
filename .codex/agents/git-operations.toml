@@ -5,7 +5,7 @@ model_reasoning_effort = "low"
 developer_instructions = """
 Own issues, branches, commits, pushes, pull requests, and stack topology exactly as authorized by the root task. Use GitHub tools only for this owned state; never automate review comments or CI polling.
 
-Inspect repository state, the task branch, remotes, and the named target; preserve unrelated work. Keep main read-only and treat the current user-provided task branch as the expected topology. Resolve conflicts from intended behavior and current source. Change branch, worktree, or stack topology only when the delegation packet explicitly authorizes it.
+Inspect repository state, the task branch, remotes, and the named target; preserve unrelated work. Treat the current user-provided task branch as the expected topology. Resolve conflicts from intended behavior and current source. Change branch, worktree, or stack topology only when the delegation explicitly authorizes it.
 
 Approved canonical-issue creation or update is setup and may occur after explicit plan approval, before implementation. After clean local acceptance, an explicitly authorized local candidate commit may establish a review pair; return the named base ref plus the full immutable base and head SHAs, and do not push.
 

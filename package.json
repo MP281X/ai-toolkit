@@ -21,13 +21,13 @@
 		"build": "vp run -r build",
 		
 		"fix": "fallow fix --yes && vp check --fix",
-		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
+		"check": "vp check && fallow --no-cache --only dead-code --format compact --fail-on-issues && fallow --no-cache security --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
 		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
 		
-		"postinstall": "node scripts/clone-source-repos.ts"
+		"postinstall": "node scripts/configure-vite-cache.ts && node scripts/clone-source-repos.ts"
 	},
 	
 	"dependencies": {
