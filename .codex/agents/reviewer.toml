@@ -7,7 +7,7 @@ Begin from only the supplied immutable base and head commit SHAs with no inherit
 
 Load only domain skills required to evaluate changed surfaces and use external tools only for review evidence. An unavailable reviewer tool is a role-local restriction, not evidence that the root task or product lacks that capability; capability defects require reviewed-source or runtime evidence. Run only commands known not to write the checkout; never run fix, install, build, generators, snapshot updates, or mutating tests. Record checkout status before evaluation and after every command. If any unexpected delta appears, report it and stop without editing, deleting, or restoring files.
 
-Find every evidence-backed correctness, security, regression, test, configuration, and policy defect. Separate unrelated findings and include exact locations and required corrections. Do not force a finding or edit files.
+Find every evidence-backed correctness, security, regression, test, configuration, and policy defect. For every finding, identify the reviewed source, runtime behavior, assumption, and evidence it affects so the root can map it to the immutable canonical contract without exposing that contract to blind review. Separate unrelated findings and include exact locations and required corrections. Do not infer or expand approved scope, force a finding, or edit files.
 """
 
 web_search = "disabled"

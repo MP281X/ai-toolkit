@@ -27,15 +27,19 @@ After issue creation, title the root task `#<issue> | <exact issue title>`. Afte
 Run one delivery role at a time. Every initial `implementation`, `tester`, `reviewer`, and `self_improvement` dispatch uses `fork_turns="none"` and passes only named artifacts and authority not recoverable from the checkout; never include the registered agent role. Keep one named implementation agent; resume it only for accepted fixes. All other delivery roles are fresh.
 
 1. Dispatch `implementation` with the canonical issue URL.
-2. Dispatch `tester` with the issue URL. Adjudicate findings; return accepted defects to the named implementation agent, then repeat with a fresh tester.
-3. Before candidate freeze, consolidate workflow findings and complete-scope evidence once; dispatch `self_improvement`. Apply accepted findings through the named implementation agent and repeat acceptance.
-4. Dispatch `git_operations` for a local candidate; retain its named base ref, base SHA, and head SHA.
-5. Dispatch a fresh `tester` with the issue URL, base SHA, and head SHA.
-6. Dispatch `reviewer` with the base SHA and head SHA.
-7. Return accepted defects to the named implementation agent. Every accepted fix invalidates acceptance, candidate head, and review; restart from tester acceptance.
-8. After clean committed-candidate acceptance and review, dispatch `git_operations` with the named base ref, base SHA, and head SHA for publication.
+2. Dispatch `tester` with the issue URL and retain its complete-scope findings without starting a correction.
+3. Consolidate all available tester, advisor, self-review, workflow, and scope findings once; dispatch `self_improvement` with the issue URL and deduplicated workflow subset.
+4. Adjudicate the complete pre-freeze set against the immutable canonical issue. Map every finding to an existing clause and the acceptance, review, runtime, or identity evidence it affects. Reject or defer anything outside the contract; retain useful outside-contract observations only as follow-up evidence.
+5. Aggregate every accepted finding and resume the named implementation agent once for one correction pass. Do not serialize corrections for findings that were jointly available. Dispatch a fresh `tester` after the pass; a newly discovered in-contract product defect may resume implementation only when its supporting evidence was not available for the aggregate.
+6. Dispatch `git_operations` for a local candidate; retain its named base ref, base SHA, and head SHA.
+7. Dispatch a fresh `tester` with the issue URL, base SHA, and head SHA.
+8. Dispatch `reviewer` with the base SHA and head SHA.
+9. Adjudicate later findings against the same contract. Return accepted product defects to the named implementation agent and rebuild the candidate; defer outside-contract and non-invalidating observations as follow-up evidence.
+10. After clean committed-candidate acceptance and review, dispatch `git_operations` with the named base ref, base SHA, and head SHA for publication.
 
-Product defects, candidate drift, changed base identity, checkout mutation, acceptance failures, and review defects invalidate the delivery cycle. Later process observations that do not affect product behavior, candidate identity, acceptance evidence, or review findings become follow-up evidence without restarting publication.
+The approved canonical issue is the immutable scope contract. Only an explicit user decision may add, remove, or alter scope.
+
+A correction invalidates only evidence whose changed surface or assumption depends on that correction. Reuse valid evidence for unchanged inputs and for surfaces restored exactly to the reviewed base. Any candidate-tree change requires refreshed candidate identity and complete-diff review, but does not invalidate unaffected focused evidence. Product defects, candidate drift, changed base identity, checkout mutation, acceptance failures, and review defects invalidate only their dependent evidence and required identity checks.
 
 A user finding dispatches `git_operations` to return the pull request to draft, then resumes the root and named implementation agent.
 

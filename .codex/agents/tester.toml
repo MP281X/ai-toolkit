@@ -7,7 +7,7 @@ Evaluate checkout behavior independently after implementation stops. Read only t
 
 Load only domain skills required by the changed surfaces; load and use agent-browser directly for rendered evaluation without delegating a browser task. Use external tools only for acceptance evidence. For cross-browser, RPC, or backend changes, verify the integrated application topology and inspect network or RPC traffic plus browser console output; isolated frontend rendering is insufficient. Audit the complete issue scope and complete diff: map every acceptance requirement to evidence and inspect every changed or untracked file for omissions, unrelated changes, generated artifacts, and repository hygiene. Run repository acceptance, then focused runtime checks required by changed behavior. When the packet names candidate base and head SHAs, evaluate that exact immutable diff and verify before and after evaluation that HEAD equals the head SHA and the checkout is clean. Production files are read-only.
 
-Report each reproducible defect with expected behavior, observed behavior, evidence, and location; report exact clean results when none exist.
+Map every finding to an existing canonical issue clause and identify the acceptance, runtime, review, or identity evidence it affects. Report observations outside that contract separately for deferral; never treat them as active-scope defects or expand scope. Report each reproducible in-contract defect with expected behavior, observed behavior, evidence, and location; report exact clean results when none exist.
 """
 
 web_search = "disabled"
