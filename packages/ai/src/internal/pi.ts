@@ -1,4 +1,3 @@
-import type {Context} from 'effect'
 import {
 	Array,
 	DateTime,
@@ -19,22 +18,27 @@ import {
 
 import type {ImageContent, TextContent} from '@earendil-works/pi-ai'
 import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
-import {
-	DefaultResourceLoader,
-	SessionManager,
-	createAgentSession,
-	getAgentDir,
-	type AgentToolResult,
-	type AgentSessionEvent,
-	type AgentToolUpdateCallback,
-	type ExtensionContext,
-	type ToolDefinition
+import {DefaultResourceLoader, SessionManager, createAgentSession, getAgentDir} from '@earendil-works/pi-coding-agent'
+import type {
+	AgentToolResult,
+	AgentSessionEvent,
+	AgentToolUpdateCallback,
+	ExtensionContext,
+	ToolDefinition
 } from '@earendil-works/pi-coding-agent'
-import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
+import {Prompt, Response, Tool} from 'effect/unstable/ai'
+import type {Toolkit} from 'effect/unstable/ai'
 
-import {AiError, type AiStatus} from '../schema.ts'
-import {Ai} from '../service.ts'
-
+import {AiError} from '../schema.ts'
+import type {AiAgent, AiModel, AiStatus} from '../schema.ts'
+type AiTools = Record<string, Tool.Any>
+type AiConfig<ToolSet extends AiTools> = {
+	readonly agent: AiAgent
+	readonly cwd: string
+	readonly model: AiModel
+	readonly systemPrompt: Prompt.SystemMessage
+	readonly toolkit: Toolkit.Toolkit<ToolSet>
+}
 function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted') {
 	return pipe(
 		Match.value(reason),
@@ -46,28 +50,23 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 		Match.exhaustive
 	)
 }
-
 function imageDataFromFilePart(part: Prompt.FilePart) {
 	if (part.data instanceof URL) return
 	if (!Predicate.isString(part.data)) return Encoding.encodeBase64(part.data)
-
 	const dataUrlPrefix = `data:${part.mediaType};base64,`
 	return String.startsWith(dataUrlPrefix)(part.data) ? String.slice(String.length(dataUrlPrefix))(part.data) : part.data
 }
-
 function imageFromFilePart(part: Prompt.FilePart) {
 	if (!String.startsWith('image/')(part.mediaType)) return
 	const data = imageDataFromFilePart(part)
 	if (Predicate.isUndefined(data)) return
 	return {data, mimeType: part.mediaType, type: 'image'} satisfies ImageContent
 }
-
 function textFromResult(result: unknown) {
 	if (Predicate.isString(result)) return result
 	if (Predicate.isUndefined(result)) return 'undefined'
 	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(result)
 }
-
 const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.Part[]) {
 	return Array.flatten(
 		yield* Effect.forEach(parts, part =>
@@ -80,7 +79,7 @@ const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Pr
 					Effect.gen(function* () {
 						const image = imageFromFilePart(filePart)
 						if (Predicate.isUndefined(image)) {
-							return yield* new AiError({
+							return yield* AiError.make({
 								message:
 									filePart.data instanceof URL
 										? 'Pi agent does not support URL file prompt parts'
@@ -95,12 +94,10 @@ const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Pr
 		)
 	)
 })
-
 function agentToolResult(result: unknown) {
 	return {content: [{text: textFromResult(result), type: 'text'}], details: result} satisfies AgentToolResult<unknown>
 }
-
-function partFromEvent<ToolSet extends Ai.Tools>(event: AgentSessionEvent) {
+function partFromEvent<ToolSet extends AiTools>(event: AgentSessionEvent) {
 	return pipe(
 		Match.value(event),
 		Match.when({type: 'message_update'}, messageEvent =>
@@ -166,14 +163,13 @@ function partFromEvent<ToolSet extends Ai.Tools>(event: AgentSessionEvent) {
 		Match.orElse(() => Array.empty<Response.StreamPart<ToolSet>>())
 	)
 }
-
 function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_end'}>) {
 	return Response.makePart('finish', {
 		reason: event.message.role === 'assistant' ? finishReason(event.message.stopReason) : 'stop',
 		response: undefined,
 		usage:
 			event.message.role === 'assistant'
-				? new Response.Usage({
+				? Response.Usage.make({
 						inputTokens: {
 							cacheRead: event.message.usage.cacheRead,
 							cacheWrite: event.message.usage.cacheWrite,
@@ -182,24 +178,24 @@ function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_en
 						},
 						outputTokens: {reasoning: undefined, text: event.message.usage.output, total: event.message.usage.output}
 					})
-				: new Response.Usage({
+				: Response.Usage.make({
 						inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
 						outputTokens: {reasoning: undefined, text: undefined, total: undefined}
 					})
 	})
 }
-
-function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
-	toolkit: Toolkit.WithHandler<ToolSet>,
-	context: Context.Context<Tool.HandlerServices<ToolSet[keyof ToolSet]>>
-) {
+function effectToolsFromToolkit<ToolSet extends AiTools>(input: {
+	readonly toolkit: Toolkit.WithHandler<ToolSet>
+	readonly run: <A, E>(effect: Effect.Effect<A, E, Tool.HandlerServices<ToolSet[keyof ToolSet]>>) => Promise<A>
+}) {
 	return pipe(
-		Record.keys(toolkit.tools),
+		Record.keys(input.toolkit.tools),
 		Array.map(name => {
-			const tool = toolkit.tools[name]
-			if (Predicate.isUndefined(tool)) throw new Error(`unknown tool ${name}`)
+			if (Predicate.isUndefined(input.toolkit.tools[name])) throw new Error(`unknown tool ${name}`)
 			const toolDefinition = {
-				description: Predicate.isString(tool.description) ? tool.description : name,
+				description: Predicate.isString(input.toolkit.tools[name].description)
+					? input.toolkit.tools[name].description
+					: name,
 				execute: async (
 					_toolCallId: string,
 					params: unknown,
@@ -207,9 +203,13 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 					onUpdate: AgentToolUpdateCallback<unknown> | undefined,
 					_ctx: ExtensionContext
 				) => {
-					const finalResult = await Effect.runPromiseWith(context)(
-						// oxlint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Pi validates JSON arguments before execution; Effect re-validates them when the toolkit handles the call.
-						toolkit.handle(name, params as Tool.Parameters<ToolSet[typeof name]>).pipe(
+					const finalResult = await input.run(
+						pipe(
+							input.toolkit.handle(
+								name,
+								// oxlint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Pi validates JSON arguments before execution; Effect re-validates them when the toolkit handles the call.
+								params as Tool.Parameters<ToolSet[typeof name]>
+							),
 							Effect.flatMap(stream =>
 								Stream.runFold<
 									Tool.HandlerResult<ToolSet[typeof name]> | undefined,
@@ -221,34 +221,53 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 											onUpdate?.(agentToolResult(result.encodedResult))
 											return current
 										}
-
 										return result
 									}
 								)(stream)
 							)
 						)
 					)
-
 					if (Predicate.isUndefined(finalResult)) return agentToolResult(void 0)
 					if (finalResult.isFailure) throw finalResult.encodedResult
 					return agentToolResult(finalResult.encodedResult)
 				},
 				label: name,
 				name,
-				parameters: Tool.getJsonSchema(tool)
+				parameters: Tool.getJsonSchema(input.toolkit.tools[name])
 			} satisfies ToolDefinition
 			return toolDefinition
 		})
 	)
 }
-
-export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
+export const makePi = Effect.fnUntraced(function* <ToolSet extends AiTools>(config: AiConfig<ToolSet>) {
+	type ToolServices = Tool.HandlerServices<ToolSet[keyof ToolSet]>
+	const callbackQueue = yield* Queue.unbounded<Effect.Effect<void, never, ToolServices>>()
+	yield* pipe(Queue.take(callbackQueue), Effect.flatten, Effect.forever, Effect.forkScoped)
+	function runCallback<A, E>(effect: Effect.Effect<A, E, ToolServices>) {
+		return new Promise<A>((resolve, reject) => {
+			Queue.offerUnsafe(
+				callbackQueue,
+				pipe(
+					effect,
+					Effect.matchEffect({
+						onFailure: error =>
+							Effect.sync(() => {
+								reject(error)
+							}),
+						onSuccess: value =>
+							Effect.sync(() => {
+								resolve(value)
+							})
+					})
+				)
+			)
+		})
+	}
 	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const model = yield* SubscriptionRef.make(config.model)
 	const history = yield* SubscriptionRef.make<readonly Prompt.Message[]>([config.systemPrompt])
 	const promptLock = yield* Semaphore.make(1)
 	const handledToolkit = yield* config.toolkit
-	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[keyof ToolSet]>>()
 	const resourceLoader = new DefaultResourceLoader({
 		agentDir: getAgentDir(),
 		appendSystemPromptOverride: () => [],
@@ -256,15 +275,14 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		systemPromptOverride: () => config.systemPrompt.content
 	})
 	yield* Effect.tryPromise({
-		catch: cause => new AiError({cause, message: 'failed to load pi agent resources'}),
+		catch: cause => AiError.make({cause, message: 'failed to load pi agent resources'}),
 		try: () => resourceLoader.reload()
 	})
-
 	const result = yield* Effect.tryPromise({
-		catch: cause => new AiError({cause, message: 'failed to create pi agent session'}),
+		catch: cause => AiError.make({cause, message: 'failed to create pi agent session'}),
 		try: () =>
 			createAgentSession({
-				customTools: effectToolsFromToolkit(handledToolkit, toolHandlerContext),
+				customTools: effectToolsFromToolkit({run: runCallback, toolkit: handledToolkit}),
 				cwd: config.cwd,
 				model: OPENAI_CODEX_MODELS[config.model.id],
 				noTools: 'all',
@@ -274,199 +292,201 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 				tools: Record.keys(handledToolkit.tools)
 			})
 	})
-
 	yield* Effect.addFinalizer(() =>
 		Effect.sync(() => {
 			result.session.dispose()
 		})
 	)
-
 	const setStatus = Effect.fnUntraced(function* (state: AiStatus['state']) {
 		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
 	})
-	const reconcileModel = Effect.fnUntraced(function* () {
+	const reconcileModel = Effect.gen(function* () {
 		const current = yield* SubscriptionRef.get(model)
 		yield* Effect.tryPromise({
-			catch: cause => new AiError({cause, message: `failed to set pi model ${current.provider}/${current.id}`}),
+			catch: cause => AiError.make({cause, message: `failed to set pi model ${current.provider}/${current.id}`}),
 			try: () => result.session.setModel(OPENAI_CODEX_MODELS[current.id])
 		})
 		yield* Effect.sync(() => {
 			result.session.setThinkingLevel(current.reasoning)
 		})
 	})
-	const appendAssistantHistory = Effect.fnUntraced(function* (text: string, reasoning: string) {
-		if (String.isEmpty(text) && String.isEmpty(reasoning)) return
-
+	const appendAssistantHistory = Effect.fnUntraced(function* (input: {
+		readonly reasoning: string
+		readonly text: string
+	}) {
+		if (String.isEmpty(input.text) && String.isEmpty(input.reasoning)) return
 		const content = [
-			...(String.isEmpty(reasoning) ? [] : [Prompt.makePart('reasoning', {text: reasoning})]),
-			...(String.isEmpty(text) ? [] : [Prompt.makePart('text', {text})])
+			...(String.isEmpty(input.reasoning) ? [] : [Prompt.makePart('reasoning', {text: input.reasoning})]),
+			...(String.isEmpty(input.text) ? [] : [Prompt.makePart('text', {text: input.text})])
 		]
 		yield* SubscriptionRef.update(history, messages => [...messages, Prompt.makeMessage('assistant', {content})])
 	})
-	const deliver = Effect.fnUntraced(function* (message: Prompt.UserMessage, delivery: 'prompt' | 'steer' | 'queue') {
-		yield* reconcileModel()
-		const content = yield* piContentFromPromptParts(message.content)
-		if (delivery === 'prompt') {
+	const deliver = Effect.fnUntraced(function* (input: {
+		readonly delivery: 'prompt' | 'steer' | 'queue'
+		readonly message: Prompt.UserMessage
+	}) {
+		yield* reconcileModel
+		const content = yield* piContentFromPromptParts(input.message.content)
+		if (input.delivery === 'prompt') {
 			yield* Effect.tryPromise({
-				catch: cause => new AiError({cause, message: 'agent prompt failed'}),
+				catch: cause => AiError.make({cause, message: 'agent prompt failed'}),
 				try: () => result.session.sendUserMessage(content)
 			})
 			return
 		}
-
 		if (!result.session.isStreaming) {
-			return yield* new AiError({message: `cannot ${delivery} when the agent is idle`})
+			return yield* AiError.make({message: `cannot ${input.delivery} when the agent is idle`})
 		}
-
 		yield* Effect.tryPromise({
-			catch: cause => new AiError({cause, message: `agent ${delivery} failed`}),
-			try: () => result.session.sendUserMessage(content, {deliverAs: delivery === 'steer' ? 'steer' : 'followUp'})
+			catch: cause => AiError.make({cause, message: `agent ${input.delivery} failed`}),
+			try: () => result.session.sendUserMessage(content, {deliverAs: input.delivery === 'steer' ? 'steer' : 'followUp'})
 		})
 	})
-
 	yield* pipe(
 		SubscriptionRef.changes(model),
 		Stream.runForEach(() =>
 			pipe(
-				reconcileModel(),
+				reconcileModel,
 				Effect.catch(error => pipe(setStatus('error'), Effect.andThen(Effect.logError(error.message))))
 			)
 		),
 		Effect.forkScoped
 	)
-
-	return Ai.of({
+	return {
 		history,
 		model,
 		prompt: (message: Prompt.UserMessage) =>
-			Stream.callback<Response.StreamPart<ToolSet>, AiError>(queue =>
-				pipe(
-					Effect.gen(function* () {
-						if (result.session.isStreaming) {
-							yield* Queue.offer(queue, Response.makePart('error', {error: 'agent is already running'}))
-							yield* Queue.end(queue)
-							return
-						}
-
-						const currentModel = yield* SubscriptionRef.get(model)
-						yield* Effect.annotateCurrentSpan({
-							cwd: config.cwd,
-							model: currentModel.id,
-							provider: currentModel.provider,
-							reasoning: currentModel.reasoning
-						})
-
-						const events = yield* Queue.bounded<AgentSessionEvent>(1_024)
-						const finished = yield* Ref.make(false)
-						const finishPart = yield* Ref.make<Response.StreamPart<ToolSet> | undefined>(void 0)
-						const overflowed = yield* Ref.make(false)
-						const assistantText = yield* Ref.make('')
-						const assistantReasoning = yield* Ref.make('')
-						yield* SubscriptionRef.update(history, messages => [...messages, message])
-						yield* setStatus('running')
-						const unsubscribe = result.session.subscribe(event => {
-							if (Queue.offerUnsafe(events, event)) return
-
-							void result.session.abort()
-							Effect.runFork(
-								Effect.gen(function* () {
-									const alreadyOverflowed = yield* Ref.getAndSet(overflowed, true)
-									if (alreadyOverflowed) return
-
-									yield* Ref.set(finished, true)
-									yield* setStatus('error')
-									yield* Queue.offer(queue, Response.makePart('error', {error: 'agent event queue overflow'}))
-									yield* Queue.end(queue)
-								})
-							)
-						})
-						yield* Effect.addFinalizer(() =>
-							pipe(
-								Effect.gen(function* () {
-									yield* Effect.sync(unsubscribe)
-									const completed = yield* Ref.get(finished)
-									if (completed) return
-
-									yield* setStatus('stopping')
-									yield* Effect.tryPromise({
-										catch: cause => new AiError({cause, message: 'failed to abort agent'}),
-										try: () => result.session.abort()
+			pipe(
+				Stream.callback<Response.StreamPart<ToolSet>, AiError>(queue =>
+					pipe(
+						Effect.gen(function* () {
+							if (result.session.isStreaming) {
+								yield* Queue.offer(queue, Response.makePart('error', {error: 'agent is already running'}))
+								yield* Queue.end(queue)
+								return
+							}
+							const currentModel = yield* SubscriptionRef.get(model)
+							yield* Effect.annotateCurrentSpan({
+								cwd: config.cwd,
+								model: currentModel.id,
+								provider: currentModel.provider,
+								reasoning: currentModel.reasoning
+							})
+							const events = yield* Queue.bounded<AgentSessionEvent>(1_024)
+							const finished = yield* Ref.make(false)
+							const finishPart = yield* Ref.make<Response.StreamPart<ToolSet> | undefined>(void 0)
+							const overflowed = yield* Ref.make(false)
+							const assistantText = yield* Ref.make('')
+							const assistantReasoning = yield* Ref.make('')
+							yield* SubscriptionRef.update(history, messages => [...messages, message])
+							yield* setStatus('running')
+							const unsubscribe = result.session.subscribe(event => {
+								if (Queue.offerUnsafe(events, event)) return
+								void result.session.abort()
+								Queue.offerUnsafe(
+									callbackQueue,
+									Effect.gen(function* () {
+										const alreadyOverflowed = yield* Ref.getAndSet(overflowed, true)
+										if (alreadyOverflowed) return
+										yield* Ref.set(finished, true)
+										yield* setStatus('error')
+										yield* Queue.offer(queue, Response.makePart('error', {error: 'agent event queue overflow'}))
+										yield* Queue.end(queue)
 									})
-									yield* setStatus('idle')
-								}),
-								Effect.catch(() => setStatus('idle'))
-							)
-						)
-						yield* Effect.forkScoped(
-							Effect.forever(
+								)
+							})
+							yield* Effect.addFinalizer(() =>
 								pipe(
-									Queue.take(events),
-									Effect.flatMap(event =>
-										Effect.gen(function* () {
-											yield* pipe(
-												Match.value(event),
-												Match.when({type: 'auto_retry_start'}, () => setStatus('retrying')),
-												Match.when({type: 'agent_start'}, () => setStatus('running')),
-												Match.when({type: 'message_update'}, messageEvent =>
-													pipe(
-														Match.value(messageEvent.assistantMessageEvent),
-														Match.when({type: 'text_delta'}, update =>
-															Ref.update(assistantText, current => `${current}${update.delta}`)
-														),
-														Match.when({type: 'thinking_delta'}, update =>
-															Ref.update(assistantReasoning, current => `${current}${update.delta}`)
-														),
-														Match.orElse(() => Effect.void)
-													)
-												),
-												Match.when({type: 'turn_end'}, turnEnd => Ref.set(finishPart, finishPartFromTurnEnd(turnEnd))),
-												Match.orElse(() => Effect.void)
-											)
-											yield* Effect.forEach(partFromEvent<ToolSet>(event), part => Queue.offer(queue, part), {
-												discard: true
-											})
-											if (event.type === 'agent_end' && !event.willRetry) {
-												const finish = yield* Ref.get(finishPart)
-												if (Predicate.isNotUndefined(finish)) yield* Queue.offer(queue, finish)
-												yield* appendAssistantHistory(yield* Ref.get(assistantText), yield* Ref.get(assistantReasoning))
-												yield* setStatus('idle')
-												yield* Ref.set(finished, true)
-												yield* Queue.end(queue)
-											}
+									Effect.gen(function* () {
+										yield* Effect.sync(unsubscribe)
+										const completed = yield* Ref.get(finished)
+										if (completed) return
+										yield* setStatus('stopping')
+										yield* Effect.tryPromise({
+											catch: cause => AiError.make({cause, message: 'failed to abort agent'}),
+											try: () => result.session.abort()
 										})
+										yield* setStatus('idle')
+									}),
+									Effect.catch(() => setStatus('idle'))
+								)
+							)
+							yield* Effect.forkScoped(
+								Effect.forever(
+									pipe(
+										Queue.take(events),
+										Effect.flatMap(event =>
+											Effect.gen(function* () {
+												yield* pipe(
+													Match.value(event),
+													Match.when({type: 'auto_retry_start'}, () => setStatus('retrying')),
+													Match.when({type: 'agent_start'}, () => setStatus('running')),
+													Match.when({type: 'message_update'}, messageEvent =>
+														pipe(
+															Match.value(messageEvent.assistantMessageEvent),
+															Match.when({type: 'text_delta'}, update =>
+																Ref.update(assistantText, current => `${current}${update.delta}`)
+															),
+															Match.when({type: 'thinking_delta'}, update =>
+																Ref.update(assistantReasoning, current => `${current}${update.delta}`)
+															),
+															Match.orElse(() => Effect.void)
+														)
+													),
+													Match.when({type: 'turn_end'}, turnEnd =>
+														Ref.set(finishPart, finishPartFromTurnEnd(turnEnd))
+													),
+													Match.orElse(() => Effect.void)
+												)
+												yield* Effect.forEach(partFromEvent<ToolSet>(event), part => Queue.offer(queue, part), {
+													discard: true
+												})
+												if (event.type === 'agent_end' && !event.willRetry) {
+													const finish = yield* Ref.get(finishPart)
+													if (Predicate.isNotUndefined(finish)) yield* Queue.offer(queue, finish)
+													yield* appendAssistantHistory({
+														reasoning: yield* Ref.get(assistantReasoning),
+														text: yield* Ref.get(assistantText)
+													})
+													yield* setStatus('idle')
+													yield* Ref.set(finished, true)
+													yield* Queue.end(queue)
+												}
+											})
+										)
 									)
 								)
 							)
-						)
-
-						yield* pipe(
-							deliver(message, 'prompt'),
-							Effect.catch(error =>
-								pipe(
-									Ref.set(finished, true),
-									Effect.andThen(setStatus('error')),
-									Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: error.message}))),
-									Effect.andThen(Queue.end(queue))
+							yield* pipe(
+								deliver({delivery: 'prompt', message}),
+								Effect.catch(error =>
+									pipe(
+										Ref.set(finished, true),
+										Effect.andThen(setStatus('error')),
+										Effect.andThen(Queue.offer(queue, Response.makePart('error', {error: error.message}))),
+										Effect.andThen(Queue.end(queue))
+									)
 								)
 							)
-						)
-					}),
-					Semaphore.withPermit(promptLock),
-					Effect.withSpan('Ai.prompt')
-				)
+						}),
+						Semaphore.withPermit(promptLock),
+						Effect.withSpan('Ai.prompt')
+					)
+				),
+				Stream.withSpan('Ai.prompt')
 			),
 		queue: (message: Prompt.UserMessage) =>
 			pipe(
-				deliver(message, 'queue'),
+				deliver({delivery: 'queue', message}),
 				Effect.andThen(SubscriptionRef.update(history, messages => [...messages, message])),
 				Effect.withSpan('Ai.queue')
 			),
 		status,
 		steer: (message: Prompt.UserMessage) =>
 			pipe(
-				deliver(message, 'steer'),
+				deliver({delivery: 'steer', message}),
 				Effect.andThen(SubscriptionRef.update(history, messages => [...messages, message])),
 				Effect.withSpan('Ai.steer')
 			)
-	})
+	}
 })

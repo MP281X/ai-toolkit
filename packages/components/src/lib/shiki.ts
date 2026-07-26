@@ -28,6 +28,10 @@ export function resolveLanguage(lang?: string) {
 	)
 }
 
-export function highlightCode(code: string, lang?: string) {
-	return highlighter.codeToHtml(code, {defaultColor: false, lang: resolveLanguage(lang), themes: HIGHLIGHT_THEMES})
+export function highlightCode(input: {readonly code: string; readonly lang?: string}) {
+	return highlighter.codeToHtml(input.code, {
+		defaultColor: false,
+		lang: resolveLanguage(input.lang),
+		themes: HIGHLIGHT_THEMES
+	})
 }

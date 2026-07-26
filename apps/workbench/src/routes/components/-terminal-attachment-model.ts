@@ -1,55 +1,56 @@
 import {Array, Option, Order, pipe} from 'effect'
 
 import type {TerminalFrame} from '@deslop/terminal/schema'
-
 type TerminalAttachmentOperation = {readonly type: 'reset'} | {readonly data: string; readonly type: 'output'}
-
-export function terminalAttachmentSizeEqual(
-	left: {readonly cols: number; readonly rows: number},
-	right: {readonly cols: number; readonly rows: number}
-) {
-	return left.cols === right.cols && left.rows === right.rows
+export function terminalAttachmentSizeEqual(input: {
+	readonly left: {readonly cols: number; readonly rows: number}
+	readonly right: {readonly cols: number; readonly rows: number}
+}) {
+	return input.left.cols === input.right.cols && input.left.rows === input.right.rows
 }
-
-function outputEnd(data: string, start: number, maxLength: number) {
-	const candidate = Math.min(start + maxLength, data.length)
-	if (candidate >= data.length) return candidate
-	const previous = data.charCodeAt(candidate - 1)
-	const next = data.charCodeAt(candidate)
+function outputEnd(input: {readonly data: string; readonly start: number; readonly maxLength: number}) {
+	const candidate = Math.min(input.start + input.maxLength, input.data.length)
+	if (candidate >= input.data.length) return candidate
+	const previous = input.data.charCodeAt(candidate - 1)
+	const next = input.data.charCodeAt(candidate)
 	const safeEnd =
 		previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? candidate - 1 : candidate
-	return safeEnd === start ? Math.min(start + maxLength, data.length) : safeEnd
+	return safeEnd === input.start ? Math.min(input.start + input.maxLength, input.data.length) : safeEnd
 }
-
-function appendOutput(operations: TerminalAttachmentOperation[], data: string, maxOutputLength: number, start = 0) {
-	if (start >= data.length) return operations
-
-	const previous = Array.last(operations)
+function appendOutput(input: {
+	readonly operations: TerminalAttachmentOperation[]
+	readonly data: string
+	readonly maxOutputLength: number
+	readonly start?: number
+}) {
+	if ((input.start ?? 0) >= input.data.length) return input.operations
+	const previous = Array.last(input.operations)
 	if (Option.isSome(previous) && previous.value.type === 'output') {
-		const available = maxOutputLength - previous.value.data.length
+		const available = input.maxOutputLength - previous.value.data.length
 		if (available > 0) {
-			const end = outputEnd(data, start, available)
-			return appendOutput(
-				[
-					...Array.dropRight(operations, 1),
-					{data: `${previous.value.data}${data.slice(start, end)}`, type: 'output' as const}
+			const end = outputEnd({data: input.data, maxLength: available, start: input.start ?? 0})
+			return appendOutput({
+				data: input.data,
+				maxOutputLength: input.maxOutputLength,
+				operations: [
+					...Array.dropRight(input.operations, 1),
+					{data: `${previous.value.data}${input.data.slice(input.start ?? 0, end)}`, type: 'output' as const}
 				],
-				data,
-				maxOutputLength,
-				end
-			)
+				start: end
+			})
 		}
 	}
-
-	const end = outputEnd(data, start, maxOutputLength)
-	return appendOutput(
-		Array.append(operations, {data: data.slice(start, end), type: 'output'} satisfies TerminalAttachmentOperation),
-		data,
-		maxOutputLength,
-		end
-	)
+	const end = outputEnd({data: input.data, maxLength: input.maxOutputLength, start: input.start ?? 0})
+	return appendOutput({
+		data: input.data,
+		maxOutputLength: input.maxOutputLength,
+		operations: Array.append(input.operations, {
+			data: input.data.slice(input.start ?? 0, end),
+			type: 'output'
+		} satisfies TerminalAttachmentOperation),
+		start: end
+	})
 }
-
 export function terminalAttachmentOperations(input: {
 	readonly frames: readonly TerminalFrame[]
 	readonly lastSequence: number
@@ -69,8 +70,10 @@ export function terminalAttachmentOperations(input: {
 						operations: Array.append(current.operations, {type: 'reset'} satisfies TerminalAttachmentOperation)
 					}
 				}
-
-				return {lastSequence: frame.sequence, operations: appendOutput(current.operations, frame.data, maxOutputLength)}
+				return {
+					lastSequence: frame.sequence,
+					operations: appendOutput({data: frame.data, maxOutputLength, operations: current.operations})
+				}
 			}
 		)
 	)

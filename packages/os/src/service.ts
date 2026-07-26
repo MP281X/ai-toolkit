@@ -7,16 +7,16 @@ export class Os extends Context.Service<Os>()('@deslop/os/service/Os', {
 	make: Effect.gen(function* () {
 		const loadResources = pipe(
 			Effect.gen(function* () {
-				const before = yield* cpuTimes()
+				const before = yield* cpuTimes
 				yield* Effect.sleep('250 millis')
-				const after = yield* cpuTimes()
+				const after = yield* cpuTimes
 				return Resources.make({
 					cpu: cpuUtilization({after, before}),
 					memory: yield* osMemoryUtilization,
 					nodeHeap: nodeProcessUsage().heapUtilization
 				})
 			}),
-			Effect.mapError(cause => new OsError({cause})),
+			Effect.mapError(cause => OsError.make({cause})),
 			Effect.withSpan('Os.resources.load')
 		)
 

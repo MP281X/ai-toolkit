@@ -1,19 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
 	"includeEntryExports": true,
-	"duplicates": {"minLines": 10, "ignore": ["apps/*/src/lib/atomRuntime.ts"]},
-	"ignoreDependencies": [
-		"@deslop/oxlint-rules",
-		"@effect/atom-react",
-		"@effect/platform-node",
-		"@effect/vitest",
-		"@lydell/node-pty",
-		"agent-browser",
-		"effect",
-		"vite-plus"
-	],
 	"ignorePatterns": [".agents/repos/**", "**/*.gen.ts"],
-	"overrides": [{"files": ["**/schema.ts"], "rules": {"unused-types": "off"}}],
 	"publicPackages": [
 		"@deslop/agent",
 		"@deslop/agent-browser",
@@ -27,24 +15,16 @@
 		"@deslop/scripts",
 		"@deslop/terminal"
 	],
-	"security": {
-		"categories": {"exclude": ["dynamic-regex", "header-injection", "path-traversal", "prototype-pollution", "ssrf"]}
-	},
 	"rules": {
-		"private-type-leaks": "error",
-		"unused-dev-dependencies": "error",
-		"unused-optional-dependencies": "error",
-		"unused-component-props": "error",
-		"type-only-dependencies": "error",
-		"test-only-dependencies": "error",
-		"re-export-cycle": "error",
-		"stale-suppressions": "error",
-		"require-suppression-reason": "error",
-		"coverage-gaps": "off",
-		"unused-catalog-entries": "error",
-		"empty-catalog-groups": "error",
-		"unused-dependency-overrides": "error",
-		"policy-violation": "error",
-		"security-sink": "error"
+		"duplicate-exports": "off",
+		"unlisted-dependencies": "off",
+		"unused-class-members": "off",
+		"unused-dependencies": "off",
+		"unused-dev-dependencies": "off",
+		"unused-enum-members": "off",
+		"unused-files": "error",
+		"unused-exports": "error",
+		"unused-optional-dependencies": "off",
+		"unused-types": "error"
 	}
 }

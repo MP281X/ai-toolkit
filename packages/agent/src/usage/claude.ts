@@ -21,59 +21,58 @@ import {
 import {HttpClient} from 'effect/unstable/http'
 
 import {AgentError, AgentUsageData, AgentUsageTokens} from '../schema.ts'
-
+type ClaudeCredentials = typeof ClaudeCredentials.Type
 const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
-
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
-	utilization: Schema.Number
+	utilization: Schema.Finite
 })
-
+type ClaudeUsage = typeof ClaudeUsage.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
-
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
 	if (!(yield* fs.exists(root))) return []
-
 	return pipe(
 		yield* fs.readDirectory(root, {recursive: true}),
 		Array.filter(entry => String.endsWith('.jsonl')(entry)),
 		Array.map(entry => join(root, entry))
 	)
 })
-
-function objectProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return
-	const value = input[key]
-	return Predicate.isObject(value) ? value : undefined
+function objectProperty(parameters: {readonly input: unknown; readonly key: string}) {
+	if (!Predicate.isObject(parameters.input)) return
+	return Predicate.isObject(parameters.input[parameters.key]) ? parameters.input[parameters.key] : undefined
 }
-
-function numberProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return 0
-	const value = input[key]
-	return Predicate.isNumber(value) ? value : 0
+function numberProperty(parameters: {readonly input: unknown; readonly key: string}) {
+	if (!Predicate.isObject(parameters.input)) return 0
+	return pipe(
+		parameters.input[parameters.key],
+		Option.liftPredicate(Predicate.isNumber),
+		Option.getOrElse(() => 0)
+	)
 }
-
 function jsonLine(line: string) {
 	return pipe(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(line), Option.getOrUndefined)
 }
-
 function claudeUsageTokens(input: unknown) {
+	const cacheCreation = numberProperty({input, key: 'cache_creation_input_tokens'})
 	return {
 		cached:
-			numberProperty(input, 'cache_read_input_tokens') +
-			(numberProperty(input, 'cache_creation_input_tokens') || numberProperty(input, 'cached_input_tokens')),
-		input: numberProperty(input, 'input_tokens'),
-		output: numberProperty(input, 'output_tokens')
+			numberProperty({input, key: 'cache_read_input_tokens'}) +
+			(cacheCreation === 0 ? numberProperty({input, key: 'cached_input_tokens'}) : cacheCreation),
+		input: numberProperty({input, key: 'input_tokens'}),
+		output: numberProperty({input, key: 'output_tokens'})
 	}
 }
-
-function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
-	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
+function addTokens(input: {readonly left: AgentUsageTokens; readonly right: AgentUsageTokens}) {
+	return {
+		cached: input.left.cached + input.right.cached,
+		input: input.left.input + input.right.input,
+		output: input.left.output + input.right.output
+	}
 }
-
 function claudeTokensFromContent(content: string) {
 	return AgentUsageTokens.make(
 		pipe(
@@ -81,41 +80,38 @@ function claudeTokensFromContent(content: string) {
 			String.split('\n'),
 			Array.reduce({cached: 0, input: 0, output: 0}, (current, line) => {
 				if (!String.includes('"usage"')(line)) return current
-
 				const decoded = jsonLine(line)
-				const usage = objectProperty(objectProperty(decoded, 'message'), 'usage') ?? objectProperty(decoded, 'usage')
-				return Predicate.isUndefined(usage) ? current : addTokens(current, claudeUsageTokens(usage))
+				const usage =
+					objectProperty({input: objectProperty({input: decoded, key: 'message'}), key: 'usage'}) ??
+					objectProperty({input: decoded, key: 'usage'})
+				return Predicate.isUndefined(usage) ? current : addTokens({left: current, right: claudeUsageTokens(usage)})
 			})
 		)
 	)
 }
-
-function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
-			addTokens(total, file.tokens)
+			addTokens({left: total, right: file.tokens})
 		)
 	)
 }
-
 export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {readonly projectsRoot: string}) {
 	const fs = yield* FileSystem.FileSystem
 	const files = yield* pipe(
 		claudeJsonlFiles(input.projectsRoot),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 	const contents = yield* pipe(
 		Effect.forEach(files, path => fs.readFileString(path), {concurrency: 8}),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
-
 	return pipe(
 		contents,
 		Array.map(content => ({tokens: claudeTokensFromContent(content)})),
 		sumTokenFiles
 	)
 })
-
 export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {readonly provider: 'claude'}) {
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
@@ -123,60 +119,50 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	const projectsRoot = join(home, '.claude', 'projects')
 	const claudeCredentialsFile = pipe(
 		fs.readFileString(join(home, '.claude', '.credentials.json')),
-		Effect.mapError(cause => new AgentError({cause, message: 'not signed in'}))
+		Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'}))
 	)
 	const claudeToken = pipe(
 		claudeCredentialsFile,
 		Effect.flatMap(input =>
 			pipe(
 				Schema.decodeEffect(ClaudeCredentials)(input),
-				Effect.mapError(cause => new AgentError({cause, message: 'not signed in'}))
+				Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'}))
 			)
 		),
 		Effect.map(credentials => credentials.claudeAiOauth.accessToken)
 	)
-
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
-		>()
+		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
 	)
-	const loadCachedTokens = Effect.fnUntraced(function* () {
+	const loadCachedTokens = Effect.gen(function* () {
 		const files = yield* pipe(
 			claudeJsonlFiles(projectsRoot),
-			Effect.mapError(cause => new AgentError({cause}))
+			Effect.mapError(cause => AgentError.make({cause}))
 		)
 		const currentCache = yield* Ref.get(tokenFileCache)
 		const tokenFiles = yield* pipe(
 			files,
 			Effect.forEach(
 				path =>
-					Effect.gen(function* () {
-						const info = yield* pipe(
-							fs.stat(path),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
-						if (info.type !== 'File') return []
-
-						const mtimeMs = pipe(
-							info.mtime,
-							Option.map(value => value.getTime()),
-							Option.getOrElse(() => 0)
-						)
-						const size = Number(info.size)
-						const cached = pipe(currentCache, HashMap.get(path), Option.getOrUndefined)
-						if (Predicate.isNotUndefined(cached) && cached.mtimeMs === mtimeMs && cached.size === size) {
-							return [[path, cached] as const]
-						}
-
-						const tokens = yield* pipe(
-							fs.readFileString(path),
-							Effect.map(claudeTokensFromContent),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
-						return [[path, {mtimeMs, size, tokens}] as const]
-					}),
+					pipe(
+						Effect.gen(function* () {
+							const info = yield* fs.stat(path)
+							if (info.type !== 'File') return []
+							const mtimeMs = pipe(
+								info.mtime,
+								Option.map(value => value.getTime()),
+								Option.getOrElse(() => 0)
+							)
+							const size = Number(info.size)
+							const cached = pipe(currentCache, HashMap.get(path), Option.getOrUndefined)
+							if (Predicate.isNotUndefined(cached) && cached.mtimeMs === mtimeMs && cached.size === size) {
+								return [[path, cached] as const]
+							}
+							const tokens = yield* pipe(fs.readFileString(path), Effect.map(claudeTokensFromContent))
+							return [[path, {mtimeMs, size, tokens}] as const]
+						}),
+						Effect.mapError(cause => AgentError.make({cause}))
+					),
 				{concurrency: 4}
 			),
 			Effect.map(Array.flatten)
@@ -185,14 +171,13 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		yield* Ref.set(tokenFileCache, nextCache)
 		return sumTokenFiles(HashMap.values(nextCache))
 	})
-
-	const remoteUsage = remoteClaudeUsage(client, claudeToken)
-	const subscription = new AgentError({message: 'subscription unavailable'})
+	const remoteUsage = remoteClaudeUsage({client, token: claudeToken})
+	const subscription = AgentError.make({message: 'subscription unavailable'})
 	const loadUsage = pipe(
 		remoteUsage,
 		Effect.flatMap(usage =>
 			pipe(
-				loadCachedTokens(),
+				loadCachedTokens,
 				Effect.map(tokens =>
 					AgentUsageData.make({fiveHour: claudeWindow(usage.five_hour), tokens, weekly: claudeWindow(usage.seven_day)})
 				)
@@ -200,49 +185,47 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		),
 		Effect.provideService(FileSystem.FileSystem, fs)
 	)
-	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
-		Array.head([])
-	)
+	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
 		Stream.repeat(Schedule.spaced('10 minutes')),
 		Stream.runForEach(value => SubscriptionRef.set(usage, Array.head([value]))),
 		Effect.forkScoped
 	)
-
 	return {subscription, usage}
 })
-
-function claudeWindow(input: typeof ClaudeUsageWindow.Type) {
+function claudeWindow(input: ClaudeUsageWindow) {
 	return {resetsAt: input.resets_at ?? undefined, utilization: input.utilization}
 }
-
-function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {
+function remoteClaudeUsage(input: {
+	readonly client: HttpClient.HttpClient
+	readonly token: Effect.Effect<string, AgentError>
+}) {
 	return pipe(
-		Effect.fnUntraced(function* () {
-			const accessToken = yield* token
+		Effect.gen(function* () {
+			const accessToken = yield* input.token
 			const response = yield* pipe(
-				client.get('https://api.anthropic.com/api/oauth/usage', {
+				input.client.get('https://api.anthropic.com/api/oauth/usage', {
 					headers: {
 						'anthropic-beta': 'oauth-2025-04-20',
 						authorization: `Bearer ${accessToken}`,
 						'user-agent': 'claude-code/2.0.31'
 					}
 				}),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 			if (response.status !== 200) {
-				return yield* new AgentError({
+				return yield* AgentError.make({
 					message: response.status === 401 ? 'not signed in' : `claude usage responded with status ${response.status}`
 				})
 			}
 			return yield* pipe(
 				response.json,
 				Effect.flatMap(Schema.decodeUnknownEffect(ClaudeUsage)),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
-		})(),
+		}),
 		Effect.timeout('10 seconds'),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 }

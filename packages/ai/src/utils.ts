@@ -25,7 +25,7 @@ export function finalTextMessage<Tools extends Record<string, Tool.Any>, E, R>(
 		Effect.map(String.trim),
 		Effect.filterOrFail(
 			message => !String.isEmpty(message),
-			() => new AiError({message: 'final text message was empty'})
+			() => AiError.make({message: 'final text message was empty'})
 		)
 	)
 }

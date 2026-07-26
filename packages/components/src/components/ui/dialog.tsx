@@ -1,112 +1,110 @@
 'use client'
 
-import {Dialog as DialogPrimitive} from '@base-ui/react/dialog'
+import * as DialogPrimitive from '@base-ui/react/dialog'
+import * as EffectRecord from 'effect/Record'
 import {XIcon} from 'lucide-react'
 import type * as React from 'react'
 
 import {Button} from '#components/ui/button.tsx'
 import {cn} from '#lib/utils.ts'
-
-function Dialog({...props}: DialogPrimitive.Root.Props) {
-	return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog(input: DialogPrimitive.Dialog.Root.Props) {
+	const props = input
+	return <DialogPrimitive.Dialog.Root data-slot="dialog" {...props} />
 }
-
-function DialogTrigger({...props}: DialogPrimitive.Trigger.Props) {
-	return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+function DialogTrigger(input: DialogPrimitive.Dialog.Trigger.Props) {
+	const props = input
+	return <DialogPrimitive.Dialog.Trigger data-slot="dialog-trigger" {...props} />
 }
-
-function DialogPortal({...props}: DialogPrimitive.Portal.Props) {
-	return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+function DialogPortal(input: DialogPrimitive.Dialog.Portal.Props) {
+	const props = input
+	return <DialogPrimitive.Dialog.Portal data-slot="dialog-portal" {...props} />
 }
-
-function DialogClose({...props}: DialogPrimitive.Close.Props) {
-	return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+function DialogClose(input: DialogPrimitive.Dialog.Close.Props) {
+	const props = input
+	return <DialogPrimitive.Dialog.Close data-slot="dialog-close" {...props} />
 }
-
-function DialogOverlay({className, ...props}: DialogPrimitive.Backdrop.Props) {
+function DialogOverlay(input: DialogPrimitive.Dialog.Backdrop.Props) {
+	const props = EffectRecord.remove('className')(input)
 	return (
-		<DialogPrimitive.Backdrop
+		<DialogPrimitive.Dialog.Backdrop
 			data-slot="dialog-overlay"
 			className={cn(
 				'data-closed:fade-out-0 data-open:fade-in-0 data-closed:animate-out data-open:animate-in fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs',
-				className
+				input.className
 			)}
 			{...props}
 		/>
 	)
 }
-
-function DialogContent({
-	className,
-	children,
-	showCloseButton = true,
-	...props
-}: DialogPrimitive.Popup.Props & {showCloseButton?: boolean}) {
+function DialogContent(input: DialogPrimitive.Dialog.Popup.Props & {showCloseButton?: boolean}) {
+	const props = EffectRecord.remove('showCloseButton')(
+		EffectRecord.remove('children')(EffectRecord.remove('className')(input))
+	)
 	return (
 		<DialogPortal>
 			<DialogOverlay />
-			<DialogPrimitive.Popup
+			<DialogPrimitive.Dialog.Popup
 				data-slot="dialog-content"
 				className={cn(
 					'data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 bg-background ring-foreground/10 data-closed:animate-out data-open:animate-in fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-none p-4 leading-relaxed font-normal ring-1 duration-100 outline-none sm:max-w-sm',
-					className
+					input.className
 				)}
 				{...props}
 			>
-				{children}
-				{showCloseButton && (
-					<DialogPrimitive.Close
+				{input.children}
+				{(input.showCloseButton ?? true) && (
+					<DialogPrimitive.Dialog.Close
 						data-slot="dialog-close"
 						render={<Button variant="ghost" className="absolute top-2 right-2" size="icon-sm" />}
 					>
 						<XIcon />
 						<span className="sr-only">Close</span>
-					</DialogPrimitive.Close>
+					</DialogPrimitive.Dialog.Close>
 				)}
-			</DialogPrimitive.Popup>
+			</DialogPrimitive.Dialog.Popup>
 		</DialogPortal>
 	)
 }
-
-function DialogHeader({className, ...props}: React.ComponentProps<'div'>) {
-	return <div data-slot="dialog-header" className={cn('flex flex-col gap-1 text-left', className)} {...props} />
+function DialogHeader(input: React.ComponentProps<'div'>) {
+	const props = EffectRecord.remove('className')(input)
+	return <div data-slot="dialog-header" className={cn('flex flex-col gap-1 text-left', input.className)} {...props} />
 }
-
-function DialogFooter({
-	className,
-	showCloseButton = false,
-	children,
-	...props
-}: React.ComponentProps<'div'> & {showCloseButton?: boolean}) {
+function DialogFooter(input: React.ComponentProps<'div'> & {showCloseButton?: boolean}) {
+	const props = EffectRecord.remove('children')(
+		EffectRecord.remove('showCloseButton')(EffectRecord.remove('className')(input))
+	)
 	return (
 		<div
 			data-slot="dialog-footer"
-			className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}
+			className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', input.className)}
 			{...props}
 		>
-			{children}
-			{showCloseButton && <DialogPrimitive.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Close>}
+			{input.children}
+			{(input.showCloseButton ?? false) && (
+				<DialogPrimitive.Dialog.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Dialog.Close>
+			)}
 		</div>
 	)
 }
-
-function DialogTitle({className, ...props}: DialogPrimitive.Title.Props) {
-	return <DialogPrimitive.Title data-slot="dialog-title" className={cn('font-normal', className)} {...props} />
-}
-
-function DialogDescription({className, ...props}: DialogPrimitive.Description.Props) {
+function DialogTitle(input: DialogPrimitive.Dialog.Title.Props) {
+	const props = EffectRecord.remove('className')(input)
 	return (
-		<DialogPrimitive.Description
+		<DialogPrimitive.Dialog.Title data-slot="dialog-title" className={cn('font-normal', input.className)} {...props} />
+	)
+}
+function DialogDescription(input: DialogPrimitive.Dialog.Description.Props) {
+	const props = EffectRecord.remove('className')(input)
+	return (
+		<DialogPrimitive.Dialog.Description
 			data-slot="dialog-description"
 			className={cn(
 				'text-muted-foreground *:[a]:hover:text-foreground leading-relaxed font-normal *:[a]:underline *:[a]:underline-offset-3',
-				className
+				input.className
 			)}
 			{...props}
 		/>
 	)
 }
-
 export {
 	Dialog,
 	DialogClose,

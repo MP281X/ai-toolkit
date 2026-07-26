@@ -16,10 +16,8 @@ import {cn, formatError, toSentenceCase} from '#lib/utils.ts'
 
 const formContexts = tanstackForm.createFormHookContexts()
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
-export const useFieldContext = formContexts.useFieldContext
-// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
-export const useFormContext = formContexts.useFormContext
+export const {useFieldContext} = formContexts
+export const {useFormContext} = formContexts
 
 function FieldWrapper(props: {
 	readonly name: string
@@ -315,10 +313,9 @@ const formHook = tanstackForm.createFormHook({
 	formContext: formContexts.formContext
 })
 
-// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form hook factory boundary.
+// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- Public component API for the hook factory result.
 export const useForm = formHook.useAppForm
-// oxlint-disable-next-line @deslop/oxlint-rules/no-access-alias -- TanStack Form validation boundary.
-export const revalidateLogic = tanstackForm.revalidateLogic
+export const {revalidateLogic} = tanstackForm
 
 export declare namespace Form {
 	export type Props = {

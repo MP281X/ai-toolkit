@@ -4,29 +4,29 @@ import {SerializeAddon} from '@xterm/addon-serialize'
 import HeadlessModule from '@xterm/headless'
 
 import type {TerminalSize, TerminalStatus} from './schema.ts'
-
-export function terminalChunks(data: string, chunkSize = 65536) {
-	if (data === '') return Array.empty<string>()
-
+export function terminalChunks(input: {readonly chunkSize?: number; readonly data: string}) {
+	if (input.data === '') return Array.empty<string>()
 	function nextEnd(start: number) {
-		const candidate = Math.min(start + chunkSize, data.length)
-		if (candidate >= data.length) return candidate
-		const previous = data.charCodeAt(candidate - 1)
-		const next = data.charCodeAt(candidate)
+		const candidate = Math.min(start + (input.chunkSize ?? 65536), input.data.length)
+		if (candidate >= input.data.length) return candidate
+		const previous = input.data.charCodeAt(candidate - 1)
+		const next = input.data.charCodeAt(candidate)
 		const safeEnd =
 			previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? candidate - 1 : candidate
-		return safeEnd === start ? Math.min(start + chunkSize, data.length) : safeEnd
+		return safeEnd === start ? Math.min(start + (input.chunkSize ?? 65536), input.data.length) : safeEnd
 	}
-
-	function collect(start: number, chunks = Array.empty<string>()) {
-		if (start >= data.length) return chunks
-		const end = nextEnd(start)
-		return collect(end, Array.append(chunks, String.slice(start, end)(data)))
+	function collect(parameters: {readonly start: number; readonly chunks?: readonly string[]}) {
+		if (parameters.start >= input.data.length) {
+			return parameters.chunks ?? Array.empty<string>()
+		}
+		const end = nextEnd(parameters.start)
+		return collect({
+			chunks: Array.append(parameters.chunks ?? Array.empty<string>(), String.slice(parameters.start, end)(input.data)),
+			start: end
+		})
 	}
-
-	return collect(0)
+	return collect({start: 0})
 }
-
 export function terminalScreenStore(size?: TerminalSize) {
 	const screen = new HeadlessModule.Terminal({
 		allowProposedApi: true,
@@ -44,7 +44,6 @@ export function terminalScreenStore(size?: TerminalSize) {
 			serialize.dispose()
 		}
 	})
-
 	return {
 		dispose() {
 			screen.dispose()
@@ -57,11 +56,10 @@ export function terminalScreenStore(size?: TerminalSize) {
 			screen.resize(nextSize.cols, nextSize.rows)
 		},
 		snapshot() {
-			return terminalChunks(serialize.serialize({scrollback: 1_000}))
+			return terminalChunks({data: serialize.serialize({scrollback: 1_000})})
 		},
 		write(data: string) {
 			if (data === '') return Promise.resolve()
-
 			return new Promise<void>(resolve => {
 				screen.write(data, () => {
 					resolve()
@@ -70,19 +68,15 @@ export function terminalScreenStore(size?: TerminalSize) {
 		}
 	}
 }
-
 const terminalTitleDecorationPattern = /^[\s\-–—_·•*✢✣✤✥✦✧✩✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿πΠ∏]+/u
 const terminalTitleActivityPattern = /^[\s·•*✢✣✤✥✦✧✩✪✫✬✭✮✯✰✱✲✳✴✵✶✷✸✹✺✻✼✽✾✿\u2800-\u28ff]/u
-
 function terminalTitleContent(title: string) {
 	return pipe(title, String.replace(terminalTitleDecorationPattern, ''), String.trim)
 }
-
 function terminalTitleActivity(title: string) {
 	if (/^Claude Code$/iu.test(terminalTitleContent(title))) return false
 	return terminalTitleActivityPattern.test(title)
 }
-
 function normalizeTerminalTitle(title: string) {
 	const normalized = pipe(
 		Array.fromIterable(title),
@@ -97,56 +91,52 @@ function normalizeTerminalTitle(title: string) {
 		String.trim
 	)
 	if (normalized === '') return
-
 	const chars = Array.fromIterable(normalized)
 	return Array.length(chars) <= 200 ? normalized : pipe(chars, Array.take(200), Array.join(''))
 }
-
 export function terminalTitleStatus(title: string) {
 	const trimmed = title.trim()
 	if (trimmed === '') return {state: 'idle' as const, title: ''}
-
 	if (/^\[\s*[!.]\s*\]\s*Action Required\b/iu.test(trimmed)) {
 		return {state: 'waiting' as const, title: String.replace(/^\[\s*[!.]\s*\]\s*/iu, '')(trimmed) || trimmed}
 	}
-
 	return {state: 'idle' as const, title: trimmed}
 }
-
 function terminalProgressStatus(value: string) {
 	const progressState = Number.parseInt(value, 10)
-	return Match.value(progressState).pipe(
+	return pipe(
+		Match.value(progressState),
 		Match.when(0, () => 'idle' as const),
 		Match.when(2, () => 'failed' as const),
 		Match.when(4, () => 'waiting' as const),
 		Match.orElse(() => 'running' as const)
 	)
 }
-
-function terminalOscStart(input: string, index: number) {
-	const code = input.charCodeAt(index)
-	if (code === 0x9d) return {length: 1, payloadStart: index + 1}
-	if (code === 0x1b && input[index + 1] === ']') return {length: 2, payloadStart: index + 2}
+function terminalOscStart(parameters: {readonly input: string; readonly index: number}) {
+	const code = parameters.input.charCodeAt(parameters.index)
+	if (code === 0x9d) return {length: 1, payloadStart: parameters.index + 1}
+	if (code === 0x1b && parameters.input[parameters.index + 1] === ']') {
+		return {length: 2, payloadStart: parameters.index + 2}
+	}
 	return void 0
 }
-
-function terminalOscEnd(input: string, payloadStart: number) {
+function terminalOscEnd(parameters: {readonly input: string; readonly payloadStart: number}) {
 	const bell = pipe(
-		String.slice(payloadStart)(input),
+		String.slice(parameters.payloadStart)(parameters.input),
 		String.indexOf('\u0007'),
-		Option.map(index => index + payloadStart),
+		Option.map(index => index + parameters.payloadStart),
 		Option.getOrElse(() => -1)
 	)
 	const st = pipe(
-		String.slice(payloadStart)(input),
+		String.slice(parameters.payloadStart)(parameters.input),
 		String.indexOf('\u001b\\'),
-		Option.map(index => index + payloadStart),
+		Option.map(index => index + parameters.payloadStart),
 		Option.getOrElse(() => -1)
 	)
 	const c1St = pipe(
-		String.slice(payloadStart)(input),
+		String.slice(parameters.payloadStart)(parameters.input),
 		String.indexOf('\u009c'),
-		Option.map(index => index + payloadStart),
+		Option.map(index => index + parameters.payloadStart),
 		Option.getOrElse(() => -1)
 	)
 	const candidates = Array.filter([bell, st, c1St], index => index !== -1)
@@ -156,25 +146,22 @@ function terminalOscEnd(input: string, payloadStart: number) {
 	if (end === -1) return
 	return {index: end, length: end === st ? 2 : 1}
 }
-
-function terminalOscTitleUpdate(command: string, value: string) {
-	if (command === '0' || command === '2') {
-		const title = normalizeTerminalTitle(value)
-		if (Predicate.isUndefined(title) && !terminalTitleActivity(value)) return
-		return {state: terminalTitleActivity(value) ? ('running' as const) : undefined, title, type: 'title'} as const
+function terminalOscTitleUpdate(input: {readonly command: string; readonly value: string}) {
+	if (input.command === '0' || input.command === '2') {
+		const title = normalizeTerminalTitle(input.value)
+		if (Predicate.isUndefined(title) && !terminalTitleActivity(input.value)) return
+		return {state: terminalTitleActivity(input.value) ? ('running' as const) : undefined, title, type: 'title'} as const
 	}
-	if (command !== '9') return
-	if (value === '3;') return {state: 'idle' as const, title: undefined, type: 'title'} as const
-	if (!String.startsWith('3;')(value)) return
-
-	const rawTitle = String.slice(2)(value)
+	if (input.command !== '9') return
+	if (input.value === '3;') return {state: 'idle' as const, title: undefined, type: 'title'} as const
+	if (!String.startsWith('3;')(input.value)) return
+	const rawTitle = String.slice(2)(input.value)
 	const title = normalizeTerminalTitle(rawTitle)
 	if (Predicate.isUndefined(title) && !terminalTitleActivity(rawTitle)) return
 	return {state: terminalTitleActivity(rawTitle) ? ('running' as const) : undefined, title, type: 'title'} as const
 }
-
-export function terminalOscUpdates(data: string, carry = '') {
-	const input = `${carry}${data}`
+export function terminalOscUpdates(parameters: {readonly carry?: string; readonly data: string}) {
+	const input = `${parameters.carry ?? ''}${parameters.data}`
 	const scan = {
 		index: 0,
 		nextCarry: '',
@@ -187,9 +174,8 @@ export function terminalOscUpdates(data: string, carry = '') {
 			| {readonly state: TerminalStatus['state']; readonly type: 'progress'}
 		>()
 	}
-
 	while (scan.index < input.length) {
-		const start = terminalOscStart(input, scan.index)
+		const start = terminalOscStart({index: scan.index, input})
 		if (Predicate.isUndefined(start)) {
 			if (input.charCodeAt(scan.index) === 0x1b && scan.index === input.length - 1) {
 				scan.nextCarry = String.slice(scan.index)(input)
@@ -198,13 +184,11 @@ export function terminalOscUpdates(data: string, carry = '') {
 			scan.index += 1
 			continue
 		}
-
-		const end = terminalOscEnd(input, start.payloadStart)
+		const end = terminalOscEnd({input, payloadStart: start.payloadStart})
 		if (Predicate.isUndefined(end)) {
 			scan.nextCarry = String.slice(scan.index)(input)
 			break
 		}
-
 		const payload = String.slice(start.payloadStart, end.index)(input)
 		const separator = pipe(
 			payload,
@@ -213,7 +197,7 @@ export function terminalOscUpdates(data: string, carry = '') {
 		)
 		const command = separator === -1 ? payload : String.slice(0, separator)(payload)
 		const value = separator === -1 ? '' : String.slice(separator + 1)(payload)
-		const titleUpdate = terminalOscTitleUpdate(command, value)
+		const titleUpdate = terminalOscTitleUpdate({command, value})
 		if (Predicate.isNotUndefined(titleUpdate)) scan.updates = Array.append(scan.updates, titleUpdate)
 		if (command === '9' && String.startsWith('4;')(value)) {
 			scan.updates = Array.append(scan.updates, {
@@ -223,6 +207,5 @@ export function terminalOscUpdates(data: string, carry = '') {
 		}
 		scan.index = end.index + end.length
 	}
-
 	return {carry: Buffer.byteLength(scan.nextCarry) > 4096 ? '' : scan.nextCarry, updates: scan.updates}
 }

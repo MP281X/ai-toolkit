@@ -3,14 +3,20 @@ import path from 'node:path'
 
 import {NodeSocket} from '@effect/platform-node'
 
-import {Array, Context, Effect, HashMap, Layer, Option, Predicate, Ref, Semaphore, String, pipe} from 'effect'
+import {Array, Context, Effect, HashMap, Layer, Match, Option, Predicate, Ref, Semaphore, String, pipe} from 'effect'
 
-import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
+import {
+	FetchHttpClient,
+	HttpClient,
+	HttpClientRequest,
+	HttpServer,
+	HttpServerRequest,
+	HttpServerResponse
+} from 'effect/unstable/http'
 import {ChildProcess} from 'effect/unstable/process'
 import {Socket} from 'effect/unstable/socket'
 
 import {PortlessOrigin} from './schema.ts'
-
 export function portlessWorktreeId(cwd: string) {
 	const segment = pipe(
 		path.basename(cwd),
@@ -20,7 +26,6 @@ export function portlessWorktreeId(cwd: string) {
 	)
 	return String.isEmpty(segment) ? 'app' : segment
 }
-
 function loopDetectedResponse(hops: number) {
 	return pipe(
 		HttpServerResponse.html(
@@ -29,13 +34,10 @@ function loopDetectedResponse(hops: number) {
 		HttpServerResponse.setStatus(508, 'Loop Detected')
 	)
 }
-
 const portlessInstrumentationLoader = `<script>(()=>{if(navigator.webdriver===true)return;const load=src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;(document.head||document.documentElement||document.body).appendChild(script)});void load('https://unpkg.com/react-scan/dist/auto.global.js').then(()=>{window.reactScan?.({allowInIframe:true,_debug:'verbose'});return load('https://unpkg.com/react-grab/dist/index.global.js')}).catch(()=>{})})()</script>`
-
 function htmlContentType(contentType: string | null | undefined) {
 	return pipe(contentType ?? '', String.toLowerCase, String.includes('text/html'))
 }
-
 function rewritePortlessHtml(html: string) {
 	const head = /<head\b[^>]*>/iu.exec(html)
 	if (Predicate.isNotNull(head)) {
@@ -44,7 +46,6 @@ function rewritePortlessHtml(html: string) {
 	}
 	return `${portlessInstrumentationLoader}${html}`
 }
-
 export function rewritePortlessHtmlResponse(input: {
 	readonly contentType?: string | null
 	readonly html: string
@@ -53,15 +54,17 @@ export function rewritePortlessHtmlResponse(input: {
 	if (input.method !== 'GET' || !htmlContentType(input.contentType)) return
 	return rewritePortlessHtml(input.html)
 }
-
-const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const webRequest = yield* HttpServerRequest.toWeb(request)
+const proxy = Effect.fnUntraced(function* (input: {
+	readonly client: HttpClient.HttpClient
+	readonly origin: string
+	readonly request: HttpServerRequest.HttpServerRequest
+}) {
+	const webRequest = yield* HttpServerRequest.toWeb(input.request)
 	const hops = Number.parseInt(webRequest.headers.get('x-portless-hops') ?? '', 10)
 	if ((Number.isFinite(hops) ? hops : 0) >= 5) return loopDetectedResponse(Number.isFinite(hops) ? hops : 0)
-
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
+	const upstreamUrl = new URL(input.request.url, input.origin)
 	const headers = new Headers(webRequest.headers)
-	headers.set('host', new URL(origin).host)
+	headers.set('host', new URL(input.origin).host)
 	headers.set('x-portless-hops', `${(Number.isFinite(hops) ? hops : 0) + 1}`)
 	const requestInit = {
 		body: webRequest.body,
@@ -71,47 +74,37 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 		redirect: webRequest.redirect,
 		signal: webRequest.signal
 	} satisfies RequestInit & {readonly duplex: 'half'}
-	const upstream = yield* Effect.tryPromise(() =>
-		fetch(new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, requestInit))
-	)
-	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
+	const upstream = yield* input.client.execute(HttpClientRequest.fromWeb(new Request(upstreamUrl, requestInit)))
+	if (webRequest.method === 'GET' && htmlContentType(upstream.headers['content-type'])) {
 		const responseHeaders = new Headers(upstream.headers)
 		responseHeaders.delete('content-length')
 		responseHeaders.delete('content-encoding')
 		responseHeaders.set('content-type', 'text/html; charset=utf-8')
-		const html = yield* Effect.tryPromise(() => upstream.text())
+		const html = yield* upstream.text
 		const rewritten = rewritePortlessHtmlResponse({
-			contentType: upstream.headers.get('content-type'),
+			contentType: upstream.headers['content-type'] ?? null,
 			html,
 			method: webRequest.method
 		})
 		return HttpServerResponse.fromWeb(
-			new Response(rewritten ?? html, {
-				headers: responseHeaders,
-				status: upstream.status,
-				statusText: upstream.statusText
-			})
+			new Response(rewritten ?? html, {headers: responseHeaders, status: upstream.status})
 		)
 	}
-	return HttpServerResponse.fromWeb(
-		new Response(upstream.body, {headers: upstream.headers, status: upstream.status, statusText: upstream.statusText})
-	)
+	return HttpServerResponse.stream(upstream.stream, {headers: upstream.headers, status: upstream.status})
 })
-
-const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
-	const upstreamUrl = new URL(origin)
+const proxyWebSocket = Effect.fnUntraced(function* (input: {
+	readonly origin: string
+	readonly request: HttpServerRequest.HttpServerRequest
+}) {
+	const upstreamUrl = new URL(input.request.url, input.origin)
 	upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
-	upstreamUrl.pathname = pathname
-	upstreamUrl.search = search
-
-	const inbound = yield* request.upgrade
+	const inbound = yield* input.request.upgrade
 	const webSocketConstructor = Layer.succeed(Socket.WebSocketConstructor)(
 		(url, protocols) =>
 			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Effect's constructor uses the DOM WebSocket shape; ws is the Node transport that supports forwarded headers.
 			new NodeSocket.NodeWS.WebSocket(url, protocols, {
 				headers: pipe(
-					request.headers['cookie'],
+					input.request.headers['cookie'],
 					Option.fromUndefinedOr,
 					Option.filter(String.isNonEmpty),
 					Option.map(cookie => ({cookie})),
@@ -119,129 +112,121 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 				)
 			}) as unknown as globalThis.WebSocket
 	)
-	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString()).pipe(Effect.provide(webSocketConstructor))
+	const outbound = yield* pipe(Socket.makeWebSocket(upstreamUrl.toString()), Effect.provide(webSocketConstructor))
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
-
 	yield* Effect.all(
 		[
-			outbound.runRaw(message => writeInbound(message)).pipe(Effect.catch(() => Effect.void)),
-			inbound
-				.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-				.pipe(Effect.catch(() => Effect.void))
+			pipe(
+				outbound.runRaw(message => writeInbound(message)),
+				Effect.ignore
+			),
+			pipe(
+				inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+				Effect.ignore
+			)
 		],
 		{concurrency: 'unbounded', discard: true}
 	)
-
 	return HttpServerResponse.empty()
 })
-
 function hostname(host: string | undefined) {
 	return pipe(
 		Option.fromUndefinedOr(host),
 		Option.flatMap(value => pipe(value, String.split(':'), Array.head))
 	)
 }
-
-const hostPortAvailable = Effect.fnUntraced(function* (host: string, port: number) {
-	return yield* Effect.promise<boolean>(
-		() =>
-			new Promise(resolve => {
-				const server = createServer()
-				server.once('error', () => {
-					resolve(false)
-				})
-				server.once('listening', () => {
-					server.close(() => {
-						resolve(true)
-					})
-				})
-				server.listen({host, port})
+function hostPortAvailable(input: {readonly host: string; readonly port: number}): Effect.Effect<boolean> {
+	return Effect.callback<boolean>(resume => {
+		const server = createServer()
+			.once('error', () => {
+				resume(Effect.succeed(false))
 			})
-	)
-})
-
-const portAvailable = Effect.fnUntraced(function* (port: number) {
-	const localhost = yield* hostPortAvailable('localhost', port)
-	if (!localhost) return false
-	const loopback = yield* hostPortAvailable('127.0.0.1', port)
-	if (!loopback) return false
-	return yield* hostPortAvailable('0.0.0.0', port)
-})
-
-function commandArg(command: ChildProcess.StandardCommand, index: number) {
-	return pipe(command.args, Array.drop(index), Array.head, Option.getOrUndefined)
+			.once('listening', () => {
+				server.close(() => {
+					resume(Effect.succeed(true))
+				})
+			})
+		server.listen(input)
+		return Effect.sync(() => {
+			if (server.listening) server.close()
+		})
+	})
 }
-
+const portAvailable = Effect.fnUntraced(function* (port: number) {
+	const localhost = yield* hostPortAvailable({host: 'localhost', port})
+	if (!localhost) return false
+	const loopback = yield* hostPortAvailable({host: '127.0.0.1', port})
+	if (!loopback) return false
+	return yield* hostPortAvailable({host: '0.0.0.0', port})
+})
+function commandArg(input: {readonly command: ChildProcess.StandardCommand; readonly index: number}) {
+	return pipe(input.command.args, Array.drop(input.index), Array.head, Option.getOrUndefined)
+}
 function scriptName(taskId: string) {
 	const index = taskId.indexOf('#')
 	return index < 0 ? taskId : String.slice(index + 1)(taskId)
 }
-
 function acceptsPortFlags(command: ChildProcess.StandardCommand) {
-	const firstArg = commandArg(command, 0)
-	const runScript = command.command === 'vp' && firstArg === 'run' ? scriptName(commandArg(command, 1) ?? '') : ''
+	const firstArg = commandArg({command, index: 0})
+	const runScript =
+		command.command === 'vp' && firstArg === 'run' ? scriptName(commandArg({command, index: 1}) ?? '') : ''
 	return (
 		((command.command === 'vp' || command.command === 'vite') && firstArg === 'dev') ||
 		runScript === 'dev' ||
 		runScript === 'dev:client'
 	)
 }
-
-function commandArgs(command: ChildProcess.StandardCommand, port: number) {
-	const flags = ['--port', port.toString()]
-	return acceptsPortFlags(command) ? [...command.args, ...flags] : [...command.args]
+function commandArgs(input: {readonly command: ChildProcess.StandardCommand; readonly port: number}) {
+	const flags = ['--port', input.port.toString()]
+	return acceptsPortFlags(input.command) ? [...input.command.args, ...flags] : [...input.command.args]
 }
-
 export class Portless extends Context.Service<Portless>()('@deslop/portless/service/Portless', {
 	make: Effect.gen(function* () {
+		const client = yield* HttpClient.HttpClient
 		const server = yield* HttpServer.HttpServer
-		const proxyPort =
-			server.address._tag === 'TcpAddress'
-				? server.address.port.toString()
-				: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
+		const proxyPort = yield* pipe(
+			Match.value(server.address),
+			Match.when({_tag: 'TcpAddress'}, address => Effect.succeed(address.port.toString())),
+			Match.orElse(() => Effect.die('portless requires a TCP HTTP server address'))
+		)
 		const ports = yield* Ref.make(Array.empty<number>())
 		const routes = yield* Ref.make(HashMap.empty<string, string>())
 		const portLock = yield* Semaphore.make(1)
-
 		function origin(host: string) {
 			return `http://${host}:${proxyPort}`
 		}
-		const allocatePort = Effect.fnUntraced(function* () {
-			return yield* pipe(
-				Effect.gen(function* () {
-					const used = yield* Ref.get(ports)
-					for (const port of Array.range(4000, 4999)) {
-						if (Array.contains(used, port) || !(yield* portAvailable(port))) continue
-						yield* Ref.update(ports, Array.append(port))
-						return port
-					}
-					return yield* Effect.die(new Error('no portless app ports available'))
-				}),
-				Semaphore.withPermit(portLock)
-			)
-		})
-		const middleware = Effect.fnUntraced(function* <E, R>(
+		const allocatePort = pipe(
+			Effect.gen(function* () {
+				const used = yield* Ref.get(ports)
+				for (const port of Array.range(4000, 4999)) {
+					if (Array.contains(used, port) || !(yield* portAvailable(port))) continue
+					yield* Ref.update(ports, Array.append(port))
+					return port
+				}
+				return yield* Effect.die(new Error('no portless app ports available'))
+			}),
+			Semaphore.withPermit(portLock)
+		)
+		const middleware = Effect.fn('Portless.middleware')(function* <E, R>(
 			app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 		) {
 			const request = yield* HttpServerRequest.HttpServerRequest
 			const host = hostname(request.headers['host'])
 			if (Option.isNone(host) || !pipe(host.value, String.endsWith('.localhost'))) return yield* app
-
 			const target = pipe(yield* Ref.get(routes), HashMap.get(host.value))
 			if (Option.isNone(target)) return HttpServerResponse.empty({status: 404})
 			return pipe(request.headers['upgrade'] ?? '', String.toLowerCase) === 'websocket'
-				? yield* proxyWebSocket(request, target.value)
-				: yield* proxy(request, target.value)
+				? yield* proxyWebSocket({origin: target.value, request})
+				: yield* proxy({client, origin: target.value, request})
 		})
-
 		return {
 			middleware,
 			open: Effect.fn('Portless.open')(function* (input: {
 				readonly command: ChildProcess.StandardCommand
 				readonly segments: readonly string[]
 			}) {
-				const port = yield* allocatePort()
+				const port = yield* allocatePort
 				const id = pipe(input.segments, Array.join('.'))
 				const worktree = pipe(
 					input.segments,
@@ -265,9 +250,8 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				yield* Effect.addFinalizer(() =>
 					Effect.all([Ref.update(routes, HashMap.remove(host)), Ref.update(ports, Array.remove(port))], {discard: true})
 				)
-
 				return {
-					command: ChildProcess.make(input.command.command, commandArgs(input.command, port), {
+					command: ChildProcess.make(input.command.command, commandArgs({command: input.command, port}), {
 						...input.command.options,
 						env: {...input.command.options.env, ...env}
 					}),
@@ -286,8 +270,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 		}
 	})
 }) {
-	public static layer = Layer.effect(this, this.make)
-
+	public static layer = pipe(Layer.effect(this, this.make), Layer.provide(FetchHttpClient.layer))
 	public static middleware = Effect.fnUntraced(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 	) {

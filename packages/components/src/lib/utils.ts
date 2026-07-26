@@ -3,11 +3,9 @@ import {Array, Cause, DateTime, Match, Predicate, Schema, String, pipe} from 'ef
 import type {ClassValue} from 'clsx'
 import {clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
-
 export function cn(...inputs: readonly ClassValue[]) {
 	return twMerge(clsx(inputs))
 }
-
 export const formatError = pipe(
 	Match.type(),
 	Match.when(Predicate.isError, error => {
@@ -28,7 +26,6 @@ export const formatError = pipe(
 	Match.when(Predicate.isObjectOrArray, error => Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(error)),
 	Match.orElse(() => 'Unknown Error' as const)
 )
-
 export const formatTimestamp = pipe(
 	Match.type<DateTime.DateTime>(),
 	Match.when(
@@ -37,7 +34,6 @@ export const formatTimestamp = pipe(
 	),
 	Match.exhaustive
 )
-
 export function formatTimeUntil(date: DateTime.DateTime) {
 	const millis = DateTime.toEpochMillis(date) - DateTime.toEpochMillis(DateTime.nowUnsafe())
 	if (millis <= 0) return 'now'
@@ -47,32 +43,28 @@ export function formatTimeUntil(date: DateTime.DateTime) {
 	if (hours < 24) return `${hours}h`
 	return `${Math.round(hours / 24)}d`
 }
-
 export function formatBytes(bytes: number) {
 	if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-
 	const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
 	const value = bytes / 1024 ** exponent
 	if (value >= 100 || exponent === 0) return `${value.toFixed(0)} ${units[exponent]}`
 	if (value >= 10) return `${value.toFixed(1)} ${units[exponent]}`
-
 	return `${value.toFixed(2)} ${units[exponent]}`
 }
-
 export function formatNumber(value: number) {
 	const absolute = Math.abs(value)
-	if (absolute >= 1_000_000_000_000) return formatNumberUnit(value, 1_000_000_000_000, 'T')
-	if (absolute >= 1_000_000_000) return formatNumberUnit(value, 1_000_000_000, 'B')
-	if (absolute >= 1_000_000) return formatNumberUnit(value, 1_000_000, 'M')
-	if (absolute >= 1_000) return formatNumberUnit(value, 1_000, 'K')
+	if (absolute >= 1_000_000_000_000) return formatNumberUnit({divisor: 1_000_000_000_000, suffix: 'T', value})
+	if (absolute >= 1_000_000_000) return formatNumberUnit({divisor: 1_000_000_000, suffix: 'B', value})
+	if (absolute >= 1_000_000) return formatNumberUnit({divisor: 1_000_000, suffix: 'M', value})
+	if (absolute >= 1_000) return formatNumberUnit({divisor: 1_000, suffix: 'K', value})
 	return Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(value)
 }
-
-function formatNumberUnit(value: number, divisor: number, suffix: string) {
-	return `${Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(value / divisor)}${suffix}`
+function formatNumberUnit(input: {readonly value: number; readonly divisor: number; readonly suffix: string}) {
+	return `${Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(
+		input.value / input.divisor
+	)}${input.suffix}`
 }
-
 export function toSentenceCase(value: string) {
 	return pipe(
 		value,

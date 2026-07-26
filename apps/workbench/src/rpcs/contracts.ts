@@ -22,6 +22,7 @@ import {OsError, Resources} from '@deslop/os/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
 
+type CwdPayload = typeof CwdPayload.Type
 const CwdPayload = Schema.Struct({cwd: Schema.String})
 
 const TerminalPayloadFields = {
@@ -35,6 +36,7 @@ const TerminalPayloadFields = {
 export type TerminalPayload = typeof TerminalPayload.Type
 export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 
+type TerminalStatusPayload = typeof TerminalStatusPayload.Type
 const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
 
 export type AgentSession = typeof AgentSession.Type
@@ -77,8 +79,10 @@ const SidebarProject = Schema.Struct({
 	worktrees: Schema.Array(SidebarWorktree)
 })
 
+type HomeSidebar = typeof HomeSidebar.Type
 const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
 
+type PublishDraftError = typeof PublishDraftError.Type
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(
@@ -141,7 +145,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Number, rows: Schema.Number})
+		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Finite, rows: Schema.Finite})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
@@ -150,8 +154,8 @@ export class RpcContracts extends RpcGroup.make(
 		error: TerminalError,
 		payload: Schema.Struct({
 			...TerminalPayloadFields,
-			cols: Schema.optional(Schema.Number),
-			rows: Schema.optional(Schema.Number)
+			cols: Schema.optional(Schema.Finite),
+			rows: Schema.optional(Schema.Finite)
 		}),
 		stream: true,
 		success: TerminalFrame

@@ -18,7 +18,7 @@ import {
 	MemoryStick,
 	Server
 } from '@deslop/components/icons'
-import {formatError, formatNumber, formatTimestamp, formatTimeUntil} from '@deslop/components/utils'
+import {formatError, formatNumber, formatTimeUntil, formatTimestamp} from '@deslop/components/utils'
 
 const providers = ['codex', 'claude'] as const
 

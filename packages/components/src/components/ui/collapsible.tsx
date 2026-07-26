@@ -1,15 +1,15 @@
-import {Collapsible as CollapsiblePrimitive} from '@base-ui/react/collapsible'
-
-function Collapsible({...props}: CollapsiblePrimitive.Root.Props) {
-	return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
+import * as CollapsiblePrimitive from '@base-ui/react/collapsible'
+import * as EffectRecord from 'effect/Record'
+function Collapsible(input: CollapsiblePrimitive.Collapsible.Root.Props) {
+	const props = input
+	return <CollapsiblePrimitive.Collapsible.Root data-slot="collapsible" {...props} />
 }
-
-function CollapsibleTrigger({...props}: CollapsiblePrimitive.Trigger.Props) {
-	return <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" {...props} />
+function CollapsibleTrigger(input: CollapsiblePrimitive.Collapsible.Trigger.Props) {
+	const props = input
+	return <CollapsiblePrimitive.Collapsible.Trigger data-slot="collapsible-trigger" {...props} />
 }
-
-function CollapsibleContent({...props}: CollapsiblePrimitive.Panel.Props) {
-	return <CollapsiblePrimitive.Panel data-slot="collapsible-content" {...props} />
+function CollapsibleContent(input: CollapsiblePrimitive.Collapsible.Panel.Props) {
+	const props = input
+	return <CollapsiblePrimitive.Collapsible.Panel data-slot="collapsible-content" {...props} />
 }
-
 export {Collapsible, CollapsibleContent, CollapsibleTrigger}

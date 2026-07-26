@@ -1,4 +1,3 @@
-// fallow-ignore-file circular-dependency -- Service modules own implementation constructor dispatch.
 import {Context, Match, pipe} from 'effect'
 import type {Effect, Stream, SubscriptionRef} from 'effect'
 

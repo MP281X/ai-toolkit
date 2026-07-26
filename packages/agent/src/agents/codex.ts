@@ -2,7 +2,8 @@ import {Effect, String} from 'effect'
 
 import {ChildProcess} from 'effect/unstable/process'
 
-import {AgentError, type AgentLayerConfig} from '../schema.ts'
+import {AgentError} from '../schema.ts'
+import type {AgentLayerConfig} from '../schema.ts'
 
 const codexCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
@@ -17,7 +18,7 @@ const codexCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 		],
 		{cwd: config.cwd, env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}, extendEnv: true}
 	)
-	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'codex command unavailable'})
+	if (String.isEmpty(command.command)) return yield* AgentError.make({message: 'codex command unavailable'})
 	return command
 })
 

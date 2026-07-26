@@ -26,7 +26,9 @@ NodeRuntime.runMain(
 			{disableLogger: true}
 		),
 		Layer.provide(LiveLayers),
-		Layer.provide(NodeHttpServer.layerConfig(createServer, {port: Config.port('PORT').pipe(Config.withDefault(5000))})),
+		Layer.provide(
+			NodeHttpServer.layerConfig(createServer, {port: pipe(Config.port('PORT'), Config.withDefault(5000))})
+		),
 		Layer.launch
 	)
 )

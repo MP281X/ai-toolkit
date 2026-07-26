@@ -7,7 +7,7 @@ export function Code(props: {readonly children: string; readonly lang?: string; 
 	return (
 		<div
 			data-code-block
-			dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(highlightCode(props.children, props.lang))}}
+			dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(highlightCode({code: props.children, lang: props.lang}))}}
 			className={cn('bg-muted/30 overflow-hidden select-text [&_*]:select-text', props.className)}
 		/>
 	)

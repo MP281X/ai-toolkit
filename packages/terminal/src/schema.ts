@@ -16,7 +16,7 @@ export function terminalStatusActive(state: TerminalStatus['state']) {
 }
 
 export type TerminalSize = typeof TerminalSize.Type
-const TerminalSize = Schema.Struct({cols: Schema.Number, rows: Schema.Number})
+const TerminalSize = Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
 
 export type TerminalInput = typeof TerminalInput.Type
 export const TerminalInput = Schema.Union([
@@ -26,6 +26,6 @@ export const TerminalInput = Schema.Union([
 
 export type TerminalFrame = typeof TerminalFrame.Type
 export const TerminalFrame = Schema.Union([
-	Schema.Struct({sequence: Schema.Number, type: Schema.Literal('reset')}),
-	Schema.Struct({data: Schema.String, sequence: Schema.Number, type: Schema.Literal('output')})
+	Schema.Struct({sequence: Schema.Finite, type: Schema.Literal('reset')}),
+	Schema.Struct({data: Schema.String, sequence: Schema.Finite, type: Schema.Literal('output')})
 ])

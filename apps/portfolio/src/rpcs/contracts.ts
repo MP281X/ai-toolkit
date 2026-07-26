@@ -7,16 +7,16 @@ export const PortfolioVisitor = Schema.Struct({
 	color: Schema.NonEmptyString,
 	id: Schema.NonEmptyString,
 	name: Schema.NonEmptyString,
-	x: Schema.Number,
-	y: Schema.Number
+	x: Schema.Finite,
+	y: Schema.Finite
 })
 
 export type PortfolioTrail = typeof PortfolioTrail.Type
 export const PortfolioTrail = Schema.Struct({
 	color: Schema.NonEmptyString,
 	visitorId: Schema.NonEmptyString,
-	x: Schema.Number,
-	y: Schema.Number
+	x: Schema.Finite,
+	y: Schema.Finite
 })
 
 export type PortfolioState = typeof PortfolioState.Type
@@ -40,14 +40,13 @@ export const PortfolioVisitorRemoved = Schema.TaggedStruct('visitor-removed', {i
 export type PortfolioTrailAdded = typeof PortfolioTrailAdded.Type
 export const PortfolioTrailAdded = Schema.TaggedStruct('trail-added', {trail: PortfolioTrail})
 
+export type PortfolioEvent = typeof PortfolioEvent.Type
 const PortfolioEvent = Schema.Union([
 	PortfolioSnapshot,
 	PortfolioVisitorUpserted,
 	PortfolioVisitorRemoved,
 	PortfolioTrailAdded
 ])
-
-export type PortfolioEvent = typeof PortfolioEvent.Type
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('portfolio.join', {
@@ -59,8 +58,8 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({
 			color: Schema.NonEmptyString,
 			id: Schema.NonEmptyString,
-			x: Schema.Number,
-			y: Schema.Number
+			x: Schema.Finite,
+			y: Schema.Finite
 		})
 	})
 ) {}

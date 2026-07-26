@@ -5,13 +5,7 @@ import type {ChildProcess} from 'effect/unstable/process'
 
 import {makeLayerClaude} from './agents/claude.ts'
 import {makeLayerCodex} from './agents/codex.ts'
-import {
-	type AgentError,
-	type AgentLayerConfig,
-	type AgentSubscription,
-	type AgentUsageData,
-	type AgentUsageProvider
-} from './schema.ts'
+import type {AgentError, AgentLayerConfig, AgentSubscription, AgentUsageData, AgentUsageProvider} from './schema.ts'
 import {makeLayerClaudeUsage} from './usage/claude.ts'
 import {makeLayerCodexUsage} from './usage/codex.ts'
 

@@ -13,7 +13,6 @@ import {Markdown} from './markdown.tsx'
 
 import {Spinner} from '#components/ui/spinner.tsx'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
-
 const DIFF_CSS = `
 	:host,
 	pre {
@@ -71,7 +70,6 @@ const DIFF_CSS = `
 		color: var(--muted-foreground) !important;
 	}
 `
-
 export declare namespace PatchDiff {
 	export type Comment = {
 		readonly filePath: string
@@ -83,18 +81,16 @@ export declare namespace PatchDiff {
 		readonly threadId?: string
 	}
 }
-
-function sameDiffLine(
-	left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide},
-	right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
-) {
+function sameDiffLine(input: {
+	readonly left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
+	readonly right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
+}) {
 	return (
-		left.filePath === right.filePath &&
-		left.lineNumber === right.lineNumber &&
-		(left.side === 'deletions') === (right.side === 'deletions')
+		input.left.filePath === input.right.filePath &&
+		input.left.lineNumber === input.right.lineNumber &&
+		(input.left.side === 'deletions') === (input.right.side === 'deletions')
 	)
 }
-
 export function formatCopiedComment(comment: {
 	readonly body: string
 	readonly filePath: string
@@ -104,63 +100,58 @@ export function formatCopiedComment(comment: {
 	const linePrefix = comment.side === 'deletions' ? 'deleted' : 'line'
 	return `# Review comments\n\n## ${comment.filePath}\n\n${linePrefix}:${comment.lineNumber}: ${comment.body}`
 }
-
-function captureScrollAnchor(container: HTMLElement, clientY: number) {
+function captureScrollAnchor(input: {readonly container: HTMLElement; readonly clientY: number}) {
 	const lineElement = pipe(
 		Array.fromIterable(
-			container
+			input.container
 				.querySelector('diffs-container')
 				?.shadowRoot?.querySelectorAll<HTMLElement>('[data-line][data-line-type]') ?? []
 		),
 		Array.findFirst(element => {
 			const rect = element.getBoundingClientRect()
-			return clientY >= rect.top && clientY <= rect.bottom
+			return input.clientY >= rect.top && input.clientY <= rect.bottom
 		}),
 		Option.getOrUndefined
 	)
-
 	if (!lineElement) return
-
 	if (Predicate.isUndefined(lineElement.dataset['line']) || String.isEmpty(lineElement.dataset['line'])) return
-
 	return {
-		clientY,
+		clientY: input.clientY,
 		lineNumber: lineElement.dataset['line'],
-		offsetWithinLine: clientY - lineElement.getBoundingClientRect().top,
-		scrollTop: container.scrollTop
+		offsetWithinLine: input.clientY - lineElement.getBoundingClientRect().top,
+		scrollTop: input.container.scrollTop
 	}
 }
-
-function restoreScrollAnchor(
-	container: HTMLElement,
-	anchor: {
+function restoreScrollAnchor(input: {
+	readonly container: HTMLElement
+	readonly anchor: {
 		readonly clientY: number
 		readonly offsetWithinLine: number
 		readonly lineNumber: string
 		readonly scrollTop: number
-	},
-	mode: 'diff' | 'file'
-) {
-	const targetLine = container
+	}
+	readonly mode: 'diff' | 'file'
+}) {
+	const targetLine = input.container
 		.querySelector('diffs-container')
 		?.shadowRoot?.querySelector(
-			mode === 'diff'
-				? `[data-line="${CSS.escape(anchor.lineNumber)}"]:not([data-line-type="change-deletion"])`
-				: `[data-line="${CSS.escape(anchor.lineNumber)}"]`
+			input.mode === 'diff'
+				? `[data-line="${CSS.escape(input.anchor.lineNumber)}"]:not([data-line-type="change-deletion"])`
+				: `[data-line="${CSS.escape(input.anchor.lineNumber)}"]`
 		)
-
 	if (!(targetLine instanceof HTMLElement)) {
-		container.scrollTo({behavior: 'instant', top: anchor.scrollTop})
+		input.container.scrollTo({behavior: 'instant', top: input.anchor.scrollTop})
 		return true
 	}
-
-	container.scrollTo({
+	input.container.scrollTo({
 		behavior: 'instant',
-		top: container.scrollTop + targetLine.getBoundingClientRect().top - (anchor.clientY - anchor.offsetWithinLine)
+		top:
+			input.container.scrollTop +
+			targetLine.getBoundingClientRect().top -
+			(input.anchor.clientY - input.anchor.offsetWithinLine)
 	})
 	return true
 }
-
 function CommentAnnotation(props: {
 	readonly comment: PatchDiff.Comment
 	readonly isDraft?: boolean
@@ -170,38 +161,30 @@ function CommentAnnotation(props: {
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
 	const [editing, setEditing] = useState(() => String.isEmpty(props.comment.body))
-
 	useEffect(() => {
 		if (!editing) return
-
 		const animationFrame = window.requestAnimationFrame(() => {
 			inputRef.current?.focus()
 		})
-
 		return () => {
 			window.cancelAnimationFrame(animationFrame)
 		}
 	}, [editing])
-
 	function saveDraft() {
-		const body = inputRef.current?.value ?? props.comment.body
-		if (String.isEmpty(String.trim(body))) {
+		if (String.isEmpty(String.trim(inputRef.current?.value ?? props.comment.body))) {
 			if (props.isDraft === true) {
 				props.onCloseDraft?.()
 				return
 			}
-
-			props.onResolveComment?.({...props.comment, body})
+			props.onResolveComment?.({...props.comment, body: inputRef.current?.value ?? props.comment.body})
 			setEditing(false)
 			props.onCloseDraft?.()
 			return
 		}
-
-		props.onSaveComment?.({...props.comment, body: String.trim(body)})
+		props.onSaveComment?.({...props.comment, body: String.trim(inputRef.current?.value ?? props.comment.body)})
 		setEditing(false)
 		props.onCloseDraft?.()
 	}
-
 	if (editing) {
 		return (
 			<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
@@ -224,11 +207,9 @@ function CommentAnnotation(props: {
 						onKeyDown={event => {
 							if (event.key === 'Escape') {
 								event.preventDefault()
-
 								if (props.isDraft === true) props.onCloseDraft?.()
 								else setEditing(false)
 							}
-
 							if (event.key === 'Enter' && !event.shiftKey) {
 								event.preventDefault()
 								saveDraft()
@@ -240,7 +221,6 @@ function CommentAnnotation(props: {
 			</div>
 		)
 	}
-
 	return (
 		<div className="border-border/70 bg-muted/70 text-foreground box-border grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 border-y px-2 py-2">
 			<div className="border-border bg-background text-muted-foreground inline-flex shrink-0 border p-1">
@@ -292,7 +272,6 @@ function CommentAnnotation(props: {
 		</div>
 	)
 }
-
 export function PatchDiff(props: {
 	readonly filePath: string
 	readonly fileContent?: string
@@ -321,59 +300,68 @@ export function PatchDiff(props: {
 	}
 	const mode = resolveMode()
 	const language = resolveLanguage(props.filePath)
-	const fileDiff = Predicate.isString(patch) ? setLanguageOverride(getSingularPatch(patch), language) : undefined
-	const comments = props.comments ?? []
-	const commentsWithDraft = draftComment ? Array.append(comments, draftComment) : comments
-
+	const fileDiff = pipe(
+		Match.value(patch),
+		Match.when(Predicate.isString, value => setLanguageOverride(getSingularPatch(value), language)),
+		Match.orElse(() => undefined)
+	)
 	useEffect(() => {
 		containerRef.current?.focus()
 	}, [mode, props.filePath, props.patch, props.fileContent])
-
 	useLayoutEffect(() => {
 		if (Predicate.isNull(containerRef.current) || Predicate.isNull(scrollAnchorRef.current)) return
-		if (restoreScrollAnchor(containerRef.current, scrollAnchorRef.current, mode)) scrollAnchorRef.current = null
+		if (restoreScrollAnchor({anchor: scrollAnchorRef.current, container: containerRef.current, mode})) {
+			scrollAnchorRef.current = null
+		}
 	}, [mode, props.fileContent])
-
 	function toggleMode() {
-		if (Predicate.isUndefined(patch) || Predicate.isUndefined(fileContent)) return
+		if (Predicate.isUndefined(patch) || Predicate.isUndefined(fileContent)) {
+			return
+		}
 		if (Predicate.isNull(containerRef.current)) return
-
 		const rect = containerRef.current.getBoundingClientRect()
-		const clientY = Predicate.isNull(pointerClientYRef.current)
-			? rect.top + rect.height / 2
-			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
-		scrollAnchorRef.current = captureScrollAnchor(containerRef.current, clientY) ?? null
+		const clientY = pipe(
+			Match.value(pointerClientYRef.current),
+			Match.when(Predicate.isNull, () => rect.top + rect.height / 2),
+			Match.orElse(value => Math.min(Math.max(value, rect.top), rect.bottom))
+		)
+		scrollAnchorRef.current = captureScrollAnchor({clientY, container: containerRef.current}) ?? null
 		setModeState(current => ({
 			key: modeKey,
 			mode: current.key === modeKey && current.mode === 'file' ? 'diff' : 'file'
 		}))
 	}
-
 	useHotkey(
 		'Tab',
 		event => {
-			if (Predicate.isUndefined(patch) || Predicate.isUndefined(fileContent)) return
+			if (
+				Predicate.isUndefined(
+					Predicate.isString(props.patch) && String.isNonEmpty(props.patch) ? props.patch : undefined
+				) ||
+				Predicate.isUndefined(Predicate.isString(props.fileContent) ? props.fileContent : undefined)
+			) {
+				return
+			}
 			event.preventDefault()
 			toggleMode()
 		},
 		{preventDefault: false, target: containerRef}
 	)
-
 	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
 		if (!props.onSaveComment) return
-
 		if (
 			draftComment &&
-			sameDiffLine(draftComment, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
+			sameDiffLine({
+				left: draftComment,
+				right: {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side}
+			})
 		) {
 			return
 		}
-
 		if (draftComment) return
-
 		if (
-			!Array.some(comments, current =>
-				sameDiffLine(current, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
+			!Array.some(props.comments ?? [], current =>
+				sameDiffLine({left: current, right: {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side}})
 			)
 		) {
 			setDraftComment({
@@ -384,8 +372,13 @@ export function PatchDiff(props: {
 			})
 		}
 	}
-
-	const content = Match.value({fileContent, fileDiff, mode, patch}).pipe(
+	const content = pipe(
+		Match.value({
+			fileContent: Predicate.isString(props.fileContent) ? props.fileContent : undefined,
+			fileDiff,
+			mode,
+			patch: Predicate.isString(props.patch) && String.isNonEmpty(props.patch) ? props.patch : undefined
+		}),
 		Match.when(
 			value => value.mode === 'diff' && Predicate.isNotUndefined(value.fileDiff),
 			value => (
@@ -407,15 +400,14 @@ export function PatchDiff(props: {
 						themeType: 'system',
 						unsafeCSS: DIFF_CSS
 					}}
-					lineAnnotations={Array.map(commentsWithDraft, comment => ({
-						lineNumber: comment.lineNumber,
-						metadata: comment,
-						side: comment.side ?? 'additions'
-					}))}
+					lineAnnotations={Array.map(
+						draftComment ? Array.append(props.comments ?? [], draftComment) : (props.comments ?? []),
+						comment => ({lineNumber: comment.lineNumber, metadata: comment, side: comment.side ?? 'additions'})
+					)}
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							isDraft={draftComment && sameDiffLine({left: annotation.metadata, right: draftComment})}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
@@ -444,13 +436,16 @@ export function PatchDiff(props: {
 						unsafeCSS: DIFF_CSS
 					}}
 					lineAnnotations={Array.map(
-						Array.filter(commentsWithDraft, comment => comment.side !== 'deletions'),
+						Array.filter(
+							draftComment ? Array.append(props.comments ?? [], draftComment) : (props.comments ?? []),
+							comment => comment.side !== 'deletions'
+						),
 						comment => ({lineNumber: comment.lineNumber, metadata: comment})
 					)}
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							isDraft={draftComment && sameDiffLine({left: annotation.metadata, right: draftComment})}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
@@ -468,7 +463,6 @@ export function PatchDiff(props: {
 			</div>
 		))
 	)
-
 	return (
 		<section
 			ref={containerRef}
@@ -480,7 +474,6 @@ export function PatchDiff(props: {
 			}}
 			onPointerDownCapture={event => {
 				pointerClientYRef.current = event.clientY
-
 				if (!(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLButtonElement)) {
 					event.currentTarget.focus()
 				}

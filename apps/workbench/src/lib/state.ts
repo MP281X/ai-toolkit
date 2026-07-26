@@ -24,9 +24,9 @@ export const TerminalSessionAtomKey = Schema.Struct({
 
 type TerminalAttachAtomKey = typeof TerminalAttachAtomKey.Type
 export const TerminalAttachAtomKey = Schema.Struct({
-	attachId: Schema.Number,
+	attachId: Schema.Finite,
 	session: TerminalSessionInput,
-	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number})
+	size: Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
 })
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {

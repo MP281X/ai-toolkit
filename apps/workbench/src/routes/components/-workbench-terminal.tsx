@@ -2,6 +2,7 @@ import {useAtomSet, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 
 import {Predicate} from 'effect'
 
+import {AsyncResult} from 'effect/unstable/reactivity'
 import {useEffect, useRef, useState} from 'react'
 
 import {terminalAttachmentOperations, terminalAttachmentSizeEqual} from './-terminal-attachment-model.ts'
@@ -13,11 +14,11 @@ import {
 	terminalFramePullAtomFamily,
 	terminalSessionInput,
 	terminalSessionKey,
-	terminalStatusAtomFamily,
-	type TerminalSessionInput
+	terminalStatusAtomFamily
 } from '#lib/state.ts'
-import {Terminal, type TerminalHandle} from '@deslop/components/render/terminal'
-
+import type {TerminalSessionInput} from '#lib/state.ts'
+import {Terminal} from '@deslop/components/render/terminal'
+import type {TerminalHandle} from '@deslop/components/render/terminal'
 export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
@@ -34,7 +35,6 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 		readonly sessionKey: string
 		readonly size: {readonly cols: number; readonly rows: number}
 	} | null>(null)
-
 	useEffect(
 		() => () => {
 			if (reattachTimeoutRef.current) clearTimeout(reattachTimeoutRef.current)
@@ -42,16 +42,13 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 		},
 		[sessionKey]
 	)
-
 	function nextAttachment(size: {readonly cols: number; readonly rows: number}) {
 		nextAttachIdRef.current += 1
 		return {id: nextAttachIdRef.current, size}
 	}
-
 	function reattach() {
 		if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
 		if (reattachTimeoutRef.current) return
-
 		reattachTimeoutRef.current = setTimeout(() => {
 			reattachTimeoutRef.current = null
 			if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
@@ -61,18 +58,22 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 			})
 		}, 300)
 	}
-
 	return (
 		<>
 			<Terminal
 				key={sessionKey}
-				ref={terminalRef}
+				handleRef={terminalRef}
 				className="h-full min-h-0 w-full min-w-0 overflow-hidden"
 				onData={data => {
 					write({payload: {...input.session, data: {data, type: 'text'}}})
 				}}
 				onResize={size => {
-					if (Predicate.isNotNull(sizeRef.current) && !terminalAttachmentSizeEqual(sizeRef.current, size)) reattach()
+					if (
+						Predicate.isNotNull(sizeRef.current) &&
+						!terminalAttachmentSizeEqual({left: sizeRef.current, right: size})
+					) {
+						reattach()
+					}
 					sizeRef.current = size
 					resize({payload: {...input.session, cols: size.cols, rows: size.rows}})
 					setAttachment(current => {
@@ -98,7 +99,6 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 		</>
 	)
 }
-
 function TerminalAttachment(input: {
 	readonly attachId: number
 	readonly currentSize: () => {readonly cols: number; readonly rows: number} | null
@@ -118,58 +118,52 @@ function TerminalAttachment(input: {
 	const activeRef = useRef(true)
 	const lastSequenceRef = useRef(-1)
 	const writingRef = useRef(false)
-
 	useEffect(() => {
 		activeRef.current = true
 		lastSequenceRef.current = -1
 		writingRef.current = false
 		pullFrames(void 0)
-
 		return () => {
 			activeRef.current = false
 		}
 	}, [framePull, pullFrames])
-
 	useAtomSubscribe(
 		framePull,
 		result => {
 			if (!activeRef.current) return
 			const latestSize = input.currentSize()
-			if (Predicate.isNotNull(latestSize) && !terminalAttachmentSizeEqual(input.size, latestSize)) {
+			if (Predicate.isNotNull(latestSize) && !terminalAttachmentSizeEqual({left: input.size, right: latestSize})) {
 				activeRef.current = false
 				input.onDone()
 				return
 			}
-			if (result._tag === 'Failure') {
+			if (AsyncResult.isFailure(result)) {
 				activeRef.current = false
 				input.onDone()
 				return
 			}
-			if (result._tag !== 'Success' || result.waiting || writingRef.current) return
+			if (!AsyncResult.isSuccess(result) || result.waiting || writingRef.current) return
 			if (result.value.done) {
 				activeRef.current = false
 				input.onDone()
 				return
 			}
-
 			const next = terminalAttachmentOperations({frames: result.value.items, lastSequence: lastSequenceRef.current})
 			if (next.operations.length === 0) {
 				pullFrames(void 0)
 				return
 			}
-
 			writingRef.current = true
 			function process(index: number): void {
 				if (!activeRef.current) return
 				const appliedSize = input.currentSize()
-				if (Predicate.isNotNull(appliedSize) && !terminalAttachmentSizeEqual(input.size, appliedSize)) {
+				if (Predicate.isNotNull(appliedSize) && !terminalAttachmentSizeEqual({left: input.size, right: appliedSize})) {
 					activeRef.current = false
 					writingRef.current = false
 					input.onDone()
 					return
 				}
-				const operation = next.operations[index]
-				if (Predicate.isUndefined(operation)) {
+				if (Predicate.isUndefined(next.operations[index])) {
 					lastSequenceRef.current = next.lastSequence
 					writingRef.current = false
 					pullFrames(void 0)
@@ -181,7 +175,7 @@ function TerminalAttachment(input: {
 					input.onDone()
 					return
 				}
-				if (operation.type === 'reset') {
+				if (next.operations[index].type === 'reset') {
 					try {
 						input.terminalRef.current.reset()
 					} catch {
@@ -194,8 +188,11 @@ function TerminalAttachment(input: {
 					return
 				}
 				try {
-					input.terminalRef.current.write(operation.data, () => {
-						process(index + 1)
+					input.terminalRef.current.write({
+						data: next.operations[index].data,
+						done: () => {
+							process(index + 1)
+						}
 					})
 				} catch {
 					activeRef.current = false
@@ -207,6 +204,5 @@ function TerminalAttachment(input: {
 		},
 		{immediate: true}
 	)
-
 	return null
 }

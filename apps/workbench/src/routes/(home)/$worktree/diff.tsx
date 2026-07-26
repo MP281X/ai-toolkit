@@ -59,12 +59,37 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-function targetKey(target: GitReviewTarget) {
-	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
+const matchTargetKey = pipe(
+	Match.type<GitReviewTarget>(),
+	Match.when({_tag: 'commit'}, target => `commit\u0000${target.hash}`),
+	Match.when({_tag: 'local'}, () => 'local'),
+	Match.when({_tag: 'branch'}, () => 'branch'),
+	Match.orElse(() => 'changes')
+)
+
+const matchTargetSearch = pipe(
+	Match.type<GitReviewTarget>(),
+	Match.when({_tag: 'commit'}, target => ({commit: target.hash})),
+	Match.orElse(() => ({}))
+)
+
+const matchNonCommitTarget = pipe(
+	Match.type<GitReviewTarget>(),
+	Match.when({_tag: 'commit'}, () => undefined),
+	Match.orElse(target => target)
+)
+
+function targetIsCommit(target: GitReviewTarget, hash: string) {
+	return pipe(
+		Match.value(target),
+		Match.when({_tag: 'commit'}, commit => commit.hash === hash),
+		Match.orElse(() => false)
+	)
 }
 
 function targetFromKey(tag: string, hash = '') {
-	return Match.value(tag).pipe(
+	return pipe(
+		Match.value(tag),
 		Match.when('commit', () => GitReviewCommitTarget.make({hash})),
 		Match.when('local', () => GitReviewLocalTarget.make({})),
 		Match.when('branch', () => GitReviewBranchTarget.make({})),
@@ -240,19 +265,22 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		Option.getOrUndefined
 	)
 	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
-	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
-	const changesReviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(GitReviewChangesTarget.make({}))}`)
+	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${matchTargetKey(reviewTarget)}`)
+	const changesReviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${matchTargetKey(GitReviewChangesTarget.make({}))}`)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
 	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
 	const changesReviewDiffsLoaded = AsyncResult.isSuccess(changesReviewDiffsResult)
 	const changesReviewDiffsValue = changesReviewDiffsLoaded ? changesReviewDiffsResult.value : Array.empty<GitDiff>()
-	const selectedFilePath =
-		String.isNonEmpty(selectedFilePathState[0]) &&
-		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
-			? selectedFilePathState[0]
-			: ''
+	const selectedFilePath = pipe(
+		Match.value(
+			String.isNonEmpty(selectedFilePathState[0]) &&
+				Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
+		),
+		Match.when(true, () => selectedFilePathState[0]),
+		Match.orElse(() => '')
+	)
 	const selectedEntry =
 		(String.isNonEmpty(selectedFilePath)
 			? pipe(
@@ -277,9 +305,13 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}))
 	const unresolvedCommentInputs = Array.map(effectiveComments, comment => ({comment}))
 	const commentsByFile = groupCommentsByFile(effectiveComments)
-	const selectedEntryComments = selectedEntry
-		? Array.filter(effectiveComments, comment => comment.filePath === selectedEntry.filePath)
-		: Array.empty()
+	const selectedEntryComments = pipe(
+		Match.value(selectedEntry),
+		Match.when(Predicate.isNotUndefined, entry =>
+			Array.filter(effectiveComments, comment => comment.filePath === entry.filePath)
+		),
+		Match.orElse(() => Array.empty())
+	)
 	const visibleSegmentKeys = pipe(reviewDiffsValue, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
 	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => HashSet.has(visibleSegmentKeys, mark))
 
@@ -312,9 +344,10 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 
 	function selectTarget(target: GitReviewTarget) {
 		startTransition(() => {
-			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
+			void navigate({search: matchTargetSearch(target)})
 		})
-		if (target._tag !== 'commit') selectedScopeState[1](target)
+		const scope = matchNonCommitTarget(target)
+		if (Predicate.isNotUndefined(scope)) selectedScopeState[1](scope)
 		selectedFilePathState[1]('')
 	}
 
@@ -554,11 +587,8 @@ function CommitActionForm(input: {
 	const checkpoint = useAtomSet(checkpointActionAtom(input.cwd), {mode: 'promise'})
 	const publish = useAtomSet(publishActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const commitMessagePlaceholder = Match.value({
-		checkpoints: input.hasCheckpointCommits,
-		dirty: input.dirty,
-		loading: input.loading
-	}).pipe(
+	const commitMessagePlaceholder = pipe(
+		Match.value({checkpoints: input.hasCheckpointCommits, dirty: input.dirty, loading: input.loading}),
 		Match.when({loading: true}, () => 'Loading'),
 		Match.when({dirty: true}, () => 'Generate commit message'),
 		Match.when({checkpoints: true}, () => 'Generate squash message'),
@@ -567,10 +597,8 @@ function CommitActionForm(input: {
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
 	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
-	const subjectContent = Match.value({
-		generating: actionState.generatingMessage,
-		hasSubject: String.isNonEmpty(messageSubject)
-	}).pipe(
+	const subjectContent = pipe(
+		Match.value({generating: actionState.generatingMessage, hasSubject: String.isNonEmpty(messageSubject)}),
 		Match.when({generating: true}, () => 'Generating commit message'),
 		Match.when({hasSubject: true}, () => messageSubject),
 		Match.orElse(() => commitMessagePlaceholder)
@@ -798,13 +826,13 @@ function CommitList(input: {
 			<li key={commit.hash} className="w-full min-w-0">
 				<button
 					type="button"
-					aria-current={input.selected._tag === 'commit' && input.selected.hash === commit.hash ? 'page' : undefined}
+					aria-current={targetIsCommit(input.selected, commit.hash) ? 'page' : undefined}
 					onClick={() => {
 						input.selectCommit(commit)
 					}}
 					className={cn(
 						'text-muted-foreground hover:bg-muted hover:text-foreground grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-						input.selected._tag === 'commit' && input.selected.hash === commit.hash && 'bg-primary/15 text-primary'
+						targetIsCommit(input.selected, commit.hash) && 'bg-primary/15 text-primary'
 					)}
 				>
 					<span className="min-w-0 truncate">
@@ -862,13 +890,13 @@ function CommitScopeRow(input: {
 		<li className="w-full min-w-0">
 			<button
 				type="button"
-				aria-current={input.selected._tag === input.target._tag ? 'page' : undefined}
+				aria-current={matchTargetKey(input.selected) === matchTargetKey(input.target) ? 'page' : undefined}
 				onClick={() => {
 					input.selectScope(input.target)
 				}}
 				className={cn(
 					'text-secondary-foreground hover:bg-accent hover:text-accent-foreground bg-secondary grid h-6 w-full min-w-0 grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 px-3 text-left',
-					input.selected._tag === input.target._tag && 'bg-primary/15 text-primary'
+					matchTargetKey(input.selected) === matchTargetKey(input.target) && 'bg-primary/15 text-primary'
 				)}
 			>
 				<span className="min-w-0 truncate">{input.label}</span>
@@ -927,7 +955,7 @@ function buildFileTree(diffs: readonly GitDiff[]) {
 }
 
 function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly type: 'directory'}>) {
-	const child = directory.children[0]
+	const child = pipe(directory.children, Array.head, Option.getOrUndefined)
 
 	if (Array.length(directory.children) === 1 && child?.type === 'directory') {
 		return collapseSingleChildDirectory({

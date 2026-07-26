@@ -5,6 +5,7 @@ description: 'Use for approved workspace, Effect, React, or UI changes; return c
 
 # Workspace
 
+- Repository enforcement and review policy: `references/enforcement.md`.
 - Packages expose public entrypoints through `exports` and private aliases through `imports`.
 - Put dependencies and scripts in the manifest that uses them; preserve grouping and intentional ranges.
 - Manifest changes include only the required lockfile resolution.

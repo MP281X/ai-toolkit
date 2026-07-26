@@ -1,6 +1,6 @@
 import {Match, pipe} from 'effect'
 
-import {Braces, CirclePauseIcon, CircleIcon, File} from 'lucide-react'
+import {Braces, CircleIcon, CirclePauseIcon, File} from 'lucide-react'
 
 import {BashDark} from './svgs/bashDark.tsx'
 import {ClaudeDark} from './svgs/claudeDark.tsx'

@@ -13,18 +13,18 @@ const marked = new Marked({async: false, breaks: true, gfm: true})
 export function Markdown(props: {readonly children: string; readonly className?: string}) {
 	return (
 		<div className={cn('markdown text-wrap wrap-break-word select-text', props.className)}>
-			{Array.map(marked.lexer(props.children), (token, index) =>
+			{Array.map(marked.lexer(props.children), token =>
 				pipe(
 					Match.value(token),
 					Match.when({type: 'html'}, () => null),
 					Match.when({lang: 'mermaid', type: 'code'}, code => (
-						<Mermaid key={`${token.type}:${index}:${code.text}`} className="border-border border">
+						<Mermaid key={`${token.type}:${code.text}`} className="border-border border">
 							{code.text}
 						</Mermaid>
 					)),
 					Match.when({type: 'code'}, code => (
 						<Code
-							key={`${token.type}:${index}:${code.lang ?? ''}:${code.text}`}
+							key={`${token.type}:${code.lang ?? ''}:${code.text}`}
 							className="border-border border"
 							lang={Predicate.isString(code.lang) ? code.lang : undefined}
 						>

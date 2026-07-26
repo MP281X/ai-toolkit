@@ -2,7 +2,8 @@ import {Effect, String} from 'effect'
 
 import {ChildProcess} from 'effect/unstable/process'
 
-import {AgentError, type AgentLayerConfig} from '../schema.ts'
+import {AgentError} from '../schema.ts'
+import type {AgentLayerConfig} from '../schema.ts'
 
 const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make(
@@ -18,7 +19,7 @@ const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 		],
 		{cwd: config.cwd, env: {CLAUDE_CODE_NO_FLICKER: '1', PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}, extendEnv: true}
 	)
-	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'claude command unavailable'})
+	if (String.isEmpty(command.command)) return yield* AgentError.make({message: 'claude command unavailable'})
 	return command
 })
 

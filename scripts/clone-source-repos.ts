@@ -1,6 +1,6 @@
 import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Config, Effect, FileSystem} from 'effect'
+import {Config, Effect, FileSystem, pipe} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
@@ -9,11 +9,14 @@ const repositories = [
 	{name: 'codex', url: 'https://github.com/openai/codex'},
 	{name: 'effect', url: 'https://github.com/Effect-TS/effect-smol'},
 	{name: 'effect-lsp', url: 'https://github.com/Effect-TS/language-service'},
+	{name: 'executor', url: 'https://github.com/UsefulSoftwareCo/executor'},
+	{name: 'kitlangton-skills', url: 'https://github.com/kitlangton/skills'},
 	{name: 'legend-list', url: 'https://github.com/LegendApp/legend-list'},
 	{name: 'lexical', url: 'https://github.com/facebook/lexical'},
 	{name: 'localterm', url: 'https://github.com/millionco/localterm.git'},
 	{name: 'lydell-node-pty', url: 'https://github.com/lydell/node-pty'},
 	{name: 'node-pty', url: 'https://github.com/microsoft/node-pty'},
+	{name: 'opencode', url: 'https://github.com/anomalyco/opencode'},
 	{name: 'pi', url: 'https://github.com/earendil-works/pi'},
 	{name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre'},
 	{name: 'portless', url: 'https://github.com/vercel-labs/portless'},
@@ -29,7 +32,7 @@ const repositories = [
 ] as const
 
 const program = Effect.gen(function* () {
-	const githubActions = yield* Config.boolean('GITHUB_ACTIONS').pipe(Config.withDefault(false))
+	const githubActions = yield* pipe(Config.boolean('GITHUB_ACTIONS'), Config.withDefault(false))
 
 	if (githubActions) {
 		yield* Effect.log('Skipping source repository clone.')
@@ -44,14 +47,14 @@ const program = Effect.gen(function* () {
 		const exitCode = yield* spawner.exitCode(ChildProcess.make('git', args, {stderr: 'inherit', stdout: 'inherit'}))
 
 		if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-			return yield* Effect.fail(new Error(`git ${args.join(' ')} failed for ${name}`))
+			return yield* Effect.die(`git ${args.join(' ')} failed for ${name}`)
 		}
 	})
 
 	yield* fs.makeDirectory('.agents/repos', {recursive: true})
 	yield* Effect.forEach(
 		repositories,
-		Effect.fnUntraced(function* (repository) {
+		Effect.fnUntraced(function* (repository: (typeof repositories)[number]) {
 			const directory = `.agents/repos/${repository.name}`
 
 			if (yield* fs.exists(directory)) {
@@ -84,4 +87,4 @@ const program = Effect.gen(function* () {
 	)
 })
 
-NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))
+NodeRuntime.runMain(pipe(program, Effect.provide(NodeServices.layer)))
