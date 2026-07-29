@@ -69,9 +69,12 @@ export default defineConfig({
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
 			{name: 'react-doctor', specifier: 'oxlint-plugin-react-doctor'}
 		],
-		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: false},
-		overrides: [{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}}],
-		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react'],
+		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
+		overrides: [
+			{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}},
+			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
+		],
+		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// TypeScript type shape
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
@@ -264,11 +267,32 @@ export default defineConfig({
 			// TypeScript syntax
 			'typescript/ban-ts-comment': ['error', {'ts-nocheck': true}],
 
+			// Unicorn
+			'unicorn/consistent-function-scoping': 'error',
+			'unicorn/no-array-reverse': 'error',
+			'unicorn/no-array-sort': 'error',
+			'unicorn/no-null': 'error',
+			'unicorn/no-object-as-default-parameter': 'error',
+			'unicorn/no-static-only-class': 'error',
+			'unicorn/no-useless-fallback-in-spread': 'error',
+			'unicorn/no-useless-length-check': 'error',
+			'unicorn/no-useless-promise-resolve-reject': 'error',
+			'unicorn/no-useless-spread': 'error',
+			'unicorn/no-useless-switch-case': 'error',
+			'unicorn/no-useless-undefined': 'error',
+			'unicorn/prefer-logical-operator-over-ternary': 'error',
+			'unicorn/prefer-number-properties': 'error',
+
 			// JavaScript globals and Vite Plus
 			'use-isnan': 'error',
 			'vite-plus/prefer-vite-plus-imports': 'error'
 		},
 		settings: {react: {version: '19.0'}}
 	},
-	test: {environment: 'node', include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], pool: 'forks'}
+	test: {
+		environment: 'node',
+		include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+		passWithNoTests: true,
+		pool: 'forks'
+	}
 })

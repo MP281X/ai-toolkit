@@ -154,21 +154,29 @@ function terminalSessionInput(
 	session:
 		| TerminalPayload
 		| {readonly command?: ChildProcess.StandardCommand | string; readonly cwd: string; readonly sessionId?: string}
-) {
+): {readonly command?: ChildProcess.StandardCommand; readonly cwd: string; readonly sessionId?: string} {
 	if ('args' in session || 'env' in session) {
 		return {
-			command: Predicate.isUndefined(session.command)
-				? undefined
-				: ChildProcess.make(session.command, session.args ?? [], {env: session.env}),
 			cwd: session.cwd,
-			sessionId: session.sessionId
+			...(Predicate.isUndefined(session.command)
+				? {}
+				: {command: ChildProcess.make(session.command, session.args ?? [], {env: session.env})}),
+			...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
 		}
 	}
 	if (Predicate.isString(session.command)) {
-		return {command: ChildProcess.make(session.command), cwd: session.cwd, sessionId: session.sessionId}
+		return {
+			command: ChildProcess.make(session.command),
+			cwd: session.cwd,
+			...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
+		}
 	}
 
-	return {command: session.command, cwd: session.cwd, sessionId: session.sessionId}
+	return {
+		cwd: session.cwd,
+		...(Predicate.isUndefined(session.command) ? {} : {command: session.command}),
+		...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
+	}
 }
 
 const TerminalSessions = RcMap.make({
@@ -308,7 +316,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const scripts = yield* pipe(
 					Effect.provide(Scripts, Scripts.layer({cwd})),
-					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover scripts in ${cwd}`}))
+					Effect.mapError(cause => TerminalError.make({cause, message: `failed to discover scripts in ${cwd}`}))
 				)
 				const worktree = portlessWorktreeId(cwd)
 				const runs = yield* pipe(
@@ -367,7 +375,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			lookup: Effect.fnUntraced(function* (cwd: string) {
 				const scripts = yield* pipe(
 					Effect.provide(Scripts, Scripts.layer({cwd})),
-					Effect.mapError(cause => new TerminalError({cause, message: `failed to discover scripts in ${cwd}`}))
+					Effect.mapError(cause => TerminalError.make({cause, message: `failed to discover scripts in ${cwd}`}))
 				)
 				const packageRuns = Array.fromIterable(HashMap.entries(scripts.scripts))
 
@@ -443,10 +451,13 @@ export const RpcHandlers = RpcContracts.toLayer(
 				return {command: packageScript, cwd: input.cwd, sessionId: input.sessionId}
 			}
 
-			return yield* new TerminalError({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
+			return yield* TerminalError.make({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
-			const statusKey = TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId})
+			const statusKey = TerminalStatusKey.make({
+				cwd: input.cwd,
+				...(Predicate.isUndefined(input.sessionId) ? {} : {sessionId: input.sessionId})
+			})
 			const resolved = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
 			const session = Predicate.isNotUndefined(resolved)
 				? resolved
@@ -533,7 +544,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						)
 					)
 					if (terminalStatusRunning(status)) {
-						yield* syncPortlessBrowser(script.script.cwd).pipe(Effect.ignore, Effect.forkDetach)
+						yield* pipe(syncPortlessBrowser(script.script.cwd), Effect.ignore, Effect.forkDetach)
 					}
 
 					yield* pipe(
@@ -551,7 +562,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 								Effect.andThen(
 									terminalStatusDone(state)
 										? invalidateTerminal(input)
-										: syncPortlessBrowser(script.script.cwd).pipe(Effect.ignore)
+										: pipe(syncPortlessBrowser(script.script.cwd), Effect.ignore)
 								)
 							)
 						)
@@ -658,18 +669,21 @@ export const RpcHandlers = RpcContracts.toLayer(
 
 		return RpcContracts.of({
 			'agentBrowser.switchTab': payload =>
-				Effect.gen(function* () {
-					const scripts = Array.fromIterable(HashMap.values(yield* Ref.get(portlessScripts)))
-					const run = pipe(
-						scripts,
-						Array.findFirst(script => script.origin.worktree === payload.session)
-					)
-					if (Option.isNone(run)) {
-						return yield* new AgentBrowserError({message: `Unknown agent-browser session: ${payload.session}`})
-					}
-					const browser = yield* RcMap.get(portlessBrowsers, run.value.script.cwd)
-					yield* browser.switchTab(payload.origin)
-				}).pipe(Effect.scoped),
+				pipe(
+					Effect.gen(function* () {
+						const scripts = Array.fromIterable(HashMap.values(yield* Ref.get(portlessScripts)))
+						const run = pipe(
+							scripts,
+							Array.findFirst(script => script.origin.worktree === payload.session)
+						)
+						if (Option.isNone(run)) {
+							return yield* AgentBrowserError.make({message: `Unknown agent-browser session: ${payload.session}`})
+						}
+						const browser = yield* RcMap.get(portlessBrowsers, run.value.script.cwd)
+						yield* browser.switchTab(payload.origin)
+					}),
+					Effect.scoped
+				),
 			'agentBrowser.sync': payload => syncPortlessBrowser(payload.cwd),
 			agents: payload =>
 				pipe(
@@ -682,11 +696,11 @@ export const RpcHandlers = RpcContracts.toLayer(
 			}) {
 				const providerAgent = yield* pipe(
 					RcMap.get(providerAgents, {cwd: payload.cwd, provider: payload.provider}),
-					Effect.mapError(cause => new TerminalError({cause, message: 'failed to prepare agent provider'}))
+					Effect.mapError(cause => TerminalError.make({cause, message: 'failed to prepare agent provider'}))
 				)
 				const preparedCommand = yield* pipe(
 					providerAgent.create,
-					Effect.mapError(cause => new TerminalError({cause, message: cause.message}))
+					Effect.mapError(cause => TerminalError.make({cause, message: cause.message}))
 				)
 				const profile = pipe(
 					agentProfiles,
@@ -694,7 +708,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 					Option.getOrUndefined
 				)
 				if (Predicate.isUndefined(profile)) {
-					return yield* new TerminalError({message: `Unknown agent provider: ${payload.provider}`})
+					return yield* TerminalError.make({message: `Unknown agent provider: ${payload.provider}`})
 				}
 				const agentSession = makeAgentSession({
 					cwd: payload.cwd,
@@ -712,15 +726,18 @@ export const RpcHandlers = RpcContracts.toLayer(
 						AGENT_BROWSER_SESSION: portlessWorktreeId(agentSession.cwd)
 					}
 				} satisfies AgentSession
-				const input = yield* terminalSession(
-					TerminalPayload.make({
-						args: agentSessionWithEnv.args,
-						command: agentSessionWithEnv.command,
-						cwd: agentSessionWithEnv.cwd,
-						...(Predicate.isUndefined(agentSessionWithEnv.env) ? {} : {env: agentSessionWithEnv.env}),
-						sessionId: agentSessionWithEnv.uuid
-					})
-				).pipe(Effect.map(terminalSessionInput))
+				const input = yield* pipe(
+					terminalSession(
+						TerminalPayload.make({
+							args: agentSessionWithEnv.args,
+							command: agentSessionWithEnv.command,
+							cwd: agentSessionWithEnv.cwd,
+							...(Predicate.isUndefined(agentSessionWithEnv.env) ? {} : {env: agentSessionWithEnv.env}),
+							sessionId: agentSessionWithEnv.uuid
+						})
+					),
+					Effect.map(terminalSessionInput)
+				)
 				yield* Ref.update(resolvedTerminals, sessions =>
 					HashMap.set(sessions, TerminalStatusKey.make({cwd: agentSession.cwd, sessionId: agentSession.uuid}), input)
 				)
@@ -800,21 +817,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 							Effect.flatMap(Stream.runHead),
 							Effect.map(Option.getOrThrow)
 						)
-						const diffs = yield* Effect.gen(function* () {
-							if (!Array.isReadonlyArrayEmpty(changesDiffs)) return changesDiffs
-							if (Array.isReadonlyArrayEmpty(checkpointCommits)) {
-								return yield* pipe(
-									changes.diffs(GitReviewBranchTarget.make({})),
-									Effect.flatMap(Stream.runHead),
-									Effect.map(Option.getOrThrow)
-								)
-							}
-							return yield* pipe(
-								changes.diffs(GitReviewLocalTarget.make({})),
-								Effect.flatMap(Stream.runHead),
-								Effect.map(Option.getOrThrow)
-							)
-						})
+						const fallbackDiffs = Array.isReadonlyArrayEmpty(checkpointCommits)
+							? changes.diffs(GitReviewBranchTarget.make({}))
+							: changes.diffs(GitReviewLocalTarget.make({}))
+						const diffs = Array.isReadonlyArrayEmpty(changesDiffs)
+							? yield* pipe(fallbackDiffs, Effect.flatMap(Stream.runHead), Effect.map(Option.getOrThrow))
+							: changesDiffs
 						const scope =
 							Array.isReadonlyArrayEmpty(changesDiffs) && Array.isReadonlyArrayEmpty(checkpointCommits)
 								? 'branch'
@@ -825,7 +833,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 							status: diff.status
 						}))
 						if (Array.isReadonlyArrayEmpty(promptDiffs)) {
-							return yield* new GitError({message: 'No current changes to summarize.'})
+							return yield* GitError.make({message: 'No current changes to summarize.'})
 						}
 						const recentSubjects = pipe(
 							Array.appendAll(metadata.localCommits, metadata.branchCommits),
@@ -931,7 +939,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				if (Predicate.isNotUndefined(input.sessionId)) {
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
-					yield* syncOrClosePortlessBrowser(input.cwd).pipe(Effect.ignore, Effect.forkDetach)
+					yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
 				}
 				yield* watchPortlessRoute(input, sessionTerminal)
 				return status
@@ -992,7 +1000,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				if (Predicate.isNotUndefined(input.sessionId)) {
 					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
 					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
-					yield* syncOrClosePortlessBrowser(input.cwd).pipe(Effect.ignore, Effect.forkDetach)
+					yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
 				}
 				yield* invalidateTerminal(input)
 				return status

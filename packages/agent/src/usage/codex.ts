@@ -4,6 +4,7 @@ import {join, resolve} from 'node:path'
 import type {Exit} from 'effect'
 import {
 	Array,
+	Config,
 	Duration,
 	Effect,
 	FileSystem,
@@ -210,12 +211,12 @@ export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonl
 			{concurrency: 2}
 		),
 		Effect.map(Array.flatten),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 	const tokens = yield* pipe(
 		files,
 		Effect.forEach(path => pipe(fs.readFileString(path), Effect.map(codexTokensFromContent)), {concurrency: 8}),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 
 	return sumTokenFiles(Array.map(tokens, value => ({tokens: value})))
@@ -224,17 +225,22 @@ export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonl
 export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readonly provider: 'codex'}) {
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
-	const codexRoot = pipe(process.env['CODEX_HOME'] ?? '', String.trim, value =>
+	const codexRootValue = yield* pipe(
+		Config.string('CODEX_HOME'),
+		Config.withDefault(''),
+		Effect.mapError(cause => AgentError.make({cause}))
+	)
+	const codexRoot = pipe(codexRootValue, String.trim, value =>
 		String.isNonEmpty(value) ? resolve(value) : join(homedir(), '.codex')
 	)
 
 	const codexToken = pipe(
 		fs.readFileString(join(codexRoot, 'auth.json')),
-		Effect.mapError(cause => new AgentError({cause, message: 'not signed in'})),
+		Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'})),
 		Effect.flatMap(input =>
 			pipe(
 				Schema.decodeEffect(CodexCredentials)(input),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 		),
 		Effect.map(credentials => credentials.tokens.access_token)
@@ -250,7 +256,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 				{concurrency: 2}
 			),
 			Effect.map(Array.flatten),
-			Effect.mapError(cause => new AgentError({cause}))
+			Effect.mapError(cause => AgentError.make({cause}))
 		)
 		const currentCache = yield* Ref.get(tokenFileCache)
 		const tokenFiles = yield* pipe(
@@ -260,7 +266,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 					Effect.gen(function* () {
 						const info = yield* pipe(
 							fs.stat(path),
-							Effect.mapError(cause => new AgentError({cause}))
+							Effect.mapError(cause => AgentError.make({cause}))
 						)
 						if (info.type !== 'File') return []
 
@@ -297,18 +303,24 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 		Effect.flatMap(label =>
 			Predicate.isString(label)
 				? Effect.succeed(AgentSubscription.make(label))
-				: new AgentError({message: 'subscription unavailable'})
+				: AgentError.make({message: 'subscription unavailable'})
 		)
 	)
-	const loadUsage = Effect.gen(function* () {
-		const usage = yield* remoteUsage
-		const tokens = yield* loadCachedTokens()
-		return AgentUsageData.make({
-			fiveHour: codexWindow(usage.rate_limit.primary_window),
-			tokens,
-			weekly: codexWindow(usage.rate_limit.secondary_window)
-		})
-	}).pipe(Effect.provideService(FileSystem.FileSystem, fs))
+	const loadUsage = pipe(
+		Effect.gen(function* () {
+			const usage = yield* remoteUsage
+			const tokens = yield* pipe(
+				loadCachedTokens(),
+				Effect.mapError(cause => AgentError.make({cause}))
+			)
+			return AgentUsageData.make({
+				fiveHour: codexWindow(usage.rate_limit.primary_window),
+				tokens,
+				weekly: codexWindow(usage.rate_limit.secondary_window)
+			})
+		}),
+		Effect.provideService(FileSystem.FileSystem, fs)
+	)
 	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
@@ -347,20 +359,20 @@ function remoteCodexUsage(client: HttpClient.HttpClient, token: Effect.Effect<st
 			const accessToken = yield* token
 			const response = yield* pipe(
 				client.get('https://chatgpt.com/backend-api/wham/usage', {headers: {authorization: `Bearer ${accessToken}`}}),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 			if (response.status !== 200) {
-				return yield* new AgentError({
+				return yield* AgentError.make({
 					message: response.status === 401 ? 'not signed in' : `codex usage responded with status ${response.status}`
 				})
 			}
 			return yield* pipe(
 				response.json,
 				Effect.flatMap(Schema.decodeUnknownEffect(CodexUsage)),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 		}),
 		Effect.timeout('10 seconds'),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 }

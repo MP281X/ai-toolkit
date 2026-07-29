@@ -76,7 +76,7 @@ export const Route = createFileRoute('/(home)')({
 		middlewares: [retainSearchParams(['filterActiveWorktrees']), stripSearchParams({filterActiveWorktrees: false})]
 	},
 	validateSearch: Schema.toStandardSchemaV1(
-		Schema.Struct({filterActiveWorktrees: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false)))})
+		Schema.Struct({filterActiveWorktrees: pipe(Schema.Boolean, Schema.withDecodingDefaultKey(Effect.succeed(false)))})
 	)
 })
 
@@ -672,8 +672,8 @@ function worktreeHasAgent(worktree: SidebarWorktree) {
 }
 
 function WorktreeManager(input: {
-	readonly activeProject?: SidebarProject
-	readonly activeWorktree?: SidebarWorktree
+	readonly activeProject?: SidebarProject | undefined
+	readonly activeWorktree?: SidebarWorktree | undefined
 	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
 	readonly agentProfiles: readonly AgentProfile[]
 	readonly projects: readonly SidebarProject[]
@@ -744,7 +744,8 @@ function WorktreeManager(input: {
 
 		const source = Predicate.isUndefined(candidate)
 			? GitWorktreeNewSource.make({})
-			: Match.value(candidate).pipe(
+			: pipe(
+					Match.value(candidate),
 					Match.when({type: 'local'}, () => GitWorktreeLocalSource.make({})),
 					Match.orElse(remoteBranch => GitWorktreeRemoteSource.make({remote: remoteBranch.remote ?? 'origin'}))
 				)
@@ -958,7 +959,8 @@ function WorktreeManager(input: {
 										state.creatingBranch === candidate.name ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
-											Match.value(candidate.type).pipe(
+											pipe(
+												Match.value(candidate.type),
 												Match.when('local', () => <GitBranch />),
 												Match.orElse(() => <GlobeIcon />)
 											)

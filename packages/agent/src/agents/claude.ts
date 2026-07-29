@@ -18,7 +18,7 @@ const claudeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 		],
 		{cwd: config.cwd, env: {CLAUDE_CODE_NO_FLICKER: '1', PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'}, extendEnv: true}
 	)
-	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'claude command unavailable'})
+	if (String.isEmpty(command.command)) return yield* AgentError.make({message: 'claude command unavailable'})
 	return command
 })
 

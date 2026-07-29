@@ -76,17 +76,17 @@ export declare namespace PatchDiff {
 	export type Comment = {
 		readonly filePath: string
 		readonly lineNumber: number
-		readonly side?: AnnotationSide
+		readonly side?: AnnotationSide | undefined
 		readonly body: string
-		readonly resolving?: boolean
-		readonly source?: 'github' | 'local'
-		readonly threadId?: string
+		readonly resolving?: boolean | undefined
+		readonly source?: 'github' | 'local' | undefined
+		readonly threadId?: string | undefined
 	}
 }
 
 function sameDiffLine(
-	left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide},
-	right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
+	left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide | undefined},
+	right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide | undefined}
 ) {
 	return (
 		left.filePath === right.filePath &&
@@ -99,7 +99,7 @@ export function formatCopiedComment(comment: {
 	readonly body: string
 	readonly filePath: string
 	readonly lineNumber: number
-	readonly side?: AnnotationSide
+	readonly side?: AnnotationSide | undefined
 }) {
 	const linePrefix = comment.side === 'deletions' ? 'deleted' : 'line'
 	return `# Review comments\n\n## ${comment.filePath}\n\n${linePrefix}:${comment.lineNumber}: ${comment.body}`
@@ -163,9 +163,9 @@ function restoreScrollAnchor(
 
 function CommentAnnotation(props: {
 	readonly comment: PatchDiff.Comment
-	readonly isDraft?: boolean
-	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
-	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
+	readonly isDraft?: boolean | undefined
+	readonly onSaveComment?: ((comment: PatchDiff.Comment) => void) | undefined
+	readonly onResolveComment?: ((comment: PatchDiff.Comment) => void) | undefined
 	readonly onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -295,11 +295,11 @@ function CommentAnnotation(props: {
 
 export function PatchDiff(props: {
 	readonly filePath: string
-	readonly fileContent?: string
-	readonly patch?: string
+	readonly fileContent?: string | undefined
+	readonly patch?: string | undefined
 	readonly comments?: readonly PatchDiff.Comment[]
-	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
-	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
+	readonly onSaveComment?: ((comment: PatchDiff.Comment) => void) | undefined
+	readonly onResolveComment?: ((comment: PatchDiff.Comment) => void) | undefined
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number>(null)
@@ -359,7 +359,7 @@ export function PatchDiff(props: {
 		{preventDefault: false, target: containerRef}
 	)
 
-	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
+	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide | undefined}) {
 		if (!props.onSaveComment) return
 
 		if (
@@ -385,7 +385,8 @@ export function PatchDiff(props: {
 		}
 	}
 
-	const content = Match.value({fileContent, fileDiff, mode, patch}).pipe(
+	const content = pipe(
+		Match.value({fileContent, fileDiff, mode, patch}),
 		Match.when(
 			value => value.mode === 'diff' && Predicate.isNotUndefined(value.fileDiff),
 			value => (

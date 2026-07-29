@@ -1,6 +1,6 @@
 import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Config, Effect, FileSystem} from 'effect'
+import {Config, Effect, FileSystem, Schema, pipe} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
@@ -29,8 +29,12 @@ const repositories = [
 	{name: 'xterm.js', url: 'https://github.com/xtermjs/xterm.js'}
 ] as const
 
+class SourceRepositoryError extends Schema.TaggedErrorClass<SourceRepositoryError>()('SourceRepositoryError', {
+	message: Schema.String
+}) {}
+
 const program = Effect.gen(function* () {
-	const githubActions = yield* Config.boolean('GITHUB_ACTIONS').pipe(Config.withDefault(false))
+	const githubActions = yield* pipe(Config.boolean('GITHUB_ACTIONS'), Config.withDefault(false))
 
 	if (githubActions) {
 		yield* Effect.log('Skipping source repository clone.')
@@ -45,7 +49,7 @@ const program = Effect.gen(function* () {
 		const exitCode = yield* spawner.exitCode(ChildProcess.make('git', args, {stderr: 'inherit', stdout: 'inherit'}))
 
 		if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-			return yield* Effect.die(`git ${args.join(' ')} failed for ${name}`)
+			return yield* SourceRepositoryError.make({message: `git ${args.join(' ')} failed for ${name}`})
 		}
 	})
 
@@ -85,4 +89,4 @@ const program = Effect.gen(function* () {
 	)
 })
 
-NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))
+NodeRuntime.runMain(pipe(program, Effect.provide(NodeServices.layer)))

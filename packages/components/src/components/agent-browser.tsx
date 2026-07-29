@@ -1,15 +1,60 @@
-import {Array, Match, Predicate, String, pipe} from 'effect'
+import {Array, Match, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
 import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
 
 import {cn} from '#lib/utils.ts'
 
-type AgentBrowserFrame = {
-	readonly data: string
-	readonly metadata?: {readonly deviceHeight?: number; readonly deviceWidth?: number}
-	readonly type: 'frame'
-}
+const AgentBrowserFrame = Schema.Struct({
+	data: Schema.String,
+	metadata: Schema.optional(
+		Schema.Struct({deviceHeight: Schema.optional(Schema.Finite), deviceWidth: Schema.optional(Schema.Finite)})
+	),
+	type: Schema.Literal('frame')
+})
+type AgentBrowserFrame = typeof AgentBrowserFrame.Type
+
+const AgentBrowserStreamTab = Schema.Struct({
+	active: Schema.optional(Schema.Boolean),
+	label: Schema.optional(Schema.String),
+	tabId: Schema.String,
+	title: Schema.optional(Schema.String),
+	url: Schema.optional(Schema.String)
+})
+type AgentBrowserStreamTab = typeof AgentBrowserStreamTab.Type
+
+const AgentBrowserStreamMessageFromJson = Schema.fromJsonString(
+	Schema.Union([
+		AgentBrowserFrame,
+		Schema.Struct({tabs: Schema.Array(AgentBrowserStreamTab), type: Schema.Literal('tabs')})
+	])
+)
+
+const AgentBrowserInputFromJson = Schema.fromJsonString(
+	Schema.Union([
+		Schema.Struct({
+			button: Schema.optional(Schema.Literals(['left', 'none'])),
+			clickCount: Schema.optional(Schema.Finite),
+			deltaX: Schema.optional(Schema.Finite),
+			deltaY: Schema.optional(Schema.Finite),
+			eventType: Schema.Literals(['mouseMoved', 'mousePressed', 'mouseReleased', 'mouseWheel']),
+			modifiers: Schema.optional(Schema.Finite),
+			type: Schema.Literal('input_mouse'),
+			x: Schema.Finite,
+			y: Schema.Finite
+		}),
+		Schema.Struct({
+			code: Schema.String,
+			eventType: Schema.Literals(['keyDown', 'keyUp']),
+			key: Schema.String,
+			modifiers: Schema.optional(Schema.Finite),
+			text: Schema.optional(Schema.String),
+			type: Schema.Literal('input_keyboard'),
+			windowsVirtualKeyCode: Schema.optional(Schema.Finite)
+		})
+	])
+)
+type AgentBrowserInput = typeof AgentBrowserInputFromJson.Type
 
 type AgentBrowserOwnedTab = {
 	readonly id: string
@@ -34,39 +79,12 @@ function messageText(source: unknown) {
 
 async function decodeMessage(source: unknown) {
 	const text = await Promise.resolve(messageText(source))
-	try {
-		return JSON.parse(text) as unknown
-	} catch {
-		return null
-	}
+	return pipe(Schema.decodeUnknownOption(AgentBrowserStreamMessageFromJson)(text), Option.getOrUndefined)
 }
 
-function sendSocket(
-	socket: WebSocket | null,
-	input:
-		| {
-				readonly button?: 'left' | 'none'
-				readonly clickCount?: number
-				readonly deltaX?: number
-				readonly deltaY?: number
-				readonly eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' | 'mouseWheel'
-				readonly modifiers?: number
-				readonly type: 'input_mouse'
-				readonly x: number
-				readonly y: number
-		  }
-		| {
-				readonly code: string
-				readonly eventType: 'keyDown' | 'keyUp'
-				readonly key: string
-				readonly modifiers?: number
-				readonly text?: string
-				readonly type: 'input_keyboard'
-				readonly windowsVirtualKeyCode?: number
-		  }
-) {
+function sendSocket(socket: WebSocket | null, input: AgentBrowserInput) {
 	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
-	socket.send(JSON.stringify(input))
+	socket.send(Schema.encodeSync(AgentBrowserInputFromJson)(input))
 }
 
 function modifiers(event: {
@@ -120,51 +138,12 @@ function mouseButton(eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' 
 	return buttons === 1 ? ('left' as const) : ('none' as const)
 }
 
-function frameMessage(value: unknown) {
-	if (!Predicate.hasProperty(value, 'type') || value.type !== 'frame') return
-	if (!Predicate.hasProperty(value, 'data') || !Predicate.isString(value.data)) return
-	const metadata =
-		Predicate.hasProperty(value, 'metadata') && Predicate.isObject(value.metadata) ? value.metadata : undefined
-	return {
-		data: value.data,
-		...(Predicate.isUndefined(metadata)
-			? {}
-			: {
-					metadata: {
-						...(Predicate.hasProperty(metadata, 'deviceHeight') && Predicate.isNumber(metadata.deviceHeight)
-							? {deviceHeight: metadata.deviceHeight}
-							: {}),
-						...(Predicate.hasProperty(metadata, 'deviceWidth') && Predicate.isNumber(metadata.deviceWidth)
-							? {deviceWidth: metadata.deviceWidth}
-							: {})
-					}
-				}),
-		type: 'frame' as const
-	}
+function frameMessage(value: typeof AgentBrowserStreamMessageFromJson.Type | undefined) {
+	return value?.type === 'frame' ? value : undefined
 }
 
-function tabsMessage(value: unknown) {
-	if (!Predicate.hasProperty(value, 'type') || value.type !== 'tabs') return
-	if (!Predicate.hasProperty(value, 'tabs') || !Array.isArray(value.tabs)) return
-
-	const tabs = Array.empty<{
-		readonly active?: boolean
-		readonly label?: string
-		readonly tabId: string
-		readonly title?: string
-		readonly url?: string
-	}>()
-	for (const tab of value.tabs) {
-		if (!Predicate.hasProperty(tab, 'tabId') || !Predicate.isString(tab.tabId)) continue
-		tabs.push({
-			...(Predicate.hasProperty(tab, 'active') && Predicate.isBoolean(tab.active) ? {active: tab.active} : {}),
-			...(Predicate.hasProperty(tab, 'label') && Predicate.isString(tab.label) ? {label: tab.label} : {}),
-			tabId: tab.tabId,
-			...(Predicate.hasProperty(tab, 'title') && Predicate.isString(tab.title) ? {title: tab.title} : {}),
-			...(Predicate.hasProperty(tab, 'url') && Predicate.isString(tab.url) ? {url: tab.url} : {})
-		})
-	}
-	return tabs
+function tabsMessage(value: typeof AgentBrowserStreamMessageFromJson.Type | undefined) {
+	return value?.type === 'tabs' ? value.tabs : undefined
 }
 
 export function agentBrowserActiveOwnedTabId(input: {
@@ -174,13 +153,7 @@ export function agentBrowserActiveOwnedTabId(input: {
 		readonly streamLabel: string
 		readonly url: string
 	}[]
-	readonly streamTabs: readonly {
-		readonly active?: boolean
-		readonly label?: string
-		readonly tabId: string
-		readonly title?: string
-		readonly url?: string
-	}[]
+	readonly streamTabs: readonly AgentBrowserStreamTab[]
 }) {
 	const active = Array.findFirst(input.streamTabs, tab => tab.active === true)
 	if (active._tag === 'None' || Predicate.isUndefined(active.value.label)) return
@@ -214,7 +187,7 @@ export function AgentBrowser(props: {
 		readonly streamLabel: string
 		readonly url: string
 	}) => void
-	readonly session?: string
+	readonly session?: string | undefined
 	readonly streamUrl?: string
 	readonly tabs?: readonly {
 		readonly id: string
@@ -418,8 +391,8 @@ export function AgentBrowser(props: {
 				eventType,
 				key: event.key,
 				modifiers: modifiers(event),
-				text,
 				type: 'input_keyboard',
+				...(Predicate.isUndefined(text) ? {} : {text}),
 				windowsVirtualKeyCode
 			})
 		}

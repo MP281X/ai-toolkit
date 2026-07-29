@@ -3,7 +3,11 @@ import DOMPurify from 'dompurify'
 import {highlightCode} from '#lib/shiki.ts'
 import {cn} from '#lib/utils.ts'
 
-export function Code(props: {readonly children: string; readonly lang?: string; readonly className?: string}) {
+export function Code(props: {
+	readonly children: string
+	readonly className?: string
+	readonly lang?: string | undefined
+}) {
 	return (
 		<div
 			data-code-block

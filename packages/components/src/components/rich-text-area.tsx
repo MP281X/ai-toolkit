@@ -260,7 +260,7 @@ function closeXmlTag(event: KeyboardEvent) {
 function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 	readonly tokensMap: Map<string, RichTextArea.Token<TValue>>
 	readonly isMenuOpen: () => boolean
-	readonly onSubmit?: (snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void
+	readonly onSubmit?: ((snapshot: Readonly<RichTextArea.Snapshot<TValue>>) => void) | undefined
 	readonly setEditor: (editor: Lexical.LexicalEditor | null) => void
 }) {
 	const [editor] = useLexicalComposerContext()
@@ -340,12 +340,12 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 }
 
 function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
-	readonly children?: (entry: RichTextArea.Entry<TValue>) => React.ReactNode
+	readonly children: ((entry: RichTextArea.Entry<TValue>) => React.ReactNode) | undefined
 	readonly menuBoxRef: React.RefObject<HTMLDivElement | null>
 	readonly onClose: () => void
 	readonly onOpen: () => void
 	readonly tokensMap: Map<string, RichTextArea.Token<TValue>>
-	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}>
+	readonly options?: Record<string, {readonly color: string; readonly values: readonly TValue[]}> | undefined
 }) {
 	const [search, setSearch] = useState<{readonly trigger: string; readonly query: string} | undefined>()
 	const tokenIdRef = useRef(0)

@@ -19,7 +19,7 @@
 		"build": "vp run -r build",
 		
 		"fix": "vp check --fix",
-		"check": "vp check && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
+		"check": "vp check && chmod +x \"$(effect-tsgo get-exe-path)\" && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",

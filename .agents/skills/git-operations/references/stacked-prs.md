@@ -1,21 +1,22 @@
-# Stacked Pull Requests
+# Stacked pull requests
 
 ## Topology
 
-- The root targets the default branch.
-- Each later branch targets its preceding stack branch.
-- Every pull request remains independently understandable and reviewable against its immediate base.
-
-## Commands
+- The root targets the default branch; each later pull request targets its immediate preceding branch.
+- Add and submit only unpublished nodes. Inspect the complete topology before changing a stack.
+- Every pull request remains independently understandable and valid against its immediate base.
 
 ```bash
 gh stack add
 gh stack view
 gh stack push
 gh stack submit
-gh stack sync
 ```
 
-`gh stack sync` fetches, fast-forwards trunk, cascades rebases, pushes with force-with-lease when required, synchronizes pull requests, and may prune merged branches.
+## Published alignment
 
-For conflicts, run `gh stack rebase`, resolve the current branch, then `gh stack rebase --continue`. Abort with `gh stack rebase --abort`. Use `--downstack`, `--upstack`, or `--no-trunk` only for a known intended segment.
+- Preserve published commits. Align a descendant by merging its updated immediate base, then validate and push normally.
+- Align and validate one node at a time from root to tip. Escalate conflicts when intended final behavior is not provable from the issue and current source.
+- After an earlier pull request merges, retarget its direct child to the merged destination and recheck the remaining topology.
+
+**Reject:** stack sync, rebase, amend, squash, force-push, or any operation that rewrites a published branch.

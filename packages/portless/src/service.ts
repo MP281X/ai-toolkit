@@ -72,6 +72,8 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 		signal: webRequest.signal
 	} satisfies RequestInit & {readonly duplex: 'half'}
 	const upstream = yield* Effect.tryPromise(() =>
+		// Native fetch preserves the Web Request and streaming Response at the transparent proxy boundary.
+		// @effect-diagnostics-next-line globalFetchInEffect:off
 		fetch(new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, requestInit))
 	)
 	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
@@ -119,16 +121,20 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 				)
 			}) as unknown as globalThis.WebSocket
 	)
-	const outbound = yield* Socket.makeWebSocket(upstreamUrl.toString()).pipe(Effect.provide(webSocketConstructor))
+	const outbound = yield* pipe(Socket.makeWebSocket(upstreamUrl.toString()), Effect.provide(webSocketConstructor))
 	const writeInbound = yield* inbound.writer
 	const writeOutbound = yield* outbound.writer
 
 	yield* Effect.all(
 		[
-			outbound.runRaw(message => writeInbound(message)).pipe(Effect.ignore),
-			inbound
-				.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-				.pipe(Effect.ignore)
+			pipe(
+				outbound.runRaw(message => writeInbound(message)),
+				Effect.ignore
+			),
+			pipe(
+				inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+				Effect.ignore
+			)
 		],
 		{concurrency: 'unbounded', discard: true}
 	)

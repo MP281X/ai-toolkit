@@ -1,4 +1,4 @@
-import {Schema} from 'effect'
+import {Schema, pipe} from 'effect'
 
 export class AgentError extends Schema.TaggedErrorClass<AgentError>()('AgentError', {
 	cause: Schema.optional(Schema.Defect()),
@@ -15,7 +15,7 @@ export type AgentLayerConfig = typeof AgentLayerConfig.Type
 export const AgentLayerConfig = Schema.Struct({cwd: Schema.String, provider: AgentProvider})
 
 export type AgentSubscription = typeof AgentSubscription.Type
-export const AgentSubscription = Schema.String.pipe(Schema.brand('AgentSubscription'))
+export const AgentSubscription = pipe(Schema.String, Schema.brand('AgentSubscription'))
 
 export type AgentUsageWindow = typeof AgentUsageWindow.Type
 export const AgentUsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.String), utilization: Schema.Finite})

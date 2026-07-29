@@ -64,7 +64,8 @@ function targetKey(target: GitReviewTarget) {
 }
 
 function targetFromKey(tag: string, hash = '') {
-	return Match.value(tag).pipe(
+	return pipe(
+		Match.value(tag),
 		Match.when('commit', () => GitReviewCommitTarget.make({hash})),
 		Match.when('local', () => GitReviewLocalTarget.make({})),
 		Match.when('branch', () => GitReviewBranchTarget.make({})),
@@ -546,7 +547,7 @@ function CommitActionForm(input: {
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 	readonly unpushedCount: number
-	readonly upstream?: {readonly ahead: number; readonly behind: number}
+	readonly upstream?: {readonly ahead: number; readonly behind: number} | undefined
 }) {
 	const commitMessageState = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
@@ -554,11 +555,8 @@ function CommitActionForm(input: {
 	const checkpoint = useAtomSet(checkpointActionAtom(input.cwd), {mode: 'promise'})
 	const publish = useAtomSet(publishActionAtom(input.cwd), {mode: 'promise'})
 	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
-	const commitMessagePlaceholder = Match.value({
-		checkpoints: input.hasCheckpointCommits,
-		dirty: input.dirty,
-		loading: input.loading
-	}).pipe(
+	const commitMessagePlaceholder = pipe(
+		Match.value({checkpoints: input.hasCheckpointCommits, dirty: input.dirty, loading: input.loading}),
 		Match.when({loading: true}, () => 'Loading'),
 		Match.when({dirty: true}, () => 'Generate commit message'),
 		Match.when({checkpoints: true}, () => 'Generate squash message'),
@@ -567,10 +565,8 @@ function CommitActionForm(input: {
 	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
 	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
-	const subjectContent = Match.value({
-		generating: actionState.generatingMessage,
-		hasSubject: String.isNonEmpty(messageSubject)
-	}).pipe(
+	const subjectContent = pipe(
+		Match.value({generating: actionState.generatingMessage, hasSubject: String.isNonEmpty(messageSubject)}),
 		Match.when({generating: true}, () => 'Generating commit message'),
 		Match.when({hasSubject: true}, () => messageSubject),
 		Match.orElse(() => commitMessagePlaceholder)
@@ -946,7 +942,7 @@ function DiffList(input: {
 	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
 	readonly marks: readonly GitReviewMark[]
 	readonly openReviewEntry: (filePath: string) => void
-	readonly selectedEntry?: GitDiff
+	readonly selectedEntry?: GitDiff | undefined
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
 	const collapsedFoldersState = useState(() => HashSet.empty<string>())
