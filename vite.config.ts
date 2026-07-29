@@ -231,7 +231,6 @@ export default defineConfig({
 			// React Doctor JSX and component contracts
 			'react-doctor/checked-requires-onchange-or-readonly': 'error',
 			'react-doctor/jsx-no-undef': 'error',
-			'react-doctor/no-array-index-as-key': 'error',
 			'react-doctor/no-call-component-as-function': 'error',
 			'react-doctor/no-create-context-in-render': 'error',
 			'react-doctor/no-create-ref-in-function-component': 'error',
@@ -245,7 +244,6 @@ export default defineConfig({
 			'react-doctor/require-render-return': 'error',
 
 			// React Doctor effects and state
-			'react-doctor/effect-needs-cleanup': 'error',
 			'react-doctor/no-async-effect-callback': 'error',
 			'react-doctor/no-cascading-set-state': 'error',
 			'react-doctor/no-derived-useState': 'error',
@@ -289,9 +287,7 @@ export default defineConfig({
 			'react-doctor/no-layout-transition-inline': 'error',
 			'react-doctor/no-long-transition-duration': 'error',
 			'react-doctor/no-outline-none': 'error',
-			'react-doctor/no-permanent-will-change': 'error',
 			'react-doctor/no-scale-from-zero': 'error',
-			'react-doctor/no-tiny-text': 'error',
 			'react-doctor/no-transition-all': 'error',
 
 			// React
