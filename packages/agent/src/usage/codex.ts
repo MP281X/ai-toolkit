@@ -30,15 +30,17 @@ const CodexUsage = Schema.Struct({
 	plan_type: Schema.optional(Schema.NullOr(Schema.String)),
 	rate_limit: Schema.Struct({
 		primary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
-			used_percent: Schema.Number
+			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			used_percent: Schema.Finite
 		}),
 		secondary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
-			used_percent: Schema.Number
+			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			used_percent: Schema.Finite
 		})
 	})
 })
+
+type CodexUsageWindow = typeof CodexUsage.Type.rate_limit.primary_window
 
 const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
@@ -75,11 +77,11 @@ function codexUsageTokens(input: unknown) {
 	}
 }
 
-function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
+function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
-function sameTokens(left: typeof AgentUsageTokens.Type | undefined, right: typeof AgentUsageTokens.Type) {
+function sameTokens(left: AgentUsageTokens | undefined, right: AgentUsageTokens) {
 	return (
 		Predicate.isNotUndefined(left) &&
 		left.cached === right.cached &&
@@ -121,7 +123,7 @@ function totalUsageFromMarker(content: string, markerIndex: number) {
 	}
 }
 
-function totalDelta(previous: typeof AgentUsageTokens.Type | undefined, next: typeof AgentUsageTokens.Type) {
+function totalDelta(previous: AgentUsageTokens | undefined, next: AgentUsageTokens) {
 	if (Predicate.isUndefined(previous)) return next
 	if (next.cached < previous.cached || next.input < previous.input || next.output < previous.output) return next
 
@@ -139,7 +141,7 @@ function totalUsageTokensFromContent(content: string) {
 	return Array.reduce(
 		matches,
 		{
-			previous: undefined as typeof AgentUsageTokens.Type | undefined,
+			previous: undefined as AgentUsageTokens | undefined,
 			total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
 		},
 		(current, match) => {
@@ -166,7 +168,7 @@ function explicitUsageTokensFromContent(content: string) {
 		String.split('\n'),
 		Array.reduce(
 			{
-				previous: undefined as typeof AgentUsageTokens.Type | undefined,
+				previous: undefined as AgentUsageTokens | undefined,
 				total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
 			},
 			(current, line) => {
@@ -192,7 +194,7 @@ function codexTokensFromContent(content: string) {
 	return totalUsageTokensFromContent(content) ?? explicitUsageTokensFromContent(content)
 }
 
-function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
 			addTokens(total, file.tokens)
@@ -239,10 +241,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 	)
 
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
-		>()
+		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
 	)
 	const loadCachedTokens = Effect.fnUntraced(function* () {
 		const files = yield* pipe(
@@ -279,11 +278,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 							return [[path, cached] as const]
 						}
 
-						const tokens = yield* pipe(
-							fs.readFileString(path),
-							Effect.map(codexTokensFromContent),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
+						const tokens = yield* pipe(fs.readFileString(path), Effect.map(codexTokensFromContent))
 						return [[path, {mtimeMs, size, tokens}] as const]
 					}),
 				{concurrency: 4}
@@ -314,9 +309,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 			weekly: codexWindow(usage.rate_limit.secondary_window)
 		})
 	}).pipe(Effect.provideService(FileSystem.FileSystem, fs))
-	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
-		Array.head([])
-	)
+	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
 		Stream.repeat(Schedule.spaced('10 minutes')),
@@ -341,7 +334,7 @@ function codexSubscriptionLabel(planType: string | null | undefined) {
 	)
 }
 
-function codexWindow(input: typeof CodexUsage.Type.rate_limit.primary_window) {
+function codexWindow(input: CodexUsageWindow) {
 	return {
 		resetsAt: Predicate.isNumber(input.reset_at) ? new Date(input.reset_at * 1000).toISOString() : undefined,
 		utilization: input.used_percent
@@ -350,7 +343,7 @@ function codexWindow(input: typeof CodexUsage.Type.rate_limit.primary_window) {
 
 function remoteCodexUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {
 	return pipe(
-		Effect.fnUntraced(function* () {
+		Effect.gen(function* () {
 			const accessToken = yield* token
 			const response = yield* pipe(
 				client.get('https://chatgpt.com/backend-api/wham/usage', {headers: {authorization: `Bearer ${accessToken}`}}),
@@ -366,7 +359,7 @@ function remoteCodexUsage(client: HttpClient.HttpClient, token: Effect.Effect<st
 				Effect.flatMap(Schema.decodeUnknownEffect(CodexUsage)),
 				Effect.mapError(cause => new AgentError({cause}))
 			)
-		})(),
+		}),
 		Effect.timeout('10 seconds'),
 		Effect.mapError(cause => new AgentError({cause}))
 	)

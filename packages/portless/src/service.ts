@@ -125,10 +125,10 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 
 	yield* Effect.all(
 		[
-			outbound.runRaw(message => writeInbound(message)).pipe(Effect.catch(() => Effect.void)),
+			outbound.runRaw(message => writeInbound(message)).pipe(Effect.ignore),
 			inbound
 				.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-				.pipe(Effect.catch(() => Effect.void))
+				.pipe(Effect.ignore)
 		],
 		{concurrency: 'unbounded', discard: true}
 	)

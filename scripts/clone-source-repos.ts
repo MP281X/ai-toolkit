@@ -45,7 +45,7 @@ const program = Effect.gen(function* () {
 		const exitCode = yield* spawner.exitCode(ChildProcess.make('git', args, {stderr: 'inherit', stdout: 'inherit'}))
 
 		if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-			return yield* Effect.fail(new Error(`git ${args.join(' ')} failed for ${name}`))
+			return yield* Effect.die(`git ${args.join(' ')} failed for ${name}`)
 		}
 	})
 

@@ -35,7 +35,6 @@ function messageText(source: unknown) {
 async function decodeMessage(source: unknown) {
 	const text = await Promise.resolve(messageText(source))
 	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
 		return JSON.parse(text) as unknown
 	} catch {
 		return null
@@ -67,7 +66,6 @@ function sendSocket(
 		  }
 ) {
 	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
-	// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser stream protocol JSON
 	socket.send(JSON.stringify(input))
 }
 

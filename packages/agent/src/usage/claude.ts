@@ -28,9 +28,10 @@ const ClaudeCredentials = Schema.fromJsonString(
 
 const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
-	utilization: Schema.Number
+	utilization: Schema.Finite
 })
 
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
@@ -70,7 +71,7 @@ function claudeUsageTokens(input: unknown) {
 	}
 }
 
-function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
+function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
@@ -90,7 +91,7 @@ function claudeTokensFromContent(content: string) {
 	)
 }
 
-function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
 			addTokens(total, file.tokens)
@@ -137,10 +138,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	)
 
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
-		>()
+		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
 	)
 	const loadCachedTokens = Effect.fnUntraced(function* () {
 		const files = yield* pipe(
@@ -170,11 +168,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 							return [[path, cached] as const]
 						}
 
-						const tokens = yield* pipe(
-							fs.readFileString(path),
-							Effect.map(claudeTokensFromContent),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
+						const tokens = yield* pipe(fs.readFileString(path), Effect.map(claudeTokensFromContent))
 						return [[path, {mtimeMs, size, tokens}] as const]
 					}),
 				{concurrency: 4}
@@ -200,9 +194,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		),
 		Effect.provideService(FileSystem.FileSystem, fs)
 	)
-	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
-		Array.head([])
-	)
+	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
 		Stream.repeat(Schedule.spaced('10 minutes')),
@@ -213,13 +205,13 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	return {subscription, usage}
 })
 
-function claudeWindow(input: typeof ClaudeUsageWindow.Type) {
+function claudeWindow(input: ClaudeUsageWindow) {
 	return {resetsAt: input.resets_at ?? undefined, utilization: input.utilization}
 }
 
 function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {
 	return pipe(
-		Effect.fnUntraced(function* () {
+		Effect.gen(function* () {
 			const accessToken = yield* token
 			const response = yield* pipe(
 				client.get('https://api.anthropic.com/api/oauth/usage', {
@@ -241,7 +233,7 @@ function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<s
 				Effect.flatMap(Schema.decodeUnknownEffect(ClaudeUsage)),
 				Effect.mapError(cause => new AgentError({cause}))
 			)
-		})(),
+		}),
 		Effect.timeout('10 seconds'),
 		Effect.mapError(cause => new AgentError({cause}))
 	)

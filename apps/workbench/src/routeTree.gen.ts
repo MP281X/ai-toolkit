@@ -11,12 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as homeRouteRouteImport } from './routes/(home)/route'
 import { Route as homeIndexRouteImport } from './routes/(home)/index'
-import { Route as homeWorktreeTerminalRouteImport } from './routes/(home)/$worktree/terminal'
-import { Route as homeWorktreeRunRouteImport } from './routes/(home)/$worktree/run'
-import { Route as homeWorktreePortlessRouteImport } from './routes/(home)/$worktree/portless'
-import { Route as homeWorktreeDiffRouteImport } from './routes/(home)/$worktree/diff'
-import { Route as homeWorktreeAgentBrowserRouteImport } from './routes/(home)/$worktree/agent-browser'
 import { Route as homeWorktreeAgentRouteImport } from './routes/(home)/$worktree/agent'
+import { Route as homeWorktreeAgentBrowserRouteImport } from './routes/(home)/$worktree/agent-browser'
+import { Route as homeWorktreeDiffRouteImport } from './routes/(home)/$worktree/diff'
+import { Route as homeWorktreePortlessRouteImport } from './routes/(home)/$worktree/portless'
+import { Route as homeWorktreeRunRouteImport } from './routes/(home)/$worktree/run'
+import { Route as homeWorktreeTerminalRouteImport } from './routes/(home)/$worktree/terminal'
 
 const homeRouteRoute = homeRouteRouteImport.update({
   id: '/(home)',
@@ -27,24 +27,9 @@ const homeIndexRoute = homeIndexRouteImport.update({
   path: '/',
   getParentRoute: () => homeRouteRoute,
 } as any)
-const homeWorktreeTerminalRoute = homeWorktreeTerminalRouteImport.update({
-  id: '/$worktree/terminal',
-  path: '/$worktree/terminal',
-  getParentRoute: () => homeRouteRoute,
-} as any)
-const homeWorktreeRunRoute = homeWorktreeRunRouteImport.update({
-  id: '/$worktree/run',
-  path: '/$worktree/run',
-  getParentRoute: () => homeRouteRoute,
-} as any)
-const homeWorktreePortlessRoute = homeWorktreePortlessRouteImport.update({
-  id: '/$worktree/portless',
-  path: '/$worktree/portless',
-  getParentRoute: () => homeRouteRoute,
-} as any)
-const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
-  id: '/$worktree/diff',
-  path: '/$worktree/diff',
+const homeWorktreeAgentRoute = homeWorktreeAgentRouteImport.update({
+  id: '/$worktree/agent',
+  path: '/$worktree/agent',
   getParentRoute: () => homeRouteRoute,
 } as any)
 const homeWorktreeAgentBrowserRoute =
@@ -53,9 +38,24 @@ const homeWorktreeAgentBrowserRoute =
     path: '/$worktree/agent-browser',
     getParentRoute: () => homeRouteRoute,
   } as any)
-const homeWorktreeAgentRoute = homeWorktreeAgentRouteImport.update({
-  id: '/$worktree/agent',
-  path: '/$worktree/agent',
+const homeWorktreeDiffRoute = homeWorktreeDiffRouteImport.update({
+  id: '/$worktree/diff',
+  path: '/$worktree/diff',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeWorktreePortlessRoute = homeWorktreePortlessRouteImport.update({
+  id: '/$worktree/portless',
+  path: '/$worktree/portless',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeWorktreeRunRoute = homeWorktreeRunRouteImport.update({
+  id: '/$worktree/run',
+  path: '/$worktree/run',
+  getParentRoute: () => homeRouteRoute,
+} as any)
+const homeWorktreeTerminalRoute = homeWorktreeTerminalRouteImport.update({
+  id: '/$worktree/terminal',
+  path: '/$worktree/terminal',
   getParentRoute: () => homeRouteRoute,
 } as any)
 
@@ -139,32 +139,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeIndexRouteImport
       parentRoute: typeof homeRouteRoute
     }
-    '/(home)/$worktree/terminal': {
-      id: '/(home)/$worktree/terminal'
-      path: '/$worktree/terminal'
-      fullPath: '/$worktree/terminal'
-      preLoaderRoute: typeof homeWorktreeTerminalRouteImport
-      parentRoute: typeof homeRouteRoute
-    }
-    '/(home)/$worktree/run': {
-      id: '/(home)/$worktree/run'
-      path: '/$worktree/run'
-      fullPath: '/$worktree/run'
-      preLoaderRoute: typeof homeWorktreeRunRouteImport
-      parentRoute: typeof homeRouteRoute
-    }
-    '/(home)/$worktree/portless': {
-      id: '/(home)/$worktree/portless'
-      path: '/$worktree/portless'
-      fullPath: '/$worktree/portless'
-      preLoaderRoute: typeof homeWorktreePortlessRouteImport
-      parentRoute: typeof homeRouteRoute
-    }
-    '/(home)/$worktree/diff': {
-      id: '/(home)/$worktree/diff'
-      path: '/$worktree/diff'
-      fullPath: '/$worktree/diff'
-      preLoaderRoute: typeof homeWorktreeDiffRouteImport
+    '/(home)/$worktree/agent': {
+      id: '/(home)/$worktree/agent'
+      path: '/$worktree/agent'
+      fullPath: '/$worktree/agent'
+      preLoaderRoute: typeof homeWorktreeAgentRouteImport
       parentRoute: typeof homeRouteRoute
     }
     '/(home)/$worktree/agent-browser': {
@@ -174,11 +153,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof homeWorktreeAgentBrowserRouteImport
       parentRoute: typeof homeRouteRoute
     }
-    '/(home)/$worktree/agent': {
-      id: '/(home)/$worktree/agent'
-      path: '/$worktree/agent'
-      fullPath: '/$worktree/agent'
-      preLoaderRoute: typeof homeWorktreeAgentRouteImport
+    '/(home)/$worktree/diff': {
+      id: '/(home)/$worktree/diff'
+      path: '/$worktree/diff'
+      fullPath: '/$worktree/diff'
+      preLoaderRoute: typeof homeWorktreeDiffRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
+    '/(home)/$worktree/portless': {
+      id: '/(home)/$worktree/portless'
+      path: '/$worktree/portless'
+      fullPath: '/$worktree/portless'
+      preLoaderRoute: typeof homeWorktreePortlessRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
+    '/(home)/$worktree/run': {
+      id: '/(home)/$worktree/run'
+      path: '/$worktree/run'
+      fullPath: '/$worktree/run'
+      preLoaderRoute: typeof homeWorktreeRunRouteImport
+      parentRoute: typeof homeRouteRoute
+    }
+    '/(home)/$worktree/terminal': {
+      id: '/(home)/$worktree/terminal'
+      path: '/$worktree/terminal'
+      fullPath: '/$worktree/terminal'
+      preLoaderRoute: typeof homeWorktreeTerminalRouteImport
       parentRoute: typeof homeRouteRoute
     }
   }

@@ -10,21 +10,22 @@
 		"noImplicitOverride": true,
 		"allowUnreachableCode": false,
 		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": false,
+		"exactOptionalPropertyTypes": true,
 		"noFallthroughCasesInSwitch": true,
 		"noPropertyAccessFromIndexSignature": true,
+		"forceConsistentCasingInFileNames": true,
 
 		// ts version and module resolution (use the lasted ts/js features and types)
 		"jsx": "react-jsx",
 		"lib": ["DOM", "ESNext", "DOM.Iterable"],
-		"types": ["node"],
+		"types": ["node", "vite-plus/client"],
 		"target": "ESNext",
 		"module": "ESNext",
 		"moduleDetection": "force",
 		"moduleResolution": "bundler",
 
 		// imports / type checking and parsing / ...
-		"skipLibCheck": true,
+		"skipLibCheck": false,
 		"esModuleInterop": true,
 		"isolatedModules": true,
 		"resolveJsonModule": true,
@@ -33,6 +34,15 @@
 		"useDefineForClassFields": true,
 		"allowImportingTsExtensions": true,
 		"noUncheckedSideEffectImports": true,
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"effectFn": ["span"],
+				"includeSuggestionsInTsc": true,
+				"ignoreEffectSuggestionsInTscExitCode": false,
+				"diagnosticSeverity": {"deterministicKeys": "error", "importFromBarrel": "off"}
+			}
+		],
 
 		// build config
 		"noEmit": true,
@@ -43,6 +53,8 @@
 	"exclude": ["${configDir}/**/node_modules", "${configDir}/**/dist", "${configDir}/**/.output"],
 	"include": [
 		"${configDir}/src/**/*",
+		"${configDir}/apps/*/src/**/*",
+		"${configDir}/packages/*/src/**/*",
 		"${configDir}/*.config.*",
 		"${configDir}/codegen/**/*",
 		"${configDir}/scripts/**/*"

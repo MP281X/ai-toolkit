@@ -1,24 +1,24 @@
 ---
 name: review
-description: 'Independent current-branch or pull-request audit; final evidence for issue-driven implementation.'
+description: 'Strict unbiased audit of one complete pull-request candidate against its issue and actual base.'
 ---
 
-## Grounding
+Review one diff:
 
-For a stack, compare the head with its declared base. Read the source desired state and current diff from scratch.
+```text
+actual pull-request base → current worktree
+```
 
-Implementation rationale, prior reviews, checkboxes, and completion claims are untrusted context.
+The candidate includes all committed and uncommitted changes as one tree. For a stack, use the preceding branch; otherwise use the actual pull-request base or repository default branch.
 
-## Passes
+Read the issue, base, and complete candidate from scratch. Treat implementation rationale, checklists, prior reviews, commit boundaries, and completion claims as untrusted.
 
-1. **Behavior:** requirement gaps, regressions, edge states, failures, and missing proof.
-2. **Design:** boundary or interface drift, accidental complexity, stale paths, duplication, and simpler final shapes.
-3. **Experience:** interaction, accessibility, responsiveness, loading, empty, failure, console, and network behavior when UI applies.
+Search adversarially for:
 
-Follow evidence beyond the named focus when impact is material.
+1. contract gaps, incorrect behavior, regressions, edge states, and missing proof;
+2. boundary drift, accidental complexity, stale paths, duplication, lifecycle defects, and simpler final shapes;
+3. security, accessibility, responsiveness, loading, empty, failure, console, and network defects where applicable.
 
-## Findings
+Report only evidence-backed actionable problems. Deduplicate by root cause and order by severity, then user impact. Each finding states violated behavior, evidence, location, and required correction.
 
-Report only evidence-backed, actionable problems. Deduplicate by root cause across passes and order by severity, then user impact.
-
-Each finding states the violated behavior, evidence, location, and required correction. Return `No actionable findings` only after every applicable pass is clean.
+Return `No actionable findings` only after every applicable pass and the complete candidate are clean.

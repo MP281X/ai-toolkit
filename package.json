@@ -18,8 +18,8 @@
 	"scripts": {
 		"build": "vp run -r build",
 		
-		"fix": "fallow fix --yes && vp check --fix",
-		"check": "vp check && fallow --only dead-code --format compact --fail-on-issues && fallow security --fail-on-issues",
+		"fix": "vp check --fix",
+		"check": "vp check && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
@@ -34,14 +34,14 @@
 		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
-		"typescript": "rc",
+		"typescript": "latest",
+		"@effect/tsgo": "latest",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		
 		"fallow": "latest",
 		"@effect/vitest": "^4.0.0-beta",
-		"@deslop/oxlint-rules": "workspace:*",
 		"oxlint-plugin-react-doctor": "latest",
 		
 		"vite": "catalog:",

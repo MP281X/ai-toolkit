@@ -18,10 +18,10 @@ export type AgentSubscription = typeof AgentSubscription.Type
 export const AgentSubscription = Schema.String.pipe(Schema.brand('AgentSubscription'))
 
 export type AgentUsageWindow = typeof AgentUsageWindow.Type
-export const AgentUsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.String), utilization: Schema.Number})
+export const AgentUsageWindow = Schema.Struct({resetsAt: Schema.optional(Schema.String), utilization: Schema.Finite})
 
 export type AgentUsageTokens = typeof AgentUsageTokens.Type
-export const AgentUsageTokens = Schema.Struct({cached: Schema.Number, input: Schema.Number, output: Schema.Number})
+export const AgentUsageTokens = Schema.Struct({cached: Schema.Finite, input: Schema.Finite, output: Schema.Finite})
 
 export type AgentUsageData = typeof AgentUsageData.Type
 export const AgentUsageData = Schema.Struct({

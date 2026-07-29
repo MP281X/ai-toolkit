@@ -1,28 +1,39 @@
 ---
 name: planning
-description: 'Unresolved intent, behavior, scope, interfaces, acceptance, material tradeoffs; user alignment.'
+description: 'Invoke only as `$planning` to resolve a new or existing issue through research, UI prototyping, user decisions, and canonical GitHub persistence.'
 ---
 
-Planning resolves desired state, not implementation sequence. Writable artifacts are temporary HTML and explicitly requested issue persistence.
+Resolve desired behavior, scope, architecture, interfaces, acceptance, and material risks with the user. Planning does not own implementation sequence, bugs, or routine code quality.
 
-## Discovery
+```mermaid
+stateDiagram-v2
+    [*] --> LoadContext
+    LoadContext --> Planning
+    Planning --> Prototype: UI uncertainty
+    Prototype --> Planning: feedback captured
+    Planning --> Approval: complete plan
+    Approval --> Planning: changes requested
+    Approval --> Cleanup: approved
+    Cleanup --> SaveIssue
+    SaveIssue --> [*]
+```
 
-Treat proposed solutions as hypotheses. Establish the root cause, desired behavior, scope, interfaces, acceptance, constraints, and material risks.
+## Load context
 
-Ask one question at a time, and only when undiscoverable input changes the desired state. Once evidence is sufficient, recommend a direction rather than surveying options that will not be pursued.
+Start from a clean worktree. Read current source, relevant `.agents/repos/*`, current issues, and the existing canonical issue when replanning. Treat proposed solutions as hypotheses.
 
-## Checkpoint
+Ask one material question at a time only when undiscoverable input changes the desired state. Recommend a direction once evidence is sufficient.
 
-Read `assets/template.html`, replace `<!-- COMPLETE_PLAN -->` with one complete document, write it to a random `/tmp/deslop-plan-<random>.html`, and open it immediately.
+## Prototype
 
-The checkpoint is compact, mobile-first, and scroll-only. Lead with the thesis and dominant decision visual. Include only user-validatable behavior, states, interfaces, decisions, acceptance, and material risks. Keep all information visible; no tabs, accordions, decorative navigation, nested cards, repeated content, or viewport-filling whitespace.
+Prototype UI uncertainty with repository DevTools. Keep variants implementation-equivalent and compare interaction or layout rather than decoration.
 
-Mocks and prototypes are local, responsive, resettable, and dependency-free. Use repository-native components only when real components decide behavior.
+Prototype code is disposable. On approval, discard every tracked and untracked prototype change and verify the worktree is clean before persistence. Preserve ignored environment and runtime state.
 
-After opening the checkpoint, stop. Feedback produces a complete replacement, never a delta or addendum.
+## Approval
 
-## Handoff
+Present one complete GFM plan. Give each fact one representation; a diagram is not followed by a prose mirror. Feedback replaces the complete checkpoint rather than appending a delta.
 
-Approval authorizes same-session execution. A persistence request creates or updates the issue and stops without implementation.
+Approval authorizes creating a new canonical GitHub issue or replacing the complete body of the issue being replanned. Persist outcome, decisions, rationale, behavior, interfaces, scope, acceptance, constraints, dependencies, risks, and meaningful rejected alternatives.
 
-Persist the smallest sufficient Markdown subset of outcome, behavior, interfaces, scope, acceptance, constraints, dependencies, and risks. Exclude HTML, transcripts, discarded alternatives, and unresolved questions.
+Exclude transcripts, prototype code, local plan files, implementation order, and recoverable repository facts. Stop after issue persistence.

@@ -368,7 +368,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 							if (Queue.offerUnsafe(events, event)) return
 
 							void result.session.abort()
-							Effect.runFork(
+							Effect.runForkWith(toolHandlerContext)(
 								Effect.gen(function* () {
 									const alreadyOverflowed = yield* Ref.getAndSet(overflowed, true)
 									if (alreadyOverflowed) return

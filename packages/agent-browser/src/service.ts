@@ -92,17 +92,17 @@ function proxyStream(session: string) {
 
 			yield* Effect.all(
 				[
-					outbound.value.runRaw(message => writeInbound(message)).pipe(Effect.catch(() => Effect.void)),
+					outbound.value.runRaw(message => writeInbound(message)).pipe(Effect.ignore),
 					inbound
 						.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-						.pipe(Effect.catch(() => Effect.void))
+						.pipe(Effect.ignore)
 				],
 				{concurrency: 'unbounded', discard: true}
 			)
 
 			return HttpServerResponse.empty()
 		}),
-		Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 404})))
+		Effect.orElseSucceed(() => HttpServerResponse.empty({status: 404}))
 	)
 }
 
@@ -147,6 +147,10 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 	)
 })
 
+function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], args: readonly string[]) {
+	return pipe(runAgentBrowser(args), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
+}
+
 const AgentBrowserCliTabs = Schema.Struct({
 	data: Schema.Struct({
 		tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
@@ -155,7 +159,6 @@ const AgentBrowserCliTabs = Schema.Struct({
 
 function decodeAgentBrowserTabs(output: string) {
 	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser CLI JSON output
 		const decoded = JSON.parse(output) as unknown
 		return pipe(
 			Schema.decodeUnknownSync(AgentBrowserCliTabs)(decoded).data.tabs,
@@ -166,8 +169,13 @@ function decodeAgentBrowserTabs(output: string) {
 	}
 }
 
-const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (sessionId: string) {
-	return decodeAgentBrowserTabs(yield* runAgentBrowser(['--session', sessionId, '--json', 'tab']))
+const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
+	readonly sessionId: string
+	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
+}) {
+	return decodeAgentBrowserTabs(
+		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
+	)
 })
 
 const reachable = Effect.fn('AgentBrowser.reachable')(function* (url: string) {
@@ -205,8 +213,9 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 	readonly label: string
 	readonly origin: string
 	readonly sessionId: string
+	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
-	const existingTabs = yield* listTabs(input.sessionId)
+	const existingTabs = yield* listTabs(input)
 	const existingTab = pipe(
 		existingTabs,
 		Array.findFirst(tab => tab.label === input.label)
@@ -215,10 +224,18 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 
 	yield* waitForReachable(input.origin)
 	yield* pipe(
-		runAgentBrowser(['--session', input.sessionId, 'tab', 'new', input.origin, '--label', input.label]),
+		runAgentBrowserWith(input.spawner, [
+			'--session',
+			input.sessionId,
+			'tab',
+			'new',
+			input.origin,
+			'--label',
+			input.label
+		]),
 		Effect.catch(error => (String.includes('already used')(error.message) ? Effect.void : Effect.fail(error)))
 	)
-	yield* runAgentBrowser(['--session', input.sessionId, 'set', 'viewport', '1600', '900'])
+	yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, 'set', 'viewport', '1600', '900'])
 })
 
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
@@ -226,9 +243,12 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 		readonly closeOnFinalize?: boolean
 		readonly sessionId: string
 	}) {
+		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 		const labelsByOrigin = yield* Ref.make(HashMap.empty<string, string>())
 		if (input.closeOnFinalize === true) {
-			yield* Effect.addFinalizer(() => runAgentBrowser(['--session', input.sessionId, 'close']).pipe(Effect.ignore))
+			yield* Effect.addFinalizer(() =>
+				runAgentBrowserWith(spawner, ['--session', input.sessionId, 'close']).pipe(Effect.ignore)
+			)
 		}
 		return {
 			openTabs(origins: readonly string[]) {
@@ -236,7 +256,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 					Ref.set(labelsByOrigin, agentBrowserOwnedTabLabels(origins)),
 					Effect.andThen(
 						pipe(
-							runAgentBrowser(['--session', input.sessionId, 'stream', 'enable']),
+							runAgentBrowserWith(spawner, ['--session', input.sessionId, 'stream', 'enable']),
 							Effect.catch(error =>
 								String.includes('already enabled')(error.message) ? Effect.void : Effect.fail(error)
 							)
@@ -253,7 +273,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 											HashMap.get(labels, origin),
 											Option.match({
 												onNone: () => Effect.void,
-												onSome: label => openOwnedTab({label, origin, sessionId: input.sessionId})
+												onSome: label => openOwnedTab({label, origin, sessionId: input.sessionId, spawner})
 											})
 										)
 									)
@@ -273,7 +293,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 							Option.match({
 								onNone: () =>
 									Effect.fail(new AgentBrowserError({message: `Unknown agent-browser tab origin: ${origin}`})),
-								onSome: label => runAgentBrowser(['--session', input.sessionId, 'tab', label])
+								onSome: label => runAgentBrowserWith(spawner, ['--session', input.sessionId, 'tab', label])
 							})
 						)
 					),

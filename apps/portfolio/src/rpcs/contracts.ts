@@ -7,16 +7,16 @@ export const PortfolioVisitor = Schema.Struct({
 	color: Schema.NonEmptyString,
 	id: Schema.NonEmptyString,
 	name: Schema.NonEmptyString,
-	x: Schema.Number,
-	y: Schema.Number
+	x: Schema.Finite,
+	y: Schema.Finite
 })
 
 export type PortfolioTrail = typeof PortfolioTrail.Type
 export const PortfolioTrail = Schema.Struct({
 	color: Schema.NonEmptyString,
 	visitorId: Schema.NonEmptyString,
-	x: Schema.Number,
-	y: Schema.Number
+	x: Schema.Finite,
+	y: Schema.Finite
 })
 
 export type PortfolioState = typeof PortfolioState.Type
@@ -59,8 +59,8 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({
 			color: Schema.NonEmptyString,
 			id: Schema.NonEmptyString,
-			x: Schema.Number,
-			y: Schema.Number
+			x: Schema.Finite,
+			y: Schema.Finite
 		})
 	})
 ) {}

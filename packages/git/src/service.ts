@@ -219,8 +219,8 @@ function readTextFile(filePath: string) {
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
 const GitHubReviewThreadCommentResponse = Schema.Struct({
 	body: Schema.String,
-	line: Schema.optional(Schema.NullOr(Schema.Number)),
-	originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
+	line: Schema.optional(Schema.NullOr(Schema.Finite)),
+	originalLine: Schema.optional(Schema.NullOr(Schema.Finite)),
 	path: Schema.String,
 	url: Schema.optional(Schema.String)
 })

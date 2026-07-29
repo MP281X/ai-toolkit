@@ -64,6 +64,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const screen = terminalScreenStore()
 		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
 		const status = yield* SubscriptionRef.make<TerminalStatus>({state: 'idle', title: ''})
+		const runFork = Effect.runForkWith(yield* Effect.context())
 
 		const nextSequence = Effect.fnUntraced(function* () {
 			return yield* Ref.modify(sequenceRef, current => [current, current + 1] as const)
@@ -242,7 +243,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				if (Queue.offerUnsafe(dataQueue, output)) return
 
 				if (backpressureState.pending.length >= 1024) {
-					Effect.runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
+					runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
 					return
 				}
 
@@ -251,7 +252,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 				backpressureState.draining = true
 				pauseProcess(subprocess)
-				Effect.runFork(
+				runFork(
 					drainBackpressure().pipe(
 						Effect.ensuring(
 							Effect.sync(() => {
@@ -263,7 +264,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			})
 			const exit = subprocess.onExit(event => {
-				Effect.runFork(
+				runFork(
 					Semaphore.withPermit(
 						lifecycleLock,
 						Effect.gen(function* () {

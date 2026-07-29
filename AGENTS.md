@@ -1,37 +1,31 @@
 ## Repository
 
-- Package manager: `vp`.
-- Workspaces: `apps/*`, `packages/*`.
+- Package manager: `vp`; workspaces: `apps/*`, `packages/*`.
 - Effect is the application model; non-Effect code is boundary interop.
 
 ## Grounding
 
-- Read repository source before acting.
-- Local source outranks `.agents/repos/*`; both outrank memory.
-- Use package APIs rather than remembered signatures.
-- Reuse established evidence until its source changes.
-- For new behavior, find the nearest current pattern before choosing a shape.
+- Current repository source outranks relevant `.agents/repos/*`; both outrank maintained documentation and memory.
+- Use package APIs and the nearest current pattern rather than remembered signatures.
+- Preserve behavior outside the approved scope and write the accepted final shape directly.
 
-## Change Boundary
+## Authorization
 
-- Preserve behavior outside the requested change.
-- Write the accepted final shape directly; leave one implementation path.
-- Add compatibility, migration, caching, or background work only for current behavior.
-- Act when evidence is sufficient. Reopen settled decisions only when new evidence contradicts them.
-- Questions, plans, and reviews remain read-only unless the user requests a change.
-- Requested changes include in-scope local edits and validation. External writes, destructive actions, and material scope expansion require an explicit request.
+- Subagents never edit repository files. They may run commands and mutate task-scoped runtime or explicitly delegated external state.
+- Git and GitHub mutations require workflow or explicit user authority. Agents never merge.
 
 ## Verification
 
-After changing the repository, run:
+Repository changes finish with:
 
 ```bash
 vp run fix && vp run check
 ```
 
-Resolve related failures together and fix their shared cause.
+Resolve related failures at their shared cause.
 
 ## Communication
 
-- Ground progress and completion claims in current-session evidence.
-- Lead with the outcome. Include detail only when it changes a decision or action.
+- Use dense GFM, semantic labels, and simple technical English.
+- Represent each fact once in its most useful form; do not recap diagrams, mirror lists in prose, or duplicate skill policy.
+- Ground claims in current evidence. Lead with the outcome and include detail only when it changes a decision or action.

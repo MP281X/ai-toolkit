@@ -141,7 +141,7 @@ export class RpcContracts extends RpcGroup.make(
 	}),
 	Rpc.make('terminal.resize', {
 		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Number, rows: Schema.Number})
+		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Finite, rows: Schema.Finite})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
@@ -150,8 +150,8 @@ export class RpcContracts extends RpcGroup.make(
 		error: TerminalError,
 		payload: Schema.Struct({
 			...TerminalPayloadFields,
-			cols: Schema.optional(Schema.Number),
-			rows: Schema.optional(Schema.Number)
+			cols: Schema.optional(Schema.Finite),
+			rows: Schema.optional(Schema.Finite)
 		}),
 		stream: true,
 		success: TerminalFrame

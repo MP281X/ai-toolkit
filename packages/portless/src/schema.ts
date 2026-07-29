@@ -24,7 +24,7 @@ export const PortlessOrigin = Schema.Struct({
 	base: Schema.optional(Schema.String),
 	host: Schema.String,
 	origin: Schema.String,
-	port: Schema.Number,
+	port: Schema.Finite,
 	sessionId: Schema.String,
 	taskId: Schema.String,
 	worktree: Schema.String
