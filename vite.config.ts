@@ -80,7 +80,7 @@ export default defineConfig({
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
 			'@typescript-eslint/consistent-type-assertions': [
 				'error',
-				{arrayLiteralTypeAssertions: 'never', objectLiteralTypeAssertions: 'never'}
+				{arrayLiteralTypeAssertions: 'never', assertionStyle: 'never', objectLiteralTypeAssertions: 'never'}
 			],
 			'@typescript-eslint/consistent-type-definitions': ['error', 'type'],
 			'@typescript-eslint/consistent-type-exports': 'error',

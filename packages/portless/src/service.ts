@@ -100,6 +100,12 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	)
 })
 
+function webSocketBytes(message: NodeSocket.NodeWS.RawData) {
+	if (message instanceof ArrayBuffer) return new Uint8Array(message)
+	if (Array.isArray(message)) return Buffer.concat(message)
+	return message
+}
+
 const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const [pathname = '/', search = ''] = String.split(request.url, '?')
 	const upstreamUrl = new URL(origin)
@@ -108,10 +114,9 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	upstreamUrl.search = search
 
 	const inbound = yield* request.upgrade
-	const webSocketConstructor = Layer.succeed(Socket.WebSocketConstructor)(
-		(url, protocols) =>
-			// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Effect's constructor uses the DOM WebSocket shape; ws is the Node transport that supports forwarded headers.
-			new NodeSocket.NodeWS.WebSocket(url, protocols, {
+	const outbound = yield* Effect.acquireRelease(
+		Effect.callback<NodeSocket.NodeWS.WebSocket, Socket.SocketError>(resume => {
+			const socket = new NodeSocket.NodeWS.WebSocket(upstreamUrl, {
 				headers: pipe(
 					request.headers['cookie'],
 					Option.fromUndefinedOr,
@@ -119,24 +124,129 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 					Option.map(cookie => ({cookie})),
 					Option.getOrUndefined
 				)
-			}) as unknown as globalThis.WebSocket
+			})
+			function cleanup() {
+				socket.off('open', onOpen)
+				socket.off('error', onError)
+			}
+			function onOpen() {
+				cleanup()
+				resume(Effect.succeed(socket))
+			}
+			function onError(cause: Error) {
+				cleanup()
+				resume(Effect.fail(Socket.SocketError.make({reason: Socket.SocketOpenError.make({cause, kind: 'Unknown'})})))
+			}
+			socket.once('open', onOpen)
+			socket.once('error', onError)
+			return Effect.sync(() => {
+				cleanup()
+				socket.terminate()
+			})
+		}),
+		socket =>
+			Effect.sync(() => {
+				socket.terminate()
+			})
 	)
-	const outbound = yield* pipe(Socket.makeWebSocket(upstreamUrl.toString()), Effect.provide(webSocketConstructor))
 	const writeInbound = yield* inbound.writer
-	const writeOutbound = yield* outbound.writer
+	const runFork = Effect.runForkWith(yield* Effect.context())
+	const readOutbound = Effect.callback<unknown, Socket.SocketError>(resume => {
+		function closeInbound(code: number, reason?: string) {
+			runFork(
+				pipe(
+					writeInbound(new Socket.CloseEvent(code, reason)),
+					Effect.match({
+						onFailure: error => {
+							resume(Effect.fail(error))
+						},
+						onSuccess: () => {
+							resume(Effect.void)
+						}
+					})
+				)
+			)
+		}
+		function onMessage(message: NodeSocket.NodeWS.RawData, isBinary: boolean) {
+			const payload = webSocketBytes(message)
+			runFork(
+				pipe(
+					writeInbound(isBinary ? payload : new TextDecoder().decode(payload)),
+					Effect.catch(error =>
+						Effect.sync(() => {
+							resume(Effect.fail(error))
+						})
+					)
+				)
+			)
+		}
+		function onError(cause: Error) {
+			closeInbound(1011, cause.message)
+		}
+		function onClose(code: number, reason: Buffer) {
+			const closeReason = reason.toString()
+			closeInbound(code, String.isNonEmpty(closeReason) ? closeReason : undefined)
+		}
+		outbound.on('message', onMessage)
+		outbound.once('error', onError)
+		outbound.once('close', onClose)
+		return Effect.sync(() => {
+			outbound.off('message', onMessage)
+			outbound.off('error', onError)
+			outbound.off('close', onClose)
+		})
+	})
+	function writeOutbound(message: string | Uint8Array) {
+		return Effect.callback<unknown, Socket.SocketError>(resume => {
+			outbound.send(message, cause => {
+				resume(
+					cause ? Effect.fail(Socket.SocketError.make({reason: Socket.SocketWriteError.make({cause})})) : Effect.void
+				)
+			})
+		})
+	}
+	function closeOutbound(error?: Socket.SocketError) {
+		return Effect.callback<unknown, Socket.SocketError>(resume => {
+			function cleanup() {
+				outbound.off('close', onClose)
+				outbound.off('error', onError)
+			}
+			function onClose() {
+				cleanup()
+				resume(Effect.void)
+			}
+			function onError(cause: Error) {
+				cleanup()
+				resume(Effect.fail(Socket.SocketError.make({reason: Socket.SocketWriteError.make({cause})})))
+			}
+			outbound.once('close', onClose)
+			outbound.once('error', onError)
+			try {
+				if (error?.reason._tag === 'SocketCloseError') {
+					outbound.close(error.reason.code, error.reason.closeReason)
+				} else {
+					outbound.close(
+						Predicate.isUndefined(error) ? 1000 : 1011,
+						Predicate.isUndefined(error) ? undefined : 'proxy failed'
+					)
+				}
+			} catch (cause) {
+				cleanup()
+				resume(Effect.fail(Socket.SocketError.make({reason: Socket.SocketWriteError.make({cause})})))
+			}
+			return Effect.sync(cleanup)
+		})
+	}
 
-	yield* Effect.all(
-		[
-			pipe(
-				outbound.runRaw(message => writeInbound(message)),
-				Effect.ignore
-			),
+	yield* pipe(
+		Effect.raceFirst(
+			readOutbound,
 			pipe(
 				inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
-				Effect.ignore
+				Effect.matchEffect({onFailure: closeOutbound, onSuccess: () => closeOutbound()})
 			)
-		],
-		{concurrency: 'unbounded', discard: true}
+		),
+		Effect.ignore
 	)
 
 	return HttpServerResponse.empty()

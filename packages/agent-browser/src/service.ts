@@ -90,18 +90,30 @@ function proxyStream(session: string) {
 			const writeInbound = yield* inbound.writer
 			const writeOutbound = yield* outbound.value.writer
 
-			yield* Effect.all(
-				[
+			yield* pipe(
+				Effect.raceFirst(
 					pipe(
 						outbound.value.runRaw(message => writeInbound(message)),
-						Effect.ignore
+						Effect.catch(error =>
+							writeInbound(
+								error.reason._tag === 'SocketCloseError'
+									? new Socket.CloseEvent(error.reason.code, error.reason.closeReason)
+									: new Socket.CloseEvent(1011, 'agent browser stream failed')
+							)
+						)
 					),
 					pipe(
 						inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
-						Effect.ignore
+						Effect.catch(error =>
+							writeOutbound(
+								error.reason._tag === 'SocketCloseError'
+									? new Socket.CloseEvent(error.reason.code, error.reason.closeReason)
+									: new Socket.CloseEvent(1011, 'workbench stream failed')
+							)
+						)
 					)
-				],
-				{concurrency: 'unbounded', discard: true}
+				),
+				Effect.ignore
 			)
 
 			return HttpServerResponse.empty()
@@ -168,12 +180,14 @@ function decodeAgentBrowserTabs(output: string) {
 		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson)(output),
 		Option.map(decoded =>
 			Array.map(decoded.data.tabs, tab => ({
-				...(Predicate.isNull(tab.label) ? {} : {label: tab.label}),
+				label: Predicate.isNull(tab.label) ? undefined : tab.label,
 				tabId: tab.tabId,
 				url: tab.url
 			}))
 		),
-		Option.getOrElse(() => Array.empty<{readonly label?: string; readonly tabId: string; readonly url: string}>())
+		Option.getOrElse(() =>
+			Array.empty<{readonly label: string | undefined; readonly tabId: string; readonly url: string}>()
+		)
 	)
 }
 

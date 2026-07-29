@@ -44,11 +44,11 @@ export function terminalSessionInput(input: TerminalSessionInput) {
 	const env = terminalSessionEnv(input.env)
 
 	return {
-		...(Predicate.isUndefined(input.args) ? {} : {args: [...input.args]}),
-		...(Predicate.isUndefined(input.command) ? {} : {command: input.command}),
+		args: Predicate.isUndefined(input.args) ? undefined : [...input.args],
+		command: input.command,
 		cwd: input.cwd,
-		...(Predicate.isUndefined(env) ? {} : {env}),
-		...(Predicate.isUndefined(input.sessionId) ? {} : {sessionId: input.sessionId})
+		env,
+		sessionId: input.sessionId
 	}
 }
 

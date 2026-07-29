@@ -5,56 +5,62 @@ import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'r
 
 import {cn} from '#lib/utils.ts'
 
+type AgentBrowserFrame = typeof AgentBrowserFrame.Type
 const AgentBrowserFrame = Schema.Struct({
 	data: Schema.String,
-	metadata: Schema.optional(
-		Schema.Struct({deviceHeight: Schema.optional(Schema.Finite), deviceWidth: Schema.optional(Schema.Finite)})
-	),
+	metadata: Schema.Struct({
+		deviceHeight: Schema.Finite,
+		deviceWidth: Schema.Finite,
+		offsetTop: Schema.Finite,
+		pageScaleFactor: Schema.Finite,
+		scrollOffsetX: Schema.Finite,
+		scrollOffsetY: Schema.Finite,
+		timestamp: Schema.Finite
+	}),
 	type: Schema.Literal('frame')
 })
-type AgentBrowserFrame = typeof AgentBrowserFrame.Type
 
-const AgentBrowserStreamTab = Schema.Struct({
-	active: Schema.optional(Schema.Boolean),
-	label: Schema.optional(Schema.String),
-	tabId: Schema.String,
-	title: Schema.optional(Schema.String),
-	url: Schema.optional(Schema.String)
-})
 type AgentBrowserStreamTab = typeof AgentBrowserStreamTab.Type
+const AgentBrowserStreamTab = Schema.Struct({
+	active: Schema.Boolean,
+	label: Schema.OptionFromOptionalNullOr(Schema.String, {onNoneEncoding: 'omit'}),
+	tabId: Schema.String,
+	title: Schema.String,
+	type: Schema.String,
+	url: Schema.String
+})
 
 const AgentBrowserStreamMessageFromJson = Schema.fromJsonString(
 	Schema.Union([
 		AgentBrowserFrame,
-		Schema.Struct({tabs: Schema.Array(AgentBrowserStreamTab), type: Schema.Literal('tabs')})
+		Schema.Struct({tabs: Schema.Array(AgentBrowserStreamTab), timestamp: Schema.Finite, type: Schema.Literal('tabs')})
 	])
 )
 
-const AgentBrowserInputFromJson = Schema.fromJsonString(
-	Schema.Union([
-		Schema.Struct({
-			button: Schema.optional(Schema.Literals(['left', 'none'])),
-			clickCount: Schema.optional(Schema.Finite),
-			deltaX: Schema.optional(Schema.Finite),
-			deltaY: Schema.optional(Schema.Finite),
-			eventType: Schema.Literals(['mouseMoved', 'mousePressed', 'mouseReleased', 'mouseWheel']),
-			modifiers: Schema.optional(Schema.Finite),
-			type: Schema.Literal('input_mouse'),
-			x: Schema.Finite,
-			y: Schema.Finite
-		}),
-		Schema.Struct({
-			code: Schema.String,
-			eventType: Schema.Literals(['keyDown', 'keyUp']),
-			key: Schema.String,
-			modifiers: Schema.optional(Schema.Finite),
-			text: Schema.optional(Schema.String),
-			type: Schema.Literal('input_keyboard'),
-			windowsVirtualKeyCode: Schema.optional(Schema.Finite)
-		})
-	])
-)
-type AgentBrowserInput = typeof AgentBrowserInputFromJson.Type
+type AgentBrowserInput = typeof AgentBrowserInput.Type
+const AgentBrowserInput = Schema.Union([
+	Schema.Struct({
+		button: Schema.optional(Schema.Literals(['left', 'none'])),
+		clickCount: Schema.optional(Schema.Finite),
+		deltaX: Schema.optional(Schema.Finite),
+		deltaY: Schema.optional(Schema.Finite),
+		eventType: Schema.Literals(['mouseMoved', 'mousePressed', 'mouseReleased', 'mouseWheel']),
+		modifiers: Schema.optional(Schema.Finite),
+		type: Schema.Literal('input_mouse'),
+		x: Schema.Finite,
+		y: Schema.Finite
+	}),
+	Schema.Struct({
+		code: Schema.String,
+		eventType: Schema.Literals(['keyDown', 'keyUp']),
+		key: Schema.String,
+		modifiers: Schema.optional(Schema.Finite),
+		text: Schema.optional(Schema.String),
+		type: Schema.Literal('input_keyboard'),
+		windowsVirtualKeyCode: Schema.optional(Schema.Finite)
+	})
+])
+const AgentBrowserInputFromJson = Schema.fromJsonString(AgentBrowserInput)
 
 type AgentBrowserOwnedTab = {
 	readonly id: string
@@ -155,15 +161,18 @@ export function agentBrowserActiveOwnedTabId(input: {
 	}[]
 	readonly streamTabs: readonly AgentBrowserStreamTab[]
 }) {
-	const active = Array.findFirst(input.streamTabs, tab => tab.active === true)
-	if (active._tag === 'None' || Predicate.isUndefined(active.value.label)) return
-
-	const owned = Array.findFirst(input.ownedTabs, tab => tab.streamLabel === active.value.label)
-	return owned._tag === 'Some' ? owned.value.id : undefined
+	return pipe(
+		input.streamTabs,
+		Array.findFirst(tab => tab.active),
+		Option.flatMap(tab => tab.label),
+		Option.flatMap(label => Array.findFirst(input.ownedTabs, tab => tab.streamLabel === label)),
+		Option.map(tab => tab.id),
+		Option.getOrUndefined
+	)
 }
 
 function frameViewport(frame: AgentBrowserFrame, bitmap: ImageBitmap) {
-	return {height: frame.metadata?.deviceHeight ?? bitmap.height, width: frame.metadata?.deviceWidth ?? bitmap.width}
+	return {height: frame.metadata.deviceHeight || bitmap.height, width: frame.metadata.deviceWidth || bitmap.width}
 }
 
 function decodeFrame(frame: AgentBrowserFrame) {
@@ -187,7 +196,7 @@ export function AgentBrowser(props: {
 		readonly streamLabel: string
 		readonly url: string
 	}) => void
-	readonly session?: string | undefined
+	readonly session?: string
 	readonly streamUrl?: string
 	readonly tabs?: readonly {
 		readonly id: string
@@ -391,8 +400,8 @@ export function AgentBrowser(props: {
 				eventType,
 				key: event.key,
 				modifiers: modifiers(event),
+				text,
 				type: 'input_keyboard',
-				...(Predicate.isUndefined(text) ? {} : {text}),
 				windowsVirtualKeyCode
 			})
 		}

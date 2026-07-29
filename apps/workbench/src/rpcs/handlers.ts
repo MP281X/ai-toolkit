@@ -141,7 +141,7 @@ function makeAgentSession(input: {
 		args: [...input.preparedCommand.args],
 		command: input.preparedCommand.command,
 		cwd: input.cwd,
-		...(Predicate.isUndefined(input.preparedCommand.options.env) ? {} : {env: input.preparedCommand.options.env}),
+		env: input.preparedCommand.options.env,
 		icon: input.profile.icon,
 		label: `${input.profile.label} ${labelCount + 1}`,
 		profileId: input.profile.id,
@@ -154,29 +154,21 @@ function terminalSessionInput(
 	session:
 		| TerminalPayload
 		| {readonly command?: ChildProcess.StandardCommand | string; readonly cwd: string; readonly sessionId?: string}
-): {readonly command?: ChildProcess.StandardCommand; readonly cwd: string; readonly sessionId?: string} {
+) {
 	if ('args' in session || 'env' in session) {
 		return {
+			command: Predicate.isUndefined(session.command)
+				? undefined
+				: ChildProcess.make(session.command, session.args ?? [], {env: session.env}),
 			cwd: session.cwd,
-			...(Predicate.isUndefined(session.command)
-				? {}
-				: {command: ChildProcess.make(session.command, session.args ?? [], {env: session.env})}),
-			...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
+			sessionId: session.sessionId
 		}
 	}
 	if (Predicate.isString(session.command)) {
-		return {
-			command: ChildProcess.make(session.command),
-			cwd: session.cwd,
-			...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
-		}
+		return {command: ChildProcess.make(session.command), cwd: session.cwd, sessionId: session.sessionId}
 	}
 
-	return {
-		cwd: session.cwd,
-		...(Predicate.isUndefined(session.command) ? {} : {command: session.command}),
-		...(Predicate.isUndefined(session.sessionId) ? {} : {sessionId: session.sessionId})
-	}
+	return {command: session.command, cwd: session.cwd, sessionId: session.sessionId}
 }
 
 const TerminalSessions = RcMap.make({
@@ -454,10 +446,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return yield* TerminalError.make({message: `failed to resolve script ${input.sessionId} in ${input.cwd}`})
 		})
 		const getTerminal = Effect.fnUntraced(function* (input: TerminalPayload) {
-			const statusKey = TerminalStatusKey.make({
-				cwd: input.cwd,
-				...(Predicate.isUndefined(input.sessionId) ? {} : {sessionId: input.sessionId})
-			})
+			const statusKey = TerminalStatusKey.make({cwd: input.cwd, sessionId: input.sessionId})
 			const resolved = pipe(yield* Ref.get(resolvedTerminals), HashMap.get(statusKey), Option.getOrUndefined)
 			const session = Predicate.isNotUndefined(resolved)
 				? resolved
@@ -656,7 +645,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				args: session.args,
 				command: session.command,
 				cwd: session.cwd,
-				...(Predicate.isUndefined(session.env) ? {} : {env: session.env}),
+				env: session.env,
 				sessionId: session.uuid
 			})
 			yield* pipe(
@@ -732,7 +721,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 							args: agentSessionWithEnv.args,
 							command: agentSessionWithEnv.command,
 							cwd: agentSessionWithEnv.cwd,
-							...(Predicate.isUndefined(agentSessionWithEnv.env) ? {} : {env: agentSessionWithEnv.env}),
+							env: agentSessionWithEnv.env,
 							sessionId: agentSessionWithEnv.uuid
 						})
 					),

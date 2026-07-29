@@ -19,13 +19,15 @@ stateDiagram-v2
 
 ## Load issue
 
-Treat the canonical issue as the desired-state contract. Inspect the actual worktree and relevant `.agents/repos/*`; start from a clean worktree or the user-provided follow-up state.
-
-When the user says the issue changed, reload it and reconcile a small revision with the current candidate. An explicit reset or discard request authorizes cleaning current tracked and untracked changes before loading a replacement plan; preserve ignored environment and runtime state.
+Treat the canonical issue as an immutable, literal desired-state contract. Exclude planning discussion, discarded alternatives, summaries, prior implementation narratives, and context rot; re-read the issue after context compaction. Never reinterpret, expand, reduce, substitute, partially comply with, work around, or preserve code superseded by a clause. Inspect the actual worktree and relevant `.agents/repos/*`; start from a clean worktree or the user-provided follow-up state.
 
 ## Analyze
 
-Before editing, map issue clauses to current ownership, invariants, public seams, dependency APIs, material risks, and plausible failure modes. Resolve assumptions from current source, relevant cloned or installed source, and maintained documentation. Ask only when an unresolved choice changes the contract.
+Load the engineering skill. Use its routes for analysis, implementation, validation, and self-review.
+
+Before editing, independently research relevant cloned source and local ownership. Map every issue clause to invariants, public seams, dependency APIs, material risks, and plausible failure modes. Resolve assumptions from current source, relevant cloned or installed source, and maintained documentation.
+
+When an exact clause cannot be satisfied, stop with the requirement, its concrete conflict, and the missing user decision. Never select a weaker interpretation.
 
 ## Implement
 
@@ -33,11 +35,9 @@ Own all repository edits. Produce complete production-ready working code, run fo
 
 Immediately before assurance, inspect the complete actual-base-to-worktree diff and every changed or untracked file against every applicable engineering reference. Explicitly verify boundary decoding, typed failures and messages, duplication, and authorization or safety. Assurance is exceptional verification of an implementation-owned clean candidate.
 
-The user may stop the task at any time.
-
 ## Assurance
 
-Enter assurance only after implementation, validation, and self-review are complete. Freeze repository edits. Spawn fresh generic testing and review subagents concurrently with no inherited conversation. Tell each to invoke its applicable skill and provide only:
+Enter assurance only after implementation, validation, and self-review are complete. Freeze repository edits. Spawn fresh generic testing and review subagents concurrently with no inherited conversation. Tell them to load the testing skill and review skill respectively, and provide only:
 
 - canonical issue;
 - repository/worktree path;

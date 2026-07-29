@@ -191,56 +191,51 @@ function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_en
 
 function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 	toolkit: Toolkit.WithHandler<ToolSet>,
-	context: Context.Context<Tool.HandlerServices<ToolSet[keyof ToolSet]>>
+	context: Context.Context<Tool.HandlerServices<ToolSet[string]>>
 ) {
-	return pipe(
-		Record.keys(toolkit.tools),
-		Array.map(name => {
-			const tool = toolkit.tools[name]
-			if (Predicate.isUndefined(tool)) throw new Error(`unknown tool ${name}`)
-			const toolDefinition = {
-				description: Predicate.isString(tool.description) ? tool.description : name,
-				execute: async (
-					_toolCallId: string,
-					params: unknown,
-					_signal: AbortSignal | undefined,
-					onUpdate: AgentToolUpdateCallback<unknown> | undefined,
-					_ctx: ExtensionContext
-				) => {
-					const finalResult = await Effect.runPromiseWith(context)(
-						pipe(
-							// oxlint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Pi validates JSON arguments before execution; Effect re-validates them when the toolkit handles the call.
-							toolkit.handle(name, params as Tool.Parameters<ToolSet[typeof name]>),
-							Effect.flatMap(stream =>
-								Stream.runFold<
-									Tool.HandlerResult<ToolSet[typeof name]> | undefined,
-									Tool.HandlerResult<ToolSet[typeof name]>
-								>(
-									() => {},
-									(current, result) => {
-										if (result.preliminary) {
-											onUpdate?.(agentToolResult(result.encodedResult))
-											return current
-										}
+	function makeToolDefinition(name: string) {
+		const tool = toolkit.tools[name]
+		if (Predicate.isUndefined(tool)) throw new Error(`unknown tool ${name}`)
 
-										return result
+		return {
+			description: Predicate.isString(tool.description) ? tool.description : name,
+			execute: async (
+				_toolCallId: string,
+				params: Tool.Parameters<ToolSet[string]>,
+				_signal: AbortSignal | undefined,
+				onUpdate: AgentToolUpdateCallback<unknown> | undefined,
+				_ctx: ExtensionContext
+			) => {
+				const finalResult = await Effect.runPromiseWith(context)(
+					pipe(
+						toolkit.handle(name, params),
+						Effect.flatMap(stream =>
+							Stream.runFold<Tool.HandlerResult<ToolSet[string]> | undefined, Tool.HandlerResult<ToolSet[string]>>(
+								() => {},
+								(current, result) => {
+									if (result.preliminary) {
+										onUpdate?.(agentToolResult(result.encodedResult))
+										return current
 									}
-								)(stream)
-							)
+
+									return result
+								}
+							)(stream)
 						)
 					)
+				)
 
-					if (Predicate.isUndefined(finalResult)) return agentToolResult(void 0)
-					if (finalResult.isFailure) throw finalResult.encodedResult
-					return agentToolResult(finalResult.encodedResult)
-				},
-				label: name,
-				name,
-				parameters: Tool.getJsonSchema(tool)
-			} satisfies ToolDefinition
-			return toolDefinition
-		})
-	)
+				if (Predicate.isUndefined(finalResult)) return agentToolResult(void 0)
+				if (finalResult.isFailure) throw finalResult.encodedResult
+				return agentToolResult(finalResult.encodedResult)
+			},
+			label: name,
+			name,
+			parameters: Tool.getJsonSchema(tool)
+		} satisfies ToolDefinition
+	}
+
+	return pipe(Record.keys(toolkit.tools), Array.map(makeToolDefinition))
 }
 
 export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
@@ -249,7 +244,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 	const history = yield* SubscriptionRef.make<readonly Prompt.Message[]>([config.systemPrompt])
 	const promptLock = yield* Semaphore.make(1)
 	const handledToolkit = yield* config.toolkit
-	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[keyof ToolSet]>>()
+	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[string]>>()
 	const resourceLoader = new DefaultResourceLoader({
 		agentDir: getAgentDir(),
 		appendSystemPromptOverride: () => [],

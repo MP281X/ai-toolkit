@@ -672,8 +672,8 @@ function worktreeHasAgent(worktree: SidebarWorktree) {
 }
 
 function WorktreeManager(input: {
-	readonly activeProject?: SidebarProject | undefined
-	readonly activeWorktree?: SidebarWorktree | undefined
+	readonly activeProject?: SidebarProject
+	readonly activeWorktree?: SidebarWorktree
 	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
 	readonly agentProfiles: readonly AgentProfile[]
 	readonly projects: readonly SidebarProject[]

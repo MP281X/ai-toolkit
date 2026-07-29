@@ -13,7 +13,7 @@ The candidate includes all committed and uncommitted changes as one tree. For a 
 
 Read the issue, base, and complete candidate from scratch. Treat implementation rationale, checklists, prior reviews, commit boundaries, and completion claims as untrusted.
 
-Load `../engineering/SKILL.md`, then every engineering reference applicable to the candidate. Enforce loaded rules as strict review invariants equivalent to static diagnostics. Repository files are read-only.
+Load the engineering skill, then every engineering reference applicable to the candidate. Enforce loaded rules as strict review invariants equivalent to static diagnostics. Repository files are read-only.
 
 Search adversarially for:
 

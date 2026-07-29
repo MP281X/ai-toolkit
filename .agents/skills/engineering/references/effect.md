@@ -8,7 +8,7 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 
 - Unknown input uses `Schema`; configuration uses `Config`; expected failures use typed errors.
 - Decode once at the owning RPC, HTTP, storage, process, SDK, form, or browser boundary, normalize once, then trust the decoded type.
-- Keep named schema/type pairs at module scope. Use schema-backed constructors for domain data; tagged errors are the supported schema-class exception and are constructed with `.make`.
+- Keep named schema/type pairs at module scope and infer the type immediately before its schema with `type Name = typeof Name.Type`. Inline one nested schema type access at its consumer instead of naming an alias. Use schema-backed constructors for domain data; tagged errors are the supported schema-class exception and are constructed with `.make`.
 - Consume existing `Option` values directly instead of reconstructing presence or absence.
 - Use maintained Effect or platform capabilities before JavaScript globals, prototypes, or native state, time, process, network, filesystem, cancellation, cache, event, JSON, and collection machinery.
 - Keep unavoidable native APIs at a narrow external or synchronous presentation boundary.
@@ -39,9 +39,7 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 
 ## Shape and tracing
 
-- Keep pure transformations local until they own policy or change together.
-- A helper earns a name for domain policy, lifecycle, an external boundary, recursion, or behavior that changes as one unit.
 - Use data-first dual APIs and imported `pipe` or `flow` for larger compositions.
 - Trace public Effect, Stream, channel, and scoped capabilities plus meaningful external I/O and failure-prone stages.
 
-**Reject:** method `.pipe`, schema-decoder aliases, signature-only wrappers, access aliases, and traces around pure transformations or entire infinite stream lifetimes.
+**Reject:** method `.pipe`, schema-decoder aliases, and traces around pure transformations or entire infinite stream lifetimes.

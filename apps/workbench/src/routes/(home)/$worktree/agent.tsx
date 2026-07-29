@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Option, Predicate, Schema, pipe} from 'effect'
+import {Array, Option, Schema, pipe} from 'effect'
 
 import {createFileRoute} from '@tanstack/react-router'
 
@@ -34,7 +34,7 @@ function AgentPage() {
 					args: session.args,
 					command: session.command,
 					cwd: activeHome.value.activeWorktree.root,
-					...(Predicate.isUndefined(session.env) ? {} : {env: session.env}),
+					env: session.env,
 					sessionId: search.agentId
 				}}
 			/>

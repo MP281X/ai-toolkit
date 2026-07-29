@@ -41,8 +41,6 @@ const CodexUsage = Schema.Struct({
 	})
 })
 
-type CodexUsageWindow = typeof CodexUsage.Type.rate_limit.primary_window
-
 const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
 	if (!(yield* fs.exists(root))) return []
@@ -141,15 +139,15 @@ function totalUsageTokensFromContent(content: string) {
 
 	return Array.reduce(
 		matches,
-		{
-			previous: undefined as AgentUsageTokens | undefined,
-			total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
-		},
+		{previous: Option.none<AgentUsageTokens>(), total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})},
 		(current, match) => {
 			const next = totalUsageFromMarker(content, match.index)
 			return Predicate.isUndefined(next)
 				? current
-				: {previous: next, total: addTokens(current.total, totalDelta(current.previous, next))}
+				: {
+						previous: Option.some(next),
+						total: addTokens(current.total, totalDelta(Option.getOrUndefined(current.previous), next))
+					}
 		}
 	).total
 }
@@ -168,10 +166,7 @@ function explicitUsageTokensFromContent(content: string) {
 		content,
 		String.split('\n'),
 		Array.reduce(
-			{
-				previous: undefined as AgentUsageTokens | undefined,
-				total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
-			},
+			{previous: Option.none<AgentUsageTokens>(), total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})},
 			(current, line) => {
 				if (String.includes('"last_token_usage"')(line) || String.includes('"usage"')(line)) {
 					const usage = explicitUsageFromLine(line)
@@ -179,8 +174,10 @@ function explicitUsageTokensFromContent(content: string) {
 
 					const next = codexUsageTokens(usage)
 					return {
-						previous: next,
-						total: sameTokens(current.previous, next) ? current.total : addTokens(current.total, next)
+						previous: Option.some(next),
+						total: sameTokens(Option.getOrUndefined(current.previous), next)
+							? current.total
+							: addTokens(current.total, next)
 					}
 				}
 
@@ -346,7 +343,7 @@ function codexSubscriptionLabel(planType: string | null | undefined) {
 	)
 }
 
-function codexWindow(input: CodexUsageWindow) {
+function codexWindow(input: typeof CodexUsage.Type.rate_limit.primary_window) {
 	return {
 		resetsAt: Predicate.isNumber(input.reset_at) ? new Date(input.reset_at * 1000).toISOString() : undefined,
 		utilization: input.used_percent

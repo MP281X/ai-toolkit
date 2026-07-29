@@ -547,7 +547,7 @@ function CommitActionForm(input: {
 	readonly refreshReview: () => void
 	readonly unpushedCommits: boolean
 	readonly unpushedCount: number
-	readonly upstream?: {readonly ahead: number; readonly behind: number} | undefined
+	readonly upstream?: {readonly ahead: number; readonly behind: number}
 }) {
 	const commitMessageState = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
@@ -942,7 +942,7 @@ function DiffList(input: {
 	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
 	readonly marks: readonly GitReviewMark[]
 	readonly openReviewEntry: (filePath: string) => void
-	readonly selectedEntry?: GitDiff | undefined
+	readonly selectedEntry?: GitDiff
 	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
 }) {
 	const collapsedFoldersState = useState(() => HashSet.empty<string>())

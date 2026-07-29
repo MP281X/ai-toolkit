@@ -26,12 +26,12 @@ const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
 	utilization: Schema.Finite
 })
 
-type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {

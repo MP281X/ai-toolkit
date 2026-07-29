@@ -10,6 +10,16 @@ Match repository vocabulary. Use concrete nouns and omit vague verbs such as `su
 
 ## Pull request
 
-Use a concise outcome title. The body contains only unrecoverable deviations from the linked issue and `Closes #<number>`. Create it as draft.
+Use a concise outcome title and create the pull request as draft.
 
-Commit and pull-request text never repeats the linked issue, workflow, validation, routine process, commit chronology, or recoverable repository facts.
+```md
+## Changes
+
+| Change                        | Reason                                             |
+| ----------------------------- | -------------------------------------------------- |
+| `<delivered technical shape>` | `<implementation reasoning absent from the issue>` |
+
+Closes #<number>
+```
+
+Describe only the delivered final state and implementation reasoning absent from the linked issue. Exclude superseded requirements, iterations, issue restatement, workflow, validation, commit chronology, file-by-file narration, and recoverable repository facts.

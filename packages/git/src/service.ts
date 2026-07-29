@@ -692,7 +692,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					)?.[1]
 					return [
 						{
-							...(Predicate.isUndefined(branch) ? {} : {branch}),
+							branch,
 							gitDirectory,
 							main: false,
 							root: normalizePublicPath(path.dirname(path.resolve(metadataDirectory, gitdir)))
@@ -709,12 +709,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			if (dotGit.value.isDirectory()) {
 				const gitDirectory = normalizePublicPath(dotGitPath)
 				const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
-				return {
-					...(Predicate.isUndefined(branch) ? {} : {branch}),
-					gitDirectory,
-					main: true,
-					root: normalizePublicPath(root)
-				} satisfies DiscoveredWorktree
+				return {branch, gitDirectory, main: true, root: normalizePublicPath(root)} satisfies DiscoveredWorktree
 			}
 			if (!dotGit.value.isFile()) return
 
@@ -729,7 +724,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
 
 			return {
-				...(Predicate.isUndefined(branch) ? {} : {branch}),
+				branch,
 				gitDirectory: commonDirectory,
 				main: false,
 				root: normalizePublicPath(root)
@@ -800,10 +795,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					return GitProject.make({
 						repository: GitRepository.make({gitDirectory, root}),
 						worktrees: Array.map(sortedWorktrees, worktree =>
-							GitWorktree.make({
-								...(Predicate.isUndefined(worktree.branch) ? {} : {branch: worktree.branch}),
-								root: worktree.root
-							})
+							GitWorktree.make({branch: worktree.branch, root: worktree.root})
 						)
 					})
 				}),

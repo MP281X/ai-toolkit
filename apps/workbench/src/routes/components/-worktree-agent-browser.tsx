@@ -14,7 +14,7 @@ import {terminalStatusActive} from '@deslop/terminal/schema'
 
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-export function WorktreeAgentBrowser(input: {readonly origin?: string | undefined; readonly worktree: string}) {
+export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly worktree: string}) {
 	const activeSidebar = useAtomSuspense(activeSidebarAtom(input.worktree))
 	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'), {mode: 'promise'})
 	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'), {mode: 'promise'})

@@ -9,8 +9,7 @@ Inspect the installed `@effect/tsgo` schema first. Use `.agents/repos/effect-lsp
 1. Enumerate the current diagnostic keys from maintained source.
 2. Enable strict diagnostics first.
 3. Disable a diagnostic only from concrete current repository or boundary evidence.
-4. Keep `importFromBarrel` disabled.
-5. Integrate diagnostics once at the repository root; do not patch TypeScript or duplicate package commands.
-6. Assign Effect-specific replacements here and leave semantic architecture to the Effect domain guidance.
+4. Integrate diagnostics once at the repository root; do not patch TypeScript or duplicate package commands.
+5. Assign Effect-specific replacements here and leave semantic architecture to the Effect domain guidance.
 
 Record every non-strict severity and its concrete current evidence. Do not preserve stale diagnostic snapshots across package upgrades.
