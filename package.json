@@ -8,10 +8,8 @@
 	
 	"deslop": {
 		"dev": [
-			"@deslop/portfolio#dev:client",
-			"@deslop/portfolio#dev:server",
-			"@deslop/workbench#dev:client",
-			"@deslop/workbench#dev:server"
+			"@deslop/portfolio#dev",
+			"@deslop/workbench#dev"
 		]
 	},
 	

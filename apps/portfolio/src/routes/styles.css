@@ -1,3 +1,2 @@
-@import 'tailwindcss';
 @import '@deslop/components/theme.css';
 @source '../../../../packages/components/src/**/*.tsx';
