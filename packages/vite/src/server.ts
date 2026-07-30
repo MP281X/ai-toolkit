@@ -26,6 +26,8 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 	let pendingReplacement = false
 	let reloadBackend = Effect.void
 	const reloadLock = Semaphore.makeUnsafe(1)
+	const runFork = Effect.runForkWith(Context.empty())
+	const runPromise = Effect.runPromiseWith(Context.empty())
 
 	const close = Effect.suspend(() => {
 		if (active === undefined) return Effect.void
@@ -34,17 +36,15 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 		return Scope.close(scope, Exit.void)
 	})
 	return {
-		closeBundle: async () => {
-			await Effect.runPromise(reloadLock.withPermit(close))
-		},
+		closeBundle: () => runPromise(reloadLock.withPermit(close)),
 		config: () => ({
-			environments: {server: config === undefined ? {} : {resolve: {external: config.external}}},
+			environments: {server: {resolve: config}},
 			server: {
 				hotUpdateEnvironments: async (server, hotUpdate) => {
 					await Promise.all(Record.values(server.environments).map(hotUpdate))
 					if (!pendingReplacement) return
 					pendingReplacement = false
-					await Effect.runPromise(reloadLock.withPermit(reloadBackend))
+					await runPromise(reloadLock.withPermit(reloadBackend))
 				}
 			}
 		}),
@@ -112,7 +112,6 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 				)
 			)
 
-			const runFork = Effect.runForkWith(Context.empty())
 			viteServer.once('listening', () => {
 				runFork(reloadLock.withPermit(reloadBackend))
 			})
@@ -140,14 +139,10 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 			handler(options) {
 				if (this.environment.name === 'client') {
 					const serverModules = options.server.environments['server']?.moduleGraph.getModulesByFile(options.file)
-					const clientModules = this.environment.moduleGraph.getModulesByFile(options.file)
-					const clientOwnsFile =
-						clientModules !== undefined &&
-						pipe(
-							clientModules,
-							Array.fromIterable,
-							Array.some(module => Predicate.isNotNull(module.id) && module.file === options.file)
-						)
+					const clientOwnsFile = Array.some(
+						options.modules,
+						module => Predicate.isNotNull(module.id) && module.file === options.file
+					)
 					if (serverModules !== undefined && serverModules.size > 0 && !clientOwnsFile) return []
 					return
 				}
