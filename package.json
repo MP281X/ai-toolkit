@@ -34,7 +34,7 @@
 		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
-		"typescript": "next",
+		"typescript": "latest",
 		"@effect/tsgo": "latest",
 		"@types/node": "latest",
 		"@types/react": "^19",
