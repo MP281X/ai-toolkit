@@ -3,52 +3,51 @@ name: planning
 description: 'Use only when explicitly invoked to turn an idea or existing issue into one implementation-ready GitHub issue.'
 ---
 
-Find the smallest complete solution to the root problem. Resolve behavior, scope, architecture, interfaces, UI, acceptance, constraints, and material risk.
+Find the smallest complete solution to the root problem.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Research
-    Research --> Alternatives
-    Alternatives --> Prototype: affected UI
-    Prototype --> Alternatives
-    Alternatives --> Contract: design selected
-    Contract --> Alternatives: correction
-    Contract --> Cleanup: user approved
-    Cleanup --> SaveIssue: clean
+    Research --> Prototype: affected UI
+    Prototype --> Research
+    Research --> Decision: user choice required
+    Decision --> Research
+    Research --> Contract: choices resolved
+    Contract --> Research: correction
+    Contract --> SaveApproval
+    SaveApproval --> Contract: correction
+    SaveApproval --> SaveIssue: explicit approval
     SaveIssue --> [*]
 ```
 
 ## Resolve
 
-- Start with a clean worktree.
-- Read related issues and the canonical issue when replanning.
-- Research relevant cloned APIs and local product ownership independently.
-- Treat the initial proposal and existing local shape as hypotheses.
-- Compare library-native design, removal, smaller scope, larger coherent boundaries, different architectures, and different interactions.
-- Ask one researched, non-duplicate question at a time when undiscoverable input changes behavior, interface, UI, ownership, or a fixed constraint.
-- Recommend one design after material alternatives have decisive evidence.
+- Begin clean. Read related issues; inspect local ownership and cloned APIs.
+- Treat proposals and current shape as hypotheses. Compare removal, native, smaller/larger coherent, architecture, and interaction; recommend one evidenced design.
+- Keep research, mechanics, and rejections internal unless they change the user decision.
 
-## Prototype
+## Output
 
-Prototype every affected UI in repository DevTools. Present behavior, interaction, and layout for user review.
+| State | User sees | Write |
+|---|---|---|
+| Research · Decision | `result → consequence → recommendation → ## Decision`; one necessary question | None |
+| Prototype | Affected UI in repository DevTools | Disposable preview |
+| Contract | Final issue after every decision resolves | None |
+| SaveIssue | Persistence result | Canonical issue |
 
-## Contract
+Before decisions resolve: no status, acceptance, implementation detail, complete issue, or product/configuration/instruction edits.
 
-```text
-Include
-  always   — outcome · behavior · scope · constraints · acceptance
-  affected — UI · architecture · data model · ownership · lifecycle · state transitions
-             public signatures · typed request/success/failure · route/search · risks
-  decision — decisive reasoning · rejected alternatives
+## Issue
 
-Exclude
-  transcript · backtracking · prototype code · workflow · validation
-  implementation order · function bodies · local variables · exact lines
-  facts recoverable from source or loaded instructions
-```
+| Retain only when unrecoverable | Exclude |
+|---|---|
+| Outcome/behavior · material interface/ownership/lifecycle/architecture · fixed constraint/exclusion/risk · reasoning preventing a wrong path | Transcript/backtracking · prototype code · workflow/validation/order · private mechanics/lines · source facts · repetition |
 
-The issue must be sufficient from a clean implementation context and allow one interpretation.
+Persist the smallest GFM contract allowing one clean-context implementation. Use no template. Keep acceptance beside behavior only when it adds a boundary and rejections only when likely to recur. Remove every redundancy.
 
-Thread output contains the current decision delta; the persisted issue contains the complete clean-context contract.
+Present the final issue once, then end with:
 
-User approval authorizes replacing the complete replanned issue body or creating one canonical issue. Before persistence, discard all tracked and untracked prototype changes and verify a clean worktree; preserve ignored runtime state. Load the git-operations skill, persist the issue, then stop.
+> [!IMPORTANT]
+> Save this issue?
+
+Only an explicit affirmative response to this question authorizes persistence. Before saving, discard prototypes, verify a clean worktree while preserving ignored runtime state, load `git-operations`, persist, and stop.
