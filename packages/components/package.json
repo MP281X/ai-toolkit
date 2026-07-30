@@ -44,6 +44,8 @@
 		"@xterm/addon-clipboard": "latest",
 
 		"clsx": "latest",
+		"shadcn": "latest",
+		"tailwindcss": "latest",
 		"tailwind-merge": "latest",
 		"tw-animate-css": "latest",
 		"class-variance-authority": "latest",
@@ -51,9 +53,6 @@
 	},
 	"peerDependencies": {
 		"react": "^19",
-		"react-dom": "^19",
-
-		"shadcn": "^4",
-		"tailwindcss": "^4"
+		"react-dom": "^19"
 	}
 }

@@ -1,0 +1,19 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/vite",
+
+	"exports": {
+		".": "./src/config.ts"
+	},
+
+	"devDependencies": {
+		"@vitejs/plugin-react": "latest",
+		"@rolldown/plugin-babel": "latest",
+		"babel-plugin-react-compiler": "latest",
+
+		"@tanstack/router-plugin": "latest",
+
+		"@tailwindcss/vite": "latest"
+	}
+}

@@ -16,8 +16,7 @@
 	},
 
 	"scripts": {
-		"dev:client": "vp dev",
-		"dev:server": "node --env-file-if-exists=.env --watch ./src/main.server.ts",
+		"dev": "vp dev --host 0.0.0.0",
 
 		"build": "rm -rf dist && vp build && vp pack",
 
@@ -33,7 +32,6 @@
 		"react-dom": "^19",
 
 		"@tanstack/react-router": "latest",
-		"@tanstack/router-plugin": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/ai": "workspace:*",
@@ -46,12 +44,6 @@
 		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
-
-		"@vitejs/plugin-react": "latest",
-		"@rolldown/plugin-babel": "latest",
-		"babel-plugin-react-compiler": "latest",
-
-		"tailwindcss": "latest",
-		"@tailwindcss/vite": "latest"
+		"@deslop/vite": "workspace:*"
 	}
 }

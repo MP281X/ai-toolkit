@@ -68,36 +68,21 @@ importers:
       '@deslop/opentelemetry':
         specifier: workspace:*
         version: link:../../packages/opentelemetry
-      '@rolldown/plugin-babel':
-        specifier: latest
-        version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
-      '@tailwindcss/vite':
-        specifier: latest
-        version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
+      '@deslop/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
       '@tanstack/react-hotkeys':
         specifier: latest
         version: 0.10.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-router':
         specifier: latest
         version: 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@tanstack/router-plugin':
-        specifier: latest
-        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
-      '@vitejs/plugin-react':
-        specifier: latest
-        version: 6.0.4(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(babel-plugin-react-compiler@1.0.0)
-      babel-plugin-react-compiler:
-        specifier: latest
-        version: 1.0.0
       react:
         specifier: ^19
         version: 19.2.8
       react-dom:
         specifier: ^19
         version: 19.2.8(react@19.2.8)
-      tailwindcss:
-        specifier: latest
-        version: 4.3.3
 
   apps/workbench:
     dependencies:
@@ -135,36 +120,21 @@ importers:
       '@deslop/terminal':
         specifier: workspace:*
         version: link:../../packages/terminal
-      '@rolldown/plugin-babel':
-        specifier: latest
-        version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
-      '@tailwindcss/vite':
-        specifier: latest
-        version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
+      '@deslop/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
       '@tanstack/react-hotkeys':
         specifier: latest
         version: 0.10.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-router':
         specifier: latest
         version: 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@tanstack/router-plugin':
-        specifier: latest
-        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
-      '@vitejs/plugin-react':
-        specifier: latest
-        version: 6.0.4(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(babel-plugin-react-compiler@1.0.0)
-      babel-plugin-react-compiler:
-        specifier: latest
-        version: 1.0.0
       react:
         specifier: ^19
         version: 19.2.8
       react-dom:
         specifier: ^19
         version: 19.2.8(react@19.2.8)
-      tailwindcss:
-        specifier: latest
-        version: 4.3.3
 
   packages/agent: {}
 
@@ -258,7 +228,7 @@ importers:
         specifier: latest
         version: 4.12.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       shadcn:
-        specifier: ^4
+        specifier: latest
         version: 4.16.0(typescript@7.0.2)
       sonner:
         specifier: latest
@@ -267,7 +237,7 @@ importers:
         specifier: latest
         version: 3.6.0
       tailwindcss:
-        specifier: ^4
+        specifier: latest
         version: 4.3.3
       tw-animate-css:
         specifier: latest
@@ -307,6 +277,24 @@ importers:
       '@xterm/headless':
         specifier: 6.0.0
         version: 6.0.0
+
+  packages/vite:
+    devDependencies:
+      '@rolldown/plugin-babel':
+        specifier: latest
+        version: 0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
+      '@tailwindcss/vite':
+        specifier: latest
+        version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
+      '@tanstack/router-plugin':
+        specifier: latest
+        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0)
+      '@vitejs/plugin-react':
+        specifier: latest
+        version: 6.0.4(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(rolldown@1.2.0))(@voidzero-dev/vite-plus-core@0.2.6(@types/node@26.1.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(babel-plugin-react-compiler@1.0.0)
+      babel-plugin-react-compiler:
+        specifier: latest
+        version: 1.0.0
 
 packages:
 
