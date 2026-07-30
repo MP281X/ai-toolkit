@@ -72,6 +72,7 @@ export default defineConfig({
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off'}},
+			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
 		],
 		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],

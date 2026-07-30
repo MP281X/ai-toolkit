@@ -22,7 +22,12 @@ NodeRuntime.runMain(
 			),
 			{disableLogger: true}
 		),
-		Layer.provide(NodeHttpServer.layerConfig(createServer, {port: Config.port('PORT').pipe(Config.withDefault(5000))})),
+		Layer.provide(
+			NodeHttpServer.layerConfig(createServer, {
+				gracefulShutdownTimeout: Config.succeed('1500 millis'),
+				port: Config.port('PORT').pipe(Config.withDefault(5000))
+			})
+		),
 		Layer.launch
 	)
 )

@@ -4,7 +4,7 @@ import type {Duplex} from 'node:stream'
 import type {NodeServices} from '@effect/platform-node'
 import {NodeHttpServer, NodeSocket} from '@effect/platform-node'
 
-import {Array, Cause, Context, Effect, Exit, Layer, Predicate, Record, Scope, pipe} from 'effect'
+import {Array, Cause, Context, Effect, Exit, Layer, Predicate, Record, Scope, Semaphore, pipe} from 'effect'
 
 import {HttpRouter, HttpServer} from 'effect/unstable/http'
 import type {Connect, EnvironmentModuleNode, Plugin} from 'vite'
@@ -24,8 +24,8 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 		  }
 		| undefined
 	let pendingReplacement = false
-	let reload: (() => Promise<void>) | undefined
-	let reloadQueue = Promise.resolve()
+	let reloadBackend = Effect.void
+	const reloadLock = Semaphore.makeUnsafe(1)
 
 	const close = Effect.suspend(() => {
 		if (active === undefined) return Effect.void
@@ -33,15 +33,9 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 		active = undefined
 		return Scope.close(scope, Exit.void)
 	})
-	function queueReload() {
-		reloadQueue = reloadQueue.then(() => reload?.())
-		return reloadQueue
-	}
-
 	return {
 		closeBundle: async () => {
-			await reloadQueue
-			await Effect.runPromise(close)
+			await Effect.runPromise(reloadLock.withPermit(close))
 		},
 		config: () => ({
 			environments: {server: config === undefined ? {} : {resolve: {external: config.external}}},
@@ -50,7 +44,7 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 					await Promise.all(Record.values(server.environments).map(hotUpdate))
 					if (!pendingReplacement) return
 					pendingReplacement = false
-					await queueReload()
+					await Effect.runPromise(reloadLock.withPermit(reloadBackend))
 				}
 			}
 		}),
@@ -64,69 +58,63 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 			const runnableEnvironment = environment
 			const viteServer = httpServer
 
-			async function reloadBackend() {
-				await Effect.runPromise(
-					Effect.gen(function* () {
-						yield* close
-						runnableEnvironment.runner.clearCache()
-						const application = yield* Effect.tryPromise(() =>
-							runnableEnvironment.runner.import<{
-								readonly default: Layer.Layer<never, never, HttpServer.HttpServer | NodeServices.NodeServices>
-							}>('src/main.server.ts')
-						)
-						const address = viteServer.address()
-						if (Predicate.isNull(address) || typeof address === 'string') {
-							return yield* Effect.die('Vite HTTP server is not listening on TCP')
-						}
-						const scope = yield* Scope.make()
-						return yield* pipe(
-							Effect.gen(function* () {
-								const webSocketServer = yield* Effect.acquireRelease(
-									Effect.sync(() => new NodeSocket.NodeWS.WebSocketServer({noServer: true})),
-									socketServer =>
-										Effect.callback<true>(resume => {
-											socketServer.close(() => {
-												resume(Effect.succeed(true))
-											})
-										})
-								)
-								const httpEffect = yield* HttpRouter.toHttpEffect(application.default)
-								active = {
-									request: yield* NodeHttpServer.makeHandler(httpEffect, {scope}),
-									scope,
-									upgrade: yield* NodeHttpServer.makeUpgradeHandler(Effect.succeed(webSocketServer), httpEffect, {
-										scope
-									})
-								}
-							}),
-							Scope.provide(scope),
-							Effect.provide(
-								Layer.merge(
-									NodeHttpServer.layerHttpServices,
-									Layer.succeed(HttpServer.HttpServer)(
-										HttpServer.make({
-											address: {_tag: 'TcpAddress', hostname: '0.0.0.0', port: address.port},
-											serve: () => Effect.void
-										})
-									)
-								)
-							),
-							Effect.onError(() => Scope.close(scope, Exit.void))
-						)
-					}).pipe(
-						Effect.catchCause(cause =>
-							Effect.sync(() => {
-								server.config.logger.error(`Backend unavailable\n${Cause.pretty(cause)}`)
-							})
-						)
+			reloadBackend = pipe(
+				Effect.gen(function* () {
+					yield* close
+					runnableEnvironment.runner.clearCache()
+					const application = yield* Effect.tryPromise(() =>
+						runnableEnvironment.runner.import<{
+							readonly default: Layer.Layer<never, never, HttpServer.HttpServer | NodeServices.NodeServices>
+						}>('src/main.server.ts')
 					)
+					const address = viteServer.address()
+					if (Predicate.isNull(address) || typeof address === 'string') {
+						return yield* Effect.die('Vite HTTP server is not listening on TCP')
+					}
+					const scope = yield* Scope.make()
+					return yield* pipe(
+						Effect.gen(function* () {
+							const webSocketServer = yield* Effect.acquireRelease(
+								Effect.sync(() => new NodeSocket.NodeWS.WebSocketServer({noServer: true})),
+								socketServer =>
+									Effect.callback<true>(resume => {
+										socketServer.close(() => {
+											resume(Effect.succeed(true))
+										})
+									})
+							)
+							const httpEffect = yield* HttpRouter.toHttpEffect(application.default)
+							active = {
+								request: yield* NodeHttpServer.makeHandler(httpEffect, {scope}),
+								scope,
+								upgrade: yield* NodeHttpServer.makeUpgradeHandler(Effect.succeed(webSocketServer), httpEffect, {scope})
+							}
+						}),
+						Scope.provide(scope),
+						Effect.provide(
+							Layer.merge(
+								NodeHttpServer.layerHttpServices,
+								Layer.succeed(HttpServer.HttpServer)(
+									HttpServer.make({
+										address: {_tag: 'TcpAddress', hostname: '0.0.0.0', port: address.port},
+										serve: () => Effect.void
+									})
+								)
+							)
+						),
+						Effect.onError(() => Scope.close(scope, Exit.void))
+					)
+				}),
+				Effect.catchCause(cause =>
+					Effect.sync(() => {
+						server.config.logger.error(`Backend unavailable\n${Cause.pretty(cause)}`)
+					})
 				)
-			}
-			reload = reloadBackend
+			)
 
 			const runFork = Effect.runForkWith(Context.empty())
 			viteServer.once('listening', () => {
-				runFork(Effect.promise(queueReload))
+				runFork(reloadLock.withPermit(reloadBackend))
 			})
 			server.middlewares.use((request: Connect.IncomingMessage, response, next) => {
 				if (!isBackendRequest(request)) {

@@ -17,7 +17,6 @@ NodeRuntime.runMain(
 			pipe(
 				Layer.mergeAll(
 					HttpRouter.middleware(
-						// oxlint-disable-next-line react-hooks/rules-of-hooks -- Effect service accessor, not a React hook.
 						Portless.use(portless => Effect.succeed(portless.middleware)),
 						{global: true}
 					),
