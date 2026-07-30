@@ -41,11 +41,11 @@ function agentBrowserEnv() {
 const streamPort = Effect.fn('AgentBrowser.streamPort')(function* (session: string) {
 	const source = yield* pipe(
 		Effect.tryPromise(() => readFile(path.join(socketDir(), `${session}.stream`), 'utf8')),
-		Effect.mapError(cause => new AgentBrowserError({cause, message: `Unknown agent-browser session: ${session}`}))
+		Effect.mapError(cause => AgentBrowserError.make({cause, message: `Unknown agent-browser session: ${session}`}))
 	)
 	const port = Number.parseInt(String.trim(source), 10)
 	if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
-		return yield* new AgentBrowserError({message: `Invalid stream metadata for ${session}`})
+		return yield* AgentBrowserError.make({message: `Invalid stream metadata for ${session}`})
 	}
 	return port
 })
@@ -90,19 +90,35 @@ function proxyStream(session: string) {
 			const writeInbound = yield* inbound.writer
 			const writeOutbound = yield* outbound.value.writer
 
-			yield* Effect.all(
-				[
-					outbound.value.runRaw(message => writeInbound(message)).pipe(Effect.catch(() => Effect.void)),
-					inbound
-						.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice()))
-						.pipe(Effect.catch(() => Effect.void))
-				],
-				{concurrency: 'unbounded', discard: true}
+			yield* pipe(
+				Effect.raceFirst(
+					pipe(
+						outbound.value.runRaw(message => writeInbound(message)),
+						Effect.catch(error =>
+							writeInbound(
+								error.reason._tag === 'SocketCloseError'
+									? new Socket.CloseEvent(error.reason.code, error.reason.closeReason)
+									: new Socket.CloseEvent(1011, 'agent browser stream failed')
+							)
+						)
+					),
+					pipe(
+						inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+						Effect.catch(error =>
+							writeOutbound(
+								error.reason._tag === 'SocketCloseError'
+									? new Socket.CloseEvent(error.reason.code, error.reason.closeReason)
+									: new Socket.CloseEvent(1011, 'workbench stream failed')
+							)
+						)
+					)
+				),
+				Effect.ignore
 			)
 
 			return HttpServerResponse.empty()
 		}),
-		Effect.catch(() => Effect.succeed(HttpServerResponse.empty({status: 404})))
+		Effect.orElseSucceed(() => HttpServerResponse.empty({status: 404}))
 	)
 }
 
@@ -114,7 +130,7 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 				spawner.spawn(
 					ChildProcess.make('vpx', ['agent-browser', ...args], {env: agentBrowserEnv(), stderr: 'pipe', stdout: 'pipe'})
 				),
-				Effect.mapError(cause => new AgentBrowserError({cause, message: 'failed to spawn agent-browser'}))
+				Effect.mapError(cause => AgentBrowserError.make({cause, message: 'failed to spawn agent-browser'}))
 			)
 			const output = yield* Effect.all(
 				{
@@ -133,13 +149,13 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 			)
 			const exitCode = yield* pipe(
 				handle.exitCode,
-				Effect.mapError(cause => new AgentBrowserError({cause, message: 'agent-browser command failed'}))
+				Effect.mapError(cause => AgentBrowserError.make({cause, message: 'agent-browser command failed'}))
 			)
 			if (exitCode === ChildProcessSpawner.ExitCode(0)) return output.stdout
 
 			const stderr = String.trim(output.stderr)
 			const stdout = String.trim(output.stdout)
-			return yield* new AgentBrowserError({
+			return yield* AgentBrowserError.make({
 				cause: new Error(stderr || stdout || `vpx agent-browser ${Array.join(' ')(args)} exited with ${exitCode}`),
 				message: stderr || stdout || 'agent-browser command failed'
 			})
@@ -147,44 +163,53 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 	)
 })
 
-const AgentBrowserCliTabs = Schema.Struct({
-	data: Schema.Struct({
-		tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
-	})
-})
-
-function decodeAgentBrowserTabs(output: string) {
-	try {
-		// oxlint-disable-next-line @deslop/oxlint-rules/no-json-global -- agent-browser CLI JSON output
-		const decoded = JSON.parse(output) as unknown
-		return pipe(
-			Schema.decodeUnknownSync(AgentBrowserCliTabs)(decoded).data.tabs,
-			Array.map(tab => ({label: Predicate.isNull(tab.label) ? undefined : tab.label, tabId: tab.tabId, url: tab.url}))
-		)
-	} catch {
-		return Array.empty<{readonly label?: string; readonly tabId: string; readonly url: string}>()
-	}
+function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], args: readonly string[]) {
+	return pipe(runAgentBrowser(args), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 }
 
-const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (sessionId: string) {
-	return decodeAgentBrowserTabs(yield* runAgentBrowser(['--session', sessionId, '--json', 'tab']))
+const AgentBrowserCliTabsFromJson = Schema.fromJsonString(
+	Schema.Struct({
+		data: Schema.Struct({
+			tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
+		})
+	})
+)
+
+function decodeAgentBrowserTabs(output: string) {
+	return pipe(
+		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson)(output),
+		Option.map(decoded =>
+			Array.map(decoded.data.tabs, tab => ({
+				label: Predicate.isNull(tab.label) ? undefined : tab.label,
+				tabId: tab.tabId,
+				url: tab.url
+			}))
+		),
+		Option.getOrElse(() =>
+			Array.empty<{readonly label: string | undefined; readonly tabId: string; readonly url: string}>()
+		)
+	)
+}
+
+const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
+	readonly sessionId: string
+	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
+}) {
+	return decodeAgentBrowserTabs(
+		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
+	)
 })
 
 const reachable = Effect.fn('AgentBrowser.reachable')(function* (url: string) {
-	const controller = new AbortController()
-	const timeout = setTimeout(() => {
-		controller.abort()
-	}, 750)
 	return yield* pipe(
 		Effect.tryPromise({
-			catch: cause => new AgentBrowserError({cause, message: `unreachable browser tab origin: ${url}`}),
-			try: () => fetch(url, {redirect: 'manual', signal: controller.signal})
+			catch: cause => AgentBrowserError.make({cause, message: `unreachable browser tab origin: ${url}`}),
+			// Native fetch consumes Effect's abort signal at the browser reachability boundary.
+			// @effect-diagnostics-next-line globalFetchInEffect:off
+			try: signal => fetch(url, {redirect: 'manual', signal})
 		}),
-		Effect.ensuring(
-			Effect.sync(() => {
-				clearTimeout(timeout)
-			})
-		),
+		Effect.timeout(Duration.millis(750)),
+		Effect.mapError(cause => AgentBrowserError.make({cause, message: `unreachable browser tab origin: ${url}`})),
 		Effect.asVoid
 	)
 })
@@ -205,8 +230,9 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 	readonly label: string
 	readonly origin: string
 	readonly sessionId: string
+	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
-	const existingTabs = yield* listTabs(input.sessionId)
+	const existingTabs = yield* listTabs(input)
 	const existingTab = pipe(
 		existingTabs,
 		Array.findFirst(tab => tab.label === input.label)
@@ -215,10 +241,18 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 
 	yield* waitForReachable(input.origin)
 	yield* pipe(
-		runAgentBrowser(['--session', input.sessionId, 'tab', 'new', input.origin, '--label', input.label]),
+		runAgentBrowserWith(input.spawner, [
+			'--session',
+			input.sessionId,
+			'tab',
+			'new',
+			input.origin,
+			'--label',
+			input.label
+		]),
 		Effect.catch(error => (String.includes('already used')(error.message) ? Effect.void : Effect.fail(error)))
 	)
-	yield* runAgentBrowser(['--session', input.sessionId, 'set', 'viewport', '1600', '900'])
+	yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, 'set', 'viewport', '1600', '900'])
 })
 
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
@@ -226,9 +260,12 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 		readonly closeOnFinalize?: boolean
 		readonly sessionId: string
 	}) {
+		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 		const labelsByOrigin = yield* Ref.make(HashMap.empty<string, string>())
 		if (input.closeOnFinalize === true) {
-			yield* Effect.addFinalizer(() => runAgentBrowser(['--session', input.sessionId, 'close']).pipe(Effect.ignore))
+			yield* Effect.addFinalizer(() =>
+				pipe(runAgentBrowserWith(spawner, ['--session', input.sessionId, 'close']), Effect.ignore)
+			)
 		}
 		return {
 			openTabs(origins: readonly string[]) {
@@ -236,7 +273,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 					Ref.set(labelsByOrigin, agentBrowserOwnedTabLabels(origins)),
 					Effect.andThen(
 						pipe(
-							runAgentBrowser(['--session', input.sessionId, 'stream', 'enable']),
+							runAgentBrowserWith(spawner, ['--session', input.sessionId, 'stream', 'enable']),
 							Effect.catch(error =>
 								String.includes('already enabled')(error.message) ? Effect.void : Effect.fail(error)
 							)
@@ -253,7 +290,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 											HashMap.get(labels, origin),
 											Option.match({
 												onNone: () => Effect.void,
-												onSome: label => openOwnedTab({label, origin, sessionId: input.sessionId})
+												onSome: label => openOwnedTab({label, origin, sessionId: input.sessionId, spawner})
 											})
 										)
 									)
@@ -272,8 +309,8 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 							HashMap.get(labels, origin),
 							Option.match({
 								onNone: () =>
-									Effect.fail(new AgentBrowserError({message: `Unknown agent-browser tab origin: ${origin}`})),
-								onSome: label => runAgentBrowser(['--session', input.sessionId, 'tab', label])
+									Effect.fail(AgentBrowserError.make({message: `Unknown agent-browser tab origin: ${origin}`})),
+								onSome: label => runAgentBrowserWith(spawner, ['--session', input.sessionId, 'tab', label])
 							})
 						)
 					),

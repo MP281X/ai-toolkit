@@ -1,28 +1,54 @@
 ---
 name: planning
-description: 'Unresolved intent, behavior, scope, interfaces, acceptance, material tradeoffs; user alignment.'
+description: 'Use only when explicitly invoked to turn an idea or existing issue into one implementation-ready GitHub issue.'
 ---
 
-Planning resolves desired state, not implementation sequence. Writable artifacts are temporary HTML and explicitly requested issue persistence.
+Find the smallest complete solution to the root problem. Resolve behavior, scope, architecture, interfaces, UI, acceptance, constraints, and material risk.
 
-## Discovery
+```mermaid
+stateDiagram-v2
+    [*] --> Research
+    Research --> Alternatives
+    Alternatives --> Prototype: affected UI
+    Prototype --> Alternatives
+    Alternatives --> Contract: design selected
+    Contract --> Alternatives: correction
+    Contract --> Cleanup: user approved
+    Cleanup --> SaveIssue: clean
+    SaveIssue --> [*]
+```
 
-Treat proposed solutions as hypotheses. Establish the root cause, desired behavior, scope, interfaces, acceptance, constraints, and material risks.
+## Resolve
 
-Ask one question at a time, and only when undiscoverable input changes the desired state. Once evidence is sufficient, recommend a direction rather than surveying options that will not be pursued.
+- Start with a clean worktree.
+- Read related issues and the canonical issue when replanning.
+- Research relevant cloned APIs and local product ownership independently.
+- Treat the initial proposal and existing local shape as hypotheses.
+- Compare library-native design, removal, smaller scope, larger coherent boundaries, different architectures, and different interactions.
+- Ask one researched, non-duplicate question at a time when undiscoverable input changes behavior, interface, UI, ownership, or a fixed constraint.
+- Recommend one design after material alternatives have decisive evidence.
 
-## Checkpoint
+## Prototype
 
-Read `assets/template.html`, replace `<!-- COMPLETE_PLAN -->` with one complete document, write it to a random `/tmp/deslop-plan-<random>.html`, and open it immediately.
+Prototype every affected UI in repository DevTools. Present behavior, interaction, and layout for user review.
 
-The checkpoint is compact, mobile-first, and scroll-only. Lead with the thesis and dominant decision visual. Include only user-validatable behavior, states, interfaces, decisions, acceptance, and material risks. Keep all information visible; no tabs, accordions, decorative navigation, nested cards, repeated content, or viewport-filling whitespace.
+## Contract
 
-Mocks and prototypes are local, responsive, resettable, and dependency-free. Use repository-native components only when real components decide behavior.
+```text
+Include
+  always   — outcome · behavior · scope · constraints · acceptance
+  affected — UI · architecture · data model · ownership · lifecycle · state transitions
+             public signatures · typed request/success/failure · route/search · risks
+  decision — decisive reasoning · rejected alternatives
 
-After opening the checkpoint, stop. Feedback produces a complete replacement, never a delta or addendum.
+Exclude
+  transcript · backtracking · prototype code · workflow · validation
+  implementation order · function bodies · local variables · exact lines
+  facts recoverable from source or loaded instructions
+```
 
-## Handoff
+The issue must be sufficient from a clean implementation context and allow one interpretation.
 
-Approval authorizes same-session execution. A persistence request creates or updates the issue and stops without implementation.
+Thread output contains the current decision delta; the persisted issue contains the complete clean-context contract.
 
-Persist the smallest sufficient Markdown subset of outcome, behavior, interfaces, scope, acceptance, constraints, dependencies, and risks. Exclude HTML, transcripts, discarded alternatives, and unresolved questions.
+User approval authorizes replacing the complete replanned issue body or creating one canonical issue. Before persistence, discard all tracked and untracked prototype changes and verify a clean worktree; preserve ignored runtime state. Load the git-operations skill, persist the issue, then stop.

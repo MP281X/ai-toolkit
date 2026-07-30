@@ -62,8 +62,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const attachedRef = yield* Ref.make<readonly Queue.Queue<TerminalFrame, Cause.Done>[]>([])
 		const sequenceRef = yield* Ref.make(0)
 		const screen = terminalScreenStore()
-		const shell = yield* Config.string('SHELL').pipe(Effect.orElseSucceed(() => 'bash'))
+		const shell = yield* pipe(
+			Config.string('SHELL'),
+			Effect.orElseSucceed(() => 'bash')
+		)
 		const status = yield* SubscriptionRef.make<TerminalStatus>({state: 'idle', title: ''})
+		const runFork = Effect.runForkWith(yield* Effect.context())
 
 		const nextSequence = Effect.fnUntraced(function* () {
 			return yield* Ref.modify(sequenceRef, current => [current, current + 1] as const)
@@ -101,11 +105,15 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		})
 
 		function setStatus(state: TerminalStatus['state']) {
-			return SubscriptionRef.get(status).pipe(Effect.flatMap(current => publishStatus({...current, state})))
+			return pipe(
+				SubscriptionRef.get(status),
+				Effect.flatMap(current => publishStatus({...current, state}))
+			)
 		}
 
 		function setTitle(title: string | undefined, state: TerminalStatus['state'] | undefined) {
-			return SubscriptionRef.get(status).pipe(
+			return pipe(
+				SubscriptionRef.get(status),
 				Effect.flatMap(current => {
 					if (!terminalStatusActive(current.state)) return Effect.void
 					if (Predicate.isUndefined(title)) {
@@ -123,7 +131,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		}
 
 		function setProgress(state: TerminalStatus['state']) {
-			return SubscriptionRef.get(status).pipe(
+			return pipe(
+				SubscriptionRef.get(status),
 				Effect.flatMap(current =>
 					terminalStatusActive(current.state) ? publishStatus({...current, state}) : Effect.void
 				)
@@ -165,7 +174,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			yield* Ref.set(sizeRef, nextSize)
 			const process = yield* Ref.get(processRef)
 			yield* Effect.try({
-				catch: cause => new TerminalError({cause, message: 'failed to resize terminal'}),
+				catch: cause => TerminalError.make({cause, message: 'failed to resize terminal'}),
 				try: () => {
 					screen.resize(nextSize)
 					if (process) process.process.resize(nextSize.cols, nextSize.rows)
@@ -191,13 +200,19 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				handle.exit.dispose()
 			})
 			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
-			yield* Effect.sync(() => {
-				handle.process.kill('SIGTERM')
-			}).pipe(Effect.ignore)
+			yield* pipe(
+				Effect.sync(() => {
+					handle.process.kill('SIGTERM')
+				}),
+				Effect.ignore
+			)
 			yield* Effect.sleep('250 millis')
-			yield* Effect.sync(() => {
-				handle.process.kill('SIGKILL')
-			}).pipe(Effect.ignore)
+			yield* pipe(
+				Effect.sync(() => {
+					handle.process.kill('SIGKILL')
+				}),
+				Effect.ignore
+			)
 			if (state) yield* setStatus(state)
 		})
 
@@ -210,7 +225,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 			const size = yield* Ref.get(sizeRef)
 			const subprocess = yield* Effect.try({
-				catch: cause => new TerminalError({cause, message: `failed to spawn terminal in ${config.cwd}`}),
+				catch: cause => TerminalError.make({cause, message: `failed to spawn terminal in ${config.cwd}`}),
 				try: () =>
 					nodePty.spawn(config.command?.command ?? shell, [...(config.command?.args ?? [])], {
 						cols: size.cols,
@@ -242,7 +257,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				if (Queue.offerUnsafe(dataQueue, output)) return
 
 				if (backpressureState.pending.length >= 1024) {
-					Effect.runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
+					runFork(pipe(stopProcess('failed'), Semaphore.withPermit(lifecycleLock), Effect.ignore))
 					return
 				}
 
@@ -251,8 +266,9 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 				backpressureState.draining = true
 				pauseProcess(subprocess)
-				Effect.runFork(
-					drainBackpressure().pipe(
+				runFork(
+					pipe(
+						drainBackpressure(),
 						Effect.ensuring(
 							Effect.sync(() => {
 								backpressureState.draining = false
@@ -263,7 +279,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			})
 			const exit = subprocess.onExit(event => {
-				Effect.runFork(
+				runFork(
 					Semaphore.withPermit(
 						lifecycleLock,
 						Effect.gen(function* () {
@@ -348,44 +364,50 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		return {
 			attach: (size?: TerminalSize) =>
 				Stream.unwrap(
-					Effect.gen(function* () {
-						yield* Effect.annotateCurrentSpan({cols: size?.cols ?? -1, cwd: config.cwd, rows: size?.rows ?? -1})
-						const queue = yield* Queue.bounded<TerminalFrame, Cause.Done>(1024)
-						if (Predicate.isNotUndefined(size)) yield* pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
-						yield* startDefaultProcess()
-						const snapshot = yield* pipe(
-							Effect.gen(function* () {
-								const reset = {sequence: yield* nextSequence(), type: 'reset'} satisfies TerminalFrame
-								const chunks = yield* Effect.sync(() => screen.snapshot())
-								const frames = pipe(
-									yield* Effect.forEach(chunks, data =>
-										Effect.gen(function* () {
-											return {data, sequence: yield* nextSequence(), type: 'output'} satisfies TerminalFrame
-										})
-									),
-									Array.prepend(reset)
-								)
-								yield* Ref.update(attachedRef, current => Array.append(current, queue))
-								return frames
-							}),
-							Semaphore.withPermit(screenLock)
-						)
-						yield* Effect.annotateCurrentSpan({snapshotFrameCount: Array.length(snapshot)})
+					pipe(
+						Effect.gen(function* () {
+							yield* Effect.annotateCurrentSpan({cols: size?.cols ?? -1, cwd: config.cwd, rows: size?.rows ?? -1})
+							const queue = yield* Queue.bounded<TerminalFrame, Cause.Done>(1024)
+							if (Predicate.isNotUndefined(size)) yield* pipe(resizeLocked(size), Semaphore.withPermit(screenLock))
+							yield* startDefaultProcess()
+							const snapshot = yield* pipe(
+								Effect.gen(function* () {
+									const reset = {sequence: yield* nextSequence(), type: 'reset'} satisfies TerminalFrame
+									const chunks = yield* Effect.sync(() => screen.snapshot())
+									const frames = pipe(
+										yield* Effect.forEach(chunks, data =>
+											Effect.gen(function* () {
+												return {data, sequence: yield* nextSequence(), type: 'output'} satisfies TerminalFrame
+											})
+										),
+										Array.prepend(reset)
+									)
+									yield* Ref.update(attachedRef, current => Array.append(current, queue))
+									return frames
+								}),
+								Semaphore.withPermit(screenLock)
+							)
+							yield* Effect.annotateCurrentSpan({snapshotFrameCount: Array.length(snapshot)})
 
-						return pipe(
-							Stream.fromIterable(snapshot),
-							Stream.concat(
-								Stream.fromQueue(queue).pipe(
-									Stream.ensuring(
-										pipe(
-											Ref.update(attachedRef, current => Array.filter(current, currentQueue => currentQueue !== queue)),
-											Effect.andThen(Queue.shutdown(queue))
+							return pipe(
+								Stream.fromIterable(snapshot),
+								Stream.concat(
+									pipe(
+										Stream.fromQueue(queue),
+										Stream.ensuring(
+											pipe(
+												Ref.update(attachedRef, current =>
+													Array.filter(current, currentQueue => currentQueue !== queue)
+												),
+												Effect.andThen(Queue.shutdown(queue))
+											)
 										)
 									)
 								)
 							)
-						)
-					}).pipe(Effect.withSpan('Terminal.attach'))
+						}),
+						Effect.withSpan('Terminal.attach')
+					)
 				),
 			resize: Effect.fn('Terminal.resize')(function* (size: TerminalSize) {
 				yield* Effect.annotateCurrentSpan({cols: size.cols, cwd: config.cwd, rows: size.rows})
@@ -418,7 +440,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				if (!process) return
 
 				yield* Effect.try({
-					catch: cause => new TerminalError({cause, message: 'failed to write to terminal'}),
+					catch: cause => TerminalError.make({cause, message: 'failed to write to terminal'}),
 					try: () => {
 						process.process.write(data)
 					}

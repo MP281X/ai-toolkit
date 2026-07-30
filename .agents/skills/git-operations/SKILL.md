@@ -1,27 +1,31 @@
 ---
 name: git-operations
-description: 'Branches, worktrees, commits, issues, Projects, pull requests, stacks, synchronization, conflicts.'
+description: 'Use when mutating Git or GitHub state: branches, commits, issues, pull requests, stacks, or conflicts.'
 ---
 
 ## Safety
 
-Inspect status, current branch, default branch, remotes, and the relevant pull request before mutation. Preserve unrelated changes and untracked files.
-
-The default branch is read-only for commits, pushes, history rewrites, and destructive Git mutations. Outside it, reset, discard, branch/worktree deletion, and shared-history rewrite require an explicit request. Use `--force-with-lease` only for an accepted stack rebase.
-
-Resolve conflicts from intended final behavior and current source, never by mechanically choosing a side. Integrate the default branch into feature or stack branches, never the reverse. The user merges pull requests.
+| Operation                          | Invariant                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| Any mutation                       | resolve target; inspect status and relevant remote/PR/stack; preserve unrelated changes     |
+| Default branch                     | read-only without explicit operation-specific authority                                     |
+| Reset/discard/delete/local rewrite | explicit request and exact resolved target                                                  |
+| Published branch                   | no rebase, amend, squash, reset, or force-push                                              |
+| Conflict                           | resolve from intended final state and current source, never by choosing a side mechanically |
+| Ready/merge                        | user-owned                                                                                  |
 
 ## GitHub
 
-Infer the repository from the checkout. Discover the current-branch pull request with `gh pr view`; require a URL only for another target.
-
-Create and edit real issues with `gh issue create|edit`. Add each created issue to the repository Project with `gh project item-add`; Project membership is the only Project mutation. Keep the issue open until its linked pull request merges.
+Use `gh`. Infer the repository from the checkout; inspect the current branch pull request with `gh pr view`. Create/edit issues with `gh issue create|edit`. Keep an issue open until its closing pull request merges.
 
 ## Branches
 
-One issue maps to one branch and one pull request. Create implementation branches from current default-branch state. Keep independent work on independent branches; use a stack only when one item depends on another item's unmerged changes.
+- One issue → one short semantic branch → one pull request.
+- No agent/tool branch prefix.
+- Independent branch → fetched remote default branch.
+- Dependent branch → immediate preceding stack branch.
 
 ## Conditional reference
 
-- Before writing commit or pull-request text, read `references/messages.md`.
-- Before stack mutation or recovery, read `references/stacked-prs.md`.
+- Commit/pull-request text → `references/messages.md`
+- Stack creation, publication, alignment, merge recovery, or retargeting → `references/stacked-prs.md`

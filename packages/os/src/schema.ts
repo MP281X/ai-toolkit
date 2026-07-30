@@ -6,4 +6,4 @@ export class OsError extends Schema.TaggedErrorClass<OsError>()('OsError', {
 }) {}
 
 export type Resources = typeof Resources.Type
-export const Resources = Schema.Struct({cpu: Schema.Number, memory: Schema.Number, nodeHeap: Schema.Number})
+export const Resources = Schema.Struct({cpu: Schema.Finite, memory: Schema.Finite, nodeHeap: Schema.Finite})

@@ -16,7 +16,7 @@ export class Os extends Context.Service<Os>()('@deslop/os/service/Os', {
 					nodeHeap: nodeProcessUsage().heapUtilization
 				})
 			}),
-			Effect.mapError(cause => new OsError({cause})),
+			Effect.mapError(cause => OsError.make({cause})),
 			Effect.withSpan('Os.resources.load')
 		)
 

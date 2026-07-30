@@ -26,7 +26,7 @@ export class Scripts extends Context.Service<Scripts>()('@deslop/scripts/service
 		const packageJson = yield* pipe(
 			fs.readFileString(path.join(input.cwd, 'package.json')),
 			Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ScriptsPackageJson))),
-			Effect.catch(() => Effect.succeed(EmptyScriptsPackageJson))
+			Effect.orElseSucceed(() => EmptyScriptsPackageJson)
 		)
 		const scripts = pipe(
 			packageJson.scripts ?? {},

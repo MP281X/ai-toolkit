@@ -10,7 +10,7 @@ const opencodeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 		env: {PNPM_CONFIG_MINIMUM_RELEASE_AGE: '0'},
 		extendEnv: true
 	})
-	if (String.isEmpty(command.command)) return yield* new AgentError({message: 'opencode command unavailable'})
+	if (String.isEmpty(command.command)) return yield* AgentError.make({message: 'opencode command unavailable'})
 	return command
 })
 

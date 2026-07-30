@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Planning'
+  short_description: 'Create one implementation-ready issue'
+  default_prompt: 'Use $planning to turn this request into an implementation-ready issue.'
+policy:
+  allow_implicit_invocation: false

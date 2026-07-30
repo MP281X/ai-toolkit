@@ -24,9 +24,9 @@ export const TerminalSessionAtomKey = Schema.Struct({
 
 type TerminalAttachAtomKey = typeof TerminalAttachAtomKey.Type
 export const TerminalAttachAtomKey = Schema.Struct({
-	attachId: Schema.Number,
+	attachId: Schema.Finite,
 	session: TerminalSessionInput,
-	size: Schema.Struct({cols: Schema.Number, rows: Schema.Number})
+	size: Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
 })
 
 function terminalSessionEnv(env: TerminalSessionInput['env']) {
@@ -44,11 +44,11 @@ export function terminalSessionInput(input: TerminalSessionInput) {
 	const env = terminalSessionEnv(input.env)
 
 	return {
-		...(Predicate.isUndefined(input.args) ? {} : {args: [...input.args]}),
-		...(Predicate.isUndefined(input.command) ? {} : {command: input.command}),
+		args: Predicate.isUndefined(input.args) ? undefined : [...input.args],
+		command: input.command,
 		cwd: input.cwd,
-		...(Predicate.isUndefined(env) ? {} : {env}),
-		...(Predicate.isUndefined(input.sessionId) ? {} : {sessionId: input.sessionId})
+		env,
+		sessionId: input.sessionId
 	}
 }
 

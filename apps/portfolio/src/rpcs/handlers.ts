@@ -1,4 +1,4 @@
-import {Array, Duration, Effect, Option, PubSub, Schedule, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array, Clock, Duration, Effect, Option, PubSub, Schedule, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {
 	PortfolioSnapshot,
@@ -108,12 +108,12 @@ export const RpcHandlers = RpcContracts.toLayer(
 			PortfolioSnapshot | PortfolioVisitorUpserted | PortfolioVisitorRemoved | PortfolioTrailAdded
 		>()
 
-		const start = Date.now()
+		const start = yield* Clock.currentTimeMillis
 		for (const bot of SERVER_BOTS) {
 			yield* Effect.forkScoped(
 				Effect.repeat(
 					Effect.gen(function* () {
-						const pos = botPosition(bot, (Date.now() - start) / 1000)
+						const pos = botPosition(bot, ((yield* Clock.currentTimeMillis) - start) / 1000)
 						const visitor = PortfolioVisitor.make({color: bot.color, id: bot.id, name: bot.name, x: pos.x, y: pos.y})
 						const next = yield* SubscriptionRef.modify(state, currentState => {
 							const currentBot = findVisitor(currentState.visitors, bot.id)

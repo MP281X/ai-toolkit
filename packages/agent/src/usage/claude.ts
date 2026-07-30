@@ -26,9 +26,10 @@ const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
-	utilization: Schema.Number
+	utilization: Schema.Finite
 })
 
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
@@ -70,7 +71,7 @@ function claudeUsageTokens(input: unknown) {
 	}
 }
 
-function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
+function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
@@ -90,7 +91,7 @@ function claudeTokensFromContent(content: string) {
 	)
 }
 
-function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
 			addTokens(total, file.tokens)
@@ -102,11 +103,11 @@ export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {readon
 	const fs = yield* FileSystem.FileSystem
 	const files = yield* pipe(
 		claudeJsonlFiles(input.projectsRoot),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 	const contents = yield* pipe(
 		Effect.forEach(files, path => fs.readFileString(path), {concurrency: 8}),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 
 	return pipe(
@@ -123,29 +124,26 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	const projectsRoot = join(home, '.claude', 'projects')
 	const claudeCredentialsFile = pipe(
 		fs.readFileString(join(home, '.claude', '.credentials.json')),
-		Effect.mapError(cause => new AgentError({cause, message: 'not signed in'}))
+		Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'}))
 	)
 	const claudeToken = pipe(
 		claudeCredentialsFile,
 		Effect.flatMap(input =>
 			pipe(
 				Schema.decodeEffect(ClaudeCredentials)(input),
-				Effect.mapError(cause => new AgentError({cause, message: 'not signed in'}))
+				Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'}))
 			)
 		),
 		Effect.map(credentials => credentials.claudeAiOauth.accessToken)
 	)
 
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
-		>()
+		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
 	)
 	const loadCachedTokens = Effect.fnUntraced(function* () {
 		const files = yield* pipe(
 			claudeJsonlFiles(projectsRoot),
-			Effect.mapError(cause => new AgentError({cause}))
+			Effect.mapError(cause => AgentError.make({cause}))
 		)
 		const currentCache = yield* Ref.get(tokenFileCache)
 		const tokenFiles = yield* pipe(
@@ -155,7 +153,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 					Effect.gen(function* () {
 						const info = yield* pipe(
 							fs.stat(path),
-							Effect.mapError(cause => new AgentError({cause}))
+							Effect.mapError(cause => AgentError.make({cause}))
 						)
 						if (info.type !== 'File') return []
 
@@ -170,11 +168,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 							return [[path, cached] as const]
 						}
 
-						const tokens = yield* pipe(
-							fs.readFileString(path),
-							Effect.map(claudeTokensFromContent),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
+						const tokens = yield* pipe(fs.readFileString(path), Effect.map(claudeTokensFromContent))
 						return [[path, {mtimeMs, size, tokens}] as const]
 					}),
 				{concurrency: 4}
@@ -187,12 +181,13 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	})
 
 	const remoteUsage = remoteClaudeUsage(client, claudeToken)
-	const subscription = new AgentError({message: 'subscription unavailable'})
+	const subscription = AgentError.make({message: 'subscription unavailable'})
 	const loadUsage = pipe(
 		remoteUsage,
 		Effect.flatMap(usage =>
 			pipe(
 				loadCachedTokens(),
+				Effect.mapError(cause => AgentError.make({cause})),
 				Effect.map(tokens =>
 					AgentUsageData.make({fiveHour: claudeWindow(usage.five_hour), tokens, weekly: claudeWindow(usage.seven_day)})
 				)
@@ -200,9 +195,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		),
 		Effect.provideService(FileSystem.FileSystem, fs)
 	)
-	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
-		Array.head([])
-	)
+	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
 		Stream.repeat(Schedule.spaced('10 minutes')),
@@ -213,13 +206,13 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	return {subscription, usage}
 })
 
-function claudeWindow(input: typeof ClaudeUsageWindow.Type) {
+function claudeWindow(input: ClaudeUsageWindow) {
 	return {resetsAt: input.resets_at ?? undefined, utilization: input.utilization}
 }
 
 function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {
 	return pipe(
-		Effect.fnUntraced(function* () {
+		Effect.gen(function* () {
 			const accessToken = yield* token
 			const response = yield* pipe(
 				client.get('https://api.anthropic.com/api/oauth/usage', {
@@ -229,20 +222,20 @@ function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<s
 						'user-agent': 'claude-code/2.0.31'
 					}
 				}),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 			if (response.status !== 200) {
-				return yield* new AgentError({
+				return yield* AgentError.make({
 					message: response.status === 401 ? 'not signed in' : `claude usage responded with status ${response.status}`
 				})
 			}
 			return yield* pipe(
 				response.json,
 				Effect.flatMap(Schema.decodeUnknownEffect(ClaudeUsage)),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
-		})(),
+		}),
 		Effect.timeout('10 seconds'),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 }

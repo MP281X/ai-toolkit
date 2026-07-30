@@ -385,7 +385,8 @@ export function PatchDiff(props: {
 		}
 	}
 
-	const content = Match.value({fileContent, fileDiff, mode, patch}).pipe(
+	const content = pipe(
+		Match.value({fileContent, fileDiff, mode, patch}),
 		Match.when(
 			value => value.mode === 'diff' && Predicate.isNotUndefined(value.fileDiff),
 			value => (

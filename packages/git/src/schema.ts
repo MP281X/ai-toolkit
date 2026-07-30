@@ -51,7 +51,7 @@ export const GitReviewMetadata = Schema.Struct({
 	dirty: Schema.Boolean,
 	localCommits: Schema.Array(GitCommit),
 	unpushedCommits: Schema.Boolean,
-	upstream: Schema.optional(Schema.Struct({ahead: Schema.Number, behind: Schema.Number}))
+	upstream: Schema.optional(Schema.Struct({ahead: Schema.Finite, behind: Schema.Finite}))
 })
 
 export type GitReviewMark = typeof GitReviewMark.Type
@@ -61,7 +61,7 @@ export type GitReviewCommentDraft = typeof GitReviewCommentDraft.Type
 export const GitReviewCommentDraft = Schema.Struct({
 	body: Schema.String,
 	filePath: Schema.String,
-	lineNumber: Schema.Number,
+	lineNumber: Schema.Finite,
 	side: Schema.optional(Schema.Literals(['additions', 'deletions']))
 })
 
@@ -69,7 +69,7 @@ export type GitReviewComment = typeof GitReviewComment.Type
 export const GitReviewComment = Schema.Struct({
 	body: Schema.String,
 	filePath: Schema.String,
-	lineNumber: Schema.Number,
+	lineNumber: Schema.Finite,
 	side: Schema.optional(Schema.Literals(['additions', 'deletions'])),
 	source: Schema.Literals(['local', 'github']),
 	threadId: Schema.optional(Schema.String),

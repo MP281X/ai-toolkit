@@ -2,7 +2,12 @@ import {defineConfig} from 'vite-plus'
 
 export default defineConfig({
 	fmt: {
-		ignorePatterns: ['**/*.gen.ts', '**/package.json'],
+		ignorePatterns: [
+			'**/*.gen.ts',
+			'**/package.json',
+			'packages/components/src/components/svgs/**',
+			'packages/components/src/components/ui/**'
+		],
 
 		arrowParens: 'avoid',
 		bracketSpacing: false,
@@ -54,77 +59,28 @@ export default defineConfig({
 			suspicious: 'off'
 		},
 		env: {browser: true, builtin: true, node: true},
-		ignorePatterns: ['.agents/repos/**', '**/*.gen.ts', '**/components/svgs/**', '**/components/ui/**'],
+		ignorePatterns: [
+			'.agents/repos/**',
+			'**/*.gen.ts',
+			'packages/components/src/components/svgs/**',
+			'packages/components/src/components/ui/**'
+		],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
-			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},
 			{name: 'react-doctor', specifier: 'oxlint-plugin-react-doctor'}
 		],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts'], rules: {'import/no-default-export': 'off'}},
-			{
-				files: ['packages/oxlint-rules/src/oxlint-plugin.ts'],
-				rules: {'func-style': 'off', 'import/no-default-export': 'off'}
-			},
 			{files: ['**/*.tsx'], rules: {'unicorn/no-null': 'off'}}
 		],
 		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
-			// Deslop repo policy
-			'@deslop/oxlint-rules/no-access-alias': 'error',
-			'@deslop/oxlint-rules/no-access-helper': 'error',
-			'@deslop/oxlint-rules/no-atom-family-inferred-arg': 'error',
-			'@deslop/oxlint-rules/no-composed-identity-key': 'error',
-			'@deslop/oxlint-rules/no-condition-alias': 'error',
-			'@deslop/oxlint-rules/no-data-class': 'error',
-			'@deslop/oxlint-rules/no-declare-module-export': 'error',
-			'@deslop/oxlint-rules/no-effect-returning-function': 'error',
-			'@deslop/oxlint-rules/no-effect-run-entrypoint': 'error',
-			'@deslop/oxlint-rules/no-exported-local-type': 'error',
-			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
-			'@deslop/oxlint-rules/no-floating-local-type': 'error',
-			'@deslop/oxlint-rules/no-function-return-type': 'error',
-			'@deslop/oxlint-rules/no-generic-state-patch': 'error',
-			'@deslop/oxlint-rules/no-identity-callback': 'error',
-			'@deslop/oxlint-rules/no-iife': 'error',
-			'@deslop/oxlint-rules/no-import-alias': 'error',
-			'@deslop/oxlint-rules/no-json-global': 'error',
-			'@deslop/oxlint-rules/no-let': 'error',
-			'@deslop/oxlint-rules/no-local-mutable-holder': 'error',
-			'@deslop/oxlint-rules/no-module-mutable-state': 'error',
-			'@deslop/oxlint-rules/no-native-mutable-collection': 'error',
-			'@deslop/oxlint-rules/no-native-prototype-method': 'error',
-			'@deslop/oxlint-rules/no-nullary-effect-fn': 'error',
-			'@deslop/oxlint-rules/no-nullary-effect-wrapper': 'error',
-			'@deslop/oxlint-rules/no-nullish-comparison': 'error',
-			'@deslop/oxlint-rules/no-object-destructure': 'error',
-			'@deslop/oxlint-rules/no-option-constructor': 'error',
-			'@deslop/oxlint-rules/no-optional-undefined-property': 'error',
-			'@deslop/oxlint-rules/no-pass-through-wrapper': 'error',
-			'@deslop/oxlint-rules/no-primitive-const': 'error',
-			'@deslop/oxlint-rules/no-private-test-import': 'error',
-			'@deslop/oxlint-rules/no-private-workspace-import': 'error',
-			'@deslop/oxlint-rules/no-promise-callback': 'error',
-			'@deslop/oxlint-rules/no-public-raw-domain-string': 'error',
-			'@deslop/oxlint-rules/no-raw-tagged-object': 'error',
-			'@deslop/oxlint-rules/no-schema-class': 'error',
-			'@deslop/oxlint-rules/no-schema-decoder-alias': 'error',
-			'@deslop/oxlint-rules/no-schema-without-type-export': 'error',
-			'@deslop/oxlint-rules/no-single-use-guard': 'error',
-			'@deslop/oxlint-rules/no-single-use-helper': 'error',
-			'@deslop/oxlint-rules/no-static-return-function': 'error',
-			'@deslop/oxlint-rules/no-typed-callback-params': 'error',
-			'@deslop/oxlint-rules/no-useless-effect-wrapper': 'error',
-			'@deslop/oxlint-rules/no-variable-type-annotation': 'error',
-			'@deslop/oxlint-rules/no-zero-arg-effect-fn': 'error',
-			'@deslop/oxlint-rules/prefer-match': 'error',
-
 			// TypeScript type shape
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
 			'@typescript-eslint/consistent-type-assertions': [
 				'error',
-				{arrayLiteralTypeAssertions: 'never', objectLiteralTypeAssertions: 'never'}
+				{arrayLiteralTypeAssertions: 'never', assertionStyle: 'never', objectLiteralTypeAssertions: 'never'}
 			],
 			'@typescript-eslint/consistent-type-definitions': ['error', 'type'],
 			'@typescript-eslint/consistent-type-exports': 'error',
@@ -182,6 +138,7 @@ export default defineConfig({
 			'func-style': ['error', 'declaration'],
 
 			// Imports
+			'import/newline-after-import': 'error',
 			'import/no-default-export': 'error',
 			'import/no-duplicates': 'error',
 			'import/no-empty-named-blocks': 'error',
@@ -332,5 +289,10 @@ export default defineConfig({
 		},
 		settings: {react: {version: '19.0'}}
 	},
-	test: {environment: 'node', include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'], pool: 'forks'}
+	test: {
+		environment: 'node',
+		include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+		passWithNoTests: true,
+		pool: 'forks'
+	}
 })

@@ -1,48 +1,61 @@
 ---
 name: skill-writing
-description: 'Repository instructions; skill metadata, bodies, references; agent workflows; static enforcement.'
+description: 'Use when creating or auditing repository instructions, skill metadata, progressive references, or enforcement ownership.'
 ---
 
-Predictability is the goal: the same decision process across runs, not identical output.
+## Intent
 
-With no target, audit and rewrite the complete instruction system: implicit root and subtree guidance, every skill's metadata, body, sibling references, and static enforcement. With a named target, include only the semantic owners needed to leave the system consistent.
-
-## Invocation
-
-A model-invoked skill needs an independent leading concept. Its name carries identity; its description adds only trigger branches the name does not already imply. Name plus description must reliably match every required invocation.
-
-The body starts with owned behavior. It does not repeat the title, description, invocation condition, or implicit repository context. Skills never name, load, or point to other skills.
-
-## Information hierarchy
-
-Keep rules every branch needs in `SKILL.md`. Move branch-only reference behind a precise pointer to source, tool help, or a sibling file. Keep a concept's definition, rules, and exceptions together.
-
-Ordered workflows use steps with observable completion criteria. Reference skills use flat rules. Do not force one format across both.
+Make independent runs choose the same action from the same evidence.
 
 ## Ownership
 
-Each meaning has one narrow owner:
+| Owner              | Surface                                                       |
+| ------------------ | ------------------------------------------------------------- |
+| `AGENTS.md`        | unconditional repository behavior                             |
+| TypeScript         | type validity, inference, compiler semantics                  |
+| Oxlint             | maintained generic syntax, import policy, source restrictions |
+| Effect diagnostics | Effect invalid states and native replacements                 |
+| Fallow             | repository-graph reachability                                 |
+| Domain skill       | conditional semantic behavior                                 |
 
-- universal behavior: implicit root guidance
-- subtree behavior: implicit local guidance
-- independently invoked workflow or domain: skill
-- detectable regression: Vite Plus or Oxlint
-- dead-code or security ownership: Fallow
+One invariant has one owner. Prefer the earliest maintained owner that proves it without harmful false positives. If mechanical compliance can still violate semantic intent, tooling owns the detectable floor and the domain skill owns the semantic decision.
 
-Every combination of loaded guidance must yield one compatible answer per decision.
+## Skill
 
-## Pruning
+- Description = front-loaded trigger + exact owned outcome/boundary.
+- Simulate positive and adjacent negative prompts; rewrite metadata when either routes incorrectly.
+- Body begins with owned behavior; never repeat title, description, invocation condition, `AGENTS.md`, or another skill.
+- Add `agents/openai.yaml` only for interface metadata, invocation policy, or tool dependencies; keep it synchronized with `SKILL.md`.
+- Root = unconditional policy + precise conditional routes.
+- Reference = complete conditional rule; never mirror it in the root or another reference.
+- Ordered workflow → state machine or steps with observable completion.
+- Static domain → flat decisions.
+- Retain intent/reason/failure/reject only when it changes application or correction.
 
-Keep accepted current behavior only. Delete superseded, opposite, historical, compatibility, migration, rationale, and partial-mirror residue.
+Delete history, tutorials, compatibility, migration, opposite rules, partial mirrors, and sentences that do not change behavior beyond model defaults.
 
-Every sentence must change behavior beyond model defaults. Remove no-ops, low-value examples, repeated caveats, and unused branches. Semantic equivalence has one owner regardless of wording.
+## Deterministic enforcement
 
-## Language
+Inspect installed help/schema, active configuration, matching `.agents/repos/*`, and repository hits; never preserve a volatile inventory in prose.
 
-Use a pretrained leading concept when it replaces explanation. Grammar may yield to concision; meaning may not. State the accepted behavior first and reserve prohibition for hard safety boundaries.
+| Tool               | Audit                                                                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript         | inventory inherited options; start at maximum practical owned-source strictness; relax only for maintained external declarations, generated source, or concrete repository evidence                                  |
+| Oxlint             | enumerate maintained active-plugin rules; group by invariant; remove TypeScript/Effect/Fallow/formatter overlap; enable rules with one valid owned-source end state; reject broad presets and shape-only diagnostics |
+| Effect diagnostics | enumerate the installed compatible schema/source; start strict; record concrete evidence for every weaker severity; configure once at the root compiler boundary                                                     |
+| Fallow             | derive the smallest owned-source reachability config; preserve intentional public exports; exclude generated/reference source; omit default-off and default-equivalent entries                                       |
 
-Use absolutes for invariants. Encode judgment as a decision rule. Use minimal code when prose leaves ambiguity.
+Suppressions are narrow, inline, reasoned, and backed by an irreducible boundary.
 
-## Completion
+## Audit
 
-Every retained word has current behavior, invocation, ownership, or precision value. Precedence, exceptions, blockers, and completion criteria have one interpretation.
+Reject:
+
+- multiple owners or incompatible answers;
+- duplicated meaning in different words;
+- metadata trigger gaps or collisions;
+- unconditional rules hidden behind progressive discovery;
+- claims unsupported by current source;
+- exceptions without a concrete boundary;
+- ambiguous authority, completion, or invalidation;
+- structural inconsistency across sibling skills.

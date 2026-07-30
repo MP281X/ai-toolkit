@@ -4,6 +4,7 @@ import {homedir} from 'node:os'
 
 import {
 	Array,
+	Clock,
 	Config,
 	Context,
 	Duration,
@@ -63,41 +64,46 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 
 		const string = Effect.fn('GitCommand.string')(function* (cwd: string, args: readonly string[]) {
 			yield* Effect.annotateCurrentSpan({command: args[0] ?? 'git', cwd})
-			return yield* Effect.scoped(
-				Effect.gen(function* () {
-					const handle = yield* pipe(
-						spawner.spawn(ChildProcess.make('git', args, {cwd, stderr: 'pipe', stdout: 'pipe'})),
-						Effect.mapError(cause => new GitError({cause}))
-					)
-					const output = yield* Effect.all(
-						{
-							stderr: pipe(
-								Stream.decodeText(handle.stderr),
-								Stream.mkString,
-								Effect.orElseSucceed(() => '')
-							),
-							stdout: pipe(
-								Stream.decodeText(handle.stdout),
-								Stream.mkString,
-								Effect.orElseSucceed(() => '')
-							)
-						},
-						{concurrency: 'unbounded'}
-					)
-					const exitCode = yield* pipe(
-						handle.exitCode,
-						Effect.mapError(cause => new GitError({cause}))
-					)
+			return yield* pipe(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const handle = yield* pipe(
+							spawner.spawn(ChildProcess.make('git', args, {cwd, stderr: 'pipe', stdout: 'pipe'})),
+							Effect.mapError(cause => GitError.make({cause}))
+						)
+						const output = yield* Effect.all(
+							{
+								stderr: pipe(
+									Stream.decodeText(handle.stderr),
+									Stream.mkString,
+									Effect.orElseSucceed(() => '')
+								),
+								stdout: pipe(
+									Stream.decodeText(handle.stdout),
+									Stream.mkString,
+									Effect.orElseSucceed(() => '')
+								)
+							},
+							{concurrency: 'unbounded'}
+						)
+						const exitCode = yield* pipe(
+							handle.exitCode,
+							Effect.mapError(cause => GitError.make({cause}))
+						)
 
-					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-						return yield* new GitError({
-							cause: new Error(output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`)
-						})
-					}
+						if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+							return yield* GitError.make({
+								cause: new Error(
+									output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
+								)
+							})
+						}
 
-					return output.stdout
-				})
-			).pipe(Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}}))
+						return output.stdout
+					})
+				),
+				Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}})
+			)
 		})
 
 		const stringWithInput = Effect.fn('GitCommand.stringWithInput')(function* (
@@ -106,48 +112,53 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 			input: string
 		) {
 			yield* Effect.annotateCurrentSpan({command: args[0] ?? 'git', cwd})
-			return yield* Effect.scoped(
-				Effect.gen(function* () {
-					const handle = yield* pipe(
-						spawner.spawn(
-							ChildProcess.make('git', args, {
-								cwd,
-								stderr: 'pipe',
-								stdin: Stream.make(Buffer.from(input, 'utf8')),
-								stdout: 'pipe'
-							})
-						),
-						Effect.mapError(cause => new GitError({cause}))
-					)
-					const output = yield* Effect.all(
-						{
-							stderr: pipe(
-								Stream.decodeText(handle.stderr),
-								Stream.mkString,
-								Effect.orElseSucceed(() => '')
+			return yield* pipe(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const handle = yield* pipe(
+							spawner.spawn(
+								ChildProcess.make('git', args, {
+									cwd,
+									stderr: 'pipe',
+									stdin: Stream.make(Buffer.from(input, 'utf8')),
+									stdout: 'pipe'
+								})
 							),
-							stdout: pipe(
-								Stream.decodeText(handle.stdout),
-								Stream.mkString,
-								Effect.orElseSucceed(() => '')
-							)
-						},
-						{concurrency: 'unbounded'}
-					)
-					const exitCode = yield* pipe(
-						handle.exitCode,
-						Effect.mapError(cause => new GitError({cause}))
-					)
+							Effect.mapError(cause => GitError.make({cause}))
+						)
+						const output = yield* Effect.all(
+							{
+								stderr: pipe(
+									Stream.decodeText(handle.stderr),
+									Stream.mkString,
+									Effect.orElseSucceed(() => '')
+								),
+								stdout: pipe(
+									Stream.decodeText(handle.stdout),
+									Stream.mkString,
+									Effect.orElseSucceed(() => '')
+								)
+							},
+							{concurrency: 'unbounded'}
+						)
+						const exitCode = yield* pipe(
+							handle.exitCode,
+							Effect.mapError(cause => GitError.make({cause}))
+						)
 
-					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-						return yield* new GitError({
-							cause: new Error(output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`)
-						})
-					}
+						if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+							return yield* GitError.make({
+								cause: new Error(
+									output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
+								)
+							})
+						}
 
-					return output.stdout
-				})
-			).pipe(Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}}))
+						return output.stdout
+					})
+				),
+				Effect.withSpan('git.command', {attributes: {command: args[0] ?? 'git', cwd}})
+			)
 		})
 
 		return {
@@ -219,8 +230,8 @@ function readTextFile(filePath: string) {
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
 const GitHubReviewThreadCommentResponse = Schema.Struct({
 	body: Schema.String,
-	line: Schema.optional(Schema.NullOr(Schema.Number)),
-	originalLine: Schema.optional(Schema.NullOr(Schema.Number)),
+	line: Schema.optional(Schema.NullOr(Schema.Finite)),
+	originalLine: Schema.optional(Schema.NullOr(Schema.Finite)),
 	path: Schema.String,
 	url: Schema.optional(Schema.String)
 })
@@ -358,7 +369,8 @@ function diffFromPatchChunk(chunk: string) {
 		chunk.match(/^--- a\/(.+)$/mu)?.[1] ??
 		chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
 		''
-	const status = Match.value(chunk).pipe(
+	const status = pipe(
+		Match.value(chunk),
 		Match.when(
 			value => /^new file mode /mu.test(value),
 			() => 'added' as const
@@ -396,7 +408,8 @@ function targetKey(target: GitReviewTarget) {
 }
 function targetFromKey(key: string) {
 	if (String.startsWith('commit:')(key)) return GitReviewCommitTarget.make({hash: String.replace(/^commit:/u, '')(key)})
-	return Match.value(key).pipe(
+	return pipe(
+		Match.value(key),
 		Match.when('local', () => GitReviewLocalTarget.make({})),
 		Match.when('branch', () => GitReviewBranchTarget.make({})),
 		Match.orElse(() => GitReviewChangesTarget.make({}))
@@ -451,39 +464,42 @@ function porcelainBranchStatus(lines: readonly string[]) {
 function gitHubString(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], cwd: string) {
 	function* runGh(args: readonly string[]) {
 		yield* Effect.annotateCurrentSpan({command: args[0] ?? 'gh', cwd})
-		return yield* Effect.scoped(
-			Effect.gen(function* () {
-				const handle = yield* pipe(
-					spawner.spawn(ChildProcess.make('gh', args, {cwd, stderr: 'pipe', stdout: 'pipe'})),
-					Effect.mapError(cause => new GitError({cause}))
-				)
-				const output = yield* Effect.all(
-					{
-						stderr: pipe(
-							Stream.decodeText(handle.stderr),
-							Stream.mkString,
-							Effect.orElseSucceed(() => '')
-						),
-						stdout: pipe(
-							Stream.decodeText(handle.stdout),
-							Stream.mkString,
-							Effect.orElseSucceed(() => '')
-						)
-					},
-					{concurrency: 'unbounded'}
-				)
-				const exitCode = yield* pipe(
-					handle.exitCode,
-					Effect.mapError(cause => new GitError({cause}))
-				)
-				if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-					return yield* new GitError({
-						cause: new Error(output.stderr || output.stdout || `gh ${Array.join(' ')(args)} exited with ${exitCode}`)
-					})
-				}
-				return output.stdout
-			})
-		).pipe(Effect.withSpan('gh.command', {attributes: {command: args[0] ?? 'gh', cwd}}))
+		return yield* pipe(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const handle = yield* pipe(
+						spawner.spawn(ChildProcess.make('gh', args, {cwd, stderr: 'pipe', stdout: 'pipe'})),
+						Effect.mapError(cause => GitError.make({cause}))
+					)
+					const output = yield* Effect.all(
+						{
+							stderr: pipe(
+								Stream.decodeText(handle.stderr),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							),
+							stdout: pipe(
+								Stream.decodeText(handle.stdout),
+								Stream.mkString,
+								Effect.orElseSucceed(() => '')
+							)
+						},
+						{concurrency: 'unbounded'}
+					)
+					const exitCode = yield* pipe(
+						handle.exitCode,
+						Effect.mapError(cause => GitError.make({cause}))
+					)
+					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+						return yield* GitError.make({
+							cause: new Error(output.stderr || output.stdout || `gh ${Array.join(' ')(args)} exited with ${exitCode}`)
+						})
+					}
+					return output.stdout
+				})
+			),
+			Effect.withSpan('gh.command', {attributes: {command: args[0] ?? 'gh', cwd}})
+		)
 	}
 	return Effect.fn('gh.string')(runGh)
 }
@@ -609,7 +625,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				Effect.gen(function* () {
 					const handle = yield* pipe(
 						spawner.spawn(ChildProcess.make('rg', args, {stderr: 'pipe', stdout: 'pipe'})),
-						Effect.mapError(cause => new GitError({cause}))
+						Effect.mapError(cause => GitError.make({cause}))
 					)
 					const output = yield* Effect.all(
 						{
@@ -628,7 +644,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					)
 					const exitCode = yield* pipe(
 						handle.exitCode,
-						Effect.mapError(cause => new GitError({cause}))
+						Effect.mapError(cause => GitError.make({cause}))
 					)
 
 					if (
@@ -639,7 +655,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 						return output.stdout
 					}
 
-					return yield* new GitError({
+					return yield* GitError.make({
 						cause: new Error(output.stderr || output.stdout || `rg ${Array.join(' ')(args)} exited with ${exitCode}`)
 					})
 				})
@@ -676,7 +692,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					)?.[1]
 					return [
 						{
-							...(Predicate.isUndefined(branch) ? {} : {branch}),
+							branch,
 							gitDirectory,
 							main: false,
 							root: normalizePublicPath(path.dirname(path.resolve(metadataDirectory, gitdir)))
@@ -693,12 +709,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			if (dotGit.value.isDirectory()) {
 				const gitDirectory = normalizePublicPath(dotGitPath)
 				const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
-				return {
-					...(Predicate.isUndefined(branch) ? {} : {branch}),
-					gitDirectory,
-					main: true,
-					root: normalizePublicPath(root)
-				} satisfies DiscoveredWorktree
+				return {branch, gitDirectory, main: true, root: normalizePublicPath(root)} satisfies DiscoveredWorktree
 			}
 			if (!dotGit.value.isFile()) return
 
@@ -713,7 +724,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
 
 			return {
-				...(Predicate.isUndefined(branch) ? {} : {branch}),
+				branch,
 				gitDirectory: commonDirectory,
 				main: false,
 				root: normalizePublicPath(root)
@@ -784,10 +795,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					return GitProject.make({
 						repository: GitRepository.make({gitDirectory, root}),
 						worktrees: Array.map(sortedWorktrees, worktree =>
-							GitWorktree.make({
-								...(Predicate.isUndefined(worktree.branch) ? {} : {branch: worktree.branch}),
-								root: worktree.root
-							})
+							GitWorktree.make({branch: worktree.branch, root: worktree.root})
 						)
 					})
 				}),
@@ -961,7 +969,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			}) {
 				yield* Effect.annotateCurrentSpan({branch: input.branch, cwd: input.cwd})
 				if (input.source._tag === 'new' && !validWorkbenchBranch(input.branch)) {
-					return yield* new GitError({
+					return yield* GitError.make({
 						message:
 							'New worktree branches must start with feat/, fix/, refactor/, perf/, test/, docs/, or chore/ and use lowercase letters, digits, and hyphens after the prefix.'
 					})
@@ -1002,7 +1010,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 
 				yield* pipe(fs.makeDirectory(path.dirname(targetDirectory), {recursive: true}), Effect.ignore)
 
-				yield* Match.value(input.source).pipe(
+				yield* pipe(
+					Match.value(input.source),
 					Match.when({_tag: 'local'}, () =>
 						pipe(
 							Effect.annotateCurrentSpan({source: 'local'}),
@@ -1225,7 +1234,8 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			)
 		})
 		const computeDiffs = Effect.fn('GitChanges.computeDiffs')(function* (target: GitReviewTarget) {
-			const trackedDiffs = yield* Match.value(target).pipe(
+			const trackedDiffs = yield* pipe(
+				Match.value(target),
 				Match.when({_tag: 'changes'}, () => gitDiffs(['HEAD'])),
 				Match.when({_tag: 'commit'}, commit => commitDiffs(commit.hash)),
 				Match.when({_tag: 'local'}, () =>
@@ -1275,11 +1285,10 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			const branchBaseRef = yield* branchDiffBase
 			const localBaseRef = status.upstream ?? branchBaseRef
 			const localCommits = yield* commitsBetween(localBaseRef, 'HEAD')
-			const branchCommitCandidates = yield* Effect.gen(function* () {
-				if (status.branch === defaultBranch) return yield* firstParentCommits
-				if (localBaseRef === branchBaseRef) return localCommits
-				return yield* commitsBetween(branchBaseRef, 'HEAD')
-			})
+			const nonDefaultBranchCommits =
+				localBaseRef === branchBaseRef ? Effect.succeed(localCommits) : commitsBetween(branchBaseRef, 'HEAD')
+			const branchCommitCandidates =
+				status.branch === defaultBranch ? yield* firstParentCommits : yield* nonDefaultBranchCommits
 			const localCommitHashes = pipe(
 				localCommits,
 				Array.map(commit => commit.hash),
@@ -1383,12 +1392,12 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const pr = yield* pipe(
 				ghString(['pr', 'view', '--json', 'number', '--jq', '.number']),
 				Effect.map(flow(String.trim, Number.parse)),
-				Effect.flatMap(Option.match({onNone: () => new GitError({message: 'No PR found.'}), onSome: Effect.succeed}))
+				Effect.flatMap(Option.match({onNone: () => GitError.make({message: 'No PR found.'}), onSome: Effect.succeed}))
 			)
 			const repository = yield* pipe(
 				ghString(['repo', 'view', '--json', 'owner,name']),
 				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubRepositoryResponse))),
-				Effect.mapError(cause => new GitError({cause, message: 'Failed to parse GitHub repository.'}))
+				Effect.mapError(cause => GitError.make({cause, message: 'Failed to parse GitHub repository.'}))
 			)
 			const query = `query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved diffSide comments(first: 20) { nodes { body line originalLine path url } } } } } } }`
 			const response = yield* pipe(
@@ -1405,7 +1414,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 					`number=${pr}`
 				]),
 				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubReviewThreadsResponse))),
-				Effect.mapError(cause => new GitError({cause, message: 'Failed to parse GitHub review threads.'}))
+				Effect.mapError(cause => GitError.make({cause, message: 'Failed to parse GitHub review threads.'}))
 			)
 			const suppressed = yield* Ref.get(suppressedThreadIds)
 			const threads = response.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
@@ -1474,7 +1483,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 					Effect.map(Array.flatten)
 				)
 				if (!Array.isReadonlyArrayEmpty(failures)) {
-					return yield* new GitError({message: 'One or more GitHub threads failed to resolve.'})
+					return yield* GitError.make({message: 'One or more GitHub threads failed to resolve.'})
 				}
 				yield* Ref.update(suppressedThreadIds, current => HashSet.union(current, HashSet.fromIterable(threadIds)))
 				yield* SubscriptionRef.update(state, current => gitReviewStateDeleteComments(current, comments))
@@ -1586,12 +1595,12 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 			const branch = yield* currentBranch
 			yield* pipe(git.string(config.cwd, ['push', '-u', 'origin', `HEAD:${branch}`]), Effect.asVoid)
 			if (yield* hasPushableCommits) {
-				return yield* new GitError({message: 'Push completed but the branch still has unpushed commits.'})
+				return yield* GitError.make({message: 'Push completed but the branch still has unpushed commits.'})
 			}
 		})
 		return {
 			checkpoint: Effect.gen(function* () {
-				if (!(yield* hasWorktreeChanges)) return yield* new GitError({message: 'No changes to checkpoint.'})
+				if (!(yield* hasWorktreeChanges)) return yield* GitError.make({message: 'No changes to checkpoint.'})
 				yield* pipe(git.string(config.cwd, ['add', '-A']), Effect.asVoid)
 				yield* pipe(
 					git.stringWithInput(config.cwd, ['commit', '-F', '-'], `checkpoint\n\n${checkpointCommit.trailer}\n`),
@@ -1603,18 +1612,16 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 				const dirty = yield* hasWorktreeChanges
 				const inputMessage = String.trim(input.message)
 				if (String.isEmpty(inputMessage) && (dirty || !Array.isReadonlyArrayEmpty(checkpoints))) {
-					return yield* new GitError({message: 'Publish message required.'})
+					return yield* GitError.make({message: 'Publish message required.'})
 				}
 				const message = String.isNonEmpty(inputMessage) ? inputMessage : yield* headCommitMessage
-				const committed = yield* Effect.gen(function* () {
-					if (Array.isReadonlyArrayEmpty(checkpoints)) {
-						if (!dirty) return false
-						yield* commitAll(message)
-						return true
-					}
+				const committed = dirty || !Array.isReadonlyArrayEmpty(checkpoints)
+				if (Array.isReadonlyArrayEmpty(checkpoints)) {
+					if (dirty) yield* commitAll(message)
+				} else {
 					const oldest = pipe(checkpoints, Array.last, Option.getOrUndefined)
-					if (Predicate.isUndefined(oldest)) return yield* new GitError({message: 'Checkpoint state is invalid.'})
-					const backupRef = `refs/deslop/backups/${Date.now()}-${randomUUID()}`
+					if (Predicate.isUndefined(oldest)) return yield* GitError.make({message: 'Checkpoint state is invalid.'})
+					const backupRef = `refs/deslop/backups/${yield* Clock.currentTimeMillis}-${randomUUID()}`
 					yield* pipe(git.string(config.cwd, ['update-ref', backupRef, 'HEAD']), Effect.asVoid)
 					yield* pipe(git.string(config.cwd, ['reset', '--soft', `${oldest.hash}^`]), Effect.asVoid)
 					yield* pipe(
@@ -1627,14 +1634,13 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 							)
 						)
 					)
-					return true
-				})
+				}
 				const pushed = yield* pipe(
 					hasPushableCommits,
 					Effect.flatMap(shouldPush => (shouldPush ? pipe(push, Effect.as(true)) : Effect.succeed(false)))
 				)
 				if (!committed && !pushed) {
-					return yield* new GitError({message: 'No changes or unpushed commits to publish.'})
+					return yield* GitError.make({message: 'No changes or unpushed commits to publish.'})
 				}
 			})
 		}

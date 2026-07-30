@@ -1,24 +1,25 @@
 ---
 name: review
-description: 'Independent current-branch or pull-request audit; final evidence for issue-driven implementation.'
+description: 'Use when independently auditing the complete issue-to-candidate diff without editing repository files.'
 ---
 
-## Grounding
+| Candidate       | Base                       |
+| --------------- | -------------------------- |
+| Stack           | immediate preceding branch |
+| Pull request    | actual pull-request base   |
+| No pull request | default branch             |
 
-For a stack, compare the head with its declared base. Read the source desired state and current diff from scratch.
+Review committed, uncommitted, and untracked changes as one diff. Treat the issue as the contract. Read it, the base, candidate, and applicable engineering references from scratch; ignore implementation narrative, checklists, prior reviews, commit boundaries, and completion claims.
 
-Implementation rationale, prior reviews, checkboxes, and completion claims are untrusted context.
+| Pass     | Search                                                                             |
+| -------- | ---------------------------------------------------------------------------------- |
+| Contract | gaps, incorrect behavior, regression, edge state, missing proof                    |
+| Design   | boundary drift, accidental complexity, stale path, duplication, lifecycle defect   |
+| Product  | security, accessibility, responsiveness, loading, empty, failure, console, network |
 
-## Passes
+Report only reproducible actionable problems. Deduplicate by root cause; order by severity, then user impact.
 
-1. **Behavior:** requirement gaps, regressions, edge states, failures, and missing proof.
-2. **Design:** boundary or interface drift, accidental complexity, stale paths, duplication, and simpler final shapes.
-3. **Experience:** interaction, accessibility, responsiveness, loading, empty, failure, console, and network behavior when UI applies.
-
-Follow evidence beyond the named focus when impact is material.
-
-## Findings
-
-Report only evidence-backed, actionable problems. Deduplicate by root cause across passes and order by severity, then user impact.
-
-Each finding states the violated behavior, evidence, location, and required correction. Return `No actionable findings` only after every applicable pass is clean.
+```text
+[P0-P3] imperative finding — location
+Violated behavior · evidence · required state
+```

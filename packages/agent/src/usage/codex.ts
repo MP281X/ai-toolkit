@@ -4,6 +4,7 @@ import {join, resolve} from 'node:path'
 import type {Exit} from 'effect'
 import {
 	Array,
+	Config,
 	Duration,
 	Effect,
 	FileSystem,
@@ -30,12 +31,12 @@ const CodexUsage = Schema.Struct({
 	plan_type: Schema.optional(Schema.NullOr(Schema.String)),
 	rate_limit: Schema.Struct({
 		primary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
-			used_percent: Schema.Number
+			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			used_percent: Schema.Finite
 		}),
 		secondary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Number)),
-			used_percent: Schema.Number
+			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			used_percent: Schema.Finite
 		})
 	})
 })
@@ -75,11 +76,11 @@ function codexUsageTokens(input: unknown) {
 	}
 }
 
-function addTokens(left: typeof AgentUsageTokens.Type, right: typeof AgentUsageTokens.Type) {
+function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
-function sameTokens(left: typeof AgentUsageTokens.Type | undefined, right: typeof AgentUsageTokens.Type) {
+function sameTokens(left: AgentUsageTokens | undefined, right: AgentUsageTokens) {
 	return (
 		Predicate.isNotUndefined(left) &&
 		left.cached === right.cached &&
@@ -121,7 +122,7 @@ function totalUsageFromMarker(content: string, markerIndex: number) {
 	}
 }
 
-function totalDelta(previous: typeof AgentUsageTokens.Type | undefined, next: typeof AgentUsageTokens.Type) {
+function totalDelta(previous: AgentUsageTokens | undefined, next: AgentUsageTokens) {
 	if (Predicate.isUndefined(previous)) return next
 	if (next.cached < previous.cached || next.input < previous.input || next.output < previous.output) return next
 
@@ -138,15 +139,15 @@ function totalUsageTokensFromContent(content: string) {
 
 	return Array.reduce(
 		matches,
-		{
-			previous: undefined as typeof AgentUsageTokens.Type | undefined,
-			total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
-		},
+		{previous: Option.none<AgentUsageTokens>(), total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})},
 		(current, match) => {
 			const next = totalUsageFromMarker(content, match.index)
 			return Predicate.isUndefined(next)
 				? current
-				: {previous: next, total: addTokens(current.total, totalDelta(current.previous, next))}
+				: {
+						previous: Option.some(next),
+						total: addTokens(current.total, totalDelta(Option.getOrUndefined(current.previous), next))
+					}
 		}
 	).total
 }
@@ -165,10 +166,7 @@ function explicitUsageTokensFromContent(content: string) {
 		content,
 		String.split('\n'),
 		Array.reduce(
-			{
-				previous: undefined as typeof AgentUsageTokens.Type | undefined,
-				total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})
-			},
+			{previous: Option.none<AgentUsageTokens>(), total: AgentUsageTokens.make({cached: 0, input: 0, output: 0})},
 			(current, line) => {
 				if (String.includes('"last_token_usage"')(line) || String.includes('"usage"')(line)) {
 					const usage = explicitUsageFromLine(line)
@@ -176,8 +174,10 @@ function explicitUsageTokensFromContent(content: string) {
 
 					const next = codexUsageTokens(usage)
 					return {
-						previous: next,
-						total: sameTokens(current.previous, next) ? current.total : addTokens(current.total, next)
+						previous: Option.some(next),
+						total: sameTokens(Option.getOrUndefined(current.previous), next)
+							? current.total
+							: addTokens(current.total, next)
 					}
 				}
 
@@ -192,7 +192,7 @@ function codexTokensFromContent(content: string) {
 	return totalUsageTokensFromContent(content) ?? explicitUsageTokensFromContent(content)
 }
 
-function sumTokenFiles(files: Iterable<{readonly tokens: typeof AgentUsageTokens.Type}>) {
+function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
 			addTokens(total, file.tokens)
@@ -208,12 +208,12 @@ export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonl
 			{concurrency: 2}
 		),
 		Effect.map(Array.flatten),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 	const tokens = yield* pipe(
 		files,
 		Effect.forEach(path => pipe(fs.readFileString(path), Effect.map(codexTokensFromContent)), {concurrency: 8}),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 
 	return sumTokenFiles(Array.map(tokens, value => ({tokens: value})))
@@ -222,27 +222,29 @@ export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {readonl
 export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readonly provider: 'codex'}) {
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
-	const codexRoot = pipe(process.env['CODEX_HOME'] ?? '', String.trim, value =>
+	const codexRootValue = yield* pipe(
+		Config.string('CODEX_HOME'),
+		Config.withDefault(''),
+		Effect.mapError(cause => AgentError.make({cause}))
+	)
+	const codexRoot = pipe(codexRootValue, String.trim, value =>
 		String.isNonEmpty(value) ? resolve(value) : join(homedir(), '.codex')
 	)
 
 	const codexToken = pipe(
 		fs.readFileString(join(codexRoot, 'auth.json')),
-		Effect.mapError(cause => new AgentError({cause, message: 'not signed in'})),
+		Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'})),
 		Effect.flatMap(input =>
 			pipe(
 				Schema.decodeEffect(CodexCredentials)(input),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 		),
 		Effect.map(credentials => credentials.tokens.access_token)
 	)
 
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<
-			string,
-			{readonly mtimeMs: number; readonly size: number; readonly tokens: typeof AgentUsageTokens.Type}
-		>()
+		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
 	)
 	const loadCachedTokens = Effect.fnUntraced(function* () {
 		const files = yield* pipe(
@@ -251,7 +253,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 				{concurrency: 2}
 			),
 			Effect.map(Array.flatten),
-			Effect.mapError(cause => new AgentError({cause}))
+			Effect.mapError(cause => AgentError.make({cause}))
 		)
 		const currentCache = yield* Ref.get(tokenFileCache)
 		const tokenFiles = yield* pipe(
@@ -261,7 +263,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 					Effect.gen(function* () {
 						const info = yield* pipe(
 							fs.stat(path),
-							Effect.mapError(cause => new AgentError({cause}))
+							Effect.mapError(cause => AgentError.make({cause}))
 						)
 						if (info.type !== 'File') return []
 
@@ -279,11 +281,7 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 							return [[path, cached] as const]
 						}
 
-						const tokens = yield* pipe(
-							fs.readFileString(path),
-							Effect.map(codexTokensFromContent),
-							Effect.mapError(cause => new AgentError({cause}))
-						)
+						const tokens = yield* pipe(fs.readFileString(path), Effect.map(codexTokensFromContent))
 						return [[path, {mtimeMs, size, tokens}] as const]
 					}),
 				{concurrency: 4}
@@ -302,21 +300,25 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {readon
 		Effect.flatMap(label =>
 			Predicate.isString(label)
 				? Effect.succeed(AgentSubscription.make(label))
-				: new AgentError({message: 'subscription unavailable'})
+				: AgentError.make({message: 'subscription unavailable'})
 		)
 	)
-	const loadUsage = Effect.gen(function* () {
-		const usage = yield* remoteUsage
-		const tokens = yield* loadCachedTokens()
-		return AgentUsageData.make({
-			fiveHour: codexWindow(usage.rate_limit.primary_window),
-			tokens,
-			weekly: codexWindow(usage.rate_limit.secondary_window)
-		})
-	}).pipe(Effect.provideService(FileSystem.FileSystem, fs))
-	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<typeof AgentUsageData.Type, AgentError>>>(
-		Array.head([])
+	const loadUsage = pipe(
+		Effect.gen(function* () {
+			const usage = yield* remoteUsage
+			const tokens = yield* pipe(
+				loadCachedTokens(),
+				Effect.mapError(cause => AgentError.make({cause}))
+			)
+			return AgentUsageData.make({
+				fiveHour: codexWindow(usage.rate_limit.primary_window),
+				tokens,
+				weekly: codexWindow(usage.rate_limit.secondary_window)
+			})
+		}),
+		Effect.provideService(FileSystem.FileSystem, fs)
 	)
+	const usage = yield* SubscriptionRef.make<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>(Array.head([]))
 	yield* pipe(
 		Stream.fromEffect(Effect.exit(loadUsage)),
 		Stream.repeat(Schedule.spaced('10 minutes')),
@@ -350,24 +352,24 @@ function codexWindow(input: typeof CodexUsage.Type.rate_limit.primary_window) {
 
 function remoteCodexUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {
 	return pipe(
-		Effect.fnUntraced(function* () {
+		Effect.gen(function* () {
 			const accessToken = yield* token
 			const response = yield* pipe(
 				client.get('https://chatgpt.com/backend-api/wham/usage', {headers: {authorization: `Bearer ${accessToken}`}}),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
 			if (response.status !== 200) {
-				return yield* new AgentError({
+				return yield* AgentError.make({
 					message: response.status === 401 ? 'not signed in' : `codex usage responded with status ${response.status}`
 				})
 			}
 			return yield* pipe(
 				response.json,
 				Effect.flatMap(Schema.decodeUnknownEffect(CodexUsage)),
-				Effect.mapError(cause => new AgentError({cause}))
+				Effect.mapError(cause => AgentError.make({cause}))
 			)
-		})(),
+		}),
 		Effect.timeout('10 seconds'),
-		Effect.mapError(cause => new AgentError({cause}))
+		Effect.mapError(cause => AgentError.make({cause}))
 	)
 }
