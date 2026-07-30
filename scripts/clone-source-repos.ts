@@ -63,27 +63,10 @@ const program = Effect.gen(function* () {
 			const directory = `.agents/repos/${repository.name}`
 
 			if (yield* fs.exists(directory)) {
-				yield* git(repository.name, 'fetching', [
-					'-C',
-					directory,
-					'fetch',
-					'--progress',
-					'--depth',
-					'1',
-					'origin',
-					'HEAD'
-				])
+				yield* git(repository.name, 'fetching', ['-C', directory, 'fetch', '--depth', '1', 'origin', 'HEAD'])
 				yield* git(repository.name, 'resetting', ['-C', directory, 'reset', '--hard', 'FETCH_HEAD'])
 			} else {
-				yield* git(repository.name, 'cloning', [
-					'clone',
-					'--progress',
-					'--depth',
-					'1',
-					'--single-branch',
-					repository.url,
-					directory
-				])
+				yield* git(repository.name, 'cloning', ['clone', '--depth', '1', '--single-branch', repository.url, directory])
 			}
 
 			yield* Effect.log(`ready ${repository.name}`)
