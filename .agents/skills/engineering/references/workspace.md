@@ -5,7 +5,7 @@
 Keep ownership visible in package boundaries and make shared tooling produce one coherent repository result.
 
 - Packages expose public entrypoints through `exports` and package-private modules through `imports`.
-- Edit `package.json` directly; never use `vp add` or another package-manager add command.
+- Edit `package.json` directly; never use `vp add`.
 - Put dependencies and scripts in the manifest that uses them. Do not duplicate a root dependency in a workspace.
 - Preserve manifest key, dependency, and intentional blank-line grouping and ordering.
 - New versions use `latest` unless the repository's current explicit case requires a range or channel.

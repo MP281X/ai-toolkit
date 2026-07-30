@@ -18,8 +18,8 @@
 	"scripts": {
 		"build": "vp run -r build",
 		
-		"fix": "vp check --fix",
-		"check": "vp check && chmod +x \"$(effect-tsgo get-exe-path)\" && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
+		"fix": "fallow fix --yes && vp check --fix",
+		"check": "vp check && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
@@ -34,7 +34,7 @@
 		"@effect/platform-node": "^4.0.0-beta"
 	},
 	"devDependencies": {
-		"typescript": "latest",
+		"typescript": "next",
 		"@effect/tsgo": "latest",
 		"@types/node": "latest",
 		"@types/react": "^19",

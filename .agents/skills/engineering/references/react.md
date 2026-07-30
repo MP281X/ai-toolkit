@@ -4,9 +4,15 @@
 
 Give authoritative application state and async behavior one reactive owner while components render current state and express user intent.
 
-- Current backend state uses `SubscriptionRef` atoms; incremental data uses streams.
+- Backend state uses `SubscriptionRef`; expose current values through streaming RPCs.
 - Each frontend has one always-defined `AtomRpc.Service` client in its established runtime module.
-- Suspending or failing reads use suspense atoms. Commands use action or RPC mutation atoms.
+
+```ts
+RpcClient.query('projects.branches', {cwd})
+RpcClient.mutation('projects.maintenance')
+```
+
+- Suspending or failing reads use suspense atoms.
 - Use local React state only for direct ephemeral interaction and pending UI intent.
 - A ref-shaped value uses `useRef`, not state containing `{current}`.
 - Use a reducer for coupled state with named user or domain events, never generic patches.
