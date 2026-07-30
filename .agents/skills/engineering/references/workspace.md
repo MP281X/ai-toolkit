@@ -2,17 +2,15 @@
 
 ## Intent
 
-Keep ownership visible in package boundaries and make shared tooling produce one coherent repository result.
+Keep package and generated-file ownership explicit.
 
-- Packages expose public entrypoints through `exports` and package-private modules through `imports`.
 - Edit `package.json` directly; never use `vp add`.
-- Put dependencies and scripts in the manifest that uses them. Do not duplicate a root dependency in a workspace.
-- Preserve manifest key, dependency, and intentional blank-line grouping and ordering.
+- Preserve existing manifest key, dependency, and intentional blank-line grouping/order.
+- Put a dependency or script in its owning manifest; do not duplicate a root dependency in workspaces.
 - New versions use `latest` unless the repository's current explicit case requires a range or channel.
-- Run `vp run upgrade` only when the user requests an all-dependency upgrade. Otherwise preserve current ranges and unrelated lockfile resolution.
-- Root scripts orchestrate shared checks; package scripts own package behavior; CLI commands use `bin`.
-- Keep scripts direct unless named orchestration owns status merging.
-- Use package exports across workspaces and subpath aliases within a package. Do not import workspace `src`/`lib` internals or traverse parent directories.
-- Import the public exported name directly; do not create import aliases to preserve stale local vocabulary.
-- Generated route trees, SVGs, component primitives, and lockfiles change only through their owning generator or package manager. Retain generated output only when repeating the owner produces the same result.
-- Config exceptions require generated/vendor source, a real tool conflict, a worse duplicate diagnostic, or a real package boundary.
+- All-dependency upgrade → `vp run upgrade`; otherwise preserve unrelated ranges and lockfile resolution.
+- Root scripts orchestrate repository behavior; package scripts own package behavior; CLIs use `bin`.
+- Packages expose public entrypoints through `exports` and package-private modules through `imports`.
+- Cross-workspace import → package export; intra-package import → subpath alias.
+- Reject workspace `src`/`lib` imports, parent traversal, and import aliases that preserve stale vocabulary.
+- Change routes, SVGs, primitives, lockfiles, and other generated files through their owner; retain only reproducible output.

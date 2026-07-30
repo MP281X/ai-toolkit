@@ -1,6 +1,6 @@
 interface:
   display_name: 'Implementation'
-  short_description: 'Deliver one approved issue'
-  default_prompt: 'Use $implementation to deliver this issue.'
+  short_description: 'Implement one canonical issue'
+  default_prompt: 'Use $implementation to implement this issue.'
 policy:
   allow_implicit_invocation: false

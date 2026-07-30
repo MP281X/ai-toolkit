@@ -2,23 +2,25 @@
 
 ## Intent
 
-Keep product surfaces dense, bordered, high-contrast, scan-first, and consistent with their surrounding interaction.
+Keep product surfaces dense, bordered, high-contrast, square, and scan-first.
 
-Read existing primitives, adapters, icons, and theme tokens before composing. Use `@deslop/components` exports first. Add missing generated primitives only with:
+Use current `@deslop/components` primitives, adapters, icons, and theme tokens before composing. Add a missing generated primitive only through:
 
 ```bash
-vp run shadcn list @shadcn
 vp run shadcn add <component>
 ```
 
-- Compose primitives at the feature boundary. An adapter owns layout policy, domain behavior, local state, repeated interaction, or cross-screen consistency.
-- One action has one discoverable entrypoint; one visualization has one representation unless comparison is the task.
-- Preserve layout while loading: stable-shape skeletons for content, local spinners for pending work, keyed pending state for repeated mutations.
-- Keep destructive confirmation, pending, and failure in the launching control or dialog. Unrelated controls remain active.
-- Use icons for repeated, dense, constrained, or secondary actions; text for primary, rare, ambiguous, or destructive confirmation.
-- Icon buttons require accessible names; unfamiliar icons require a tooltip.
-- Theme tokens and primitive variants own color, spacing, borders, radius, hover, and focus. Local classes own layout, containment, truncation, overflow, and state.
-- Keep corners square unless the primitive owns radius. Match surrounding size, density, border, placement, pending, and disabled behavior.
-- Use the shortest complete label.
+| Surface                       | Rule                                                     |
+| ----------------------------- | -------------------------------------------------------- |
+| Action                        | one discoverable entrypoint                              |
+| Visualization                 | one representation unless comparison is the task         |
+| Content loading               | stable-shape skeleton                                    |
+| Local pending work            | spinner in the launching control                         |
+| Repeated mutation             | pending state keyed by identity                          |
+| Destructive action            | confirmation and failure at the launching control/dialog |
+| Dense/secondary action        | icon with accessible name; tooltip when unfamiliar       |
+| Primary/rare/ambiguous action | shortest complete text label                             |
 
-**Reject:** gradients, shadows, blur, glass, marketing backgrounds, nested cards, decorative variants, implementation copy, and duplicated representations.
+Theme tokens and primitive variants own visual policy. Local classes own layout, containment, truncation, overflow, and state.
+
+Reject gradients, shadows, blur, glass, marketing backgrounds, nested cards, decorative variants, implementation copy, duplicated representations, and local style systems.

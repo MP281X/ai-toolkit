@@ -6,40 +6,47 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 
 ## Boundaries
 
-- Unknown input uses `Schema`; configuration uses `Config`; expected failures use typed errors.
-- Decode once at the owning RPC, HTTP, storage, process, SDK, form, or browser boundary, normalize once, then trust the decoded type.
-- Keep named schema/type pairs at module scope and infer the type immediately before its schema with `type Name = typeof Name.Type`. Inline one nested schema type access at its consumer instead of naming an alias. Use schema-backed constructors for domain data; tagged errors are the supported schema-class exception and are constructed with `.make`.
-- Consume existing `Option` values directly instead of reconstructing presence or absence.
-- Use maintained Effect or platform capabilities before JavaScript globals, prototypes, or native state, time, process, network, filesystem, cancellation, cache, event, JSON, and collection machinery.
-- Keep unavoidable native APIs at a narrow external or synchronous presentation boundary.
-- When a foreign API requires a callback that returns `void` or `Promise` and exposes no Effect adapter, capture the caller's context once and bridge only that callback with `Effect.runForkWith` or `Effect.runPromiseWith`. Keep resource ownership and cleanup in the surrounding Effect scope.
+- Unknown input → `Schema`
+- Configuration → `Config`
+- Expected failure → typed error
+- Existing optionality → consume its `Option`
+- Decode and normalize once at the owning external boundary.
+- Use Effect and Effect Platform before equivalent globals, prototypes, promises, timers, process, filesystem, network, cancellation, cache, events, JSON, or mutable collections.
+- Keep unavoidable native APIs inside the smallest foreign or synchronous presentation boundary.
 
-**Reject:** casts, property probing after decode, raw tagged objects, raw JSON, `Data` classes, non-error `Schema.Class`, local runtimes, `Effect.run*` outside a process entrypoint or the required foreign-callback bridge, Promise callbacks or orchestration inside Effect-owned behavior, mutable native collections, manual cancellation, and native prototype pipelines.
+```ts
+type Input = typeof Input.Type
+const Input = Schema.Struct({value: Schema.String})
 
-## Effect values
+function consume(value: typeof Usage.Type.rate_limit.primary_window) {}
+```
 
-- Named functions returning Effect use `Effect.fn` when it preserves their natural call shape and tracing.
-- Nullary Effect work is an Effect value, usually `Effect.gen`; use a function only when invocation itself carries input or creates a distinct resource or lifecycle.
-- Yield the real operation directly. A wrapper must add policy, failure translation, requirements, lifecycle, or observability.
+Reject duplicated structural types, `satisfies Schema.Schema<...>`, nested-access aliases, property probing after decode, raw tagged objects, and raw JSON.
 
-**Failure:** zero-argument factories and single-yield wrappers hide when work is constructed, duplicate signatures, and sever diagnostic context.
+When a foreign callback requires `void` or `Promise` and has no Effect adapter, capture the caller context once and bridge only that callback with `Effect.runForkWith` or `Effect.runPromiseWith`.
 
-**Direction:** expose the Effect value or named operation that owns the behavior.
+An Effect wrapper must add policy, failure translation, requirements, lifecycle, or observability. Reject zero-argument factories and single-yield wrappers.
 
 ## Public services
 
-- `service.ts` owns the tag, contract, and public layer constructors; named `internal/*` modules own implementations.
+- `service.ts` owns the tag, contract, and public layer constructors; `internal/*` owns implementations.
 - Shared instance input belongs in layer/config; operation input belongs in the method.
 - Public methods expose `R = never`, except caller-owned scoped resources.
-- Current mutable values have one `SubscriptionRef` read path; incremental-only output uses `Stream`.
+- Current mutable state has one `SubscriptionRef` read path; incremental-only output uses `Stream`.
 - Construct refs, caches, sockets, clients, queues, subscriptions, and fibers inside their owning scope.
 - Cleanup methods exist only for domain stop behavior.
 
-**Reject:** leaked requirements, `*Live` exports, global instances, public implementation types, multiple read paths, and redundant layers.
+Reject leaked requirements, `*Live` exports, global instances, public implementation types, duplicate read paths, and redundant layers.
 
 ## Shape and tracing
 
-- Use data-first dual APIs and imported `pipe` or `flow` for larger compositions.
+- Use Effect modules, data-first dual APIs, `pipe`, and `flow`.
 - Trace public Effect, Stream, channel, and scoped capabilities plus meaningful external I/O and failure-prone stages.
 
-**Reject:** method `.pipe`, schema-decoder aliases, and traces around pure transformations or entire infinite stream lifetimes.
+```ts
+pipe(values, Array.filter(Predicate.isNotNull), Array.map(transform))
+pipe(value, String.trim, String.toLowerCase)
+Boolean.match(condition, {onFalse, onTrue})
+```
+
+Reject schema-decoder aliases and traces around pure transformations or entire infinite stream lifetimes.

@@ -1,32 +1,61 @@
 ---
 name: skill-writing
-description: 'Repository instructions, skill metadata and bodies, progressive references, and static-enforcement placement.'
+description: 'Use when creating or auditing repository instructions, skill metadata, progressive references, or enforcement ownership.'
 ---
 
-Predictability is the goal: independent runs reach the same behavior from the same evidence.
+## Intent
+
+Make independent runs choose the same action from the same evidence.
 
 ## Ownership
 
-Assign each meaning to one narrow owner:
+| Owner              | Surface                                                       |
+| ------------------ | ------------------------------------------------------------- |
+| `AGENTS.md`        | unconditional repository behavior                             |
+| TypeScript         | type validity, inference, compiler semantics                  |
+| Oxlint             | maintained generic syntax, import policy, source restrictions |
+| Effect diagnostics | Effect invalid states and native replacements                 |
+| Fallow             | repository-graph reachability                                 |
+| Domain skill       | conditional semantic behavior                                 |
 
-1. TypeScript: type, inference, control-flow, and module guarantees.
-2. Oxlint: maintained generic syntax, import, control-flow, and restriction diagnostics.
-3. Effect: maintained type-aware Effect diagnostics and Effect-native replacements.
-4. Fallow: repository-graph reachability.
-5. Domain skills: semantic engineering behavior that tooling cannot diagnose reliably.
+One invariant has one owner. Prefer the earliest maintained owner that proves it without harmful false positives. If mechanical compliance can still violate semantic intent, tooling owns the detectable floor and the domain skill owns the semantic decision.
 
-Never enforce one invariant twice. Prefer the earliest maintained owner that proves it without harmful false positives. When a mechanical diagnostic can be satisfied while violating semantic intent, tooling owns the detectable floor and the domain skill retains the decision invariant. Global behavior belongs in `AGENTS.md`; conditional workflow or domain behavior belongs in its skill.
+## Skill
 
-Retain a top-level **Intent** for each domain. Use **Reason / Failure / Direction / Reject** only when the rationale changes how an agent corrects or applies a non-obvious rule.
+- Description = front-loaded trigger + exact owned outcome/boundary.
+- Simulate positive and adjacent negative prompts; rewrite metadata when either routes incorrectly.
+- Body begins with owned behavior; never repeat title, description, invocation condition, `AGENTS.md`, or another skill.
+- Add `agents/openai.yaml` only for interface metadata, invocation policy, or tool dependencies; keep it synchronized with `SKILL.md`.
+- Root = unconditional policy + precise conditional routes.
+- Reference = complete conditional rule; never mirror it in the root or another reference.
+- Ordered workflow → state machine or steps with observable completion.
+- Static domain → flat decisions.
+- Retain intent/reason/failure/reject only when it changes application or correction.
 
-## Conditional reference
+Delete history, tutorials, compatibility, migration, opposite rules, partial mirrors, and sentences that do not change behavior beyond model defaults.
 
-- Writing or restructuring `AGENTS.md`, a skill, metadata, or progressive references: `references/skill.md`.
-- Changing TypeScript compiler ownership: `references/typescript.md`.
-- Changing the maintained Oxlint inventory: `references/oxlint.md`.
-- Changing Effect language-service diagnostics: `references/effect.md`.
-- Changing Fallow reachability: `references/fallow.md`.
+## Deterministic enforcement
 
-## Completion
+Inspect installed help/schema, active configuration, matching `.agents/repos/*`, and repository hits; never preserve a volatile inventory in prose.
 
-Inspect the complete composed instruction system, including metadata trigger behavior, progressive routes, generated metadata, tooling ownership, and domain intent. Test positive and negative invocation cases. Report only concrete conflicts, duplication, unsupported claims, suppressions, or ambiguity. Return `Self-review: Clean` when none remain.
+| Tool               | Audit                                                                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript         | inventory inherited options; start at maximum practical owned-source strictness; relax only for maintained external declarations, generated source, or concrete repository evidence                                  |
+| Oxlint             | enumerate maintained active-plugin rules; group by invariant; remove TypeScript/Effect/Fallow/formatter overlap; enable rules with one valid owned-source end state; reject broad presets and shape-only diagnostics |
+| Effect diagnostics | enumerate the installed compatible schema/source; start strict; record concrete evidence for every weaker severity; configure once at the root compiler boundary                                                     |
+| Fallow             | derive the smallest owned-source reachability config; preserve intentional public exports; exclude generated/reference source; omit default-off and default-equivalent entries                                       |
+
+Suppressions are narrow, inline, reasoned, and backed by an irreducible boundary.
+
+## Audit
+
+Reject:
+
+- multiple owners or incompatible answers;
+- duplicated meaning in different words;
+- metadata trigger gaps or collisions;
+- unconditional rules hidden behind progressive discovery;
+- claims unsupported by current source;
+- exceptions without a concrete boundary;
+- ambiguous authority, completion, or invalidation;
+- structural inconsistency across sibling skills.

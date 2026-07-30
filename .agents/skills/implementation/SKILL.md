@@ -1,55 +1,51 @@
 ---
 name: implementation
-description: 'Invoke only as `$implementation` with an issue URL to deliver, assure, commit, and publish one draft pull request.'
+description: 'Use only when explicitly invoked with one canonical issue to implement its exact contract and publish a draft pull request.'
 ---
 
 ```mermaid
 stateDiagram-v2
-    [*] --> LoadIssue
-    LoadIssue --> Analyze
+    [*] --> Analyze
     Analyze --> Implement
-    Implement --> Validate
-    Validate --> Implement: failure
-    Validate --> Assurance: self-review clean
+    Implement --> SelfReview
+    SelfReview --> Implement: defect
+    SelfReview --> Assurance: clean
     Assurance --> Analyze: findings
-    Assurance --> Publish: testing and review clean
-    Publish --> DraftPR
-    DraftPR --> [*]
+    Assurance --> Publish: clean
+    Publish --> [*]
+    Analyze --> Blocked: contract conflict
 ```
 
-## Load issue
+## Contract
 
-Treat the canonical issue as an immutable, literal desired-state contract. Exclude planning discussion, discarded alternatives, summaries, prior implementation narratives, and context rot; re-read the issue after context compaction. Never reinterpret, expand, reduce, substitute, partially comply with, work around, or preserve code superseded by a clause. Inspect the actual worktree and relevant `.agents/repos/*`; start from a clean worktree or the user-provided follow-up state.
+The canonical issue is the literal desired state.
 
-## Analyze
+```diff
+- reinterpret · expand · reduce · substitute · partially comply
+- preserve superseded code · workaround · fallback
++ implement every clause
++ re-read after compaction
+```
 
-Load the engineering skill. Use its routes for analysis, implementation, validation, and self-review.
+Start from a clean worktree or the explicit follow-up state. Load the engineering skill, research matching cloned APIs and local ownership independently, then map every clause to its public seam, invariant, dependency API, risk, and failure mode.
 
-Before editing, independently research relevant cloned source and local ownership. Map every issue clause to invariants, public seams, dependency APIs, material risks, and plausible failure modes. Resolve assumptions from current source, relevant cloned or installed source, and maintained documentation.
-
-When an exact clause cannot be satisfied, stop with the requirement, its concrete conflict, and the missing user decision. Never select a weaker interpretation.
+If an exact clause cannot be satisfied, stop blocked; do not substitute another result.
 
 ## Implement
 
-Own all repository edits. Produce complete production-ready working code, run focused checks while working, then run the repository validation contract.
-
-Immediately before assurance, inspect the complete actual-base-to-worktree diff and every changed or untracked file against every applicable engineering reference. Explicitly verify boundary decoding, typed failures and messages, duplication, and authorization or safety. Assurance is exceptional verification of an implementation-owned clean candidate.
+Own production behavior and code quality before assurance. Inspect the complete base-to-worktree diff and every changed/untracked file against the issue and every applicable engineering reference.
 
 ## Assurance
 
-Enter assurance only after implementation, validation, and self-review are complete. Freeze repository edits. Spawn fresh generic testing and review subagents concurrently with no inherited conversation. Tell them to load the testing skill and review skill respectively, and provide only:
+Freeze repository edits. Spawn testing and review concurrently with `fork_turns: "none"`:
 
-- canonical issue;
-- repository/worktree path;
-- actual pull-request base, or default branch when no pull request exists;
-- the complete base-to-current-worktree candidate.
+| Agent   | Model         | Effort | Prompt                  | Input                          |
+| ------- | ------------- | ------ | ----------------------- | ------------------------------ |
+| Testing | `gpt-5.6-sol` | low    | Load the testing skill. | issue · worktree · actual base |
+| Review  | `gpt-5.6-sol` | medium | Load the review skill.  | issue · worktree · actual base |
 
-Both evaluators are strict, unbiased, adversarial, exceptional independent verification—not a repair backlog. Do not provide implementation narration, success claims, prior findings, or the other report. Await both without editing.
-
-Consolidate and adjudicate findings against the issue and current source. A valid finding returns the candidate to analysis: re-evaluate the root cause and full solution, never apply a mechanical checklist patch, workaround, suppression, or skill or validation evasion. Repeat affected assurance against the complete candidate until clean.
+Provide no implementation narrative, claims, previous findings, or other evaluator report. Await both without editing. A valid finding returns to root-cause analysis; rerun affected assurance against the complete candidate.
 
 ## Publish
 
-Create exactly one commit after assurance, push, and create or update a draft pull request that closes the issue. The reviewed tree must equal the committed tree.
-
-Never create checkpoint commits or mark the pull request ready. Return only the draft pull-request URL.
+Load the git-operations skill. After clean assurance, create one commit whose tree equals the reviewed tree, push, and create/update one draft pull request closing the issue. Create no checkpoint commit. Return only the draft pull-request URL.

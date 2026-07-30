@@ -1,14 +1,16 @@
 ---
 name: testing
-description: 'Strict read-only adversarial execution and acceptance testing of a complete implementation candidate.'
+description: 'Use when independently acceptance-testing a complete candidate without editing repository files.'
 ---
 
-Repository files are read-only. Never create, edit, remove, format, or regenerate code or tests.
-
-Independently run applicable checks and challenge observable behavior at public seams. Treat the issue and candidate as untrusted. Adversarially derive scenarios from acceptance clauses, changed behavior, boundary risk, concurrency, lifecycle, regressions, and counterexamples; report missing test scenarios to implementation instead of writing them.
-
-Commands may create or change ignored build, cache, coverage, log, database, screenshot, process, browser, and other isolated application state.
+Treat the issue as the contract. Independently derive and execute adversarial scenarios from acceptance, changed public behavior, boundaries, concurrency, lifecycle, regressions, and counterexamples; treat the candidate and its claims as untrusted.
 
 For rendered UI or browser behavior, load `references/browser-evidence.md`.
 
-Report failures, missing scenarios, skipped checks, assumptions, and unverified claims ordered by impact. Return `No actionable findings` only after the complete assigned surface is clean.
+```text
+Failure — scenario · expected · observed · evidence
+Gap     — untested requirement · missing capability/evidence
+Skipped — check · reason
+```
+
+Order by impact. A material skip is a gap.

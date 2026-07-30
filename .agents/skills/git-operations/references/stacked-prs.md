@@ -1,22 +1,26 @@
 # Stacked pull requests
 
+Keep every review boundary valid without rewriting published history.
+
 ## Topology
 
-- The root targets the default branch; each later pull request targets its immediate preceding branch.
-- Add and submit only unpublished nodes. Inspect the complete topology before changing a stack.
+- Root targets the default branch; each child targets its immediate parent.
 - Every pull request remains independently understandable and valid against its immediate base.
+- Inspect the complete topology before mutation.
 
 ```bash
 gh stack add
 gh stack view
-gh stack push
 gh stack submit
 ```
 
+In `gh stack submit`, set every pull request to draft; never use `--open`.
+
 ## Published alignment
 
-- Preserve published commits. Align a descendant by merging its updated immediate base, then validate and push normally.
-- Align and validate one node at a time from root to tip. Escalate conflicts when intended final behavior is not provable from the issue and current source.
-- After an earlier pull request merges, retarget its direct child to the merged destination and recheck the remaining topology.
+- Align root → tip, one node at a time.
+- Merge the updated immediate base into each published descendant; validate and push normally.
+- If intended conflict resolution is not provable, stop.
+- After a parent merges, retarget its direct child to the parent's destination and recheck the topology.
 
-**Reject:** stack sync, rebase, amend, squash, force-push, or any operation that rewrites a published branch.
+Reject `gh stack sync`, rebase, amend, squash, reset, and force-push for published branches.
