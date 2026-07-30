@@ -16,10 +16,10 @@
 
 ## Verification
 
-| Change | Finish with |
-|---|---|
+| Change                                                             | Finish with                                                                                 |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | Code · executable config · dependencies · generated source · tests | `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause |
-| Markdown · instructions only | `git diff --check`; inspect rendered GFM; synchronize affected metadata |
+| Markdown · instructions only                                       | `git diff --check`; inspect rendered GFM; synchronize affected metadata                     |
 
 ## Communication
 
