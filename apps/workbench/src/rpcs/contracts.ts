@@ -2,170 +2,135 @@ import {Schema} from 'effect'
 
 import {Rpc, RpcGroup} from 'effect/unstable/rpc'
 
-import {AgentBrowserError, AgentBrowserTabSwitch} from '@deslop/agent-browser/schema'
-import {AgentError, AgentProvider, AgentSubscription, AgentUsageData, AgentUsageProvider} from '@deslop/agent/schema'
-import {AiError} from '@deslop/ai/schema'
+import {Asset} from '#services/assets/schema.ts'
+import {AgentId, ArchivedIssue, BranchName, PlanHandoff} from '#services/issues/schema.ts'
+import {PreviewExposure} from '#services/preview/schema.ts'
+import {ProcessSnapshot} from '#services/processes/schema.ts'
+import {PublicationResult} from '#services/publication/schema.ts'
+import {Repository, RepositoryName} from '#services/repositories/schema.ts'
 import {
-	GitBranchesSnapshot,
-	GitDiff,
-	GitError,
-	GitProject,
-	GitReviewComment,
-	GitReviewCommentDraft,
-	GitReviewMark,
-	GitReviewMetadata,
-	GitReviewState,
-	GitReviewTarget,
-	GitWorktreeSource
-} from '@deslop/git/schema'
-import {OsError, Resources} from '@deslop/os/schema'
-import {PortlessRun} from '@deslop/portless/schema'
-import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
+	ActiveIssue,
+	Conversation,
+	IssueInspector,
+	PlanningConversation,
+	WorkbenchError
+} from '#services/workbench/schema.ts'
+import {AgentError, AgentQuota} from '@deslop/agent/schema'
+import {SourceRepository} from '@deslop/git/schema'
 
-const CwdPayload = Schema.Struct({cwd: Schema.String})
-
-const TerminalPayloadFields = {
-	args: Schema.optional(Schema.Array(Schema.String)),
-	command: Schema.optional(Schema.String),
-	cwd: Schema.String,
-	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-	sessionId: Schema.optional(Schema.String)
-}
-
-export type TerminalPayload = typeof TerminalPayload.Type
-export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
-
-const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
-
-export type AgentSession = typeof AgentSession.Type
-const AgentSession = Schema.Struct({
-	args: Schema.Array(Schema.String),
-	command: Schema.String,
-	cwd: Schema.String,
-	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-	icon: AgentProvider,
-	label: Schema.String,
-	profileId: AgentProvider,
-	state: TerminalStatusPayload,
-	uuid: Schema.String
-})
-
-export type AgentProfile = typeof AgentProfile.Type
-const AgentProfile = Schema.Struct({icon: AgentProvider, id: AgentProvider, label: Schema.String})
-
-export type ScriptRun = typeof ScriptRun.Type
-const ScriptRun = Schema.Struct({
-	command: Schema.String,
-	scriptName: Schema.String,
-	sessionId: Schema.String,
-	taskId: Schema.String
-})
-
-export type SidebarWorktree = typeof SidebarWorktree.Type
-const SidebarWorktree = Schema.Struct({
-	agents: Schema.Array(AgentSession),
-	branch: Schema.optional(Schema.String),
-	portlessRuns: Schema.Array(PortlessRun),
-	root: Schema.String,
-	runStatuses: Schema.Record(Schema.String, TerminalStatusPayload),
-	scriptRuns: Schema.Array(ScriptRun)
-})
-
-export type SidebarProject = typeof SidebarProject.Type
-const SidebarProject = Schema.Struct({
-	repository: GitProject.fields.repository,
-	worktrees: Schema.Array(SidebarWorktree)
-})
-
-const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
-
-const PublishDraftError = Schema.Union([GitError, AiError])
+const RepositoryPayload = Schema.Struct({repository: RepositoryName})
+const IssuePayload = Schema.Struct({branch: BranchName, repository: RepositoryName})
+const AgentPayload = Schema.Struct({agentId: AgentId, repository: RepositoryName})
 
 export class RpcContracts extends RpcGroup.make(
-	Rpc.make('agents.create', {
-		error: TerminalError,
-		payload: Schema.Struct({cwd: Schema.String, provider: AgentProvider}),
-		success: AgentSession
+	Rpc.make('usage', {error: AgentError, stream: true, success: AgentQuota}),
+	Rpc.make('repositories', {error: WorkbenchError, stream: true, success: Schema.Array(Repository)}),
+	Rpc.make('repositories.add', {
+		error: WorkbenchError,
+		payload: Schema.Struct({url: Schema.URLFromString}),
+		success: Repository
 	}),
-	Rpc.make('agents.profiles', {error: AgentError, success: Schema.Array(AgentProfile)}),
-	Rpc.make('agents.remove', {error: TerminalError, payload: Schema.Struct({cwd: Schema.String, uuid: Schema.String})}),
-	Rpc.make('agents', {error: TerminalError, payload: CwdPayload, stream: true, success: Schema.Array(AgentSession)}),
-	Rpc.make('agentBrowser.sync', {error: AgentBrowserError, payload: CwdPayload}),
-	Rpc.make('agentBrowser.switchTab', {error: AgentBrowserError, payload: AgentBrowserTabSwitch}),
-	Rpc.make('home.sidebar', {
-		error: Schema.Union([GitError, TerminalError, AiError]),
+	Rpc.make('planning', {error: WorkbenchError, stream: true, success: Schema.Array(PlanningConversation)}),
+	Rpc.make('planning.create', {
+		error: WorkbenchError,
+		payload: Schema.Struct({prompt: Schema.optional(Schema.String), repository: RepositoryName}),
+		success: PlanningConversation
+	}),
+	Rpc.make('planning.prompt', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...AgentPayload.fields, prompt: Schema.String}),
+		success: Schema.Unknown
+	}),
+	Rpc.make('planning.save', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...AgentPayload.fields, plan: Schema.String}),
+		success: BranchName
+	}),
+	Rpc.make('issues', {
+		error: WorkbenchError,
+		payload: RepositoryPayload,
 		stream: true,
-		success: HomeSidebar
+		success: Schema.Array(ActiveIssue)
 	}),
-	Rpc.make('projects', {error: GitError, stream: true, success: Schema.Array(GitProject)}),
-	Rpc.make('projects.branches', {error: GitError, payload: CwdPayload, success: GitBranchesSnapshot}),
-	Rpc.make('projects.maintenance', {error: GitError, payload: CwdPayload}),
-	Rpc.make('review.metadata', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewMetadata}),
-	Rpc.make('review.diffs', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, target: GitReviewTarget}),
+	Rpc.make('issues.savePlan', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...AgentPayload.fields, branch: BranchName, plan: Schema.String}),
+		success: BranchName
+	}),
+	Rpc.make('issues.close', {error: WorkbenchError, payload: IssuePayload}),
+	Rpc.make('implementation.start', {error: WorkbenchError, payload: IssuePayload, success: AgentId}),
+	Rpc.make('implementation.prompt', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, prompt: Schema.String}),
+		success: Schema.Unknown
+	}),
+	Rpc.make('conversation', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...AgentPayload.fields, branch: Schema.optional(BranchName)}),
 		stream: true,
-		success: Schema.Array(GitDiff)
+		success: Conversation
 	}),
-	Rpc.make('review.state', {error: GitError, payload: CwdPayload, stream: true, success: GitReviewState}),
-	Rpc.make('review.state.mark', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
+	Rpc.make('inspector', {error: WorkbenchError, payload: IssuePayload, stream: true, success: IssueInspector}),
+	Rpc.make('publication.publish', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, base: Schema.optional(BranchName)}),
+		success: PublicationResult
+	})
+) {}
+
+export class AgentRpcContracts extends RpcGroup.make(
+	Rpc.make('agent.assets.upload', {
+		error: WorkbenchError,
+		payload: Schema.Struct({bytes: Schema.Uint8ArrayFromBase64, repository: RepositoryName}),
+		success: Asset
 	}),
-	Rpc.make('review.state.unmark', {
-		error: GitError,
-		payload: Schema.Struct({cwd: Schema.String, marks: Schema.Array(GitReviewMark)})
-	}),
-	Rpc.make('review.comments.save', {
-		error: GitError,
-		payload: Schema.Struct({comment: GitReviewCommentDraft, cwd: Schema.String})
-	}),
-	Rpc.make('review.comments.resolve', {
-		error: GitError,
-		payload: Schema.Struct({comments: Schema.Array(GitReviewComment), cwd: Schema.String})
-	}),
-	Rpc.make('publish.checkpoint', {error: GitError, payload: CwdPayload}),
-	Rpc.make('publish.publish', {error: GitError, payload: Schema.Struct({cwd: Schema.String, message: Schema.String})}),
-	Rpc.make('publish.message.generate', {error: PublishDraftError, payload: CwdPayload, success: Schema.String}),
-	Rpc.make('projects.createWorktree', {
-		error: GitError,
-		payload: Schema.Struct({branch: Schema.String, cwd: Schema.String, source: GitWorktreeSource}),
-		success: Schema.String
-	}),
-	Rpc.make('projects.deleteWorktree', {error: GitError, payload: CwdPayload}),
-	Rpc.make('runs.portless', {error: TerminalError, payload: CwdPayload, success: Schema.Array(PortlessRun)}),
-	Rpc.make('runs.scripts', {error: TerminalError, payload: CwdPayload, success: Schema.Array(ScriptRun)}),
-	Rpc.make('terminal.write', {
-		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, data: TerminalInput})
-	}),
-	Rpc.make('terminal.resize', {
-		error: TerminalError,
-		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Finite, rows: Schema.Finite})
-	}),
-	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
-	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
-	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
-	Rpc.make('terminal.attach', {
-		error: TerminalError,
+	Rpc.make('agent.issue.savePlan', {
+		error: WorkbenchError,
 		payload: Schema.Struct({
-			...TerminalPayloadFields,
-			cols: Schema.optional(Schema.Finite),
-			rows: Schema.optional(Schema.Finite)
+			agentId: AgentId,
+			branch: Schema.optional(BranchName),
+			plan: Schema.String,
+			repository: RepositoryName
 		}),
-		stream: true,
-		success: TerminalFrame
+		success: BranchName
 	}),
-	Rpc.make('usage', {
-		error: AgentError,
-		payload: Schema.Struct({provider: AgentUsageProvider}),
-		stream: true,
-		success: AgentUsageData
+	Rpc.make('agent.issue.history', {
+		error: WorkbenchError,
+		payload: RepositoryPayload,
+		success: Schema.Array(ArchivedIssue)
 	}),
-	Rpc.make('usage.subscription', {
-		error: AgentError,
-		payload: Schema.Struct({provider: AgentUsageProvider}),
-		success: AgentSubscription
+	Rpc.make('agent.issue.close', {error: WorkbenchError, payload: IssuePayload}),
+	Rpc.make('agent.implementation.handoff', {error: WorkbenchError, payload: IssuePayload, success: PlanHandoff}),
+	Rpc.make('agent.implementation.start', {error: WorkbenchError, payload: IssuePayload, success: AgentId}),
+	Rpc.make('agent.process.start', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, script: Schema.String}),
+		success: ProcessSnapshot
 	}),
-	Rpc.make('usage.system', {error: OsError, stream: true, success: Resources})
+	Rpc.make('agent.process.stop', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, script: Schema.String})
+	}),
+	Rpc.make('agent.preview.expose', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, script: Schema.String}),
+		success: PreviewExposure
+	}),
+	Rpc.make('agent.preview.revoke', {error: WorkbenchError, payload: Schema.Struct({id: Schema.String})}),
+	Rpc.make('agent.publication.publish', {
+		error: WorkbenchError,
+		payload: Schema.Struct({...IssuePayload.fields, base: Schema.optional(BranchName)}),
+		success: PublicationResult
+	}),
+	Rpc.make('agent.repository.alignDefault', {error: WorkbenchError, payload: IssuePayload}),
+	Rpc.make('agent.source.add', {
+		error: WorkbenchError,
+		payload: Schema.Struct({repository: RepositoryName, url: Schema.URLFromString}),
+		success: SourceRepository
+	}),
+	Rpc.make('agent.source.synchronize', {
+		error: WorkbenchError,
+		payload: Schema.Struct({name: Schema.String, repository: RepositoryName}),
+		success: SourceRepository
+	})
 ) {}

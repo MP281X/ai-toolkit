@@ -6,5 +6,10 @@
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts"
+	},
+
+	"dependencies": {
+		"@earendil-works/pi-ai": "latest",
+		"@earendil-works/pi-coding-agent": "latest"
 	}
 }

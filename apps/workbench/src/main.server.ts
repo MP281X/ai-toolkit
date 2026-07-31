@@ -4,16 +4,15 @@ import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
 
 import {LiveLayers} from '#lib/serverRuntime.ts'
-import {RpcContracts} from '#rpcs/contracts.ts'
-import {AgentBrowser} from '@deslop/agent-browser/service'
-import {Portless} from '@deslop/portless/service'
+import {AgentRpcContracts, RpcContracts} from '#rpcs/contracts.ts'
 
-export default pipe(
+const Application = pipe(
 	Layer.mergeAll(
 		RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
-		HttpRouter.middleware(AgentBrowser.middleware, {global: true}),
+		RpcServer.layerHttp({group: AgentRpcContracts, path: '/api/agent-rpc', protocol: 'websocket'}),
 		HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
 	),
-	Layer.provide(LiveLayers),
-	Layer.provideMerge(Portless.layer)
+	Layer.provide(LiveLayers)
 )
+
+export default Application

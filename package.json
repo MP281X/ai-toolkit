@@ -23,7 +23,7 @@
 		"shadcn": "cd packages/components && vpx shadcn@latest",
 		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
 		
-		"postinstall": "chmod +x \"$(effect-tsgo get-exe-path)\" && node scripts/clone-source-repos.ts"
+		"postinstall": "chmod +x \"$(effect-tsgo get-exe-path)\""
 	},
 	
 	"dependencies": {

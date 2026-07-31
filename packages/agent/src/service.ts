@@ -1,64 +1,105 @@
-import {Context, Effect, Layer, Match, pipe} from 'effect'
-import type {Exit, Option, SubscriptionRef} from 'effect'
-
-import type {ChildProcess} from 'effect/unstable/process'
-
-import {makeLayerClaude} from './agents/claude.ts'
-import {makeLayerCodex} from './agents/codex.ts'
-import {makeLayerOpencode} from './agents/opencode.ts'
 import {
-	type AgentError,
-	type AgentLayerConfig,
-	type AgentSubscription,
-	type AgentUsageData,
-	type AgentUsageProvider
-} from './schema.ts'
-import {makeLayerClaudeUsage} from './usage/claude.ts'
-import {makeLayerCodexUsage} from './usage/codex.ts'
+	Context,
+	DateTime,
+	Effect,
+	FileSystem,
+	Layer,
+	Path,
+	Schedule,
+	Schema,
+	Stream,
+	SubscriptionRef,
+	pipe
+} from 'effect'
+
+import {getAgentDir} from '@earendil-works/pi-coding-agent'
+import type {Prompt, Toolkit} from 'effect/unstable/ai'
+import {HttpClient} from 'effect/unstable/http'
+
+import {makePi} from './internal/pi.ts'
+import {AgentError, AgentQuota} from './schema.ts'
+
+export declare namespace Agent {
+	export type Config = {
+		readonly id?: string
+		readonly cwd: string
+		readonly sessionDirectory: string
+		readonly model: string
+		readonly reasoningEffort: string
+		readonly systemPrompt: string
+		readonly toolkit: Toolkit.Any
+	}
+}
 
 export class Agent extends Context.Service<
 	Agent,
-	{readonly create: Effect.Effect<ChildProcess.StandardCommand, AgentError>}
->()('@deslop/agent/service/Agent') {
-	public static layer(config: AgentLayerConfig) {
-		return pipe(
-			Match.value(config),
-			Match.when({provider: 'codex'}, input => Agent.layerCodex(input)),
-			Match.when({provider: 'claude'}, input => Agent.layerClaude(input)),
-			Match.when({provider: 'opencode'}, input => Agent.layerOpencode(input)),
-			Match.exhaustive
-		)
+	{
+		readonly id: string
+		readonly history: SubscriptionRef.SubscriptionRef<readonly Prompt.Message[]>
+		readonly prompt: (message: Prompt.UserMessage) => Effect.Effect<Prompt.AssistantMessage, AgentError>
+		readonly status: SubscriptionRef.SubscriptionRef<'idle' | 'running' | 'retrying'>
+		readonly steer: (message: Prompt.UserMessage) => Effect.Effect<void, AgentError>
 	}
-
-	public static layerCodex = (config: AgentLayerConfig) =>
-		Layer.effect(this, pipe(makeLayerCodex(config), Effect.map(Agent.of)))
-
-	public static layerClaude = (config: AgentLayerConfig) =>
-		Layer.effect(this, pipe(makeLayerClaude(config), Effect.map(Agent.of)))
-
-	public static layerOpencode = (config: AgentLayerConfig) =>
-		Layer.effect(this, pipe(makeLayerOpencode(config), Effect.map(Agent.of)))
+>()('@deslop/agent/service/Agent') {
+	public static make = makePi
+	public static layer = (config: Agent.Config) => Layer.effect(this, this.make(config))
 }
 
-export class AgentUsage extends Context.Service<
-	AgentUsage,
-	{
-		readonly subscription: Effect.Effect<AgentSubscription, AgentError>
-		readonly usage: SubscriptionRef.SubscriptionRef<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>
-	}
->()('@deslop/agent/service/AgentUsage') {
-	public static layer(config: {readonly provider: AgentUsageProvider}) {
-		return pipe(
-			Match.value(config),
-			Match.when({provider: 'codex'}, input => AgentUsage.layerCodex(input)),
-			Match.when({provider: 'claude'}, input => AgentUsage.layerClaude(input)),
-			Match.exhaustive
+export declare namespace AgentUsage {
+	export type Config = {readonly provider: 'openai-codex'}
+}
+
+const PiCredentials = Schema.Struct({
+	'openai-codex': Schema.Struct({access: Schema.String, type: Schema.Literal('oauth')})
+})
+
+const UsageResponse = Schema.Struct({
+	plan_type: Schema.optional(Schema.NullOr(Schema.String)),
+	rate_limit: Schema.Struct({secondary_window: Schema.Struct({reset_at: Schema.Finite, used_percent: Schema.Finite})})
+})
+
+export class AgentUsage extends Context.Service<AgentUsage>()('@deslop/agent/service/AgentUsage', {
+	make: Effect.fnUntraced(function* (_config: AgentUsage.Config) {
+		const fs = yield* FileSystem.FileSystem
+		const path = yield* Path.Path
+		const client = yield* HttpClient.HttpClient
+
+		const load = Effect.fn('AgentUsage.load')(function* () {
+			const credentials = yield* pipe(
+				fs.readFileString(path.join(getAgentDir(), 'auth.json')),
+				Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(PiCredentials))),
+				Effect.mapError(cause => AgentError.make({cause, message: 'Pi is not signed in to OpenAI Codex'}))
+			)
+			const response = yield* pipe(
+				client.get('https://chatgpt.com/backend-api/wham/usage', {
+					headers: {authorization: `Bearer ${credentials['openai-codex'].access}`}
+				}),
+				Effect.mapError(cause => AgentError.make({cause, message: 'failed to load subscription usage'}))
+			)
+			if (response.status !== 200) {
+				return yield* AgentError.make({message: `subscription usage responded with status ${response.status}`})
+			}
+			const usage = yield* pipe(
+				response.json,
+				Effect.flatMap(Schema.decodeUnknownEffect(UsageResponse)),
+				Effect.mapError(cause => AgentError.make({cause, message: 'invalid subscription usage response'}))
+			)
+			return AgentQuota.make({
+				plan: usage.plan_type ?? undefined,
+				weeklyRemaining: Math.max(0, 100 - usage.rate_limit.secondary_window.used_percent),
+				weeklyResetAt: DateTime.makeUnsafe(usage.rate_limit.secondary_window.reset_at * 1_000)
+			})
+		})
+
+		const quota = yield* SubscriptionRef.make(yield* Effect.exit(load()))
+		yield* pipe(
+			Stream.fromEffect(Effect.exit(load())),
+			Stream.repeat(Schedule.spaced('10 minutes')),
+			Stream.runForEach(value => SubscriptionRef.set(quota, value)),
+			Effect.forkScoped
 		)
-	}
-
-	public static layerCodex = (config: {readonly provider: 'codex'}) =>
-		Layer.effect(this, pipe(makeLayerCodexUsage(config), Effect.map(AgentUsage.of)))
-
-	public static layerClaude = (config: {readonly provider: 'claude'}) =>
-		Layer.effect(this, pipe(makeLayerClaudeUsage(config), Effect.map(AgentUsage.of)))
+		return {quota}
+	})
+}) {
+	public static layer = (config: AgentUsage.Config) => Layer.effect(this, this.make(config))
 }

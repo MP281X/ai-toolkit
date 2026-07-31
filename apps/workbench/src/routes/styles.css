@@ -1,2 +1,421 @@
 @import '@deslop/components/theme.css';
 @source '../../../../packages/components/src/**/*.tsx';
+
+:root {
+	color-scheme: dark;
+}
+
+button,
+textarea,
+input {
+	font: inherit;
+}
+
+.workbench-shell {
+	display: grid;
+	grid-template-rows: 44px minmax(0, 1fr);
+	height: 100%;
+	background: var(--background);
+}
+
+.topbar {
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0 0.6rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--background);
+}
+
+.brand {
+	margin-right: 0.8rem;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+
+.repository-select {
+	width: 13rem;
+	height: 1.8rem;
+}
+
+.topbar-spacer {
+	flex: 1;
+}
+
+.usage {
+	color: var(--muted-foreground);
+	font-size: 0.68rem;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.destructive-error {
+	color: var(--destructive);
+	font-size: 0.78rem;
+}
+
+.mobile-menu {
+	display: none;
+}
+
+.workbench-grid {
+	display: grid;
+	grid-template-columns: 250px minmax(0, 1fr);
+	min-height: 0;
+}
+
+.workbench-grid:has(.workbench-inspector) {
+	grid-template-columns: 250px minmax(0, 1fr) 290px;
+}
+
+.workbench-sidebar,
+.workbench-inspector {
+	min-height: 0;
+	overflow-y: auto;
+	border-right: 1px solid var(--border);
+	background: var(--card);
+}
+
+.workbench-inspector {
+	border-right: 0;
+	border-left: 1px solid var(--border);
+}
+
+.sidebar-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 2.25rem;
+	padding: 0 0.65rem;
+	color: var(--muted-foreground);
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.issues-heading {
+	margin-top: 0.55rem;
+	border-top: 1px solid var(--border);
+}
+
+.count {
+	font-variant-numeric: tabular-nums;
+}
+
+.issue-list {
+	display: grid;
+	gap: 2px;
+	padding: 0 0.35rem;
+}
+
+.issue-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.28rem 0.45rem;
+	width: 100%;
+	padding: 0.55rem 0.58rem;
+	border: 1px solid transparent;
+	text-align: left;
+}
+
+.issue-row:hover {
+	background: var(--muted);
+}
+
+.issue-row.is-active {
+	border-color: color-mix(in oklab, var(--primary) 28%, var(--border));
+	background: color-mix(in oklab, var(--primary) 9%, var(--muted));
+}
+
+.issue-title {
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.issue-meta {
+	display: flex;
+	grid-column: 1 / -1;
+	align-items: center;
+	gap: 0.25rem;
+	overflow: hidden;
+	color: var(--muted-foreground);
+	font-size: 0.65rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.issue-meta svg {
+	width: 0.7rem;
+	height: 0.7rem;
+}
+
+.issue-row [data-slot='badge'] {
+	grid-row: 1;
+	grid-column: 2;
+	height: 1.15rem;
+	font-size: 0.58rem;
+}
+
+.workbench-main {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex-direction: column;
+}
+
+.content-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	min-height: 4.6rem;
+	padding: 0.7rem 1rem;
+	border-bottom: 1px solid var(--border);
+}
+
+.content-header h1 {
+	margin-top: 0.12rem;
+	font-size: 1.05rem;
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+
+.eyebrow {
+	color: var(--muted-foreground);
+	font-size: 0.66rem;
+}
+
+.header-actions {
+	display: flex;
+	gap: 0.35rem;
+}
+
+.issue-body,
+.planning-layout {
+	display: grid;
+	grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+	min-height: 0;
+	flex: 1;
+}
+
+.plan-document,
+.plan-editor {
+	min-height: 0;
+	overflow: auto;
+	padding: 1rem;
+	border-right: 1px solid var(--border);
+}
+
+.plan-document pre,
+.message pre {
+	font: inherit;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.conversation-panel {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+}
+
+.conversation-scroll {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.7rem;
+	overflow-y: auto;
+	padding: 1rem;
+}
+
+.message {
+	max-width: 48rem;
+	padding: 0.7rem 0.8rem;
+	border: 1px solid var(--border);
+	background: var(--card);
+}
+
+.message-user {
+	margin-left: auto;
+	background: color-mix(in oklab, var(--primary) 10%, var(--card));
+}
+
+.message-role {
+	display: block;
+	margin-bottom: 0.32rem;
+	color: var(--muted-foreground);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+}
+
+.composer {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.45rem;
+	padding: 0.7rem;
+	border-top: 1px solid var(--border);
+}
+
+.composer textarea {
+	min-height: 2.5rem;
+	max-height: 9rem;
+	resize: vertical;
+}
+
+.plan-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+}
+
+.plan-editor label {
+	font-weight: 700;
+}
+
+.plan-editor textarea {
+	min-height: 0;
+	flex: 1;
+	resize: none;
+}
+
+.plan-editor button {
+	align-self: flex-end;
+}
+
+.empty-state {
+	display: flex;
+	min-height: 10rem;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 2rem;
+	color: var(--muted-foreground);
+	text-align: center;
+}
+
+.empty-state svg {
+	width: 1rem;
+}
+
+.inspector-content {
+	display: grid;
+	gap: 1rem;
+	padding: 0.8rem;
+}
+
+.inspector-content section {
+	display: grid;
+	gap: 0.42rem;
+}
+
+.inspector-content h3 {
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.inspector-content p {
+	color: var(--muted-foreground);
+}
+
+.inspector-row {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	overflow: hidden;
+}
+
+.inspector-row > span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.process-dot {
+	width: 0.45rem;
+	height: 0.45rem;
+	background: var(--muted-foreground);
+}
+
+.process-running {
+	background: var(--primary);
+}
+
+@media (max-width: 900px) {
+	.mobile-menu {
+		display: inline-flex;
+	}
+
+	.workbench-grid,
+	.workbench-grid:has(.workbench-inspector) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.workbench-sidebar {
+		position: fixed;
+		z-index: 20;
+		top: 44px;
+		bottom: 0;
+		left: 0;
+		width: min(82vw, 300px);
+		transform: translateX(-105%);
+		transition: transform 160ms ease;
+	}
+
+	.workbench-sidebar.is-open {
+		transform: translateX(0);
+	}
+
+	.workbench-inspector {
+		position: fixed;
+		z-index: 25;
+		top: 44px;
+		right: 0;
+		bottom: 0;
+		width: min(88vw, 340px);
+		background: var(--background);
+	}
+}
+
+@media (max-width: 680px) {
+	.brand {
+		display: none;
+	}
+
+	.usage {
+		display: none;
+	}
+
+	.repository-select {
+		width: min(11rem, 42vw);
+	}
+
+	.content-header {
+		align-items: flex-start;
+	}
+
+	.issue-body,
+	.planning-layout {
+		grid-template-columns: minmax(0, 1fr);
+		overflow-y: auto;
+	}
+
+	.plan-document,
+	.plan-editor {
+		min-height: 38vh;
+		border-right: 0;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.conversation-panel {
+		min-height: 50vh;
+	}
+}

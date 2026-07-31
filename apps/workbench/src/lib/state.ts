@@ -1,210 +1,59 @@
-import {Array, Effect, Hash, Option, Order, Predicate, Record, Schema, Stream, pipe} from 'effect'
+import {Effect, Predicate, Stream} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
-import {RpcClient} from '#lib/atomRuntime.ts'
+import {RpcClient} from './atomRuntime.ts'
 
-export type TerminalSessionInput = typeof TerminalSessionInput.Type
-const TerminalSessionInput = Schema.Struct({
-	args: Schema.optional(Schema.Array(Schema.String)),
-	command: Schema.optional(Schema.String),
-	cwd: Schema.String,
-	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-	sessionId: Schema.optional(Schema.String)
-})
+import {AgentId, BranchName} from '#services/issues/schema.ts'
+import {RepositoryName} from '#services/repositories/schema.ts'
 
-type TerminalSessionAtomKey = typeof TerminalSessionAtomKey.Type
-export const TerminalSessionAtomKey = Schema.Struct({
-	args: Schema.optional(Schema.Array(Schema.String)),
-	command: Schema.optional(Schema.String),
-	cwd: Schema.String,
-	env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-	sessionId: Schema.optional(Schema.String)
-})
-
-type TerminalAttachAtomKey = typeof TerminalAttachAtomKey.Type
-export const TerminalAttachAtomKey = Schema.Struct({
-	attachId: Schema.Finite,
-	session: TerminalSessionInput,
-	size: Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
-})
-
-function terminalSessionEnv(env: TerminalSessionInput['env']) {
-	if (Predicate.isUndefined(env)) return
-
-	return pipe(
-		env,
-		Record.toEntries,
-		Array.sortWith(entry => entry[0], Order.String),
-		Record.fromEntries
-	)
-}
-
-export function terminalSessionInput(input: TerminalSessionInput) {
-	const env = terminalSessionEnv(input.env)
-
-	return {
-		args: Predicate.isUndefined(input.args) ? undefined : [...input.args],
-		command: input.command,
-		cwd: input.cwd,
-		env,
-		sessionId: input.sessionId
-	}
-}
-
-export function terminalSessionKey(input: TerminalSessionInput) {
-	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(terminalSessionInput(input))
-}
-
-export function worktreeRouteId(root: string) {
-	return Math.abs(Hash.string(root)).toString(36)
-}
-
-const terminalAttachQueueAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.flatMap(client =>
-				client(
-					'terminal.attach',
-					{...terminalSessionInput(input.session), ...input.size},
-					{asQueue: true, streamBufferSize: 64}
-				)
-			)
-		)
-	)
+export const repositoriesAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(Effect.map(RpcClient, client => client('repositories', void 0)).pipe(Stream.unwrap), {
+		initialValue: []
+	})
 )
 
-export const terminalFramePullAtomFamily = Atom.family((input: TerminalAttachAtomKey) =>
-	Atom.pull(
-		get =>
-			pipe(
-				get.result(terminalAttachQueueAtomFamily(input), {suspendOnWaiting: true}),
-				Effect.map(Stream.fromQueue),
-				Stream.unwrap
-			),
-		{disableAccumulation: true}
-	)
+export const usageAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(Effect.map(RpcClient, client => client('usage', void 0)).pipe(Stream.unwrap))
 )
 
-export const terminalStatusAtomFamily = Atom.family((input: TerminalSessionAtomKey) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('terminal.status', terminalSessionInput(input))),
-			Stream.unwrap
-		),
-		{initialValue: {state: 'idle', title: ''}}
-	)
+export const planningAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(Effect.map(RpcClient, client => client('planning', void 0)).pipe(Stream.unwrap), {
+		initialValue: []
+	})
 )
 
-const projectsAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('projects', void 0)),
-			Stream.unwrap
-		)
-	)
-)
-
-const homeSidebarAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('home.sidebar', void 0)),
-			Stream.unwrap
-		)
-	)
-)
-
-export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
-	Atom.keepAlive(
-		Atom.make(get =>
-			pipe(
-				get.result(projectsAtom),
-				Effect.map(projects => {
-					const activeProject = Array.findFirst(projects, project =>
-						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-					)
-					const activeWorktree = pipe(
-						activeProject,
-						Option.flatMap(project =>
-							Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-						)
-					)
-
-					return {
-						activeProject: Option.getOrUndefined(activeProject),
-						activeWorktree: Option.getOrUndefined(activeWorktree),
-						projects
-					}
-				})
-			)
-		)
-	)
-)
-
-export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
-	Atom.keepAlive(
-		Atom.make(get =>
-			pipe(
-				get.result(homeSidebarAtom),
-				Effect.map(sidebar => {
-					const activeProject = Array.findFirst(sidebar.projects, project =>
-						Array.some(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-					)
-					const activeWorktree = pipe(
-						activeProject,
-						Option.flatMap(project =>
-							Array.findFirst(project.worktrees, worktree => worktreeRouteId(worktree.root) === worktreeId)
-						)
-					)
-
-					return {
-						activeProject: Option.getOrUndefined(activeProject),
-						activeWorktree: Option.getOrUndefined(activeWorktree),
-						agentProfiles: sidebar.agentProfiles,
-						projects: sidebar.projects
-					}
-				})
-			)
-		)
-	)
-)
-
-export const agentsAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('agents', {cwd})),
-			Stream.unwrap
-		)
-	)
-)
-
-export const usageAtom = Atom.family((provider: 'claude' | 'codex') =>
+export const issuesAtom = Atom.family((repository: string) =>
 	Atom.keepAlive(
 		RpcClient.runtime.atom(
-			pipe(
-				RpcClient,
-				Effect.map(client => client('usage', {provider})),
-				Stream.unwrap
-			)
+			repository === ''
+				? Stream.succeed([])
+				: Effect.map(RpcClient, client => client('issues', {repository: RepositoryName.make(repository)})).pipe(
+						Stream.unwrap
+					),
+			{initialValue: []}
 		)
 	)
 )
 
-export const usageSubscriptionAtom = Atom.family((provider: 'claude' | 'codex') =>
-	Atom.keepAlive(RpcClient.runtime.atom(Effect.flatMap(RpcClient, client => client('usage.subscription', {provider}))))
-)
-
-export const systemUsageAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(
-		pipe(
-			RpcClient,
-			Effect.map(client => client('usage.system', void 0)),
-			Stream.unwrap
-		)
+export const inspectorAtom = Atom.family((key: string) => {
+	const [repository = '', branch = ''] = key.split('\u0000')
+	return RpcClient.runtime.atom(
+		Effect.map(RpcClient, client =>
+			client('inspector', {branch: BranchName.make(branch), repository: RepositoryName.make(repository)})
+		).pipe(Stream.unwrap)
 	)
-)
+})
+
+export const conversationAtom = Atom.family((key: string) => {
+	const [repository = '', agentId = '', branch] = key.split('\u0000')
+	return RpcClient.runtime.atom(
+		Effect.map(RpcClient, client =>
+			client('conversation', {
+				agentId: AgentId.make(agentId),
+				branch: Predicate.isUndefined(branch) || branch === '' ? undefined : BranchName.make(branch),
+				repository: RepositoryName.make(repository)
+			})
+		).pipe(Stream.unwrap)
+	)
+})

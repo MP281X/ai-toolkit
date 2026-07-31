@@ -4,7 +4,6 @@
 @import '@fontsource-variable/jetbrains-mono';
 
 @import './components/render/markdown.css';
-@import './components/render/terminal.css';
 
 :root {
 	--background: oklch(1 0 0);

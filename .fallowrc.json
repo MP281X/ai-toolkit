@@ -1,6 +1,6 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-	"entry": ["**/main.*"],
+	"entry": ["**/main.*", "apps/workbench/src/code-mode-worker.ts"],
 	"includeEntryExports": true,
 	"ignorePatterns": [
 		".agents/repos/**",
@@ -10,15 +10,12 @@
 	],
 	"publicPackages": [
 		"@deslop/agent",
-		"@deslop/agent-browser",
-		"@deslop/ai",
 		"@deslop/components",
+		"@deslop/file-storage",
 		"@deslop/git",
+		"@deslop/oauth",
 		"@deslop/opentelemetry",
-		"@deslop/os",
-		"@deslop/portless",
-		"@deslop/scripts",
-		"@deslop/terminal",
+		"@deslop/process",
 		"@deslop/vite"
 	],
 	"rules": {

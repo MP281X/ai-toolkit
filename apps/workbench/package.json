@@ -8,11 +8,15 @@
 	"publishConfig": {"access": "public"},
 	"bin": {"workbench": "dist/server.js"},
 	"repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
+	"exports": {
+		"./code-mode": "./dist/code-mode.js"
+	},
 
 	"imports": {
 		"#lib/*": "./src/lib/*",
 		"#rpcs/*": "./src/rpcs/*",
-		"#routes/*": "./src/routes/*"
+		"#routes/*": "./src/routes/*",
+		"#services/*": "./src/services/*"
 	},
 
 	"scripts": {
@@ -24,7 +28,7 @@
 	},
 
 	"dependencies": {
-		"@lydell/node-pty": "latest"
+		"diff": "latest"
 	},
 
 	"devDependencies": {
@@ -34,14 +38,11 @@
 		"@tanstack/react-router": "latest",
 		"@tanstack/react-hotkeys": "latest",
 
-		"@deslop/ai": "workspace:*",
 		"@deslop/agent": "workspace:*",
-		"@deslop/agent-browser": "workspace:*",
+		"@deslop/file-storage": "workspace:*",
 		"@deslop/git": "workspace:*",
-		"@deslop/portless": "workspace:*",
-		"@deslop/scripts": "workspace:*",
-		"@deslop/os": "workspace:*",
-		"@deslop/terminal": "workspace:*",
+		"@deslop/oauth": "workspace:*",
+		"@deslop/process": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 		"@deslop/vite": "workspace:*"

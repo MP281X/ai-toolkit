@@ -1,6 +1,8 @@
 import {defineAppConfig} from '@deslop/vite'
 
 export default defineAppConfig({
-	pack: {deps: {neverBundle: [/^@lydell\/node-pty(?:\/.*)?$/]}},
-	server: {external: ['@xterm/headless']}
+	pack: {
+		entry: ['src/main.ts', 'src/code-mode.ts', 'src/code-mode-worker.ts'],
+		outputOptions: {entryFileNames: chunk => (chunk.name === 'main' ? 'server.js' : '[name].js')}
+	}
 })
