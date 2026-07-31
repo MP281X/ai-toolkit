@@ -20,6 +20,7 @@ An abstraction must own policy, a boundary, lifecycle, recursion, expensive reus
 
 - Infer local and return types. Annotate a return only for recursion.
 - Name only public, recursive, boundary, or independently shared types.
+- Keep operation inputs inline unless they cross an unknown, serialized, or persisted boundary or are independently shared.
 - Resolve type mismatches at their origin; never widen or narrow a value to appease its consumer.
 - `value?: Value` means omission; add `| undefined` only when explicit `undefined` is a real boundary value.
 - Model domain values and structured identities; never concatenate identity fields.

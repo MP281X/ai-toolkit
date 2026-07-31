@@ -7,6 +7,7 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 ## Boundaries
 
 - Unknown input → `Schema`
+- Existing canonical protocol or domain value → import its owning schema and type directly without a local alias; AI messages, parts, and streaming response parts use `effect/unstable/ai` `Prompt` and `Response`.
 - Configuration → `Config`
 - Expected failure → typed error
 - Existing optionality → consume its `Option`
@@ -30,9 +31,12 @@ An Effect wrapper must add policy, failure translation, requirements, lifecycle,
 ## Public services
 
 - `service.ts` owns the tag, contract, and public layer constructors; `internal/*` owns implementations.
-- Shared instance input belongs in layer/config; operation input belongs in the method.
+- Immutable instance configuration belongs in the layer constructor, is declared under `export declare namespace ServiceName`, and is not a schema unless it crosses an unknown boundary; changing configuration creates another service instance.
+- Operation input belongs inline in the method unless it has its own boundary or shared identity.
+- A service represents one configured instance. The application owns multiple keyed instances through a scoped `RcMap`; do not add registries or keyed instance maps to the package service.
 - Public methods expose `R = never`, except caller-owned scoped resources.
-- Current mutable state has one `SubscriptionRef` read path; incremental-only output uses `Stream`.
+- Each current mutable value has one public `SubscriptionRef` read path so RPC consumers can remain synchronized; group values that change atomically, never mirror one value through another effect or stream, keep commands and point-in-time queries as effects, and use `Stream` only for incremental output.
+- Gate `SubscriptionRef` writes with the owning schema's equivalence because the primitive publishes every write. Invalidate after every owned mutation; observe externally mutable state through a scoped watcher or internally scheduled polling, never a user refresh action.
 - Construct refs, caches, sockets, clients, queues, subscriptions, and fibers inside their owning scope.
 - Cleanup methods exist only for domain stop behavior.
 
