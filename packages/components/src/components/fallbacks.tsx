@@ -25,7 +25,7 @@ export function Loading() {
 	)
 }
 
-export function Error(props: {readonly error: Error; readonly reset: () => void}) {
+export function Error(props: {error: unknown; reset: () => void}) {
 	const message = formatError(props.error)
 
 	return (
@@ -46,7 +46,7 @@ export function Error(props: {readonly error: Error; readonly reset: () => void}
 	)
 }
 
-export function Fallback(props: {readonly message: string}) {
+export function Fallback(props: {message: string}) {
 	return (
 		<div className="flex h-full w-full items-center justify-center p-4 select-text">
 			<Alert className="w-fit max-w-lg">

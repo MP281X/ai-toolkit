@@ -16,10 +16,13 @@ Expose dataflow, ownership, and exact inferred types at the review site.
 
 An abstraction must own policy, a boundary, lifecycle, recursion, expensive reused work, or behavior changed as one unit.
 
+Keep module values only when they own shared identity, lifecycle, caching, schemas, or reused static data. Inline default services, accessors, single-use values, and aliases aggressively.
+
 ## Types
 
 - Infer local and return types. Annotate a return only for recursion.
 - Name only public, recursive, boundary, or independently shared types.
+- Do not author `readonly` annotations or `Readonly` wrappers; preserve immutability through values and operations.
 - Keep operation inputs inline unless they cross an unknown, serialized, or persisted boundary or are independently shared.
 - Resolve type mismatches at their origin; never widen or narrow a value to appease its consumer.
 - `value?: Value` means omission; add `| undefined` only when explicit `undefined` is a real boundary value.

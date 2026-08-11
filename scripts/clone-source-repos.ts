@@ -1,6 +1,6 @@
 import {NodeRuntime, NodeServices} from '@effect/platform-node'
 
-import {Config, Effect, FileSystem, Schema, pipe} from 'effect'
+import {Array, Config, Effect, FileSystem, Schema, pipe} from 'effect'
 
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
@@ -8,7 +8,7 @@ const repositories = [
 	{name: 'agent-browser', url: 'https://github.com/vercel-labs/agent-browser'},
 	{name: 'codex', url: 'https://github.com/openai/codex'},
 	{name: 'effect', url: 'https://github.com/Effect-TS/effect-smol'},
-	{name: 'effect-lsp', url: 'https://github.com/Effect-TS/language-service'},
+	{name: 'effect-tsgo', url: 'https://github.com/Effect-TS/tsgo'},
 	{name: 'fallow', url: 'https://github.com/fallow-rs/fallow'},
 	{name: 'legend-list', url: 'https://github.com/LegendApp/legend-list'},
 	{name: 'lexical', url: 'https://github.com/facebook/lexical'},
@@ -32,7 +32,7 @@ const repositories = [
 	{name: 'xterm.js', url: 'https://github.com/xtermjs/xterm.js'}
 ] as const
 
-class SourceRepositoryError extends Schema.TaggedErrorClass<SourceRepositoryError>()('SourceRepositoryError', {
+class SourceRepositoryError extends Schema.TaggedError<SourceRepositoryError>()('SourceRepositoryError', {
 	message: Schema.String
 }) {}
 
@@ -46,13 +46,13 @@ const program = Effect.gen(function* () {
 
 	const fs = yield* FileSystem.FileSystem
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-	const git = Effect.fnUntraced(function* (name: string, phase: string, args: readonly string[]) {
+	const git = Effect.fnUntraced(function* (name: string, phase: string, args: string[]) {
 		yield* Effect.log(`${phase} ${name}`)
 
 		const exitCode = yield* spawner.exitCode(ChildProcess.make('git', args, {stderr: 'inherit', stdout: 'inherit'}))
 
 		if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
-			return yield* SourceRepositoryError.make({message: `git ${args.join(' ')} failed for ${name}`})
+			return yield* SourceRepositoryError.make({message: `git ${Array.join(' ')(args)} failed for ${name}`})
 		}
 	})
 
@@ -75,4 +75,6 @@ const program = Effect.gen(function* () {
 	)
 })
 
+// This executable provides its complete platform layer once at the entry point.
+// @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(pipe(program, Effect.provide(NodeServices.layer)))

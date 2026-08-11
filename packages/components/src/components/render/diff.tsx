@@ -74,19 +74,19 @@ const DIFF_CSS = `
 
 export declare namespace PatchDiff {
 	export type Comment = {
-		readonly filePath: string
-		readonly lineNumber: number
-		readonly side?: AnnotationSide
-		readonly body: string
-		readonly resolving?: boolean
-		readonly source?: 'github' | 'local'
-		readonly threadId?: string
+		filePath: string
+		lineNumber: number
+		side?: AnnotationSide
+		body: string
+		resolving?: boolean
+		source?: 'github' | 'local'
+		threadId?: string
 	}
 }
 
 function sameDiffLine(
-	left: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide},
-	right: {readonly filePath: string; readonly lineNumber: number; readonly side?: AnnotationSide}
+	left: {filePath: string; lineNumber: number; side?: AnnotationSide},
+	right: {filePath: string; lineNumber: number; side?: AnnotationSide}
 ) {
 	return (
 		left.filePath === right.filePath &&
@@ -96,10 +96,10 @@ function sameDiffLine(
 }
 
 export function formatCopiedComment(comment: {
-	readonly body: string
-	readonly filePath: string
-	readonly lineNumber: number
-	readonly side?: AnnotationSide
+	body: string
+	filePath: string
+	lineNumber: number
+	side?: AnnotationSide
 }) {
 	const linePrefix = comment.side === 'deletions' ? 'deleted' : 'line'
 	return `# Review comments\n\n## ${comment.filePath}\n\n${linePrefix}:${comment.lineNumber}: ${comment.body}`
@@ -133,12 +133,7 @@ function captureScrollAnchor(container: HTMLElement, clientY: number) {
 
 function restoreScrollAnchor(
 	container: HTMLElement,
-	anchor: {
-		readonly clientY: number
-		readonly offsetWithinLine: number
-		readonly lineNumber: string
-		readonly scrollTop: number
-	},
+	anchor: {clientY: number; offsetWithinLine: number; lineNumber: string; scrollTop: number},
 	mode: 'diff' | 'file'
 ) {
 	const targetLine = container
@@ -162,11 +157,11 @@ function restoreScrollAnchor(
 }
 
 function CommentAnnotation(props: {
-	readonly comment: PatchDiff.Comment
-	readonly isDraft?: boolean
-	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
-	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
-	readonly onCloseDraft?: () => void
+	comment: PatchDiff.Comment
+	isDraft?: boolean
+	onSaveComment?: (comment: PatchDiff.Comment) => void
+	onResolveComment?: (comment: PatchDiff.Comment) => void
+	onCloseDraft?: () => void
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null)
 	const [editing, setEditing] = useState(() => String.isEmpty(props.comment.body))
@@ -294,12 +289,12 @@ function CommentAnnotation(props: {
 }
 
 export function PatchDiff(props: {
-	readonly filePath: string
-	readonly fileContent?: string
-	readonly patch?: string
-	readonly comments?: readonly PatchDiff.Comment[]
-	readonly onSaveComment?: (comment: PatchDiff.Comment) => void
-	readonly onResolveComment?: (comment: PatchDiff.Comment) => void
+	filePath: string
+	fileContent?: string
+	patch?: string
+	comments?: PatchDiff.Comment[]
+	onSaveComment?: (comment: PatchDiff.Comment) => void
+	onResolveComment?: (comment: PatchDiff.Comment) => void
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number>(null)
@@ -308,7 +303,7 @@ export function PatchDiff(props: {
 	const patch = Predicate.isString(props.patch) && String.isNonEmpty(props.patch) ? props.patch : undefined
 	const fileContent = Predicate.isString(props.fileContent) ? props.fileContent : undefined
 	const modeKey = `${props.filePath}\u0000${patch ?? ''}\u0000${Predicate.isString(fileContent) ? 'file' : 'pending'}`
-	const [modeState, setModeState] = useState<{readonly key: string; readonly mode: 'diff' | 'file'}>(() => ({
+	const [modeState, setModeState] = useState<{key: string; mode: 'diff' | 'file'}>(() => ({
 		key: modeKey,
 		mode: Predicate.isString(patch) ? 'diff' : 'file'
 	}))
@@ -359,28 +354,22 @@ export function PatchDiff(props: {
 		{preventDefault: false, target: containerRef}
 	)
 
-	function openComment(line: {readonly lineNumber: number; readonly side?: AnnotationSide}) {
+	function openComment(line: {lineNumber: number; side?: AnnotationSide}) {
 		if (!props.onSaveComment) return
+		const location = {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side}
 
-		if (
-			draftComment &&
-			sameDiffLine(draftComment, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
-		) {
+		if (draftComment && sameDiffLine(draftComment, location)) {
 			return
 		}
 
 		if (draftComment) return
 
-		if (
-			!Array.some(comments, current =>
-				sameDiffLine(current, {filePath: props.filePath, lineNumber: line.lineNumber, side: line.side})
-			)
-		) {
+		if (!Array.some(comments, current => sameDiffLine(current, location))) {
 			setDraftComment({
 				body: '',
 				filePath: props.filePath,
 				lineNumber: line.lineNumber,
-				side: line.side === 'deletions' ? line.side : undefined
+				...(line.side === 'deletions' ? {side: line.side} : {})
 			})
 		}
 	}
@@ -392,7 +381,7 @@ export function PatchDiff(props: {
 			value => (
 				<FileDiff<PatchDiff.Comment>
 					key={value.patch}
-					fileDiff={value.fileDiff!}
+					fileDiff={Option.getOrThrow(Option.fromUndefinedOr(value.fileDiff))}
 					options={{
 						diffIndicators: 'bars',
 						diffStyle: 'unified',
@@ -416,7 +405,7 @@ export function PatchDiff(props: {
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							isDraft={draftComment ? sameDiffLine(annotation.metadata, draftComment) : undefined}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {
@@ -451,7 +440,7 @@ export function PatchDiff(props: {
 					renderAnnotation={annotation => (
 						<CommentAnnotation
 							comment={annotation.metadata}
-							isDraft={draftComment && sameDiffLine(annotation.metadata, draftComment)}
+							isDraft={draftComment ? sameDiffLine(annotation.metadata, draftComment) : undefined}
 							onSaveComment={props.onSaveComment}
 							onResolveComment={props.onResolveComment}
 							onCloseDraft={() => {

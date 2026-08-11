@@ -1,10 +1,12 @@
+// Vite and NodeHttpServer expose native Node request/response boundary types.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import type {IncomingMessage, ServerResponse} from 'node:http'
 import type {Duplex} from 'node:stream'
 
 import type {NodeServices} from '@effect/platform-node'
 import {NodeHttpServer, NodeSocket} from '@effect/platform-node'
 
-import {Array, Cause, Context, Effect, Exit, Layer, Predicate, Record, Scope, Semaphore, pipe} from 'effect'
+import {Array, Cause, Context, Effect, Exit, Layer, Predicate, Record, Scope, Semaphore, String, pipe} from 'effect'
 
 import {HttpRouter, HttpServer} from 'effect/unstable/http'
 import type {Connect, EnvironmentModuleNode, Plugin} from 'vite'
@@ -12,15 +14,18 @@ import {isRunnableDevEnvironment} from 'vite'
 
 function isBackendRequest(request: IncomingMessage) {
 	const url = request.url
-	return url === '/api' || url?.startsWith('/api/') === true || url?.startsWith('/api?') === true
+	return (
+		url === '/api' ||
+		(Predicate.isNotUndefined(url) && (String.startsWith('/api/')(url) || String.startsWith('/api?')(url)))
+	)
 }
 
-export function serverEnvironment(config?: {readonly external: string[]}): Plugin {
+export function serverEnvironment(config?: {external: string[]}): Plugin {
 	let active:
 		| {
-				readonly request: (request: IncomingMessage, response: ServerResponse) => void
-				readonly scope: Scope.Scope
-				readonly upgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => void
+				request: (request: IncomingMessage, response: ServerResponse) => void
+				scope: Scope.Scope
+				upgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => void
 		  }
 		| undefined
 	let pendingReplacement = false
@@ -38,13 +43,21 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 	return {
 		closeBundle: () => runPromise(reloadLock.withPermit(close)),
 		config: () => ({
-			environments: {server: {resolve: config}},
+			environments: {server: config ? {resolve: config} : {}},
 			server: {
-				hotUpdateEnvironments: async (server, hotUpdate) => {
-					await Promise.all(Record.values(server.environments).map(hotUpdate))
-					if (!pendingReplacement) return
-					pendingReplacement = false
-					await runPromise(reloadLock.withPermit(reloadBackend))
+				hotUpdateEnvironments(server, hotUpdate) {
+					return runPromise(
+						Effect.gen(function* () {
+							yield* Effect.forEach(
+								Record.values(server.environments),
+								environment => Effect.promise(() => hotUpdate(environment)),
+								{concurrency: 'unbounded', discard: true}
+							)
+							if (!pendingReplacement) return
+							pendingReplacement = false
+							yield* reloadLock.withPermit(reloadBackend)
+						})
+					)
 				}
 			}
 		}),
@@ -64,7 +77,7 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 					runnableEnvironment.runner.clearCache()
 					const application = yield* Effect.tryPromise(() =>
 						runnableEnvironment.runner.import<{
-							readonly default: Layer.Layer<never, never, HttpServer.HttpServer | NodeServices.NodeServices>
+							default: Layer.Layer<never, never, HttpServer.HttpServer | NodeServices.NodeServices>
 						}>('src/main.server.ts')
 					)
 					const address = viteServer.address()
@@ -91,6 +104,8 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 							}
 						}),
 						Scope.provide(scope),
+						// The dynamically loaded server application receives its complete platform layer here.
+						// @effect-diagnostics-next-line strictEffectProvide:off
 						Effect.provide(
 							Layer.merge(
 								NodeHttpServer.layerHttpServices,
@@ -147,6 +162,8 @@ export function serverEnvironment(config?: {readonly external: string[]}): Plugi
 					return
 				}
 				if (this.environment.name !== 'server' || options.modules.length === 0) return
+				// Vite's module-graph API requires a native Set instance.
+				// oxlint-disable-next-line eslint/no-restricted-globals
 				const invalidated = new Set<EnvironmentModuleNode>()
 				for (const module of options.modules) {
 					this.environment.moduleGraph.invalidateModule(module, invalidated, options.timestamp, true)

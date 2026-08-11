@@ -77,6 +77,7 @@ const SidebarProject = Schema.Struct({
 	worktrees: Schema.Array(SidebarWorktree)
 })
 
+export type HomeSidebar = typeof HomeSidebar.Type
 const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
 
 const PublishDraftError = Schema.Union([GitError, AiError])

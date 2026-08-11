@@ -4,7 +4,7 @@ import type {ClassValue} from 'clsx'
 import {clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
 
-export function cn(...inputs: readonly ClassValue[]) {
+export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs))
 }
 
@@ -25,7 +25,9 @@ export const formatError = pipe(
 	Match.when(Predicate.hasProperty('message'), error => String.String(error.message)),
 	Match.when(Predicate.isString, value => String.String(value)),
 	Match.when(Predicate.isNullish, () => 'Error' as const),
-	Match.when(Predicate.isObjectOrArray, error => Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(error)),
+	Match.when(Predicate.isObjectOrArray, error =>
+		Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(error)
+	),
 	Match.orElse(() => 'Unknown Error' as const)
 )
 
@@ -49,7 +51,7 @@ export function formatTimeUntil(date: DateTime.DateTime) {
 }
 
 export function formatBytes(bytes: number) {
-	if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+	if (!Schema.is(Schema.Finite)(bytes) || bytes <= 0) return '0 B'
 
 	const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)

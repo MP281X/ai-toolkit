@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-export class AiError extends Schema.TaggedErrorClass<AiError>()('AiError', {
+export class AiError extends Schema.TaggedError<AiError>()('AiError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.String
 }) {}

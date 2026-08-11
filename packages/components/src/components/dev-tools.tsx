@@ -7,8 +7,8 @@ import {Button} from '#components/ui/button.tsx'
 import {cn} from '#lib/utils.ts'
 
 function Navigation<const Route extends string>(props: {
-	readonly routes: readonly [Route, ...(readonly Route[])]
-	readonly onChange: (route: Route) => void
+	routes: [Route, ...Route[]]
+	onChange: (route: Route) => void
 }) {
 	const [value, setValue] = useState(0)
 
@@ -61,7 +61,7 @@ function Navigation<const Route extends string>(props: {
 	)
 }
 
-function Variants(props: {readonly children: readonly React.ReactNode[]}) {
+function Variants(props: {children: React.ReactNode[]}) {
 	const [value, setValue] = useState(0)
 
 	function move(delta: number) {

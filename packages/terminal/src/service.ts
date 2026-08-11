@@ -43,23 +43,18 @@ function resumeProcess(process: IPty) {
 }
 
 export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/service/Terminal', {
-	make: Effect.fnUntraced(function* (config: {readonly command?: ChildProcess.StandardCommand; readonly cwd: string}) {
-		const dataQueue = yield* Queue.bounded<{readonly data: string; readonly process: IPty}>(128)
+	make: Effect.fnUntraced(function* (config: {command?: ChildProcess.StandardCommand; cwd: string}) {
+		const dataQueue = yield* Queue.bounded<{data: string; process: IPty}>(128)
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
 		const processRef = yield* Ref.make<
-			| {
-					readonly data: {readonly dispose: () => void}
-					readonly exit: {readonly dispose: () => void}
-					readonly process: IPty
-			  }
-			| undefined
+			{data: {dispose: () => void}; exit: {dispose: () => void}; process: IPty} | undefined
 		>(void 0)
 		const replayProcessRef = yield* Ref.make<IPty | undefined>(void 0)
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
 		const oscRef = yield* Ref.make('')
-		const attachedRef = yield* Ref.make<readonly Queue.Queue<TerminalFrame, Cause.Done>[]>([])
+		const attachedRef = yield* Ref.make<Queue.Queue<TerminalFrame, Cause.Done>[]>([])
 		const sequenceRef = yield* Ref.make(0)
 		const screen = terminalScreenStore()
 		const shell = yield* pipe(
@@ -73,7 +68,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			return yield* Ref.modify(sequenceRef, current => [current, current + 1] as const)
 		})
 
-		const dropQueues = Effect.fnUntraced(function* (dropped: readonly Queue.Queue<TerminalFrame, Cause.Done>[]) {
+		const dropQueues = Effect.fnUntraced(function* (dropped: Queue.Queue<TerminalFrame, Cause.Done>[]) {
 			if (!Array.isReadonlyArrayNonEmpty(dropped)) return
 			yield* Ref.update(attachedRef, current => Array.filter(current, queue => !Array.contains(dropped, queue)))
 			yield* Effect.forEach(dropped, Queue.shutdown, {discard: true})
@@ -139,7 +134,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		const processOutput = Effect.fnUntraced(function* (output: {readonly data: string; readonly process: IPty}) {
+		const processOutput = Effect.fnUntraced(function* (output: {data: string; process: IPty}) {
 			const replayProcess = yield* Ref.get(replayProcessRef)
 			if (replayProcess !== output.process) return
 
@@ -156,7 +151,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			for (const update of updates) {
 				yield* update.type === 'title' ? setTitle(update.title, update.state) : setProgress(update.state)
 			}
-			yield* Effect.promise(() => screen.write(chunk))
+			yield* screen.write(chunk)
 			yield* publishFrame({data: chunk, sequence: yield* nextSequence(), type: 'output'})
 		})
 
@@ -241,14 +236,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						rows: size.rows
 					})
 			})
-			const backpressureState = {
-				draining: false,
-				pending: Array.empty<{readonly data: string; readonly process: IPty}>()
-			}
+			const backpressureState = {draining: false, pending: Array.empty<{data: string; process: IPty}>()}
 			const drainBackpressure = Effect.fnUntraced(function* () {
 				while (backpressureState.pending.length > 0) {
-					const next = backpressureState.pending.shift()
-					if (Predicate.isNotUndefined(next)) yield* Queue.offer(dataQueue, next)
+					const next = Array.head(backpressureState.pending)
+					backpressureState.pending = Array.drop(backpressureState.pending, 1)
+					if (Option.isSome(next)) yield* Queue.offer(dataQueue, next.value)
 				}
 				yield* waitForDataQueueDrain()
 			})
@@ -261,7 +254,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 					return
 				}
 
-				backpressureState.pending.push(output)
+				backpressureState.pending = Array.append(backpressureState.pending, output)
 				if (backpressureState.draining) return
 
 				backpressureState.draining = true

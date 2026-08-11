@@ -18,10 +18,7 @@ import {cn} from '#lib/utils.ts'
 
 export * from 'lucide-react'
 
-export function AgentIcon(props: {
-	readonly layer: 'claude' | 'codex' | 'effect' | 'opencode'
-	readonly className?: string
-}) {
+export function AgentIcon(props: {layer: 'claude' | 'codex' | 'effect' | 'opencode'; className?: string}) {
 	return pipe(
 		Match.value(props.layer),
 		Match.when('claude', () => <ClaudeDark className={cn('size-3 shrink-0', props.className)} />),
@@ -33,8 +30,8 @@ export function AgentIcon(props: {
 }
 
 export function ProcessStateIcon(props: {
-	readonly state?: 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
-	readonly className?: string
+	state?: 'idle' | 'starting' | 'running' | 'waiting' | 'stopped' | 'exited' | 'failed'
+	className?: string
 }) {
 	return pipe(
 		Match.value(props.state),
@@ -51,7 +48,7 @@ export function ProcessStateIcon(props: {
 	)
 }
 
-export function ProviderIcon(props: {readonly provider: 'openai' | 'openrouter'; readonly className?: string}) {
+export function ProviderIcon(props: {provider: 'openai' | 'openrouter'; className?: string}) {
 	return pipe(
 		Match.value(props.provider),
 		Match.when('openai', () => <OpenaiDark className={cn('size-3 shrink-0', props.className)} />),
@@ -60,7 +57,7 @@ export function ProviderIcon(props: {readonly provider: 'openai' | 'openrouter';
 	)
 }
 
-export function FileIcon(props: {readonly filePath: string; readonly className?: string}) {
+export function FileIcon(props: {filePath: string; className?: string}) {
 	return pipe(
 		Match.value(resolveLanguage(props.filePath)),
 		Match.when('shell', () => <BashDark className={cn('size-3 shrink-0', props.className)} />),

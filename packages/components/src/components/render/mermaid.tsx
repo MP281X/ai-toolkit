@@ -10,15 +10,14 @@ import {cn} from '#lib/utils.ts'
 
 const mermaidAtom = Atom.family((source: string) =>
 	Atom.make(
-		Effect.tryPromise(async () => {
+		Effect.tryPromise(() => {
 			mermaid.initialize({securityLevel: 'strict', startOnLoad: false})
-			const result = await mermaid.render(`mermaid_${Hash.string(source)}`, source)
-			return result
+			return mermaid.render(`mermaid_${Hash.string(source)}`, source)
 		})
 	)
 )
 
-export function Mermaid(props: {readonly children: string; readonly className?: string}) {
+export function Mermaid(props: {children: string; className?: string}) {
 	const result = useAtomSuspense(mermaidAtom(props.children), {includeFailure: true})
 
 	if (AsyncResult.isFailure(result)) {
@@ -36,6 +35,8 @@ export function Mermaid(props: {readonly children: string; readonly className?: 
 
 	return (
 		<div
+			// Mermaid output is sanitized immediately before this React HTML boundary.
+			// oxlint-disable-next-line react/no-danger
 			dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(result.value.svg)}}
 			className={cn(
 				'bg-muted/30 overflow-hidden p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full',

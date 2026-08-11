@@ -1,13 +1,15 @@
 import {homedir} from 'node:os'
-import {join} from 'node:path'
 
 import type {Exit} from 'effect'
 import {
 	Array,
+	BigInt,
 	Effect,
 	FileSystem,
 	HashMap,
+	Match,
 	Option,
+	Path,
 	Predicate,
 	Ref,
 	Schedule,
@@ -36,12 +38,13 @@ const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: Clau
 
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
 	if (!(yield* fs.exists(root))) return []
 
 	return pipe(
 		yield* fs.readDirectory(root, {recursive: true}),
 		Array.filter(entry => String.endsWith('.jsonl')(entry)),
-		Array.map(entry => join(root, entry))
+		Array.map(entry => path.join(root, entry))
 	)
 })
 
@@ -58,7 +61,7 @@ function numberProperty(input: unknown, key: string) {
 }
 
 function jsonLine(line: string) {
-	return pipe(Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(line), Option.getOrUndefined)
+	return pipe(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(line), Option.getOrUndefined)
 }
 
 function claudeUsageTokens(input: unknown) {
@@ -91,7 +94,7 @@ function claudeTokensFromContent(content: string) {
 	)
 }
 
-function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
+function sumTokenFiles(files: Iterable<{tokens: AgentUsageTokens}>) {
 	return AgentUsageTokens.make(
 		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
 			addTokens(total, file.tokens)
@@ -99,7 +102,7 @@ function sumTokenFiles(files: Iterable<{readonly tokens: AgentUsageTokens}>) {
 	)
 }
 
-export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {readonly projectsRoot: string}) {
+export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {projectsRoot: string}) {
 	const fs = yield* FileSystem.FileSystem
 	const files = yield* pipe(
 		claudeJsonlFiles(input.projectsRoot),
@@ -117,13 +120,14 @@ export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {readon
 	)
 })
 
-export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {readonly provider: 'claude'}) {
+export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {provider: 'claude'}) {
 	const client = yield* HttpClient.HttpClient
 	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
 	const home = homedir()
-	const projectsRoot = join(home, '.claude', 'projects')
+	const projectsRoot = path.join(home, '.claude', 'projects')
 	const claudeCredentialsFile = pipe(
-		fs.readFileString(join(home, '.claude', '.credentials.json')),
+		fs.readFileString(path.join(home, '.claude', '.credentials.json')),
 		Effect.mapError(cause => AgentError.make({cause, message: 'not signed in'}))
 	)
 	const claudeToken = pipe(
@@ -138,7 +142,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 	)
 
 	const tokenFileCache = yield* Ref.make(
-		HashMap.empty<string, {readonly mtimeMs: number; readonly size: number; readonly tokens: AgentUsageTokens}>()
+		HashMap.empty<string, {mtimeMs: number; size: number; tokens: AgentUsageTokens}>()
 	)
 	const loadCachedTokens = Effect.fnUntraced(function* () {
 		const files = yield* pipe(
@@ -149,10 +153,10 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 		const tokenFiles = yield* pipe(
 			files,
 			Effect.forEach(
-				path =>
+				filePath =>
 					Effect.gen(function* () {
 						const info = yield* pipe(
-							fs.stat(path),
+							fs.stat(filePath),
 							Effect.mapError(cause => AgentError.make({cause}))
 						)
 						if (info.type !== 'File') return []
@@ -162,14 +166,23 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {reado
 							Option.map(value => value.getTime()),
 							Option.getOrElse(() => 0)
 						)
-						const size = Number(info.size)
-						const cached = pipe(currentCache, HashMap.get(path), Option.getOrUndefined)
+						const size = pipe(
+							Match.value(info.size),
+							Match.when(Predicate.isNumber, value => value),
+							Match.orElse(value =>
+								pipe(
+									BigInt.toNumber(value),
+									Option.getOrElse(() => 0)
+								)
+							)
+						)
+						const cached = pipe(currentCache, HashMap.get(filePath), Option.getOrUndefined)
 						if (Predicate.isNotUndefined(cached) && cached.mtimeMs === mtimeMs && cached.size === size) {
-							return [[path, cached] as const]
+							return [[filePath, cached] as const]
 						}
 
-						const tokens = yield* pipe(fs.readFileString(path), Effect.map(claudeTokensFromContent))
-						return [[path, {mtimeMs, size, tokens}] as const]
+						const tokens = yield* pipe(fs.readFileString(filePath), Effect.map(claudeTokensFromContent))
+						return [[filePath, {mtimeMs, size, tokens}] as const]
 					}),
 				{concurrency: 4}
 			),

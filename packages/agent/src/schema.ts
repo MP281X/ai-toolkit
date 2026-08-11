@@ -1,6 +1,6 @@
 import {Schema, pipe} from 'effect'
 
-export class AgentError extends Schema.TaggedErrorClass<AgentError>()('AgentError', {
+export class AgentError extends Schema.TaggedError<AgentError>()('AgentError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}

@@ -1,21 +1,26 @@
-import {Array, Option, Order, pipe} from 'effect'
+import {Array, Option, Order, String, pipe} from 'effect'
 
 import type {TerminalFrame} from '@deslop/terminal/schema'
 
-type TerminalAttachmentOperation = {readonly type: 'reset'} | {readonly data: string; readonly type: 'output'}
+type TerminalAttachmentOperation = {type: 'reset'} | {data: string; type: 'output'}
 
-export function terminalAttachmentSizeEqual(
-	left: {readonly cols: number; readonly rows: number},
-	right: {readonly cols: number; readonly rows: number}
-) {
+export function terminalAttachmentSizeEqual(left: {cols: number; rows: number}, right: {cols: number; rows: number}) {
 	return left.cols === right.cols && left.rows === right.rows
 }
 
 function outputEnd(data: string, start: number, maxLength: number) {
 	const candidate = Math.min(start + maxLength, data.length)
 	if (candidate >= data.length) return candidate
-	const previous = data.charCodeAt(candidate - 1)
-	const next = data.charCodeAt(candidate)
+	const previous = pipe(
+		data,
+		String.charCodeAt(candidate - 1),
+		Option.getOrElse(() => -1)
+	)
+	const next = pipe(
+		data,
+		String.charCodeAt(candidate),
+		Option.getOrElse(() => -1)
+	)
 	const safeEnd =
 		previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? candidate - 1 : candidate
 	return safeEnd === start ? Math.min(start + maxLength, data.length) : safeEnd
@@ -32,7 +37,7 @@ function appendOutput(operations: TerminalAttachmentOperation[], data: string, m
 			return appendOutput(
 				[
 					...Array.dropRight(operations, 1),
-					{data: `${previous.value.data}${data.slice(start, end)}`, type: 'output' as const}
+					{data: `${previous.value.data}${String.slice(start, end)(data)}`, type: 'output' as const}
 				],
 				data,
 				maxOutputLength,
@@ -43,7 +48,10 @@ function appendOutput(operations: TerminalAttachmentOperation[], data: string, m
 
 	const end = outputEnd(data, start, maxOutputLength)
 	return appendOutput(
-		Array.append(operations, {data: data.slice(start, end), type: 'output'} satisfies TerminalAttachmentOperation),
+		Array.append(operations, {
+			data: String.slice(start, end)(data),
+			type: 'output'
+		} satisfies TerminalAttachmentOperation),
 		data,
 		maxOutputLength,
 		end
@@ -51,9 +59,9 @@ function appendOutput(operations: TerminalAttachmentOperation[], data: string, m
 }
 
 export function terminalAttachmentOperations(input: {
-	readonly frames: readonly TerminalFrame[]
-	readonly lastSequence: number
-	readonly maxOutputLength?: number
+	frames: TerminalFrame[]
+	lastSequence: number
+	maxOutputLength?: number
 }) {
 	const maxOutputLength = Math.max(1, input.maxOutputLength ?? 65_536)
 	return pipe(

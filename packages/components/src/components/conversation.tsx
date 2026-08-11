@@ -4,10 +4,10 @@ import {LegendList} from '@legendapp/list/react'
 
 import {cn} from '#lib/utils.ts'
 
-export function Conversation<T extends {readonly id: string}>(props: {
-	readonly items: readonly T[]
-	readonly children: (item: T, index: number) => React.ReactNode
-	readonly className?: string
+export function Conversation<T extends {id: string}>(props: {
+	items: T[]
+	children: (item: T, index: number) => React.ReactNode
+	className?: string
 }) {
 	return (
 		<LegendList<T>

@@ -43,17 +43,11 @@ function terminalSessionEnv(env: TerminalSessionInput['env']) {
 export function terminalSessionInput(input: TerminalSessionInput) {
 	const env = terminalSessionEnv(input.env)
 
-	return {
-		args: Predicate.isUndefined(input.args) ? undefined : [...input.args],
-		command: input.command,
-		cwd: input.cwd,
-		env,
-		sessionId: input.sessionId
-	}
+	return {args: input.args && [...input.args], command: input.command, cwd: input.cwd, env, sessionId: input.sessionId}
 }
 
 export function terminalSessionKey(input: TerminalSessionInput) {
-	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(terminalSessionInput(input))
+	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(terminalSessionInput(input))
 }
 
 export function worktreeRouteId(root: string) {

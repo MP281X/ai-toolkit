@@ -10,10 +10,7 @@ export const cpuTimes = Effect.fnUntraced(function* () {
 	}))
 })
 
-export function cpuUtilization(input: {
-	readonly before: {readonly idle: number; readonly total: number}
-	readonly after: {readonly idle: number; readonly total: number}
-}) {
+export function cpuUtilization(input: {before: {idle: number; total: number}; after: {idle: number; total: number}}) {
 	const total = input.after.total - input.before.total
 	const idle = input.after.idle - input.before.idle
 	if (total <= 0) return 0
@@ -26,7 +23,7 @@ export const osMemoryUtilization = Effect.sync(() => {
 	return Math.max(0, Math.min(100, ((total - freemem()) / total) * 100))
 })
 
-export function nodeProcessUsage(input?: {readonly heapLimitBytes: number; readonly heapUsedBytes: number}) {
+export function nodeProcessUsage(input?: {heapLimitBytes: number; heapUsedBytes: number}) {
 	const heapUsedBytes = input?.heapUsedBytes ?? process.memoryUsage().heapUsed
 	const heapLimitBytes = input?.heapLimitBytes ?? getHeapStatistics().heap_size_limit
 	const heapUtilization = heapLimitBytes <= 0 ? 0 : Math.max(0, Math.min(100, (heapUsedBytes / heapLimitBytes) * 100))

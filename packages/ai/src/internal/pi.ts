@@ -5,6 +5,7 @@ import {
 	Effect,
 	Encoding,
 	Match,
+	Option,
 	Predicate,
 	Queue,
 	Record,
@@ -17,7 +18,7 @@ import {
 	pipe
 } from 'effect'
 
-import type {ImageContent, TextContent} from '@earendil-works/pi-ai'
+import type {ImageContent, StopReason, TextContent} from '@earendil-works/pi-ai'
 import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
 import {
 	DefaultResourceLoader,
@@ -35,7 +36,7 @@ import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
 import {AiError, type AiStatus} from '../schema.ts'
 import {Ai} from '../service.ts'
 
-function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted') {
+function finishReason(reason: StopReason) {
 	return pipe(
 		Match.value(reason),
 		Match.when('stop', () => 'stop' as const),
@@ -43,6 +44,8 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 		Match.when('error', () => 'error' as const),
 		Match.when('toolUse', () => 'tool-calls' as const),
 		Match.when('aborted', () => 'error' as const),
+		Match.when('pending', () => 'error' as const),
+		Match.when('deferred', () => 'error' as const),
 		Match.exhaustive
 	)
 }
@@ -65,10 +68,10 @@ function imageFromFilePart(part: Prompt.FilePart) {
 function textFromResult(result: unknown) {
 	if (Predicate.isString(result)) return result
 	if (Predicate.isUndefined(result)) return 'undefined'
-	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(result)
+	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(result)
 }
 
-const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.Part[]) {
+const piContentFromPromptParts = Effect.fnUntraced(function* (parts: Iterable<Prompt.Part>) {
 	return Array.flatten(
 		yield* Effect.forEach(parts, part =>
 			pipe(
@@ -194,19 +197,18 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 	context: Context.Context<Tool.HandlerServices<ToolSet[string]>>
 ) {
 	function makeToolDefinition(name: string) {
-		const tool = toolkit.tools[name]
-		if (Predicate.isUndefined(tool)) throw new Error(`unknown tool ${name}`)
+		const tool = pipe(toolkit.tools[name], Option.fromUndefinedOr, Option.getOrThrow)
 
 		return {
 			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute: async (
+			execute(
 				_toolCallId: string,
 				params: Tool.Parameters<ToolSet[string]>,
 				_signal: AbortSignal | undefined,
 				onUpdate: AgentToolUpdateCallback<unknown> | undefined,
 				_ctx: ExtensionContext
-			) => {
-				const finalResult = await Effect.runPromiseWith(context)(
+			) {
+				return Effect.runPromiseWith(context)(
 					pipe(
 						toolkit.handle(name, params),
 						Effect.flatMap(stream =>
@@ -221,13 +223,16 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 									return result
 								}
 							)(stream)
-						)
+						),
+						Effect.flatMap(finalResult => {
+							if (Predicate.isUndefined(finalResult)) return Effect.succeed(agentToolResult(void 0))
+							if (finalResult.isFailure) {
+								return Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
+							}
+							return Effect.succeed(agentToolResult(finalResult.encodedResult))
+						})
 					)
 				)
-
-				if (Predicate.isUndefined(finalResult)) return agentToolResult(void 0)
-				if (finalResult.isFailure) throw finalResult.encodedResult
-				return agentToolResult(finalResult.encodedResult)
 			},
 			label: name,
 			name,
@@ -241,7 +246,7 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
 	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const model = yield* SubscriptionRef.make(config.model)
-	const history = yield* SubscriptionRef.make<readonly Prompt.Message[]>([config.systemPrompt])
+	const history = yield* SubscriptionRef.make<Prompt.Message[]>([config.systemPrompt])
 	const promptLock = yield* Semaphore.make(1)
 	const handledToolkit = yield* config.toolkit
 	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[string]>>()

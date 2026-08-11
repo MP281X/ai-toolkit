@@ -74,9 +74,8 @@ function targetFromKey(tag: string, hash = '') {
 }
 
 const reviewDiffsAtom = Atom.family((key: string) => {
-	const parts = key.split('\u0000')
-	const cwd = parts[0] ?? ''
-	const target = targetFromKey(parts[1] ?? 'changes', parts[2] ?? '')
+	const [cwd = '', tag = 'changes', hash = ''] = String.split('\u0000')(key)
+	const target = targetFromKey(tag, hash)
 
 	return RpcClient.runtime.atom(
 		pipe(
@@ -149,7 +148,7 @@ const commentResolutionStateAtom = Atom.family(() =>
 
 const resolveCommentActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<{readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}>()(
+		fn: RpcClient.runtime.fn<{comment: GitReviewComment & {source: 'github' | 'local'}}>()(
 			Effect.fn('DiffPage.resolveComment')(function* (resolveInput) {
 				const client = yield* RpcClient
 
@@ -165,7 +164,7 @@ const resolveCommentActionAtom = Atom.family((cwd: string) =>
 
 const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 	Atom.optimisticFn(commentResolutionStateAtom(cwd), {
-		fn: RpcClient.runtime.fn<readonly {readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}[]>()(
+		fn: RpcClient.runtime.fn<{comment: GitReviewComment & {source: 'github' | 'local'}}[]>()(
 			Effect.fn('DiffPage.resolveComments')(function* (comments) {
 				const client = yield* RpcClient
 
@@ -184,10 +183,10 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
-function groupCommentsByFile<Comment extends {readonly filePath: string}>(comments: readonly Comment[]) {
+function groupCommentsByFile<Comment extends {filePath: string}>(comments: Comment[]) {
 	return pipe(
 		comments,
-		Array.reduce(HashMap.empty<string, readonly Comment[]>(), (groups, comment) =>
+		Array.reduce(HashMap.empty<string, Comment[]>(), (groups, comment) =>
 			HashMap.set(
 				groups,
 				comment.filePath,
@@ -203,9 +202,7 @@ function groupCommentsByFile<Comment extends {readonly filePath: string}>(commen
 	)
 }
 
-async function copyReviewComments(
-	commentsToCopy: readonly (GitReviewComment & {readonly source: 'github' | 'local'})[]
-) {
+async function copyReviewComments(commentsToCopy: (GitReviewComment & {source: 'github' | 'local'})[]) {
 	try {
 		await navigator.clipboard.writeText(pipe(commentsToCopy, Array.map(formatCopiedComment), Array.join('\n\n')))
 	} catch {
@@ -221,7 +218,7 @@ function DiffPage() {
 	return <ReviewViewPanel key={activeHome.value.activeWorktree.root} cwd={activeHome.value.activeWorktree.root} />
 }
 
-function ReviewViewPanel(input: {readonly cwd: string}) {
+function ReviewViewPanel(input: {cwd: string}) {
 	const navigate = Route.useNavigate()
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
@@ -284,7 +281,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	const visibleSegmentKeys = pipe(reviewDiffsValue, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
 	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => HashSet.has(visibleSegmentKeys, mark))
 
-	async function markFileReviewed(marks: readonly GitReviewMark[]) {
+	async function markFileReviewed(marks: GitReviewState['marks']) {
 		try {
 			await markReviewed({payload: {cwd: input.cwd, marks}})
 		} catch {
@@ -292,7 +289,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 	}
 
-	async function unmarkFileReviewed(marks: readonly GitReviewMark[]) {
+	async function unmarkFileReviewed(marks: GitReviewState['marks']) {
 		try {
 			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
 		} catch {
@@ -300,7 +297,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 	}
 
-	function openFile(filePath: string) {
+	async function openFile(filePath: string) {
 		selectedFilePathState[1](filePath)
 		const marks = pipe(
 			reviewDiffsValue,
@@ -308,7 +305,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 			Option.map(gitReviewMarksForDiff),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
-		if (!Array.isReadonlyArrayEmpty(marks)) void markFileReviewed(marks)
+		if (!Array.isReadonlyArrayEmpty(marks)) await markFileReviewed(marks)
 	}
 
 	function selectTarget(target: GitReviewTarget) {
@@ -334,7 +331,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 		}
 	}
 
-	async function resolveReviewComment(comment: GitReviewComment & {readonly source: 'github' | 'local'}) {
+	async function resolveReviewComment(comment: GitReviewComment & {source: 'github' | 'local'}) {
 		try {
 			await resolveComment({comment})
 			if (comment.source === 'github') refreshReviewState()
@@ -344,7 +341,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 	}
 
 	async function resolveReviewComments(
-		commentsToResolve: readonly {readonly comment: GitReviewComment & {readonly source: 'github' | 'local'}}[]
+		commentsToResolve: {comment: GitReviewComment & {source: 'github' | 'local'}}[]
 	) {
 		try {
 			await resolveComments(commentsToResolve)
@@ -399,12 +396,8 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										<DiffList
 											diffs={reviewDiffsValue}
 											marks={validReviewMarks}
-											markReviewed={marks => {
-												void markFileReviewed(marks)
-											}}
-											unmarkReviewed={marks => {
-												void unmarkFileReviewed(marks)
-											}}
+											markReviewed={markFileReviewed}
+											unmarkReviewed={unmarkFileReviewed}
 											selectedEntry={selectedEntry}
 											openReviewEntry={openFile}
 										/>
@@ -453,7 +446,15 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 										filePath={selectedEntry.filePath}
 										fileContent={selectedEntry.fileContent}
 										patch={selectedEntry.patch}
-										comments={selectedEntryComments}
+										comments={Array.map(selectedEntryComments, comment => ({
+											body: comment.body,
+											filePath: comment.filePath,
+											lineNumber: comment.lineNumber,
+											resolving: comment.resolving,
+											side: comment.side,
+											source: comment.source,
+											threadId: comment.threadId
+										}))}
 										onSaveComment={comment => {
 											void saveQueuedComment({
 												body: comment.body,
@@ -481,7 +482,7 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 											aria-label={`Open ${group.filePath}`}
 											title={group.filePath}
 											onClick={() => {
-												openFile(group.filePath)
+												void openFile(group.filePath)
 											}}
 										>
 											<FileIcon filePath={group.filePath} />
@@ -539,15 +540,15 @@ function ReviewViewPanel(input: {readonly cwd: string}) {
 }
 
 function CommitActionForm(input: {
-	readonly cwd: string
-	readonly dirty: boolean
-	readonly hasCheckpointCommits: boolean
-	readonly hasReviewableWorktreeChanges: boolean
-	readonly loading: boolean
-	readonly refreshReview: () => void
-	readonly unpushedCommits: boolean
-	readonly unpushedCount: number
-	readonly upstream?: {readonly ahead: number; readonly behind: number}
+	cwd: string
+	dirty: boolean
+	hasCheckpointCommits: boolean
+	hasReviewableWorktreeChanges: boolean
+	loading: boolean
+	refreshReview: () => void
+	unpushedCommits: boolean
+	unpushedCount: number
+	upstream?: {ahead: number; behind: number}
 }) {
 	const commitMessageState = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
@@ -562,7 +563,7 @@ function CommitActionForm(input: {
 		Match.when({checkpoints: true}, () => 'Generate squash message'),
 		Match.orElse(() => (input.unpushedCommits ? 'Generate branch summary' : 'No changes'))
 	)
-	const messageLines = String.split(/\r?\n/)(trimmedCommitMessage)
+	const messageLines = String.split(/\r?\n/u)(trimmedCommitMessage)
 	const messageSubject = String.trim(messageLines[0])
 	const messageBody = pipe(Array.drop(messageLines, 1), Array.join('\n'), String.trim)
 	const subjectContent = pipe(
@@ -774,13 +775,16 @@ function CommitActionForm(input: {
 }
 
 function CommitList(input: {
-	readonly branchCommits: readonly GitCommit[]
-	readonly loading: boolean
-	readonly localCommits: readonly GitCommit[]
-	readonly selected: GitReviewTarget
-	readonly selectCommit: (commit: GitCommit) => void
-	readonly selectScope: (target: GitReviewTarget) => void
+	branchCommits: Iterable<GitCommit>
+	loading: boolean
+	localCommits: Iterable<GitCommit>
+	selected: GitReviewTarget
+	selectCommit: (commit: GitCommit) => void
+	selectScope: (target: GitReviewTarget) => void
 }) {
+	const branchCommits = Array.fromIterable(input.branchCommits)
+	const localCommits = Array.fromIterable(input.localCommits)
+
 	if (input.loading) {
 		return (
 			<div className="flex h-full min-h-0 items-center justify-center">
@@ -822,37 +826,37 @@ function CommitList(input: {
 					selectScope={input.selectScope}
 					target={GitReviewChangesTarget.make({})}
 				/>
-				{!Array.isReadonlyArrayEmpty(input.localCommits) && (
+				{!Array.isReadonlyArrayEmpty(localCommits) && (
 					<CommitScopeRow
-						detail={`${Array.length(input.localCommits)}`}
+						detail={`${Array.length(localCommits)}`}
 						label="Local"
 						selected={input.selected}
 						selectScope={input.selectScope}
 						target={GitReviewLocalTarget.make({})}
 					/>
 				)}
-				{Array.map(input.localCommits, renderCommit)}
-				{!Array.isReadonlyArrayEmpty(input.branchCommits) && (
+				{Array.map(localCommits, renderCommit)}
+				{!Array.isReadonlyArrayEmpty(branchCommits) && (
 					<CommitScopeRow
-						detail={`${Array.length(input.branchCommits)}`}
+						detail={`${Array.length(branchCommits)}`}
 						label="Branch"
 						selected={input.selected}
 						selectScope={input.selectScope}
 						target={GitReviewBranchTarget.make({})}
 					/>
 				)}
-				{Array.map(input.branchCommits, renderCommit)}
+				{Array.map(branchCommits, renderCommit)}
 			</ul>
 		</div>
 	)
 }
 
 function CommitScopeRow(input: {
-	readonly detail: string
-	readonly label: string
-	readonly selected: GitReviewTarget
-	readonly selectScope: (target: GitReviewTarget) => void
-	readonly target: GitReviewTarget
+	detail: string
+	label: string
+	selected: GitReviewTarget
+	selectScope: (target: GitReviewTarget) => void
+	target: GitReviewTarget
 }) {
 	return (
 		<li className="w-full min-w-0">
@@ -874,55 +878,62 @@ function CommitScopeRow(input: {
 	)
 }
 
-type FileTreeNode =
-	| {readonly children: FileTreeNode[]; readonly name: string; readonly path: string; readonly type: 'directory'}
-	| {readonly diff: GitDiff; readonly name: string; readonly path: string; readonly type: 'file'}
+type FileTreeDirectory = {children: FileTreeNode[]; name: string; path: string; type: 'directory'}
+type FileTreeNode = FileTreeDirectory | {diff: GitDiff; name: string; path: string; type: 'file'}
 
-function buildFileTree(diffs: readonly GitDiff[]) {
-	const root = {children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory' as const}
-
-	function insert(
-		directory: Extract<FileTreeNode, {readonly type: 'directory'}>,
-		parts: readonly string[],
-		diff: GitDiff
-	) {
+function buildFileTree(diffs: GitDiff[]) {
+	function insert(directory: FileTreeDirectory, parts: string[], diff: GitDiff): FileTreeDirectory {
 		if (Predicate.isUndefined(parts[0])) {
-			directory.children.push({diff, name: diff.filePath, path: diff.filePath, type: 'file'})
-			return
+			return {
+				...directory,
+				children: Array.append(directory.children, {diff, name: diff.filePath, path: diff.filePath, type: 'file'})
+			}
 		}
 		if (Array.length(parts) === 1) {
-			directory.children.push({diff, name: parts[0], path: diff.filePath, type: 'file'})
-			return
+			return {
+				...directory,
+				children: Array.append(directory.children, {diff, name: parts[0], path: diff.filePath, type: 'file'})
+			}
 		}
 
 		const path = directory.path ? `${directory.path}/${parts[0]}` : parts[0]
 		const directoryChild = pipe(
 			directory.children,
-			Array.findFirst(child => child.name === parts[0]),
-			Option.getOrUndefined
+			Array.findFirstWithIndex(child => child.name === parts[0] && child.type === 'directory')
 		)
 
-		if (directoryChild?.type === 'directory') {
-			insert(directoryChild, Array.drop(parts, 1), diff)
-			return
+		if (Option.isSome(directoryChild) && directoryChild.value[0].type === 'directory') {
+			const updatedChild = insert(directoryChild.value[0], Array.drop(parts, 1), diff)
+			return {
+				...directory,
+				children: pipe(
+					directory.children,
+					Array.modify(directoryChild.value[1], () => updatedChild),
+					Option.getOrElse(() => directory.children)
+				)
+			}
 		}
 
-		const next = {children: Array.empty<FileTreeNode>(), name: parts[0], path, type: 'directory' as const}
-		directory.children.push(next)
-		insert(next, Array.drop(parts, 1), diff)
-	}
-
-	for (const diff of diffs) {
-		insert(root, String.split('/')(diff.filePath), diff)
+		const next = insert(
+			{children: Array.empty<FileTreeNode>(), name: parts[0], path, type: 'directory'},
+			Array.drop(parts, 1),
+			diff
+		)
+		return {...directory, children: Array.append(directory.children, next)}
 	}
 
 	return pipe(
-		root.children,
+		diffs,
+		Array.reduce<FileTreeDirectory, GitDiff>(
+			{children: Array.empty<FileTreeNode>(), name: '', path: '', type: 'directory'},
+			(root, diff) => insert(root, String.split('/')(diff.filePath), diff)
+		),
+		root => root.children,
 		Array.map(node => (node.type === 'directory' ? collapseSingleChildDirectory(node) : node))
 	)
 }
 
-function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly type: 'directory'}>) {
+function collapseSingleChildDirectory(directory: FileTreeDirectory) {
 	const child = directory.children[0]
 
 	if (Array.length(directory.children) === 1 && child?.type === 'directory') {
@@ -938,18 +949,19 @@ function collapseSingleChildDirectory(directory: Extract<FileTreeNode, {readonly
 }
 
 function DiffList(input: {
-	readonly diffs: readonly GitDiff[]
-	readonly markReviewed: (marks: readonly GitReviewMark[]) => void
-	readonly marks: readonly GitReviewMark[]
-	readonly openReviewEntry: (filePath: string) => void
-	readonly selectedEntry?: GitDiff
-	readonly unmarkReviewed: (marks: readonly GitReviewMark[]) => void
+	diffs: Iterable<GitDiff>
+	markReviewed: (marks: GitReviewState['marks']) => unknown
+	marks: Iterable<GitReviewMark>
+	openReviewEntry: (filePath: string) => unknown
+	selectedEntry?: GitDiff
+	unmarkReviewed: (marks: GitReviewState['marks']) => unknown
 }) {
 	const collapsedFoldersState = useState(() => HashSet.empty<string>())
-	const fileTree = buildFileTree(input.diffs)
+	const diffs = Array.fromIterable(input.diffs)
+	const fileTree = buildFileTree(diffs)
 	const marksByDiff = pipe(
-		input.diffs,
-		Array.reduce(HashMap.empty<string, readonly GitReviewMark[]>(), (marks, diff) =>
+		diffs,
+		Array.reduce(HashMap.empty<string, GitReviewMark[]>(), (marks, diff) =>
 			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
 		)
 	)
@@ -999,9 +1011,9 @@ function DiffList(input: {
 									event.stopPropagation()
 									if (Array.isReadonlyArrayEmpty(marks)) return
 									if (state === 'checked') {
-										input.unmarkReviewed(marks)
+										void input.unmarkReviewed(marks)
 									} else {
-										input.markReviewed(marks)
+										void input.markReviewed(marks)
 									}
 								}}
 							/>
@@ -1009,7 +1021,7 @@ function DiffList(input: {
 						</div>
 					}
 					onClick={() => {
-						input.openReviewEntry(node.diff.filePath)
+						void input.openReviewEntry(node.diff.filePath)
 					}}
 				>
 					{node.name}
@@ -1021,7 +1033,7 @@ function DiffList(input: {
 	return (
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
 			<TreeExplorerSection className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-				{Array.isReadonlyArrayEmpty(input.diffs) ? (
+				{Array.isReadonlyArrayEmpty(diffs) ? (
 					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2">No changed files.</li>
 				) : (
 					Array.map(fileTree, renderNode)
@@ -1032,8 +1044,8 @@ function DiffList(input: {
 }
 
 function ReviewCheckbox(input: {
-	readonly onClick: (event: MouseEvent<HTMLButtonElement>) => void
-	readonly state: 'checked' | 'indeterminate' | 'unchecked'
+	onClick: (event: MouseEvent<HTMLButtonElement>) => void
+	state: 'checked' | 'indeterminate' | 'unchecked'
 }) {
 	return (
 		<button
@@ -1052,7 +1064,7 @@ function ReviewCheckbox(input: {
 	)
 }
 
-function DiffStatus(input: {readonly status: GitDiff['status']}) {
+function DiffStatus(input: {status: GitDiff['status']}) {
 	return pipe(
 		Match.value(input.status),
 		Match.when('added', () => <span className="text-emerald-600 dark:text-emerald-400">A</span>),

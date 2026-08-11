@@ -12,7 +12,7 @@ Keep package and generated-file ownership explicit.
 - Root scripts orchestrate repository behavior; package scripts own package behavior; CLIs use `bin`.
 - Packages expose public entrypoints through `exports` and package-private modules through `imports`.
 - Cross-workspace import → package export; intra-package import → subpath alias.
-- Reject workspace `src`/`lib` imports, parent traversal, and import aliases that preserve stale vocabulary.
+- Reject workspace `src`/`lib` imports and parent traversal.
 - Extract a service package only for a generic independently reusable capability whose contract contains no application shapes or sibling-service requirements.
 - Keep application services under `apps/<app>/src/services/<name>/{schema.ts,service.ts,internal/*}` and expose `#services/*` through the owning application manifest.
 - Compose service packages in the application. When two capabilities cannot remain independent, keep their services in one owning package or keep the composition application-local.

@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Function, HashMap, Match, Number, Option, Predicate, Stream, String, pipe} from 'effect'
+import {Array, Effect, Function, HashMap, Match, Number, Option, Predicate, Random, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -46,10 +46,21 @@ const cursorPalette = [
 	'oklch(0.73 0.19 338)',
 	'oklch(0.72 0.2 352)'
 ]
+function randomIndex(length: number) {
+	return Math.floor(Random.Random.defaultValue().nextDoubleUnsafe() * length)
+}
+
+function randomSeed() {
+	const alphabet = '0123456789abcdef'
+	return pipe(
+		Array.makeBy(6, () => alphabet[randomIndex(String.length(alphabet))] ?? '0'),
+		Array.join('')
+	)
+}
 
 function pickNextCursorColor(currentColor: string) {
 	const nextPalette = Array.filter(cursorPalette, color => color !== currentColor)
-	return nextPalette[Math.floor(Math.random() * nextPalette.length)] ?? cursorPalette[0] ?? 'oklch(0.72 0.2 210)'
+	return nextPalette[randomIndex(nextPalette.length)] ?? cursorPalette[0] ?? 'oklch(0.72 0.2 210)'
 }
 
 function getIdentity() {
@@ -58,16 +69,16 @@ function getIdentity() {
 
 	if (Predicate.isNotNullish(existingId) && Predicate.isNotNullish(existingName)) {
 		return {
-			color: cursorPalette[Math.floor(Math.random() * cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
+			color: cursorPalette[randomIndex(cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
 			id: existingId,
 			name: existingName
 		}
 	}
 
-	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
+	const seed = randomSeed()
 
 	const next = {
-		color: cursorPalette[Math.floor(Math.random() * cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
+		color: cursorPalette[randomIndex(cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
 		id: `v-${seed}`,
 		name: `Guest-${pipe(seed, String.slice(0, 3))}`
 	}
@@ -81,19 +92,19 @@ function getIdentity() {
 
 const identity = getIdentity()
 
-function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
+function upsertVisitor(visitors: PortfolioState['visitors'], visitor: PortfolioVisitor) {
 	return Array.some(visitors, current => current.id === visitor.id)
 		? Array.map(visitors, current => (current.id === visitor.id ? visitor : current))
 		: Array.append(visitors, visitor)
 }
 
-function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
+function removeVisitor(visitors: PortfolioState['visitors'], id: string) {
 	const nextVisitors = Array.filter(visitors, visitor => visitor.id !== id)
 
 	return nextVisitors.length === visitors.length ? visitors : nextVisitors
 }
 
-function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
+function appendTrail(trails: PortfolioState['trails'], trail: PortfolioTrail) {
 	const nextTrails = Array.append(trails, trail)
 	return nextTrails.length > 180 ? Array.drop(nextTrails, nextTrails.length - 180) : nextTrails
 }
@@ -258,10 +269,10 @@ const CONTACT_ITEMS = [
 ]
 
 function getDisplayCursorTarget(
-	cursor: Readonly<PortfolioVisitor>,
+	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {readonly x: number; readonly y: number} | null,
-	viewport: {readonly width: number; readonly height: number}
+	localPointer: {x: number; y: number} | null,
+	viewport: {width: number; height: number}
 ) {
 	if (isMe && Predicate.isNotNull(localPointer)) {
 		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
@@ -274,10 +285,7 @@ function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
 	node.style.setProperty('transform', `translate3d(${x}px, ${y}px, 0)`)
 }
 
-function createCursorMotion(
-	target: {readonly x: number; readonly y: number},
-	viewport: {readonly width: number; readonly height: number}
-) {
+function createCursorMotion(target: {x: number; y: number}, viewport: {width: number; height: number}) {
 	return {
 		lastFrameAt: 0,
 		targetX: target.x,
@@ -307,10 +315,10 @@ function stepCursorMotion(motion: ReturnType<typeof createCursorMotion>, now: nu
 
 function syncCursorMotion(
 	motion: ReturnType<typeof createCursorMotion>,
-	cursor: Readonly<PortfolioVisitor>,
+	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {readonly x: number; readonly y: number} | null,
-	viewport: {readonly width: number; readonly height: number}
+	localPointer: {x: number; y: number} | null,
+	viewport: {width: number; height: number}
 ) {
 	const nextTarget = getDisplayCursorTarget(cursor, isMe, localPointer, viewport)
 
@@ -347,7 +355,7 @@ function useViewport() {
 	}
 }
 
-function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
+function Panel(input: {className?: string; children: React.ReactNode}) {
 	return (
 		<div className={cn('border-border/70 bg-background/88 border backdrop-blur-sm', input.className)}>
 			{input.children}
@@ -370,10 +378,7 @@ function GridOverlay() {
 	)
 }
 
-function TrailCanvas(input: {
-	readonly trails: readonly PortfolioTrail[]
-	readonly viewport: {readonly width: number; readonly height: number}
-}) {
+function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width: number; height: number}}) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
 	useEffect(() => {
@@ -398,7 +403,7 @@ function TrailCanvas(input: {
 
 		Array.reduce(
 			input.trails,
-			HashMap.empty<string, {readonly trail: PortfolioTrail; readonly col: number; readonly row: number}>(),
+			HashMap.empty<string, {trail: PortfolioTrail; col: number; row: number}>(),
 			(previousByVisitor, trail) => {
 				const current = {
 					col: Math.floor((trail.x * input.viewport.width) / 26),
@@ -435,10 +440,10 @@ function TrailCanvas(input: {
 }
 
 function CursorEl(input: {
-	readonly cursor: PortfolioVisitor
-	readonly isMe: boolean
-	readonly localPointer: {readonly x: number; readonly y: number} | null
-	readonly viewport: {readonly width: number; readonly height: number}
+	cursor: PortfolioVisitor
+	isMe: boolean
+	localPointer: {x: number; y: number} | null
+	viewport: {width: number; height: number}
 }) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
 	const [initialMotion] = useState(() =>
@@ -524,10 +529,10 @@ function CursorEl(input: {
 }
 
 function Section(input: {
-	readonly id: number
-	readonly className?: string
-	readonly children: React.ReactNode
-	readonly registerSection: (id: number, node: HTMLElement | null) => void
+	id: number
+	className?: string
+	children: React.ReactNode
+	registerSection: (id: number, node: HTMLElement | null) => void
 }) {
 	return (
 		<section
@@ -545,7 +550,7 @@ function Section(input: {
 	)
 }
 
-function SectionLabel(input: {readonly title: string}) {
+function SectionLabel(input: {title: string}) {
 	return (
 		<div className="mb-6 flex w-full max-w-5xl items-center gap-4 sm:mb-8">
 			<div className="bg-primary/25 h-px flex-1" />
@@ -557,7 +562,7 @@ function SectionLabel(input: {readonly title: string}) {
 	)
 }
 
-function HeroSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function HeroSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={0} registerSection={input.registerSection} className="min-h-dvh justify-center py-16">
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
@@ -589,7 +594,7 @@ function HeroSection(input: {readonly registerSection: (id: number, node: HTMLEl
 	)
 }
 
-function AboutSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function AboutSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={1} registerSection={input.registerSection}>
 			<SectionLabel title="About" />
@@ -608,7 +613,7 @@ function AboutSection(input: {readonly registerSection: (id: number, node: HTMLE
 	)
 }
 
-function SkillsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function SkillsSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={2} registerSection={input.registerSection}>
 			<SectionLabel title="Skills" />
@@ -630,14 +635,7 @@ function SkillsSection(input: {readonly registerSection: (id: number, node: HTML
 }
 
 function ProjectCard(input: {
-	readonly project: {
-		readonly currentWork?: string
-		readonly description: string
-		readonly href: string
-		readonly name: string
-		readonly role: string
-		readonly stack: string
-	}
+	project: {currentWork?: string; description: string; href: string; name: string; role: string; stack: string}
 }) {
 	return (
 		<Panel className="flex h-full flex-col p-4 sm:p-5">
@@ -669,7 +667,7 @@ function ProjectCard(input: {
 	)
 }
 
-function ProjectsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ProjectsSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={3} registerSection={input.registerSection}>
 			<SectionLabel title="Personal Projects" />
@@ -686,7 +684,7 @@ function ProjectsSection(input: {readonly registerSection: (id: number, node: HT
 	)
 }
 
-function ExperienceSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ExperienceSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={4} registerSection={input.registerSection}>
 			<SectionLabel title="Experience" />
@@ -727,7 +725,7 @@ function ExperienceSection(input: {readonly registerSection: (id: number, node: 
 	)
 }
 
-function EducationSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function EducationSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={5} registerSection={input.registerSection}>
 			<SectionLabel title="Education & Languages" />
@@ -758,7 +756,7 @@ function EducationSection(input: {readonly registerSection: (id: number, node: H
 	)
 }
 
-function ContactSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ContactSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={6} registerSection={input.registerSection}>
 			<SectionLabel title="Contact" />
@@ -783,7 +781,7 @@ function ContactSection(input: {readonly registerSection: (id: number, node: HTM
 	)
 }
 
-function ShortcutsOverlay(input: {readonly onClose: () => void}) {
+function ShortcutsOverlay(input: {onClose: () => void}) {
 	return (
 		<Dialog
 			open
@@ -815,9 +813,9 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 }
 
 function RealtimeLayer(input: {
-	readonly identityColor: string
-	readonly localPointer: {readonly x: number; readonly y: number} | null
-	readonly viewport: {readonly width: number; readonly height: number}
+	identityColor: string
+	localPointer: {x: number; y: number} | null
+	viewport: {width: number; height: number}
 }) {
 	const portfolio = useAtomSuspense(portfolioAtom)
 
@@ -851,10 +849,10 @@ function PortfolioRoute() {
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{readonly x: number; readonly y: number} | null>(null)
-	const lastSentPointerRef = useRef<{readonly sentAt: number; readonly x: number; readonly y: number} | null>(null)
+	const queuedPointerRef = useRef<{x: number; y: number} | null>(null)
+	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number} | null>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [localPointer, setLocalPointer] = useState<{readonly x: number; readonly y: number} | null>(null)
+	const [localPointer, setLocalPointer] = useState<{x: number; y: number} | null>(null)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
 	function getSectionRefs() {

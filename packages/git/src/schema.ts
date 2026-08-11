@@ -1,6 +1,6 @@
 import {Array, Equal, HashSet, Predicate, Schema, pipe} from 'effect'
 
-export class GitError extends Schema.TaggedErrorClass<GitError>()('GitError', {
+export class GitError extends Schema.TaggedError<GitError>()('GitError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}
@@ -117,7 +117,7 @@ export function gitReviewMarksForDiff(diff: GitDiff) {
 	return [GitReviewMark.make({changeHash: diff.changeHash, filePath: diff.filePath})]
 }
 
-export function gitReviewStateForMarks(marks: readonly GitReviewMark[], reviewed: HashSet.HashSet<GitReviewMark>) {
+export function gitReviewStateForMarks(marks: GitReviewMark[], reviewed: HashSet.HashSet<GitReviewMark>) {
 	if (Array.isReadonlyArrayEmpty(marks)) return 'unchecked' as const
 	const reviewedMarks = Array.filter(marks, mark => HashSet.has(reviewed, mark))
 	if (Array.isReadonlyArrayEmpty(reviewedMarks)) return 'unchecked' as const
@@ -136,7 +136,7 @@ export function gitReviewStateSaveComment(state: GitReviewState, draft: GitRevie
 	})
 }
 
-export function gitReviewStateDeleteComments(state: GitReviewState, comments: readonly GitReviewComment[]) {
+export function gitReviewStateDeleteComments(state: GitReviewState, comments: GitReviewState['comments']) {
 	const deletedThreadIds = pipe(
 		comments,
 		Array.filter(comment => comment.source === 'github' && Predicate.isString(comment.threadId)),
@@ -154,7 +154,7 @@ export function gitReviewStateDeleteComments(state: GitReviewState, comments: re
 	})
 }
 
-export function gitReviewStateMark(state: GitReviewState, marks: readonly GitReviewMark[]) {
+export function gitReviewStateMark(state: GitReviewState, marks: GitReviewState['marks']) {
 	const reviewed = HashSet.fromIterable(marks)
 
 	return GitReviewState.make({
@@ -166,7 +166,7 @@ export function gitReviewStateMark(state: GitReviewState, marks: readonly GitRev
 	})
 }
 
-export function gitReviewStateUnmark(state: GitReviewState, marks: readonly GitReviewMark[]) {
+export function gitReviewStateUnmark(state: GitReviewState, marks: GitReviewState['marks']) {
 	const reviewed = HashSet.fromIterable(marks)
 
 	return GitReviewState.make({

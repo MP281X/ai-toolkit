@@ -1,6 +1,6 @@
 import {Array, HashMap, HashSet, Option, Schema, String, pipe} from 'effect'
 
-export class AgentBrowserError extends Schema.TaggedErrorClass<AgentBrowserError>()('AgentBrowserError', {
+export class AgentBrowserError extends Schema.TaggedError<AgentBrowserError>()('AgentBrowserError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.String
 }) {}
@@ -33,33 +33,35 @@ function portlessSegments(origin: string) {
 	return segments.length > 1 ? Array.dropRight(segments, 1) : segments
 }
 
-function commonPrefixLength(values: readonly (readonly string[])[], length = 0): number {
+function commonPrefixLength(values: string[][], length = 0): number {
 	const first = values[0] ?? []
-	return length < first.length && values.every(value => value[length] === first[length])
+	return length < first.length && Array.every(values, value => value[length] === first[length])
 		? commonPrefixLength(values, length + 1)
 		: length
 }
 
-function commonSuffixLength(values: readonly (readonly string[])[], prefixLength: number, length = 0): number {
+function commonSuffixLength(values: string[][], prefixLength: number, length = 0): number {
 	const first = values[0] ?? []
 	return length < first.length - prefixLength &&
-		values.every(value => value[value.length - length - 1] === first[first.length - length - 1])
+		Array.every(values, value => value[value.length - length - 1] === first[first.length - length - 1])
 		? commonSuffixLength(values, prefixLength, length + 1)
 		: length
 }
 
-function labelTokens(values: readonly (readonly string[])[]) {
+function labelTokens(values: string[][]) {
 	if (values.length <= 1) return values
 
 	const prefixLength = commonPrefixLength(values)
 	const suffixLength = commonSuffixLength(values, prefixLength)
 	if (prefixLength === 0 && suffixLength === 0) return values
 
-	const trimmed = Array.map(values, value => value.slice(prefixLength, value.length - suffixLength))
-	return trimmed.every(value => value.length > 0) ? trimmed : values
+	const trimmed = Array.map(values, value =>
+		pipe(value, Array.drop(prefixLength), Array.take(value.length - prefixLength - suffixLength))
+	)
+	return Array.every(trimmed, value => value.length > 0) ? trimmed : values
 }
 
-function segmentLabel(tokens: readonly string[]) {
+function segmentLabel(tokens: string[]) {
 	return sanitizePortlessLabel(Array.join('-')(tokens))
 }
 
@@ -71,14 +73,10 @@ function labelFor(labels: HashMap.HashMap<string, string>, origin: string) {
 }
 
 function collisionLabel(input: {
-	readonly collision: {
-		readonly origin: string
-		readonly original: readonly string[]
-		readonly tokens: readonly string[]
-	}
-	readonly collisions: readonly {readonly origin: string}[]
-	readonly label: string
-	readonly labels: HashMap.HashMap<string, string>
+	collision: {origin: string; original: string[]; tokens: string[]}
+	collisions: {origin: string}[]
+	label: string
+	labels: HashMap.HashMap<string, string>
 }) {
 	const extras = Array.filter(input.collision.original, token => !Array.contains(input.collision.tokens, token))
 	return pipe(
@@ -96,11 +94,7 @@ function collisionLabel(input: {
 }
 
 function resolveCompactCollisions(
-	entries: readonly {
-		readonly origin: string
-		readonly original: readonly string[]
-		readonly tokens: readonly string[]
-	}[],
+	entries: {origin: string; original: string[]; tokens: string[]}[],
 	labels: HashMap.HashMap<string, string>
 ) {
 	return Array.reduce(entries, labels, (current, entry) => {
@@ -119,7 +113,7 @@ function uniqueLabel(base: string, used: HashSet.HashSet<string>, index = 0): st
 	return HashSet.has(used, candidate) ? uniqueLabel(base, used, index + 1) : candidate
 }
 
-export function agentBrowserOwnedTabLabels(origins: readonly string[]) {
+export function agentBrowserOwnedTabLabels(origins: string[]) {
 	const uniqueOrigins = Array.dedupe(origins)
 	const originalTokens = Array.map(uniqueOrigins, origin => portlessSegments(origin))
 	const compactTokens = labelTokens(originalTokens)

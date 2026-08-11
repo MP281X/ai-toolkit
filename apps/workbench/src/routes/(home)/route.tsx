@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, HashSet, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Effect, HashSet, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
 
 import {
 	Outlet,
@@ -17,7 +17,14 @@ import {Suspense, startTransition, useState} from 'react'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
 import {UsageStrip, UsageStripFallback} from '#routes/components/-usage-strip.tsx'
-import type {AgentProfile, AgentSession, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
+import type {
+	AgentProfile,
+	AgentSession,
+	HomeSidebar,
+	ScriptRun,
+	SidebarProject,
+	SidebarWorktree
+} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
@@ -196,7 +203,7 @@ function shortPath(value: string) {
 	return pathLabel(value)
 }
 
-function WorktreeIcon(input: {readonly dirty: boolean; readonly root: boolean}) {
+function WorktreeIcon(input: {dirty: boolean; root: boolean}) {
 	if (input.root) return <PanelTop className={input.dirty ? 'text-amber-500' : 'text-current'} />
 	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
@@ -213,12 +220,12 @@ function validNewWorktreeBranch(branch: string) {
 	return String.isNonEmpty(String.trim(branch)) && !/\s/u.test(branch)
 }
 
-function sortScriptRuns(runs: readonly ScriptRun[]) {
-	return [...runs].toSorted((left, right) => left.taskId.localeCompare(right.taskId))
+function sortScriptRuns(runs: SidebarWorktree['scriptRuns']) {
+	return Array.sortWith(runs, run => run.taskId, Order.String)
 }
 
-function sortPortlessRuns(runs: readonly PortlessRun[]) {
-	return [...runs].toSorted((left, right) => left.script.taskId.localeCompare(right.script.taskId))
+function sortPortlessRuns(runs: SidebarWorktree['portlessRuns']) {
+	return Array.sortWith(runs, run => run.script.taskId, Order.String)
 }
 
 function nativeBrowserUrl(origin: string) {
@@ -230,10 +237,10 @@ function nativeBrowserUrl(origin: string) {
 }
 
 function WorktreeScripts(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly scripts: readonly ScriptRun[]
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	cwd: string
+	runStatuses: Record<string, AgentSession['state']>
+	scripts: SidebarWorktree['scriptRuns']
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const expandedState = useState(false)
 	const sortedRuns = sortScriptRuns(input.scripts)
@@ -253,7 +260,7 @@ function WorktreeScripts(input: {
 			</TreeExplorerRow>
 			{expandedState[0] && (
 				<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
-					{sortedRuns.map(run => (
+					{Array.map(sortedRuns, run => (
 						<Suspense key={run.sessionId} fallback={<Loading />}>
 							<ScriptRunRow
 								cwd={input.cwd}
@@ -270,10 +277,10 @@ function WorktreeScripts(input: {
 }
 
 function ScriptRunRow(input: {
-	readonly cwd: string
-	readonly run: ScriptRun
-	readonly status: AgentSession['state']
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	cwd: string
+	run: ScriptRun
+	status: AgentSession['state']
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const session = scriptSession(input.cwd, input.run)
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
@@ -342,11 +349,11 @@ function ScriptRunRow(input: {
 }
 
 function WorktreePortless(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	cwd: string
+	runStatuses: Record<string, AgentSession['state']>
+	runs: SidebarWorktree['portlessRuns']
+	selectPortless: (worktreeRoot: string) => void
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const sortedRuns = sortPortlessRuns(input.runs)
 
@@ -364,11 +371,11 @@ function WorktreePortless(input: {
 }
 
 function PortlessGroup(input: {
-	readonly cwd: string
-	readonly runStatuses: Readonly<Record<string, AgentSession['state']>>
-	readonly runs: readonly PortlessRun[]
-	readonly selectPortless: (worktreeRoot: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	cwd: string
+	runStatuses: Record<string, AgentSession['state']>
+	runs: SidebarWorktree['portlessRuns']
+	selectPortless: (worktreeRoot: string) => void
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
 	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
@@ -462,9 +469,9 @@ function PortlessGroup(input: {
 }
 
 function PortlessRunRow(input: {
-	readonly run: PortlessRun
-	readonly status: AgentSession['state']
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	run: PortlessRun
+	status: AgentSession['state']
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const browserUrl = nativeBrowserUrl(input.run.origin.origin)
 
@@ -521,12 +528,7 @@ function PortlessRunRow(input: {
 	)
 }
 
-function AgentSessionRow(input: {
-	readonly onSelect: () => void
-	readonly onStop: () => void
-	readonly session: AgentSession
-	readonly stopping: boolean
-}) {
+function AgentSessionRow(input: {onSelect: () => void; onStop: () => void; session: AgentSession; stopping: boolean}) {
 	return (
 		<li className="w-full min-w-0">
 			<TreeExplorerRow
@@ -566,17 +568,17 @@ function AgentSessionRow(input: {
 }
 
 function WorktreeAgents(input: {
-	readonly cwd: string
-	readonly profiles: readonly AgentProfile[]
-	readonly sessions: readonly AgentSession[]
-	readonly selectAgent: (cwd: string, agentId: string) => void
+	cwd: string
+	profiles: HomeSidebar['agentProfiles']
+	sessions: SidebarWorktree['agents']
+	selectAgent: (cwd: string, agentId: string) => void
 }) {
 	const create = useAtomSet(RpcClient.mutation('agents.create'), {mode: 'promise'})
 	const remove = useAtomSet(RpcClient.mutation('agents.remove'), {mode: 'promise'})
 	const startingProfilesState = useState(() => HashSet.empty<string>())
 	const stoppingSessionsState = useState(() => HashSet.empty<string>())
 
-	async function startAgent(profile: (typeof input.profiles)[number]) {
+	async function startAgent(profile: AgentProfile) {
 		if (HashSet.has(startingProfilesState[0], profile.id)) return
 
 		startingProfilesState[1](current => HashSet.add(current, profile.id))
@@ -672,16 +674,16 @@ function worktreeHasAgent(worktree: SidebarWorktree) {
 }
 
 function WorktreeManager(input: {
-	readonly activeProject?: SidebarProject
-	readonly activeWorktree?: SidebarWorktree
-	readonly activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
-	readonly agentProfiles: readonly AgentProfile[]
-	readonly projects: readonly SidebarProject[]
-	readonly selectWorktree: (worktreeRoot: string) => void
-	readonly selectTerminal: (worktreeRoot: string) => void
-	readonly selectPortless: (worktreeRoot: string) => void
-	readonly selectAgent: (worktreeRoot: string, agentId: string) => void
-	readonly selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
+	activeProject?: SidebarProject
+	activeWorktree?: SidebarWorktree
+	activeView: 'agent' | 'agent-browser' | 'diff' | 'terminal' | 'portless' | 'run'
+	agentProfiles: HomeSidebar['agentProfiles']
+	projects: HomeSidebar['projects']
+	selectWorktree: (worktreeRoot: string) => void
+	selectTerminal: (worktreeRoot: string) => void
+	selectPortless: (worktreeRoot: string) => void
+	selectAgent: (worktreeRoot: string, agentId: string) => void
+	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const maintenanceProject = useAtomSet(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
 	const createWorktree = useAtomSet(RpcClient.mutation('projects.createWorktree'), {mode: 'promise'})

@@ -20,10 +20,10 @@ export const useFieldContext = formContexts.useFieldContext
 export const useFormContext = formContexts.useFormContext
 
 function FieldWrapper(props: {
-	readonly name: string
-	readonly isInvalid: boolean
-	readonly errors: readonly {readonly message?: string}[]
-	readonly children: React.ReactNode
+	name: string
+	isInvalid: boolean
+	errors: {message?: string}[]
+	children: React.ReactNode
 }) {
 	return (
 		<Field data-invalid={props.isInvalid}>
@@ -34,7 +34,7 @@ function FieldWrapper(props: {
 	)
 }
 
-function SubmitButton(props: {readonly children: React.ReactNode}) {
+function SubmitButton(props: {children: React.ReactNode}) {
 	const form = useFormContext()
 
 	return (
@@ -49,7 +49,7 @@ function SubmitButton(props: {readonly children: React.ReactNode}) {
 	)
 }
 
-function CancelButton(props: {readonly children: React.ReactNode; readonly onClick: () => void}) {
+function CancelButton(props: {children: React.ReactNode; onClick: () => void}) {
 	const form = useFormContext()
 
 	return (
@@ -240,9 +240,9 @@ function FileField() {
 	)
 }
 
-function ComboboxField<TOption extends {readonly id: string}>(props: {
-	readonly options: readonly TOption[]
-	readonly children: (option: TOption) => React.ReactNode
+function ComboboxField<TOption extends {id: string}>(props: {
+	options: TOption[]
+	children: (option: TOption) => React.ReactNode
 }) {
 	const field = useFieldContext<string>()
 	const [open, setOpen] = useState(false)
@@ -318,13 +318,13 @@ export const revalidateLogic = tanstackForm.revalidateLogic
 
 export declare namespace Form {
 	export type Props = {
-		readonly form: {
-			readonly handleSubmit: () => Promise<void>
-			readonly reset: () => void
-			readonly AppForm: React.ComponentType<{readonly children?: React.ReactNode}>
+		form: {
+			handleSubmit: () => PromiseLike<void>
+			reset: () => void
+			AppForm: React.ComponentType<{children?: React.ReactNode}>
 		}
-		readonly className?: string
-		readonly children: React.ReactNode
+		className?: string
+		children: React.ReactNode
 	}
 }
 

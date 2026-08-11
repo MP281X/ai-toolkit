@@ -62,12 +62,7 @@ const AgentBrowserInput = Schema.Union([
 ])
 const AgentBrowserInputFromJson = Schema.fromJsonString(AgentBrowserInput)
 
-type AgentBrowserOwnedTab = {
-	readonly id: string
-	readonly label: string
-	readonly streamLabel: string
-	readonly url: string
-}
+type AgentBrowserOwnedTab = {id: string; label: string; streamLabel: string; url: string}
 
 const emptyTabs = Array.empty<AgentBrowserOwnedTab>()
 
@@ -78,13 +73,12 @@ export function agentBrowserStreamUrl(session: string) {
 }
 
 function messageText(source: unknown) {
-	if (source instanceof Blob) return source.text()
 	if (source instanceof ArrayBuffer || ArrayBuffer.isView(source)) return new TextDecoder().decode(source)
 	return Predicate.isString(source) ? source : ''
 }
 
 async function decodeMessage(source: unknown) {
-	const text = await Promise.resolve(messageText(source))
+	const text = source instanceof Blob ? await source.text() : messageText(source)
 	return pipe(Schema.decodeUnknownOption(AgentBrowserStreamMessageFromJson)(text), Option.getOrUndefined)
 }
 
@@ -93,12 +87,7 @@ function sendSocket(socket: WebSocket | null, input: AgentBrowserInput) {
 	socket.send(Schema.encodeSync(AgentBrowserInputFromJson)(input))
 }
 
-function modifiers(event: {
-	readonly altKey: boolean
-	readonly ctrlKey: boolean
-	readonly metaKey: boolean
-	readonly shiftKey: boolean
-}) {
+function modifiers(event: {altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean}) {
 	return (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0)
 }
 
@@ -107,13 +96,13 @@ function printableKey(event: KeyboardEvent) {
 }
 
 export function agentBrowserCanvasPoint(input: {
-	readonly clientX: number
-	readonly clientY: number
-	readonly rect: {readonly height: number; readonly left: number; readonly top: number; readonly width: number}
-	readonly viewport: {readonly height: number; readonly width: number}
+	clientX: number
+	clientY: number
+	rect: {height: number; left: number; top: number; width: number}
+	viewport: {height: number; width: number}
 }) {
 	const scale = Math.min(input.rect.width / input.viewport.width, input.rect.height / input.viewport.height)
-	if (!Number.isFinite(scale) || scale <= 0) return
+	if (!Schema.is(Schema.Finite)(scale) || scale <= 0) return
 
 	const renderedWidth = input.viewport.width * scale
 	const renderedHeight = input.viewport.height * scale
@@ -129,7 +118,7 @@ export function agentBrowserCanvasPoint(input: {
 
 function pointerPoint(
 	event: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>,
-	viewport: {readonly height: number; readonly width: number}
+	viewport: {height: number; width: number}
 ) {
 	return agentBrowserCanvasPoint({
 		clientX: event.clientX,
@@ -153,13 +142,8 @@ function tabsMessage(value: typeof AgentBrowserStreamMessageFromJson.Type | unde
 }
 
 export function agentBrowserActiveOwnedTabId(input: {
-	readonly ownedTabs: readonly {
-		readonly id: string
-		readonly label: string
-		readonly streamLabel: string
-		readonly url: string
-	}[]
-	readonly streamTabs: readonly AgentBrowserStreamTab[]
+	ownedTabs: {id: string; label: string; streamLabel: string; url: string}[]
+	streamTabs: Extract<typeof AgentBrowserStreamMessageFromJson.Type, {type: 'tabs'}>['tabs']
 }) {
 	return pipe(
 		input.streamTabs,
@@ -182,37 +166,33 @@ function decodeFrame(frame: AgentBrowserFrame) {
 		: new Uint8Array(
 				pipe(
 					Array.range(0, binary.length - 1),
-					Array.map(index => binary.charCodeAt(index))
+					Array.map(index =>
+						pipe(
+							binary,
+							String.charCodeAt(index),
+							Option.getOrElse(() => 0)
+						)
+					)
 				)
 			)
 	return createImageBitmap(new Blob([bytes], {type: 'image/jpeg'}))
 }
 
 export function AgentBrowser(props: {
-	readonly className?: string
-	readonly onSelectTab?: (tab: {
-		readonly id: string
-		readonly label: string
-		readonly streamLabel: string
-		readonly url: string
-	}) => void
-	readonly session?: string
-	readonly streamUrl?: string
-	readonly tabs?: readonly {
-		readonly id: string
-		readonly label: string
-		readonly streamLabel: string
-		readonly url: string
-	}[]
+	className?: string
+	onSelectTab?: (tab: {id: string; label: string; streamLabel: string; url: string}) => void
+	session?: string
+	streamUrl?: string
+	tabs?: {id: string; label: string; streamLabel: string; url: string}[]
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const contextRef = useRef<CanvasRenderingContext2D | null>(null)
 	const socketRef = useRef<WebSocket | null>(null)
-	const tabsRef = useRef<readonly AgentBrowserOwnedTab[]>(props.tabs ?? [])
+	const tabsRef = useRef<AgentBrowserOwnedTab[]>(props.tabs ?? [])
 	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
 	const viewportRef = useRef({height: 900, width: 1600})
 	const canvasSizeRef = useRef({height: 0, width: 0})
-	const latestFrameRef = useRef<{readonly frame: AgentBrowserFrame; readonly serial: number} | null>(null)
+	const latestFrameRef = useRef<{frame: AgentBrowserFrame; serial: number} | null>(null)
 	const rafRef = useRef<number | null>(null)
 	const drawingRef = useRef(false)
 	const drawnSerialRef = useRef(0)
@@ -240,7 +220,7 @@ export function AgentBrowser(props: {
 		})
 	}
 
-	async function drawFrame(queued: {readonly frame: AgentBrowserFrame; readonly serial: number}) {
+	async function drawFrame(queued: {frame: AgentBrowserFrame; serial: number}) {
 		drawingRef.current = true
 		try {
 			const bitmap = await decodeFrame(queued.frame)
@@ -304,6 +284,8 @@ export function AgentBrowser(props: {
 	useEffect(() => {
 		if (Predicate.isUndefined(streamUrl)) return
 
+		// WebSocket event listeners require native synchronous cancellation state.
+		// oxlint-disable-next-line no-restricted-globals
 		const abort = new AbortController()
 
 		function connect() {
@@ -313,7 +295,7 @@ export function AgentBrowser(props: {
 			socketRef.current = socket
 			socket.addEventListener('close', () => {
 				if (abort.signal.aborted || socketRef.current !== socket) return
-				setTimeout(connect, 750)
+				window.setTimeout(connect, 750)
 			})
 			async function handleMessage(data: unknown) {
 				const message = await decodeMessage(data)
@@ -393,7 +375,14 @@ export function AgentBrowser(props: {
 				Match.when('PageDown', () => 34),
 				Match.when('PageUp', () => 33),
 				Match.when('Tab', () => 9),
-				Match.orElse(() => event.keyCode)
+				Match.orElse(() =>
+					pipe(
+						event.key,
+						String.toUpperCase,
+						String.codePointAt(0),
+						Option.getOrElse(() => 0)
+					)
+				)
 			)
 			sendSocket(socketRef.current, {
 				code: event.code,
