@@ -1,6 +1,5 @@
 import {Schema} from 'effect'
 
-type PortlessStatus = typeof PortlessStatus.Type
 const PortlessStatus = Schema.Struct({
 	state: Schema.Literals(['idle', 'prepared', 'running', 'stopped', 'exited', 'failed'])
 })

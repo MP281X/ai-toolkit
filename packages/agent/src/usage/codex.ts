@@ -19,6 +19,7 @@ import {
 	Stream,
 	String,
 	SubscriptionRef,
+	flow,
 	pipe
 } from 'effect'
 
@@ -29,14 +30,14 @@ import {AgentError, AgentSubscription, AgentUsageData, AgentUsageTokens} from '.
 const CodexCredentials = Schema.fromJsonString(Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})}))
 
 const CodexUsage = Schema.Struct({
-	plan_type: Schema.optional(Schema.NullOr(Schema.String)),
+	plan_type: Schema.OptionFromOptionalNullOr(Schema.String, {onNoneEncoding: 'omit'}),
 	rate_limit: Schema.Struct({
 		primary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			reset_at: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
 			used_percent: Schema.Finite
 		}),
 		secondary_window: Schema.Struct({
-			reset_at: Schema.optional(Schema.NullOr(Schema.Finite)),
+			reset_at: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
 			used_percent: Schema.Finite
 		})
 	})
@@ -201,11 +202,9 @@ function codexTokensFromContent(content: string) {
 	return totalUsageTokensFromContent(content) ?? explicitUsageTokensFromContent(content)
 }
 
-function sumTokenFiles(files: Iterable<{tokens: AgentUsageTokens}>) {
+function sumTokenFiles(files: {tokens: AgentUsageTokens}[]) {
 	return AgentUsageTokens.make(
-		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
-			addTokens(total, file.tokens)
-		)
+		Array.reduce(files, {cached: 0, input: 0, output: 0}, (total, file) => addTokens(total, file.tokens))
 	)
 }
 
@@ -304,17 +303,18 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {provid
 		)
 		const nextCache = HashMap.fromIterable(tokenFiles)
 		yield* Ref.set(tokenFileCache, nextCache)
-		return sumTokenFiles(HashMap.values(nextCache))
+		return sumTokenFiles(Array.fromIterable(HashMap.values(nextCache)))
 	})
 
 	const remoteUsage = yield* Effect.cachedWithTTL(remoteCodexUsage(client, codexToken), Duration.minutes(1))
 	const subscription = pipe(
 		remoteUsage,
 		Effect.map(usage => codexSubscriptionLabel(usage.plan_type)),
-		Effect.flatMap(label =>
-			Predicate.isString(label)
-				? Effect.succeed(AgentSubscription.make(label))
-				: AgentError.make({message: 'subscription unavailable'})
+		Effect.flatMap(
+			Option.match({
+				onNone: () => AgentError.make({message: 'subscription unavailable'}),
+				onSome: label => Effect.succeed(AgentSubscription.make(label))
+			})
 		)
 	)
 	const loadUsage = pipe(
@@ -343,25 +343,31 @@ export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {provid
 	return {subscription, usage}
 })
 
-function codexSubscriptionLabel(planType: string | null | undefined) {
-	if (!Predicate.isString(planType)) return
+function codexSubscriptionLabel(planType: Option.Option<string>) {
 	return pipe(
 		planType,
-		String.trim,
-		String.split(/[\s_-]+/u),
-		Array.filter(token => String.isNonEmpty(token) && String.toLowerCase(token) !== 'default'),
-		Array.map(token =>
-			/^\d+x$/u.test(String.toLowerCase(token)) ? String.toLowerCase(token) : String.capitalize(token)
+		Option.map(
+			flow(
+				String.trim,
+				String.split(/[\s_-]+/u),
+				Array.filter(token => String.isNonEmpty(token) && String.toLowerCase(token) !== 'default'),
+				Array.map(token =>
+					/^\d+x$/u.test(String.toLowerCase(token)) ? String.toLowerCase(token) : String.capitalize(token)
+				),
+				Array.join(' ')
+			)
 		),
-		tokens => (Array.isReadonlyArrayEmpty(tokens) ? undefined : Array.join(tokens, ' '))
+		Option.filter(String.isNonEmpty)
 	)
 }
 
 function codexWindow(input: typeof CodexUsage.Type.rate_limit.primary_window) {
 	return {
-		resetsAt: Predicate.isNumber(input.reset_at)
-			? pipe(input.reset_at, DateTime.fromEpochSeconds, DateTime.formatIso)
-			: undefined,
+		resetsAt: pipe(
+			input.reset_at,
+			Option.map(flow(DateTime.fromEpochSeconds, DateTime.formatIso)),
+			Option.getOrUndefined
+		),
 		utilization: input.used_percent
 	}
 }

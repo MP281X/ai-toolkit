@@ -10,7 +10,7 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 - Existing canonical protocol or domain value → import its owning schema and type directly without a local alias; AI messages, parts, and streaming response parts use `effect/unstable/ai` `Prompt` and `Response`.
 - Configuration → `Config`
 - Expected failure → typed error
-- Existing optionality → consume its `Option`
+- Existing optionality → consume its `Option`; decode nullable or omittable boundary fields into `Option` once
 - Decode and normalize once at the owning external boundary.
 - Use Effect and Effect Platform before equivalent globals, prototypes, promises, timers, process, filesystem, network, cancellation, cache, events, JSON, or mutable collections.
 - Keep unavoidable native APIs inside the smallest foreign or synchronous presentation boundary.

@@ -172,25 +172,21 @@ function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['S
 	return pipe(runAgentBrowser(args), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 }
 
+const AgentBrowserCliTab = Schema.Struct({
+	label: Schema.OptionFromNullOr(Schema.String),
+	tabId: Schema.String,
+	url: Schema.String
+})
+
 const AgentBrowserCliTabsFromJson = Schema.fromJsonString(
-	Schema.Struct({
-		data: Schema.Struct({
-			tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
-		})
-	})
+	Schema.Struct({data: Schema.Struct({tabs: Schema.Array(AgentBrowserCliTab)})})
 )
 
 function decodeAgentBrowserTabs(output: string) {
 	return pipe(
 		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson)(output),
-		Option.map(decoded =>
-			Array.map(decoded.data.tabs, tab => ({
-				label: Predicate.isNull(tab.label) ? undefined : tab.label,
-				tabId: tab.tabId,
-				url: tab.url
-			}))
-		),
-		Option.getOrElse(() => Array.empty<{label: string | undefined; tabId: string; url: string}>())
+		Option.map(decoded => decoded.data.tabs),
+		Option.getOrElse(() => Array.empty<typeof AgentBrowserCliTab.Type>())
 	)
 }
 
@@ -238,7 +234,7 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 	const existingTabs = yield* listTabs(input)
 	const existingTab = pipe(
 		existingTabs,
-		Array.findFirst(tab => tab.label === input.label)
+		Array.findFirst(tab => Option.contains(input.label)(tab.label))
 	)
 	if (Option.isSome(existingTab)) return
 

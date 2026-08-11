@@ -1,6 +1,6 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
 
-import {Array, Effect, HashSet, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Boolean, Effect, HashSet, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
 
 import {
 	Outlet,
@@ -11,7 +11,7 @@ import {
 	useNavigate,
 	useRouterState
 } from '@tanstack/react-router'
-import {Atom} from 'effect/unstable/reactivity'
+import {AsyncResult, Atom} from 'effect/unstable/reactivity'
 import {Suspense, startTransition, useState} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -97,6 +97,37 @@ const branchesAtom = Atom.family((cwd: string) =>
 			),
 			{initialValue: GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'})}
 		)
+	)
+)
+
+const terminalActionAtom = Atom.family((cwd: string) =>
+	Atom.family((sessionId: string) =>
+		RpcClient.runtime.fn<boolean>()(
+			Effect.fn('WorktreeManager.terminalAction')(function* (active) {
+				const client = yield* RpcClient
+				return yield* Boolean.match(active, {
+					onFalse: () => client('terminal.restart', {cwd, sessionId}),
+					onTrue: () => client('terminal.stop', {cwd, sessionId})
+				})
+			})
+		)
+	)
+)
+
+const portlessActionAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.fn<{active: boolean; sessionIds: string[]}>()(
+		Effect.fn('WorktreeManager.portlessAction')(function* (input) {
+			const client = yield* RpcClient
+			yield* Effect.forEach(
+				input.sessionIds,
+				sessionId =>
+					Boolean.match(input.active, {
+						onFalse: () => client('terminal.restart', {cwd, sessionId}),
+						onTrue: () => client('terminal.stop', {cwd, sessionId})
+					}),
+				{discard: true}
+			)
+		})
 	)
 )
 
@@ -208,32 +239,16 @@ function WorktreeIcon(input: {dirty: boolean; root: boolean}) {
 	return <Square className={input.dirty ? 'text-amber-500' : 'text-current'} />
 }
 
-function scriptSession(cwd: string, run: ScriptRun) {
-	return {cwd, sessionId: run.sessionId}
-}
-
-function portlessSession(run: PortlessRun) {
-	return {cwd: run.script.cwd, sessionId: run.script.sessionId}
-}
-
 function validNewWorktreeBranch(branch: string) {
 	return String.isNonEmpty(String.trim(branch)) && !/\s/u.test(branch)
-}
-
-function sortScriptRuns(runs: SidebarWorktree['scriptRuns']) {
-	return Array.sortWith(runs, run => run.taskId, Order.String)
-}
-
-function sortPortlessRuns(runs: SidebarWorktree['portlessRuns']) {
-	return Array.sortWith(runs, run => run.script.taskId, Order.String)
 }
 
 function nativeBrowserUrl(origin: string) {
 	try {
 		const url = new URL(origin)
-		return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
+		return url.protocol === 'http:' || url.protocol === 'https:' ? Option.some(url.href) : Option.none()
 	} catch {}
-	return null
+	return Option.none<string>()
 }
 
 function WorktreeScripts(input: {
@@ -243,7 +258,7 @@ function WorktreeScripts(input: {
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
 	const expandedState = useState(false)
-	const sortedRuns = sortScriptRuns(input.scripts)
+	const sortedRuns = Array.sortWith(input.scripts, run => run.taskId, Order.String)
 
 	if (sortedRuns.length === 0) return null
 
@@ -282,23 +297,15 @@ function ScriptRunRow(input: {
 	status: AgentSession['state']
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const session = scriptSession(input.cwd, input.run)
-	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const actionState = useState(false)
+	const actionAtom = terminalActionAtom(input.cwd)(input.run.sessionId)
+	const actionResult = useAtomValue(actionAtom)
+	const runAction = useAtomSet(actionAtom, {mode: 'promise'})
 
 	async function toggleRun() {
-		if (actionState[0]) return
-
-		actionState[1](true)
 		try {
-			await (terminalStatusActive(input.status.state) && input.status.state !== 'idle'
-				? stop({payload: session})
-				: restart({payload: session}))
+			await runAction(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
 		} catch (error) {
 			toast.error(formatError(error))
-		} finally {
-			actionState[1](false)
 		}
 	}
 
@@ -312,7 +319,7 @@ function ScriptRunRow(input: {
 							variant="ghost"
 							size="icon-xs"
 							className="text-muted-foreground hover:text-foreground"
-							disabled={actionState[0]}
+							disabled={AsyncResult.isWaiting(actionResult)}
 							onClick={event => {
 								event.stopPropagation()
 								void toggleRun()
@@ -326,7 +333,7 @@ function ScriptRunRow(input: {
 							{pipe(
 								Match.value({
 									active: terminalStatusActive(input.status.state) && input.status.state !== 'idle',
-									pending: actionState[0]
+									pending: AsyncResult.isWaiting(actionResult)
 								}),
 								Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
 								Match.when({active: true}, () => <Square className="size-3" />),
@@ -355,7 +362,7 @@ function WorktreePortless(input: {
 	selectPortless: (worktreeRoot: string) => void
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const sortedRuns = sortPortlessRuns(input.runs)
+	const sortedRuns = Array.sortWith(input.runs, run => run.script.taskId, Order.String)
 
 	if (sortedRuns.length === 0) return null
 
@@ -377,14 +384,11 @@ function PortlessGroup(input: {
 	selectPortless: (worktreeRoot: string) => void
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const restart = useAtomSet(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
-	const stop = useAtomSet(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
-	const actionState = useState(false)
+	const actionAtom = portlessActionAtom(input.cwd)
+	const actionResult = useAtomValue(actionAtom)
+	const runAction = useAtomSet(actionAtom, {mode: 'promise'})
 
 	async function toggleRuns() {
-		if (actionState[0]) return
-
-		actionState[1](true)
 		try {
 			const active = Array.some(
 				input.runs,
@@ -392,15 +396,9 @@ function PortlessGroup(input: {
 					terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
 					input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
 			)
-			for (const run of input.runs) {
-				const session = portlessSession(run)
-				if (active) await stop({payload: session})
-				else await restart({payload: session})
-			}
+			await runAction({active, sessionIds: Array.map(input.runs, run => run.script.sessionId)})
 		} catch (error) {
 			toast.error(formatError(error))
-		} finally {
-			actionState[1](false)
 		}
 	}
 
@@ -413,7 +411,7 @@ function PortlessGroup(input: {
 						variant="ghost"
 						size="icon-xs"
 						className="text-muted-foreground hover:text-foreground"
-						disabled={actionState[0]}
+						disabled={AsyncResult.isWaiting(actionResult)}
 						onClick={event => {
 							event.stopPropagation()
 							void toggleRuns()
@@ -437,7 +435,7 @@ function PortlessGroup(input: {
 										terminalStatusActive(input.runStatuses[run.script.sessionId]?.state ?? 'idle') &&
 										input.runStatuses[run.script.sessionId]?.state !== 'idle'
 								),
-								pending: actionState[0]
+								pending: AsyncResult.isWaiting(actionResult)
 							}),
 							Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
 							Match.when({active: true}, () => <Square className="size-3" />),
@@ -473,7 +471,12 @@ function PortlessRunRow(input: {
 	status: AgentSession['state']
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const browserUrl = nativeBrowserUrl(input.run.origin.origin)
+	const browserUrl = pipe(
+		nativeBrowserUrl(input.run.origin.origin),
+		Option.filter(() => terminalStatusActive(input.status.state) && input.status.state !== 'idle'),
+		Option.getOrUndefined
+	)
+	const browserActive = Predicate.isNotUndefined(browserUrl)
 
 	return (
 		<li className="w-full min-w-0">
@@ -483,32 +486,19 @@ function PortlessRunRow(input: {
 						<Button
 							render={
 								<a
-									href={
-										Predicate.isNull(browserUrl) ||
-										!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
-											? undefined
-											: browserUrl
-									}
+									href={browserUrl}
 									target="_blank"
 									rel="noopener noreferrer"
 									onClick={event => {
 										event.stopPropagation()
-										if (
-											Predicate.isNull(browserUrl) ||
-											!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
-										) {
-											event.preventDefault()
-										}
+										if (!browserActive) event.preventDefault()
 									}}
 								/>
 							}
 							variant="ghost"
 							size="icon-xs"
 							className="text-muted-foreground hover:text-foreground"
-							disabled={
-								Predicate.isNull(browserUrl) ||
-								!(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
-							}
+							disabled={!browserActive}
 							title={`Open ${input.run.script.taskId} in browser`}
 						>
 							<ExternalLinkIcon className="size-3" />

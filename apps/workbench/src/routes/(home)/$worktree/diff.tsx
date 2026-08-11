@@ -39,7 +39,7 @@ import {
 	GitReviewCommitTarget,
 	GitReviewLocalTarget,
 	type GitReviewMark,
-	type GitReviewTarget,
+	GitReviewTarget,
 	gitReviewMarksForDiff,
 	gitReviewStateForMarks
 } from '@deslop/git/schema'
@@ -59,32 +59,17 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
-function targetKey(target: GitReviewTarget) {
-	return target._tag === 'commit' ? `commit\u0000${target.hash}` : target._tag
-}
+const ReviewDiffsKey = Schema.Struct({cwd: Schema.String, target: GitReviewTarget})
 
-function targetFromKey(tag: string, hash = '') {
-	return pipe(
-		Match.value(tag),
-		Match.when('commit', () => GitReviewCommitTarget.make({hash})),
-		Match.when('local', () => GitReviewLocalTarget.make({})),
-		Match.when('branch', () => GitReviewBranchTarget.make({})),
-		Match.orElse(() => GitReviewChangesTarget.make({}))
-	)
-}
-
-const reviewDiffsAtom = Atom.family((key: string) => {
-	const [cwd = '', tag = 'changes', hash = ''] = String.split('\u0000')(key)
-	const target = targetFromKey(tag, hash)
-
-	return RpcClient.runtime.atom(
+const reviewDiffsAtom = Atom.family((input: typeof ReviewDiffsKey.Type) =>
+	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('review.diffs', {cwd, target})),
+			Effect.map(client => client('review.diffs', input)),
 			Stream.unwrap
 		)
 	)
-})
+)
 
 const reviewStateAtom = Atom.family((cwd: string) =>
 	RpcClient.runtime.atom(
@@ -96,10 +81,10 @@ const reviewStateAtom = Atom.family((cwd: string) =>
 	)
 )
 
-const emptyReviewState = GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
-
 const reviewStateValueAtom = Atom.family((cwd: string) =>
-	Atom.map(reviewStateAtom(cwd), result => (AsyncResult.isSuccess(result) ? result.value : emptyReviewState))
+	Atom.map(reviewStateAtom(cwd), result =>
+		AsyncResult.isSuccess(result) ? result.value : GitReviewState.make({comments: Array.empty(), marks: Array.empty()})
+	)
 )
 
 const reviewActionsStateAtom = Atom.family(() =>
@@ -228,22 +213,31 @@ function ReviewViewPanel(input: {cwd: string}) {
 	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
 
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
-	const localCommits = suggestedMetadataLoaded ? suggestedMetadata.value.localCommits : Array.empty<GitCommit>()
-	const branchCommits = suggestedMetadataLoaded ? suggestedMetadata.value.branchCommits : Array.empty<GitCommit>()
+	const localCommits = suggestedMetadataLoaded
+		? Array.fromIterable(suggestedMetadata.value.localCommits)
+		: Array.empty<GitCommit>()
+	const branchCommits = suggestedMetadataLoaded
+		? Array.fromIterable(suggestedMetadata.value.branchCommits)
+		: Array.empty<GitCommit>()
 	const checkpointCommits = Array.takeWhile(localCommits, commit => commit.checkpoint)
-	const allCommits = Array.appendAll(localCommits, branchCommits)
-	const selectedCommit = pipe(
-		allCommits,
+	const reviewTarget = pipe(
+		Array.appendAll(localCommits, branchCommits),
 		Array.findFirst(commit => commit.hash === search.commit),
-		Option.getOrUndefined
+		Option.match({
+			onNone: () => selectedScopeState[0],
+			onSome: commit => GitReviewCommitTarget.make({hash: commit.hash})
+		})
 	)
-	const reviewTarget = selectedCommit ? GitReviewCommitTarget.make({hash: selectedCommit.hash}) : selectedScopeState[0]
-	const reviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(reviewTarget)}`)
-	const changesReviewDiffs = reviewDiffsAtom(`${input.cwd}\u0000${targetKey(GitReviewChangesTarget.make({}))}`)
+	const reviewDiffs = reviewDiffsAtom(ReviewDiffsKey.make({cwd: input.cwd, target: reviewTarget}))
+	const changesReviewDiffs = reviewDiffsAtom(
+		ReviewDiffsKey.make({cwd: input.cwd, target: GitReviewChangesTarget.make({})})
+	)
 	const selectedFilePathState = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
-	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult) ? reviewDiffsResult.value : Array.empty<GitDiff>()
+	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult)
+		? Array.fromIterable(reviewDiffsResult.value)
+		: Array.empty<GitDiff>()
 	const changesReviewDiffsLoaded = AsyncResult.isSuccess(changesReviewDiffsResult)
 	const changesReviewDiffsValue = changesReviewDiffsLoaded ? changesReviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedFilePath =
@@ -446,15 +440,7 @@ function ReviewViewPanel(input: {cwd: string}) {
 										filePath={selectedEntry.filePath}
 										fileContent={selectedEntry.fileContent}
 										patch={selectedEntry.patch}
-										comments={Array.map(selectedEntryComments, comment => ({
-											body: comment.body,
-											filePath: comment.filePath,
-											lineNumber: comment.lineNumber,
-											resolving: comment.resolving,
-											side: comment.side,
-											source: comment.source,
-											threadId: comment.threadId
-										}))}
+										comments={selectedEntryComments}
 										onSaveComment={comment => {
 											void saveQueuedComment({
 												body: comment.body,
@@ -775,16 +761,13 @@ function CommitActionForm(input: {
 }
 
 function CommitList(input: {
-	branchCommits: Iterable<GitCommit>
+	branchCommits: GitCommit[]
 	loading: boolean
-	localCommits: Iterable<GitCommit>
+	localCommits: GitCommit[]
 	selected: GitReviewTarget
 	selectCommit: (commit: GitCommit) => void
 	selectScope: (target: GitReviewTarget) => void
 }) {
-	const branchCommits = Array.fromIterable(input.branchCommits)
-	const localCommits = Array.fromIterable(input.localCommits)
-
 	if (input.loading) {
 		return (
 			<div className="flex h-full min-h-0 items-center justify-center">
@@ -826,26 +809,26 @@ function CommitList(input: {
 					selectScope={input.selectScope}
 					target={GitReviewChangesTarget.make({})}
 				/>
-				{!Array.isReadonlyArrayEmpty(localCommits) && (
+				{!Array.isReadonlyArrayEmpty(input.localCommits) && (
 					<CommitScopeRow
-						detail={`${Array.length(localCommits)}`}
+						detail={`${Array.length(input.localCommits)}`}
 						label="Local"
 						selected={input.selected}
 						selectScope={input.selectScope}
 						target={GitReviewLocalTarget.make({})}
 					/>
 				)}
-				{Array.map(localCommits, renderCommit)}
-				{!Array.isReadonlyArrayEmpty(branchCommits) && (
+				{Array.map(input.localCommits, renderCommit)}
+				{!Array.isReadonlyArrayEmpty(input.branchCommits) && (
 					<CommitScopeRow
-						detail={`${Array.length(branchCommits)}`}
+						detail={`${Array.length(input.branchCommits)}`}
 						label="Branch"
 						selected={input.selected}
 						selectScope={input.selectScope}
 						target={GitReviewBranchTarget.make({})}
 					/>
 				)}
-				{Array.map(branchCommits, renderCommit)}
+				{Array.map(input.branchCommits, renderCommit)}
 			</ul>
 		</div>
 	)
@@ -949,18 +932,17 @@ function collapseSingleChildDirectory(directory: FileTreeDirectory) {
 }
 
 function DiffList(input: {
-	diffs: Iterable<GitDiff>
+	diffs: GitDiff[]
 	markReviewed: (marks: GitReviewState['marks']) => unknown
-	marks: Iterable<GitReviewMark>
+	marks: GitReviewMark[]
 	openReviewEntry: (filePath: string) => unknown
 	selectedEntry?: GitDiff
 	unmarkReviewed: (marks: GitReviewState['marks']) => unknown
 }) {
 	const collapsedFoldersState = useState(() => HashSet.empty<string>())
-	const diffs = Array.fromIterable(input.diffs)
-	const fileTree = buildFileTree(diffs)
+	const fileTree = buildFileTree(input.diffs)
 	const marksByDiff = pipe(
-		diffs,
+		input.diffs,
 		Array.reduce(HashMap.empty<string, GitReviewMark[]>(), (marks, diff) =>
 			HashMap.set(marks, diff.filePath, gitReviewMarksForDiff(diff))
 		)
@@ -1033,7 +1015,7 @@ function DiffList(input: {
 	return (
 		<TreeExplorer className="h-full overflow-y-auto px-0 py-1">
 			<TreeExplorerSection className="min-h-0 flex-1 [&>ul]:min-h-0 [&>ul]:flex-1">
-				{Array.isReadonlyArrayEmpty(diffs) ? (
+				{Array.isReadonlyArrayEmpty(input.diffs) ? (
 					<li className="text-muted-foreground flex flex-1 items-center justify-center px-2 py-2">No changed files.</li>
 				) : (
 					Array.map(fileTree, renderNode)

@@ -62,9 +62,7 @@ const AgentBrowserInput = Schema.Union([
 ])
 const AgentBrowserInputFromJson = Schema.fromJsonString(AgentBrowserInput)
 
-type AgentBrowserOwnedTab = {id: string; label: string; streamLabel: string; url: string}
-
-const emptyTabs = Array.empty<AgentBrowserOwnedTab>()
+const emptyTabs = Array.empty<{id: string; label: string; streamLabel: string; url: string}>()
 
 export function agentBrowserStreamUrl(session: string) {
 	const url = new URL(`/api/agent-browser/sessions/${encodeURIComponent(session)}/stream`, location.origin)
@@ -188,7 +186,7 @@ export function AgentBrowser(props: {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const contextRef = useRef<CanvasRenderingContext2D | null>(null)
 	const socketRef = useRef<WebSocket | null>(null)
-	const tabsRef = useRef<AgentBrowserOwnedTab[]>(props.tabs ?? [])
+	const tabsRef = useRef<typeof emptyTabs>(props.tabs ?? [])
 	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
 	const viewportRef = useRef({height: 900, width: 1600})
 	const canvasSizeRef = useRef({height: 0, width: 0})

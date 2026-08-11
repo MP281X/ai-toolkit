@@ -1,4 +1,4 @@
-import {Array, Effect, Hash, Option, Order, Predicate, Record, Schema, Stream, pipe} from 'effect'
+import {Array, Effect, Hash, Option, Order, Record, Schema, Stream, flow, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
@@ -29,21 +29,25 @@ export const TerminalAttachAtomKey = Schema.Struct({
 	size: Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
 })
 
-function terminalSessionEnv(env: TerminalSessionInput['env']) {
-	if (Predicate.isUndefined(env)) return
-
-	return pipe(
-		env,
-		Record.toEntries,
-		Array.sortWith(entry => entry[0], Order.String),
-		Record.fromEntries
-	)
-}
-
 export function terminalSessionInput(input: TerminalSessionInput) {
-	const env = terminalSessionEnv(input.env)
-
-	return {args: input.args && [...input.args], command: input.command, cwd: input.cwd, env, sessionId: input.sessionId}
+	return {
+		args: input.args && [...input.args],
+		command: input.command,
+		cwd: input.cwd,
+		env: pipe(
+			input.env,
+			Option.fromUndefinedOr,
+			Option.map(
+				flow(
+					Record.toEntries,
+					Array.sortWith(entry => entry[0], Order.String),
+					Record.fromEntries
+				)
+			),
+			Option.getOrUndefined
+		),
+		sessionId: input.sessionId
+	}
 }
 
 export function terminalSessionKey(input: TerminalSessionInput) {

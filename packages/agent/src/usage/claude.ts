@@ -28,9 +28,8 @@ const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
-type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsageWindow = Schema.Struct({
-	resets_at: Schema.optional(Schema.NullOr(Schema.String)),
+	resets_at: Schema.OptionFromOptionalNullOr(Schema.String, {onNoneEncoding: 'omit'}),
 	utilization: Schema.Finite
 })
 
@@ -94,11 +93,9 @@ function claudeTokensFromContent(content: string) {
 	)
 }
 
-function sumTokenFiles(files: Iterable<{tokens: AgentUsageTokens}>) {
+function sumTokenFiles(files: {tokens: AgentUsageTokens}[]) {
 	return AgentUsageTokens.make(
-		Array.reduce(Array.fromIterable(files), {cached: 0, input: 0, output: 0}, (total, file) =>
-			addTokens(total, file.tokens)
-		)
+		Array.reduce(files, {cached: 0, input: 0, output: 0}, (total, file) => addTokens(total, file.tokens))
 	)
 }
 
@@ -190,7 +187,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {provi
 		)
 		const nextCache = HashMap.fromIterable(tokenFiles)
 		yield* Ref.set(tokenFileCache, nextCache)
-		return sumTokenFiles(HashMap.values(nextCache))
+		return sumTokenFiles(Array.fromIterable(HashMap.values(nextCache)))
 	})
 
 	const remoteUsage = remoteClaudeUsage(client, claudeToken)
@@ -219,8 +216,8 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {provi
 	return {subscription, usage}
 })
 
-function claudeWindow(input: ClaudeUsageWindow) {
-	return {resetsAt: input.resets_at ?? undefined, utilization: input.utilization}
+function claudeWindow(input: typeof ClaudeUsageWindow.Type) {
+	return {resetsAt: Option.getOrUndefined(input.resets_at), utilization: input.utilization}
 }
 
 function remoteClaudeUsage(client: HttpClient.HttpClient, token: Effect.Effect<string, AgentError>) {

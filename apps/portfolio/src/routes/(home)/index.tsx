@@ -137,148 +137,20 @@ const portfolioAtom = Atom.keepAlive(
 	)
 )
 
-const SUMMARY_LINES = [
-	"I'm a full-stack TypeScript developer specializing in Effect, React, and AI agents, with experience building and shipping full-stack applications.",
-	'Currently, I’m focusing on building stable, reusable primitives that coding agents can compose to build high-quality applications with minimal effort, while specialized skills, lint rules, and feedback loops steer the agent toward consistent patterns and rigorous review.'
-]
-
-const TECHNICAL_SKILLS = [
-	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
-	{area: 'Backend', icon: Server, items: 'Effect, Node.js, type-safe RPC, REST APIs'},
-	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
-	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
-	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{area: 'AI Tooling', icon: Sparkles, items: 'Codex, OpenCode, Github Copilot, Claude Code'}
-]
-
-const FEATURED_PROJECT = {
-	currentWork:
-		'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
-	description:
-		'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
-	href: 'https://github.com/MP281X/deslop',
-	name: 'deslop',
-	role: 'Full-Stack TypeScript Monorepo',
-	stack: 'Effect · React · TypeScript · WebSockets · PostgreSQL · Docker'
-}
-
-const SUPPORTING_PROJECTS = [
-	{
-		description:
-			'A starter for React and Kotlin/Spring applications with generated API types, PostgreSQL migrations, real-time sync, authentication, and reusable UI components.',
-		href: 'https://github.com/MP281X/kotlin-react-template',
-		name: 'Kotlin React Template',
-		role: 'Full-Stack Starter',
-		stack: 'React · Kotlin · Spring · Effect · PostgreSQL · ElectricSQL'
-	},
-	{
-		description:
-			'An open-source video platform with FFmpeg/HLS processing, background jobs, real-time upload progress, PostgreSQL, Redis, S3-compatible storage, and Kubernetes deployment.',
-		href: 'https://github.com/MP281X/blixter_video',
-		name: 'Blixter',
-		role: 'Video Streaming Platform',
-		stack: 'TypeScript · FFmpeg · PostgreSQL · Redis · Kubernetes'
-	}
-]
-
-const WORK_EXPERIENCE = [
-	{
-		company: 'Humans.Tech',
-		highlights: [
-			'Built the shared frontend foundation used to start new products, defining reusable architecture, tooling, and development conventions',
-			'Developed reusable messaging interfaces for person-to-person and AI-agent conversations',
-			'Created reusable data-display primitives, including tables and virtualized lists for large datasets',
-			'Collaborated closely with backend engineers to design, integrate, and refine product functionality',
-			'Introduced AI-assisted development workflows that accelerated implementation for both individual and team delivery'
-		],
-		location: 'Frosinone, Italy',
-		note: '',
-		period: 'Apr 2026 – Jul 2026',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'Tinexta Cyber',
-		highlights: [
-			'Developed a real-time network inventory application for a major telecommunications company',
-			'Built the real-time frontend in React with ElectricSQL for live updates across all users',
-			'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
-			'Gathered requirements directly from end users and iterated through feedback rounds',
-			'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
-			'Used AI coding agents daily with project-specific guidelines for development'
-		],
-		location: 'Udine, Italy',
-		note: '',
-		period: 'Oct 2024 – Mar 2026',
-		role: 'Full-Stack Developer'
-	},
-	{
-		company: 'Altitudo',
-		highlights: [
-			'Migrated the build system from Create React App to Vite',
-			'Improved rendering performance by adding proper memoization',
-			'Migrated legacy class components to modern functional components using React hooks',
-			'Recreated and restyled multiple pages using React and Tailwind CSS'
-		],
-		location: 'Salzburg, Austria',
-		note: 'Erasmus Internship',
-		period: 'Jan 2024 – Mar 2024',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'BizAway',
-		highlights: [
-			'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
-			'Built a type-safe email template framework using TSX-style components',
-			'Migrated API endpoints from the old OpenAPI version to the new specification',
-			'Built and updated multiple Angular components and features'
-		],
-		location: 'Spilimbergo, Italy',
-		note: 'Internship',
-		period: 'Jun 2023 – Aug 2023',
-		role: 'Backend Developer'
-	}
-]
-
-const EDUCATION_DATA = [
-	{
-		degree: 'Cloud Developer Diploma',
-		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
-		grade: '95/100',
-		period: '2022 – 2024',
-		school: 'ITS Alto Adriatico'
-	},
-	{
-		degree: 'High School Diploma – IT and Telecommunications',
-		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
-		grade: '',
-		period: '2017 – 2022',
-		school: 'ISIS A. Malignani'
-	}
-]
-
-const LANGUAGES_DATA = [
-	{language: 'Italian', level: 'Native'},
-	{language: 'English', level: 'C1'},
-	{language: 'Spanish', level: 'Basic'}
-]
-
-const CONTACT_ITEMS = [
-	{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
-	{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
-	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
-]
-
 function getDisplayCursorTarget(
 	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {x: number; y: number} | null,
+	localPointer: Option.Option<{x: number; y: number}>,
 	viewport: {width: number; height: number}
 ) {
-	if (isMe && Predicate.isNotNull(localPointer)) {
-		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
-	}
-
-	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
+	return pipe(
+		localPointer,
+		Option.filter(() => isMe),
+		Option.match({
+			onNone: () => ({x: cursor.x * viewport.width, y: cursor.y * viewport.height}),
+			onSome: pointer => ({x: pointer.x * viewport.width, y: pointer.y * viewport.height})
+		})
+	)
 }
 
 function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
@@ -317,7 +189,7 @@ function syncCursorMotion(
 	motion: ReturnType<typeof createCursorMotion>,
 	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {x: number; y: number} | null,
+	localPointer: Option.Option<{x: number; y: number}>,
 	viewport: {width: number; height: number}
 ) {
 	const nextTarget = getDisplayCursorTarget(cursor, isMe, localPointer, viewport)
@@ -442,7 +314,7 @@ function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width:
 function CursorEl(input: {
 	cursor: PortfolioVisitor
 	isMe: boolean
-	localPointer: {x: number; y: number} | null
+	localPointer: Option.Option<{x: number; y: number}>
 	viewport: {width: number; height: number}
 }) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
@@ -601,11 +473,17 @@ function AboutSection(input: {registerSection: (id: number, node: HTMLElement | 
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				<Panel className="p-5 sm:p-6">
 					<div className="flex flex-col gap-4">
-						{Array.map(SUMMARY_LINES, line => (
-							<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
-								{line}
-							</p>
-						))}
+						{Array.map(
+							[
+								"I'm a full-stack TypeScript developer specializing in Effect, React, and AI agents, with experience building and shipping full-stack applications.",
+								'Currently, I’m focusing on building stable, reusable primitives that coding agents can compose to build high-quality applications with minimal effort, while specialized skills, lint rules, and feedback loops steer the agent toward consistent patterns and rigorous review.'
+							],
+							line => (
+								<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
+									{line}
+								</p>
+							)
+						)}
 					</div>
 				</Panel>
 			</div>
@@ -618,17 +496,27 @@ function SkillsSection(input: {registerSection: (id: number, node: HTMLElement |
 		<Section id={2} registerSection={input.registerSection}>
 			<SectionLabel title="Skills" />
 			<div className="grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				{Array.map(TECHNICAL_SKILLS, skill => (
-					<Panel key={skill.area} className="p-4 sm:p-5">
-						<div className="mb-3 flex items-center gap-3">
-							<skill.icon className="text-primary size-4" />
-							<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
-								{skill.area}
-							</h3>
-						</div>
-						<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
-					</Panel>
-				))}
+				{Array.map(
+					[
+						{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
+						{area: 'Backend', icon: Server, items: 'Effect, Node.js, type-safe RPC, REST APIs'},
+						{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
+						{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
+						{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
+						{area: 'AI Tooling', icon: Sparkles, items: 'Codex, OpenCode, Github Copilot, Claude Code'}
+					],
+					skill => (
+						<Panel key={skill.area} className="p-4 sm:p-5">
+							<div className="mb-3 flex items-center gap-3">
+								<skill.icon className="text-primary size-4" />
+								<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
+									{skill.area}
+								</h3>
+							</div>
+							<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
+						</Panel>
+					)
+				)}
 			</div>
 		</Section>
 	)
@@ -668,14 +556,43 @@ function ProjectCard(input: {
 }
 
 function ProjectsSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const featuredProject = {
+		currentWork:
+			'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
+		description:
+			'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
+		href: 'https://github.com/MP281X/deslop',
+		name: 'deslop',
+		role: 'Full-Stack TypeScript Monorepo',
+		stack: 'Effect · React · TypeScript · WebSockets · PostgreSQL · Docker'
+	}
+	const supportingProjects = [
+		{
+			description:
+				'A starter for React and Kotlin/Spring applications with generated API types, PostgreSQL migrations, real-time sync, authentication, and reusable UI components.',
+			href: 'https://github.com/MP281X/kotlin-react-template',
+			name: 'Kotlin React Template',
+			role: 'Full-Stack Starter',
+			stack: 'React · Kotlin · Spring · Effect · PostgreSQL · ElectricSQL'
+		},
+		{
+			description:
+				'An open-source video platform with FFmpeg/HLS processing, background jobs, real-time upload progress, PostgreSQL, Redis, S3-compatible storage, and Kubernetes deployment.',
+			href: 'https://github.com/MP281X/blixter_video',
+			name: 'Blixter',
+			role: 'Video Streaming Platform',
+			stack: 'TypeScript · FFmpeg · PostgreSQL · Redis · Kubernetes'
+		}
+	]
+
 	return (
 		<Section id={3} registerSection={input.registerSection}>
 			<SectionLabel title="Personal Projects" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				<ProjectCard project={FEATURED_PROJECT} />
+				<ProjectCard project={featuredProject} />
 
 				<div className="grid gap-4 md:grid-cols-2">
-					{Array.map(SUPPORTING_PROJECTS, project => (
+					{Array.map(supportingProjects, project => (
 						<ProjectCard key={project.name} project={project} />
 					))}
 				</div>
@@ -685,11 +602,69 @@ function ProjectsSection(input: {registerSection: (id: number, node: HTMLElement
 }
 
 function ExperienceSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const experience = [
+		{
+			company: 'Humans.Tech',
+			highlights: [
+				'Built the shared frontend foundation used to start new products, defining reusable architecture, tooling, and development conventions',
+				'Developed reusable messaging interfaces for person-to-person and AI-agent conversations',
+				'Created reusable data-display primitives, including tables and virtualized lists for large datasets',
+				'Collaborated closely with backend engineers to design, integrate, and refine product functionality',
+				'Introduced AI-assisted development workflows that accelerated implementation for both individual and team delivery'
+			],
+			location: 'Frosinone, Italy',
+			note: '',
+			period: 'Apr 2026 – Jul 2026',
+			role: 'Frontend Developer'
+		},
+		{
+			company: 'Tinexta Cyber',
+			highlights: [
+				'Developed a real-time network inventory application for a major telecommunications company',
+				'Built the real-time frontend in React with ElectricSQL for live updates across all users',
+				'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
+				'Gathered requirements directly from end users and iterated through feedback rounds',
+				'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
+				'Used AI coding agents daily with project-specific guidelines for development'
+			],
+			location: 'Udine, Italy',
+			note: '',
+			period: 'Oct 2024 – Mar 2026',
+			role: 'Full-Stack Developer'
+		},
+		{
+			company: 'Altitudo',
+			highlights: [
+				'Migrated the build system from Create React App to Vite',
+				'Improved rendering performance by adding proper memoization',
+				'Migrated legacy class components to modern functional components using React hooks',
+				'Recreated and restyled multiple pages using React and Tailwind CSS'
+			],
+			location: 'Salzburg, Austria',
+			note: 'Erasmus Internship',
+			period: 'Jan 2024 – Mar 2024',
+			role: 'Frontend Developer'
+		},
+		{
+			company: 'BizAway',
+			highlights: [
+				'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
+				'Built a type-safe email template framework using TSX-style components',
+				'Migrated API endpoints from the old OpenAPI version to the new specification',
+				'Built and updated multiple Angular components and features'
+			],
+			location: 'Spilimbergo, Italy',
+			note: 'Internship',
+			period: 'Jun 2023 – Aug 2023',
+			role: 'Backend Developer'
+		}
+	]
+
 	return (
 		<Section id={4} registerSection={input.registerSection}>
 			<SectionLabel title="Experience" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(WORK_EXPERIENCE, job => (
+				{Array.map(experience, job => (
 					<Panel key={job.company} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 							<div className="space-y-1">
@@ -726,11 +701,28 @@ function ExperienceSection(input: {registerSection: (id: number, node: HTMLEleme
 }
 
 function EducationSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const education = [
+		{
+			degree: 'Cloud Developer Diploma',
+			description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
+			grade: '95/100',
+			period: '2022 – 2024',
+			school: 'ITS Alto Adriatico'
+		},
+		{
+			degree: 'High School Diploma – IT and Telecommunications',
+			description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
+			grade: '',
+			period: '2017 – 2022',
+			school: 'ISIS A. Malignani'
+		}
+	]
+
 	return (
 		<Section id={5} registerSection={input.registerSection}>
 			<SectionLabel title="Education & Languages" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(EDUCATION_DATA, entry => (
+				{Array.map(education, entry => (
 					<Panel key={entry.school} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 							<div className="flex flex-wrap items-baseline gap-x-3">
@@ -744,12 +736,19 @@ function EducationSection(input: {registerSection: (id: number, node: HTMLElemen
 					</Panel>
 				))}
 				<div className="grid gap-3 sm:grid-cols-3">
-					{Array.map(LANGUAGES_DATA, lang => (
-						<Panel key={lang.language} className="px-4 py-3">
-							<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
-							<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
-						</Panel>
-					))}
+					{Array.map(
+						[
+							{language: 'Italian', level: 'Native'},
+							{language: 'English', level: 'C1'},
+							{language: 'Spanish', level: 'Basic'}
+						],
+						lang => (
+							<Panel key={lang.language} className="px-4 py-3">
+								<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
+								<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
+							</Panel>
+						)
+					)}
 				</div>
 			</div>
 		</Section>
@@ -761,18 +760,25 @@ function ContactSection(input: {registerSection: (id: number, node: HTMLElement 
 		<Section id={6} registerSection={input.registerSection}>
 			<SectionLabel title="Contact" />
 			<div className="flex w-full max-w-5xl flex-col gap-3">
-				{Array.map(CONTACT_ITEMS, item => (
-					<a
-						key={item.label}
-						href={item.href}
-						className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
-						<span className="text-foreground break-all">{item.value}</span>
-					</a>
-				))}
+				{Array.map(
+					[
+						{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
+						{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
+						{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
+					],
+					item => (
+						<a
+							key={item.label}
+							href={item.href}
+							className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
+							<span className="text-foreground break-all">{item.value}</span>
+						</a>
+					)
+				)}
 			</div>
 			<p className="text-muted-foreground/70 mt-6 font-mono text-[10px]">
 				© 2026 Matteo Paludgnach · Moimacco (UD), Italy
@@ -814,7 +820,7 @@ function ShortcutsOverlay(input: {onClose: () => void}) {
 
 function RealtimeLayer(input: {
 	identityColor: string
-	localPointer: {x: number; y: number} | null
+	localPointer: Option.Option<{x: number; y: number}>
 	viewport: {width: number; height: number}
 }) {
 	const portfolio = useAtomSuspense(portfolioAtom)
@@ -852,7 +858,7 @@ function PortfolioRoute() {
 	const queuedPointerRef = useRef<{x: number; y: number} | null>(null)
 	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number} | null>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [localPointer, setLocalPointer] = useState<{x: number; y: number} | null>(null)
+	const [localPointer, setLocalPointer] = useState(() => Option.none<{x: number; y: number}>())
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
 	function getSectionRefs() {
@@ -881,7 +887,10 @@ function PortfolioRoute() {
 
 	function updateColor() {
 		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
+		const currentPointer = pipe(
+			localPointer,
+			Option.getOrElse(() => lastSentPointerRef.current ?? {x: 0.5, y: 0.5})
+		)
 
 		identity.color = nextColor
 		setIdentityColor(nextColor)
@@ -898,7 +907,7 @@ function PortfolioRoute() {
 			y: Math.max(0, Math.min(0.999_999, clientY / viewport.height))
 		}
 
-		setLocalPointer(nextPointer)
+		setLocalPointer(Option.some(nextPointer))
 		queuedPointerRef.current = nextPointer
 
 		if (pointerFrameRef.current !== 0) return

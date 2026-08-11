@@ -71,7 +71,7 @@ function textFromResult(result: unknown) {
 	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(result)
 }
 
-const piContentFromPromptParts = Effect.fnUntraced(function* (parts: Iterable<Prompt.Part>) {
+const piContentFromPromptParts = Effect.fnUntraced(function* (parts: Prompt.UserMessage['content']) {
 	return Array.flatten(
 		yield* Effect.forEach(parts, part =>
 			pipe(
@@ -201,14 +201,14 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 
 		return {
 			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute(
+			execute: (
 				_toolCallId: string,
 				params: Tool.Parameters<ToolSet[string]>,
 				_signal: AbortSignal | undefined,
 				onUpdate: AgentToolUpdateCallback<unknown> | undefined,
 				_ctx: ExtensionContext
-			) {
-				return Effect.runPromiseWith(context)(
+			) =>
+				Effect.runPromiseWith(context)(
 					pipe(
 						toolkit.handle(name, params),
 						Effect.flatMap(stream =>
@@ -232,8 +232,7 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 							return Effect.succeed(agentToolResult(finalResult.encodedResult))
 						})
 					)
-				)
-			},
+				),
 			label: name,
 			name,
 			parameters: Tool.getJsonSchema(tool)

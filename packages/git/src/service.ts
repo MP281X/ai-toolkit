@@ -214,8 +214,8 @@ function discoveredWorktree(input: {
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
 const GitHubReviewThreadCommentResponse = Schema.Struct({
 	body: Schema.String,
-	line: Schema.optional(Schema.NullOr(Schema.Finite)),
-	originalLine: Schema.optional(Schema.NullOr(Schema.Finite)),
+	line: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
+	originalLine: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
 	path: Schema.String,
 	url: Schema.optional(Schema.String)
 })
@@ -1468,7 +1468,11 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 						GitReviewComment.make({
 							body: comment.body,
 							filePath: comment.path,
-							lineNumber: comment.line ?? comment.originalLine ?? 1,
+							lineNumber: pipe(
+								comment.line,
+								Option.orElse(() => comment.originalLine),
+								Option.getOrElse(() => 1)
+							),
 							side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
 							source: 'github',
 							threadId: thread.id,

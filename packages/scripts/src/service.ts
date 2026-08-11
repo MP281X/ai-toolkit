@@ -7,8 +7,6 @@ const ScriptsPackageJson = Schema.Struct({
 	scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))
 })
 
-const EmptyScriptsPackageJson = {deslop: {dev: Array.empty<string>()}, scripts: {}}
-
 function taskKey(taskId: string) {
 	if (!String.startsWith('@')(taskId)) return taskId
 	return pipe(
@@ -29,7 +27,7 @@ export class Scripts extends Context.Service<Scripts>()('@deslop/scripts/service
 		const packageJson = yield* pipe(
 			fs.readFileString(path.join(input.cwd, 'package.json')),
 			Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ScriptsPackageJson))),
-			Effect.orElseSucceed(() => EmptyScriptsPackageJson)
+			Effect.orElseSucceed(() => ({deslop: {dev: Array.empty<string>()}, scripts: {}}))
 		)
 		const scripts = pipe(
 			packageJson.scripts ?? {},
