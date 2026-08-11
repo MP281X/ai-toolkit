@@ -171,18 +171,18 @@ function createCursorMotion(target: {x: number; y: number}, viewport: {width: nu
 }
 
 function stepCursorMotion(motion: ReturnType<typeof createCursorMotion>, now: number) {
-	const frameDelta = motion.lastFrameAt > 0 ? Math.max(8, Math.min(64, now - motion.lastFrameAt)) : 16
+	const frameDelta = motion.lastFrameAt > 0 ? Number.clamp({maximum: 64, minimum: 8})(now - motion.lastFrameAt) : 16
 	const deltaX = motion.targetX - motion.x
 	const deltaY = motion.targetY - motion.y
-	const catchUp = Math.min(1, (1 - Math.exp(-frameDelta / 130)) * (1 + Math.hypot(deltaX, deltaY) / 220))
+	const catchUp = Number.min(1, (1 - Math.exp(-frameDelta / 130)) * (1 + Math.hypot(deltaX, deltaY) / 220))
 	const nextX = motion.x + deltaX * catchUp
 	const nextY = motion.y + deltaY * catchUp
 
 	return {
 		...motion,
 		lastFrameAt: now,
-		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Math.max(0, Math.min(motion.viewportWidth, nextX)),
-		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY))
+		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Number.clamp({maximum: motion.viewportWidth, minimum: 0})(nextX),
+		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Number.clamp({maximum: motion.viewportHeight, minimum: 0})(nextY)
 	}
 }
 
@@ -252,13 +252,13 @@ function GridOverlay() {
 }
 
 function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width: number; height: number}}) {
-	const canvasRef = useRef<HTMLCanvasElement | null>(null)
+	const canvasRef = useRef<HTMLCanvasElement>(null)
 
 	useEffect(() => {
 		if (!(canvasRef.current && input.viewport.width && input.viewport.height)) return
 
-		const canvasWidth = Math.max(1, Math.round(input.viewport.width * (window.devicePixelRatio || 1)))
-		const canvasHeight = Math.max(1, Math.round(input.viewport.height * (window.devicePixelRatio || 1)))
+		const canvasWidth = Number.max(1, Number.round(input.viewport.width * (window.devicePixelRatio || 1), 0))
+		const canvasHeight = Number.max(1, Number.round(input.viewport.height * (window.devicePixelRatio || 1), 0))
 
 		if (canvasRef.current.width !== canvasWidth || canvasRef.current.height !== canvasHeight) {
 			canvasRef.current.width = canvasWidth
@@ -291,12 +291,12 @@ function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width:
 					return HashMap.set(previousByVisitor, trail.visitorId, current)
 				}
 
-				const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
+				const stepCount = Number.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
 
 				for (const step of Array.makeBy(stepCount + 1, Function.identity)) {
 					const progress = stepCount === 0 ? 1 : step / stepCount
-					const col = Math.round(previous.col + (current.col - previous.col) * progress)
-					const row = Math.round(previous.row + (current.row - previous.row) * progress)
+					const col = Number.round(previous.col + (current.col - previous.col) * progress, 0)
+					const row = Number.round(previous.row + (current.row - previous.row) * progress, 0)
 
 					context.fillStyle = progress < 1 ? previous.trail.color : current.trail.color
 					context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
@@ -318,7 +318,7 @@ function CursorEl(input: {
 	localPointer?: {x: number; y: number}
 	viewport: {width: number; height: number}
 }) {
-	const nodeRef = useRef<HTMLDivElement | null>(null)
+	const nodeRef = useRef<HTMLDivElement>(null)
 	const [initialMotion] = useState(() =>
 		createCursorMotion(
 			getDisplayCursorTarget(input.cursor, input.isMe, input.viewport, input.localPointer),
@@ -896,8 +896,8 @@ function PortfolioRoute() {
 		if (viewport.width === 0 || viewport.height === 0) return
 
 		const nextPointer = {
-			x: Math.max(0, Math.min(0.999_999, clientX / viewport.width)),
-			y: Math.max(0, Math.min(0.999_999, clientY / viewport.height))
+			x: Number.clamp({maximum: 0.999_999, minimum: 0})(clientX / viewport.width),
+			y: Number.clamp({maximum: 0.999_999, minimum: 0})(clientY / viewport.height)
 		}
 
 		setLocalPointer(nextPointer)
@@ -935,10 +935,10 @@ function PortfolioRoute() {
 	}
 
 	useHotkey('J', () => {
-		scrollTo(Math.min(currentSectionRef.current + 1, 6))
+		scrollTo(Number.min(currentSectionRef.current + 1, 6))
 	})
 	useHotkey('K', () => {
-		scrollTo(Math.max(currentSectionRef.current - 1, 0))
+		scrollTo(Number.max(currentSectionRef.current - 1, 0))
 	})
 	useHotkey('1', () => {
 		scrollTo(0)

@@ -45,6 +45,26 @@ const CodexUsage = Schema.Struct({
 	})
 })
 
+type CodexUsageTokens = typeof CodexUsageTokens.Type
+const CodexUsageTokens = Schema.Struct({
+	cached_input_tokens: Schema.optional(Schema.Finite),
+	input_tokens: Schema.optional(Schema.Finite),
+	output_tokens: Schema.optional(Schema.Finite)
+})
+
+type CodexUsageLine = typeof CodexUsageLine.Type
+const CodexUsageLine = Schema.fromJsonString(
+	Schema.Struct({
+		payload: Schema.optional(
+			Schema.Struct({
+				info: Schema.optional(Schema.Struct({last_token_usage: Schema.optional(CodexUsageTokens)})),
+				usage: Schema.optional(CodexUsageTokens)
+			})
+		),
+		usage: Schema.optional(CodexUsageTokens)
+	})
+)
+
 const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
@@ -57,28 +77,8 @@ const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	)
 })
 
-function objectProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return
-	const value = input[key]
-	return Predicate.isObject(value) ? value : undefined
-}
-
-function numberProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return 0
-	const value = input[key]
-	return Predicate.isNumber(value) ? value : 0
-}
-
-function jsonLine(line: string) {
-	return pipe(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(line), Option.getOrUndefined)
-}
-
-function codexUsageTokens(input: unknown) {
-	return {
-		cached: numberProperty(input, 'cached_input_tokens'),
-		input: numberProperty(input, 'input_tokens'),
-		output: numberProperty(input, 'output_tokens')
-	}
+function codexUsageTokens(input: CodexUsageTokens) {
+	return {cached: input.cached_input_tokens ?? 0, input: input.input_tokens ?? 0, output: input.output_tokens ?? 0}
 }
 
 function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
@@ -165,11 +165,12 @@ function totalUsageTokensFromContent(content: string) {
 }
 
 function explicitUsageFromLine(line: string) {
-	const decoded = jsonLine(line)
-	const payload = objectProperty(decoded, 'payload')
-	const info = objectProperty(payload, 'info')
-	return (
-		objectProperty(info, 'last_token_usage') ?? objectProperty(payload, 'usage') ?? objectProperty(decoded, 'usage')
+	return pipe(
+		Schema.decodeOption(CodexUsageLine)(line),
+		Option.flatMap(decoded =>
+			Option.fromNullishOr(decoded.payload?.info?.last_token_usage ?? decoded.payload?.usage ?? decoded.usage)
+		),
+		Option.getOrUndefined
 	)
 }
 
@@ -209,29 +210,6 @@ function sumTokenFiles(files: {tokens: AgentUsageTokens}[]) {
 		Array.reduce(files, {cached: 0, input: 0, output: 0}, (total, file) => addTokens(total, file.tokens))
 	)
 }
-
-export const loadCodexUsageTokens = Effect.fnUntraced(function* (input: {codexRoot: string}) {
-	const fs = yield* FileSystem.FileSystem
-	const path = yield* Path.Path
-	const files = yield* pipe(
-		Effect.all(
-			[
-				codexJsonlFiles(path.join(input.codexRoot, 'sessions')),
-				codexJsonlFiles(path.join(input.codexRoot, 'archived_sessions'))
-			],
-			{concurrency: 2}
-		),
-		Effect.map(Array.flatten),
-		Effect.mapError(cause => AgentError.make({cause}))
-	)
-	const tokens = yield* pipe(
-		files,
-		Effect.forEach(filePath => pipe(fs.readFileString(filePath), Effect.map(codexTokensFromContent)), {concurrency: 8}),
-		Effect.mapError(cause => AgentError.make({cause}))
-	)
-
-	return sumTokenFiles(Array.map(tokens, value => ({tokens: value})))
-})
 
 export const makeLayerCodexUsage = Effect.fnUntraced(function* (_config: {provider: 'codex'}) {
 	const client = yield* HttpClient.HttpClient

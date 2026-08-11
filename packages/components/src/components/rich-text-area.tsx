@@ -520,7 +520,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 	ref,
 	...input
 }: RichTextArea.Props<TValue>) {
-	const editorRef = useRef<Lexical.LexicalEditor | null>(null)
+	const editorRef = useRef<Lexical.LexicalEditor>(null)
 	const menuBoxRef = useRef<HTMLDivElement>(null)
 	const menuRef = useRef(false)
 	const initialSnapshotRestoredRef = useRef(false)

@@ -9,7 +9,7 @@ export function terminalChunks(data: string, chunkSize = 65536) {
 	if (data === '') return Array.empty<string>()
 
 	function nextEnd(start: number) {
-		const candidate = Math.min(start + chunkSize, data.length)
+		const candidate = Number.min(start + chunkSize, data.length)
 		if (candidate >= data.length) return candidate
 		const previous = pipe(
 			data,
@@ -23,7 +23,7 @@ export function terminalChunks(data: string, chunkSize = 65536) {
 		)
 		const safeEnd =
 			previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? candidate - 1 : candidate
-		return safeEnd === start ? Math.min(start + chunkSize, data.length) : safeEnd
+		return safeEnd === start ? Number.min(start + chunkSize, data.length) : safeEnd
 	}
 
 	function collect(start: number, chunks = Array.empty<string>()) {

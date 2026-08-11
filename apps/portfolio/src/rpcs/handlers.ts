@@ -1,4 +1,4 @@
-import {Array, Clock, Duration, Effect, Option, PubSub, Schedule, Stream, SubscriptionRef, pipe} from 'effect'
+import {Array, Clock, Duration, Effect, Number, Option, PubSub, Schedule, Stream, SubscriptionRef, pipe} from 'effect'
 
 import {
 	PortfolioSnapshot,
@@ -49,8 +49,8 @@ const SERVER_BOTS = [
 
 function botPosition(bot: (typeof SERVER_BOTS)[number], t: number) {
 	return {
-		x: Math.max(0.005, Math.min(0.995, 0.5 + 0.4 * Math.sin(t * bot.xFreq + bot.xPhase))),
-		y: Math.max(0.005, Math.min(0.995, 0.5 + 0.4 * Math.cos(t * bot.yFreq + bot.yPhase)))
+		x: Number.clamp({maximum: 0.995, minimum: 0.005})(0.5 + 0.4 * Math.sin(t * bot.xFreq + bot.xPhase)),
+		y: Number.clamp({maximum: 0.995, minimum: 0.005})(0.5 + 0.4 * Math.cos(t * bot.yFreq + bot.yPhase))
 	}
 }
 

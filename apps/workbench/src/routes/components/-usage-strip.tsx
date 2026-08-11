@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {Array, DateTime, Option, Predicate, pipe} from 'effect'
+import {Array, DateTime, Number, Option, Predicate, pipe} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 
@@ -35,7 +35,7 @@ function WindowValue(input: {icon: React.ReactNode; window: AgentUsageWindow}) {
 		<span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2.5">
 			<span className="flex items-center gap-1.5">
 				<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">{input.icon}</span>
-				<span className={utilizationClass(input.window.utilization)}>{Math.round(input.window.utilization)}%</span>
+				<span className={utilizationClass(input.window.utilization)}>{Number.round(input.window.utilization, 0)}%</span>
 			</span>
 			{Option.isSome(resets) && (
 				<span className="text-muted-foreground min-w-0 truncate" title={`resets ${formatTimestamp(resets.value)}`}>
@@ -84,7 +84,7 @@ function MetricValue(input: {compact?: boolean; icon: React.ReactNode; title?: s
 			title={input.title}
 		>
 			<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">{input.icon}</span>
-			<span className={utilizationClass(input.utilization)}>{Math.round(input.utilization)}%</span>
+			<span className={utilizationClass(input.utilization)}>{Number.round(input.utilization, 0)}%</span>
 		</span>
 	)
 }
@@ -108,17 +108,22 @@ function SystemWindows() {
 
 	return (
 		<>
-			<MetricValue compact icon={<Cpu />} title={`CPU ${Math.round(usage.value.cpu)}%`} utilization={usage.value.cpu} />
+			<MetricValue
+				compact
+				icon={<Cpu />}
+				title={`CPU ${Number.round(usage.value.cpu, 0)}%`}
+				utilization={usage.value.cpu}
+			/>
 			<MetricValue
 				compact
 				icon={<MemoryStick />}
-				title={`System memory ${Math.round(usage.value.memory)}%`}
+				title={`System memory ${Number.round(usage.value.memory, 0)}%`}
 				utilization={usage.value.memory}
 			/>
 			<MetricValue
 				compact
 				icon={<Server />}
-				title={`Node heap ${Math.round(usage.value.nodeHeap)}%`}
+				title={`Node heap ${Number.round(usage.value.nodeHeap, 0)}%`}
 				utilization={usage.value.nodeHeap}
 			/>
 		</>

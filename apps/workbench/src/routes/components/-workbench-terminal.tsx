@@ -27,8 +27,8 @@ export function WorkbenchTerminal(input: {session: TerminalSessionInput}) {
 	)
 	const terminalRef = useRef<TerminalHandle>(null)
 	const nextAttachIdRef = useRef(0)
-	const sizeRef = useRef<{cols: number; rows: number} | null>(null)
-	const reattachTimeoutRef = useRef<number | null>(null)
+	const sizeRef = useRef<{cols: number; rows: number}>(null)
+	const reattachTimeoutRef = useRef<number>(null)
 	const [attachment, setAttachment] = useState<{
 		id: number
 		sessionKey: string

@@ -38,6 +38,23 @@ const ClaudeUsageWindow = Schema.Struct({
 type ClaudeUsage = typeof ClaudeUsage.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
+type ClaudeUsageTokens = typeof ClaudeUsageTokens.Type
+const ClaudeUsageTokens = Schema.Struct({
+	cache_creation_input_tokens: Schema.optional(Schema.Finite),
+	cache_read_input_tokens: Schema.optional(Schema.Finite),
+	cached_input_tokens: Schema.optional(Schema.Finite),
+	input_tokens: Schema.optional(Schema.Finite),
+	output_tokens: Schema.optional(Schema.Finite)
+})
+
+type ClaudeUsageLine = typeof ClaudeUsageLine.Type
+const ClaudeUsageLine = Schema.fromJsonString(
+	Schema.Struct({
+		message: Schema.optional(Schema.Struct({usage: Schema.optional(ClaudeUsageTokens)})),
+		usage: Schema.optional(ClaudeUsageTokens)
+	})
+)
+
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	const fs = yield* FileSystem.FileSystem
 	const path = yield* Path.Path
@@ -50,29 +67,12 @@ const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 	)
 })
 
-function objectProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return
-	const value = input[key]
-	return Predicate.isObject(value) ? value : undefined
-}
-
-function numberProperty(input: unknown, key: string) {
-	if (!Predicate.isObject(input)) return 0
-	const value = input[key]
-	return Predicate.isNumber(value) ? value : 0
-}
-
-function jsonLine(line: string) {
-	return pipe(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(line), Option.getOrUndefined)
-}
-
-function claudeUsageTokens(input: unknown) {
+function claudeUsageTokens(input: ClaudeUsageTokens) {
 	return {
 		cached:
-			numberProperty(input, 'cache_read_input_tokens') +
-			(numberProperty(input, 'cache_creation_input_tokens') || numberProperty(input, 'cached_input_tokens')),
-		input: numberProperty(input, 'input_tokens'),
-		output: numberProperty(input, 'output_tokens')
+			(input.cache_read_input_tokens ?? 0) + (input.cache_creation_input_tokens ?? input.cached_input_tokens ?? 0),
+		input: input.input_tokens ?? 0,
+		output: input.output_tokens ?? 0
 	}
 }
 
@@ -88,9 +88,11 @@ function claudeTokensFromContent(content: string) {
 			Array.reduce({cached: 0, input: 0, output: 0}, (current, line) => {
 				if (!String.includes('"usage"')(line)) return current
 
-				const decoded = jsonLine(line)
-				const usage = objectProperty(objectProperty(decoded, 'message'), 'usage') ?? objectProperty(decoded, 'usage')
-				return Predicate.isUndefined(usage) ? current : addTokens(current, claudeUsageTokens(usage))
+				return pipe(
+					Schema.decodeOption(ClaudeUsageLine)(line),
+					Option.flatMap(decoded => Option.fromNullishOr(decoded.message?.usage ?? decoded.usage)),
+					Option.match({onNone: () => current, onSome: usage => addTokens(current, claudeUsageTokens(usage))})
+				)
 			})
 		)
 	)
@@ -101,24 +103,6 @@ function sumTokenFiles(files: {tokens: AgentUsageTokens}[]) {
 		Array.reduce(files, {cached: 0, input: 0, output: 0}, (total, file) => addTokens(total, file.tokens))
 	)
 }
-
-export const loadClaudeUsageTokens = Effect.fnUntraced(function* (input: {projectsRoot: string}) {
-	const fs = yield* FileSystem.FileSystem
-	const files = yield* pipe(
-		claudeJsonlFiles(input.projectsRoot),
-		Effect.mapError(cause => AgentError.make({cause}))
-	)
-	const contents = yield* pipe(
-		Effect.forEach(files, path => fs.readFileString(path), {concurrency: 8}),
-		Effect.mapError(cause => AgentError.make({cause}))
-	)
-
-	return pipe(
-		contents,
-		Array.map(content => ({tokens: claudeTokensFromContent(content)})),
-		sumTokenFiles
-	)
-})
 
 export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {provider: 'claude'}) {
 	const client = yield* HttpClient.HttpClient

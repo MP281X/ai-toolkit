@@ -12,7 +12,6 @@ Preserve typed failure, requirements, interruption, scope, observability, and co
 - Expected failure → typed error
 - Existing optionality → consume its `Option`; otherwise use `Option` only when it simplifies composition or elimination, and decode nullable or omittable boundary fields into `Option` once
 - Decode and normalize once at the owning external boundary.
-- Put `type Name = typeof Name.Type` immediately before every named `Name` schema; export both when the schema is public.
 - Use Effect and Effect Platform before equivalent globals, prototypes, promises, timers, process, filesystem, network, cancellation, cache, events, JSON, or mutable collections.
 - Keep unavoidable native APIs inside the smallest foreign or synchronous presentation boundary.
 
@@ -23,7 +22,7 @@ const Input = Schema.Struct({value: Schema.String})
 function consume(value: typeof Usage.Type.rate_limit.primary_window) {}
 ```
 
-Reject duplicated structural types, `satisfies Schema.Schema<...>`, nested-access aliases, property probing after decode, and raw tagged objects.
+Reject duplicated structural types, nested-access aliases, property probing after decode, and raw tagged objects.
 
 When a foreign callback requires `void` or `Promise` and has no Effect adapter, capture the caller context once and bridge only that callback with `Effect.runForkWith` or `Effect.runPromiseWith`.
 
@@ -41,7 +40,7 @@ An Effect wrapper must add policy, failure translation, requirements, lifecycle,
 - Construct refs, caches, sockets, clients, queues, subscriptions, and fibers inside their owning scope.
 - Cleanup methods exist only for domain stop behavior.
 
-Reject `*Live` exports, global instances, public implementation types, and duplicate read paths.
+Reject global instances, public implementation types, and duplicate read paths.
 
 ## Shape and tracing
 
@@ -56,4 +55,4 @@ pipe(value, String.trim, String.toLowerCase)
 Boolean.match(condition, {onFalse, onTrue})
 ```
 
-Reject schema-decoder aliases and traces around pure transformations or entire infinite stream lifetimes.
+Reject traces around pure transformations or entire infinite stream lifetimes.

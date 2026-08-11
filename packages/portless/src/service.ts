@@ -47,7 +47,7 @@ function rewritePortlessHtml(html: string) {
 	return `${portlessInstrumentationLoader}${html}`
 }
 
-export function rewritePortlessHtmlResponse(input: {contentType?: string | null; html: string; method: string}) {
+function rewritePortlessHtmlResponse(input: {contentType?: string | null; html: string; method: string}) {
 	if (input.method !== 'GET' || !htmlContentType(input.contentType)) return
 	return rewritePortlessHtml(input.html)
 }
@@ -61,7 +61,7 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	)
 	if (hops >= 5) return loopDetectedResponse(hops)
 
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
+	const [pathname, search] = String.split(request.url, '?')
 	const headers = new Headers(webRequest.headers)
 	headers.set('host', new URL(origin).host)
 	headers.set('x-portless-hops', `${hops + 1}`)
@@ -76,7 +76,12 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 	const upstream = yield* Effect.tryPromise(() =>
 		// Native fetch preserves the Web Request and streaming Response at the transparent proxy boundary.
 		// @effect-diagnostics-next-line globalFetchInEffect:off
-		fetch(new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, requestInit))
+		fetch(
+			new Request(
+				`${origin}${pathname}${Predicate.isNotUndefined(search) && String.isNonEmpty(search) ? `?${search}` : ''}`,
+				requestInit
+			)
+		)
 	)
 	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
 		const responseHeaders = new Headers(upstream.headers)
@@ -111,13 +116,13 @@ function webSocketBytes(message: NodeSocket.NodeWS.RawData) {
 }
 
 const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
+	const [pathname, search] = String.split(request.url, '?')
 	const upstreamUrl = new URL(origin)
 	upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 	upstreamUrl.pathname = pathname
 	// URL.search is boundary data, not a prototype search operation.
 	// oxlint-disable-next-line eslint/no-restricted-properties
-	upstreamUrl.search = search
+	upstreamUrl.search = search ?? ''
 
 	const inbound = yield* request.upgrade
 	const outbound = yield* Effect.acquireRelease(

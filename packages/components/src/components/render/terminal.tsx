@@ -47,9 +47,9 @@ export function Terminal({
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<xterm.Terminal>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
-	const animationFrameRef = useRef<number | null>(null)
+	const animationFrameRef = useRef<number>(null)
 	const disposedRef = useRef(false)
-	const lastSizeRef = useRef<{cols: number; rows: number} | null>(null)
+	const lastSizeRef = useRef<{cols: number; rows: number}>(null)
 
 	useEffect(() => {
 		callbacksRef.current = {onData: input.onData, onResize: input.onResize}
@@ -118,8 +118,8 @@ export function Terminal({
 			if (!screen) return
 
 			if (Predicate.isNullish(elementRef.current)) return
-			const left = Math.floor(Math.max(0, elementRef.current.clientWidth - screen.offsetWidth) / 2)
-			const top = Math.floor(Math.max(0, elementRef.current.clientHeight - screen.offsetHeight) / 2)
+			const left = Math.floor(Number.max(0, elementRef.current.clientWidth - screen.offsetWidth) / 2)
+			const top = Math.floor(Number.max(0, elementRef.current.clientHeight - screen.offsetHeight) / 2)
 			screen.style.left = `${left}px`
 			screen.style.top = `${top}px`
 		}

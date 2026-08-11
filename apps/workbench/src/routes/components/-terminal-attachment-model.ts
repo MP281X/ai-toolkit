@@ -1,4 +1,4 @@
-import {Array, Option, Order, String, pipe} from 'effect'
+import {Array, Number, Option, Order, String, pipe} from 'effect'
 
 import type {TerminalFrame} from '@deslop/terminal/schema'
 
@@ -9,7 +9,7 @@ export function terminalAttachmentSizeEqual(left: {cols: number; rows: number}, 
 }
 
 function outputEnd(data: string, start: number, maxLength: number) {
-	const candidate = Math.min(start + maxLength, data.length)
+	const candidate = Number.min(start + maxLength, data.length)
 	if (candidate >= data.length) return candidate
 	const previous = pipe(
 		data,
@@ -23,7 +23,7 @@ function outputEnd(data: string, start: number, maxLength: number) {
 	)
 	const safeEnd =
 		previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? candidate - 1 : candidate
-	return safeEnd === start ? Math.min(start + maxLength, data.length) : safeEnd
+	return safeEnd === start ? Number.min(start + maxLength, data.length) : safeEnd
 }
 
 function appendOutput(operations: TerminalAttachmentOperation[], data: string, maxOutputLength: number, start = 0) {
@@ -63,7 +63,7 @@ export function terminalAttachmentOperations(input: {
 	lastSequence: number
 	maxOutputLength?: number
 }) {
-	const maxOutputLength = Math.max(1, input.maxOutputLength ?? 65_536)
+	const maxOutputLength = Number.max(1, input.maxOutputLength ?? 65_536)
 	return pipe(
 		input.frames,
 		Array.filter(frame => frame.sequence > input.lastSequence),

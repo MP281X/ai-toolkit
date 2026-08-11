@@ -22,9 +22,8 @@ Keep module values only when they own shared identity, lifecycle, caching, schem
 
 - Infer local and return types. Annotate a return only for recursion.
 - Name only public, recursive, boundary, or independently shared types.
-- Do not author `readonly` annotations or `Readonly` wrappers; preserve immutability through values and operations.
 - Keep operation inputs inline unless they cross an unknown, serialized, or persisted boundary or are independently shared.
-- Use `Value[]` for owned arrays; keep an owning schema property type only at its decoded boundary, and never widen a consumer to `Iterable<Value>` to absorb a type mismatch.
+- Keep an owning schema property type only at its decoded boundary; never widen a consumer to absorb a type mismatch.
 - Resolve type mismatches at their origin; never widen or narrow a value to appease its consumer.
 - Use `value?: Value` for omission; reserve `null` for React ref lifecycle and foreign APIs that return it.
 - Model domain values and structured identities; never concatenate identity fields.

@@ -160,6 +160,19 @@ const noRestrictedProperties: NonNullable<NonNullable<ViteUserConfig['lint']>['r
 	{message: 'Use an owned runtime.', object: 'Effect', property: 'runPromiseExit'},
 	{message: 'Use an owned runtime.', object: 'Effect', property: 'runSync'},
 	{message: 'Use an owned runtime.', object: 'Effect', property: 'runSyncExit'},
+	{message: 'Use Number.max.', object: 'Math', property: 'max'},
+	{message: 'Use Number.min.', object: 'Math', property: 'min'},
+	{message: 'Use Number.round.', object: 'Math', property: 'round'},
+	{message: 'React Compiler owns memoization.', object: 'React', property: 'memo'},
+	{message: 'React Compiler owns memoization.', object: 'React', property: 'useMemo'},
+	{message: 'React Compiler owns memoization.', object: 'React', property: 'useCallback'},
+	{message: 'Pass refs as props in React 19.', object: 'React', property: 'forwardRef'},
+	{message: 'Use useRef in function components.', object: 'React', property: 'createRef'},
+	{message: 'Compose JSX directly.', object: 'React', property: 'cloneElement'},
+	{message: 'Compose JSX directly.', object: 'React', property: 'Children'},
+	{message: 'Use function components.', object: 'React', property: 'Component'},
+	{message: 'Use function components.', object: 'React', property: 'PureComponent'},
+	{message: 'Use JSX.', object: 'React', property: 'createFactory'},
 	{message: 'Use Schema.Struct.', object: 'Schema', property: 'Class'},
 	{message: 'Use a branded schema.', object: 'Schema', property: 'Opaque'},
 	{message: 'Use Schema.Struct.', object: 'Schema', property: 'TaggedClass'},
@@ -236,16 +249,32 @@ export default defineConfig({
 		],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
+			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},
 			{name: 'react-doctor', specifier: 'oxlint-plugin-react-doctor'}
 		],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off', 'sort-keys': 'off'}},
+			{files: ['packages/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
-			{files: ['**/*.tsx'], rules: {'effecttsgo/async-function': 'off', 'unicorn/no-null': 'off'}}
+			{
+				files: ['**/*.tsx'],
+				rules: {'effecttsgo/async-function': 'off', 'typescript/require-await': 'error', 'unicorn/no-null': 'off'}
+			}
 		],
 		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
+			// Repository invariants that maintained rules cannot express.
+			'@deslop/oxlint-rules/inline-schema-operation': 'error',
+			'@deslop/oxlint-rules/no-direct-rpc-promise-in-component': 'error',
+			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
+			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
+			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
+			'@deslop/oxlint-rules/no-trivial-indirection': 'error',
+			'@deslop/oxlint-rules/no-undestructured-use-state': 'error',
+			'@deslop/oxlint-rules/no-unvalidated-json-decode': 'error',
+			'@deslop/oxlint-rules/schema-type-pair': 'error',
+
 			// Effect owns native capabilities in and outside generators.
 			'effecttsgo/crypto-random-uuid': 'error',
 			'effecttsgo/crypto-random-uuid-in-effect': 'error',
@@ -270,7 +299,6 @@ export default defineConfig({
 			'effecttsgo/effect-do-notation': 'error',
 			'effecttsgo/effect-fn-iife': 'error',
 			'effecttsgo/effect-fn-implicit-any': 'error',
-			'effecttsgo/effect-fn-opportunity': 'error',
 			'effecttsgo/effect-gen-uses-adapter': 'error',
 			'effecttsgo/effect-in-failure': 'error',
 			'effecttsgo/effect-in-void-success': 'error',
@@ -298,6 +326,8 @@ export default defineConfig({
 			'effecttsgo/try-catch-in-effect-gen': 'error',
 			'effecttsgo/unnecessary-effect-gen': 'error',
 			'effecttsgo/unnecessary-fail-yieldable-error': 'error',
+			'effecttsgo/unnecessary-pipe': 'error',
+			'effecttsgo/unnecessary-pipe-chain': 'error',
 
 			// Failures remain typed and recovery remains direct.
 			'effecttsgo/any-unknown-in-error-context': 'error',
@@ -316,10 +346,12 @@ export default defineConfig({
 			// Services and schemas use current, sound class and identity forms.
 			'effecttsgo/class-self-mismatch': 'error',
 			'effecttsgo/deterministic-keys': 'error',
+			'effecttsgo/generic-effect-services': 'error',
 			'effecttsgo/instance-of-schema': 'error',
 			'effecttsgo/new-schema-class': 'error',
 			'effecttsgo/overridden-schema-constructor': 'error',
 			'effecttsgo/prefer-schema-type-property': 'error',
+			'effecttsgo/prefer-typed-schema-decoder': 'error',
 			'effecttsgo/schema-literal-non-finite': 'error',
 			'effecttsgo/schema-number': 'error',
 			'effecttsgo/schema-struct-with-tag': 'error',
@@ -408,6 +440,24 @@ export default defineConfig({
 			'no-restricted-imports': [
 				'error',
 				{
+					paths: [
+						{
+							importNames: [
+								'Children',
+								'Component',
+								'PureComponent',
+								'cloneElement',
+								'createFactory',
+								'createRef',
+								'forwardRef',
+								'memo',
+								'useCallback',
+								'useMemo'
+							],
+							message: 'Use React 19 function components and let React Compiler own memoization.',
+							name: 'react'
+						}
+					],
 					patterns: [
 						{
 							message: 'Use public package exports.',
@@ -452,6 +502,7 @@ export default defineConfig({
 				'globalThis'
 			],
 			'no-restricted-properties': noRestrictedProperties,
+			'no-restricted-exports': ['error', {restrictedNamedExportsPattern: 'Live$'}],
 			'no-shadow': [
 				'error',
 				{allow: ['Array', 'Boolean', 'Console', 'Effect', 'HashMap', 'Number', 'Option', 'Schema', 'String']}
@@ -459,10 +510,14 @@ export default defineConfig({
 			'no-throw-literal': 'error',
 			'no-unneeded-ternary': 'error',
 			'no-useless-assignment': 'error',
+			'no-useless-catch': 'error',
 			'no-useless-call': 'error',
+			'no-useless-computed-key': 'error',
 			'no-useless-concat': 'error',
+			'no-useless-constructor': 'error',
 			'no-useless-rename': 'error',
 			'no-useless-return': 'error',
+			'no-unused-expressions': 'error',
 			'object-shorthand': 'error',
 
 			// Oxc
@@ -480,16 +535,15 @@ export default defineConfig({
 			// React Doctor JSX and component contracts
 			'react-doctor/no-call-component-as-function': 'error',
 			'react-doctor/no-create-context-in-render': 'error',
-			'react-doctor/no-create-ref-in-function-component': 'error',
+			'react-doctor/no-default-props': 'error',
 			'react-doctor/no-inline-exhaustive-style': 'error',
 			'react-doctor/no-jsx-element-type': 'error',
 			'react-doctor/no-many-boolean-props': 'error',
+			'react-doctor/no-prop-types': 'error',
 			'react-doctor/no-uncontrolled-input': 'error',
-			'react-doctor/prefer-module-scope-pure-function': 'error',
 
 			// React Doctor effects and state
 			'react-doctor/no-async-effect-callback': 'error',
-			'react-doctor/no-cascading-set-state': 'error',
 			'react-doctor/no-derived-useState': 'error',
 			'react-doctor/no-effect-event-in-deps': 'error',
 			'react-doctor/no-effect-with-fresh-deps': 'error',
@@ -501,6 +555,10 @@ export default defineConfig({
 			'react-doctor/rerender-functional-setstate': 'error',
 			'react-doctor/rerender-lazy-ref-init': 'error',
 			'react-doctor/rerender-lazy-state-init': 'error',
+			'react-doctor/effect-listener-cleanup-mismatch': 'error',
+			'react-doctor/no-create-object-url-without-revoke': 'error',
+			'react-doctor/no-effect-wrapper-discards-callback-cleanup-return': 'error',
+			'react-doctor/no-stale-timer-ref': 'error',
 
 			// React Doctor browser and legacy APIs
 			'react-doctor/no-event-handler': 'error',
@@ -510,7 +568,6 @@ export default defineConfig({
 
 			// React Doctor rendering and compiler
 			'react-doctor/no-render-in-render': 'error',
-			'react-doctor/react-compiler-no-manual-memoization': 'error',
 			'react-doctor/rendering-conditional-render': 'error',
 
 			// React Doctor visual performance and accessibility
@@ -530,6 +587,9 @@ export default defineConfig({
 			'react/checked-requires-onchange-or-readonly': 'error',
 			'react/exhaustive-deps': 'error',
 			'react/iframe-missing-sandbox': 'error',
+			'react/jsx-boolean-value': ['error', 'never'],
+			'react/jsx-curly-brace-presence': ['error', {children: 'never', propElementValues: 'always', props: 'never'}],
+			'react/jsx-fragments': ['error', 'syntax'],
 			'react/jsx-key': 'error',
 			'react/jsx-no-duplicate-props': 'error',
 			'react/jsx-no-script-url': 'error',
@@ -537,6 +597,7 @@ export default defineConfig({
 			'react/jsx-no-undef': 'error',
 			'react/jsx-no-useless-fragment': 'error',
 			'react/no-children-prop': 'error',
+			'react/no-array-index-key': 'error',
 			'react/no-danger': 'error',
 			'react/no-danger-with-children': 'error',
 			'react/no-unknown-property': 'error',
@@ -554,6 +615,7 @@ export default defineConfig({
 
 			// TypeScript syntax
 			'typescript/ban-ts-comment': ['error', {'ts-nocheck': true}],
+			'typescript/no-meaningless-void-operator': 'error',
 			'typescript/no-restricted-types': [
 				'error',
 				{
@@ -563,16 +625,26 @@ export default defineConfig({
 						Error: 'Use Schema.TaggedErrorClass.',
 						Map: 'Use HashMap.',
 						Promise: 'Use Effect.',
+						Readonly: 'Use a mutable type shape.',
+						ReadonlyArray: 'Use T[].',
+						ReadonlyMap: 'Use HashMap.',
+						ReadonlySet: 'Use HashSet.',
 						Set: 'Use HashSet.',
+						Iterable: 'Use T[].',
 						undefined: 'Use an optional property, optional parameter, inference, or Option.',
 						WeakMap: 'Use Effect-owned state.',
 						WeakSet: 'Use Effect-owned state.'
 					}
 				}
 			],
+			'typescript/no-unnecessary-type-assertion': 'error',
+			'typescript/no-useless-default-assignment': 'error',
+			'typescript/switch-exhaustiveness-check': [
+				'error',
+				{considerDefaultExhaustiveForUnions: true, requireDefaultForNonUnion: false}
+			],
 
 			// Unicorn
-			'unicorn/consistent-function-scoping': 'error',
 			'unicorn/no-immediate-mutation': 'error',
 			'unicorn/no-null': 'error',
 			'unicorn/no-object-as-default-parameter': 'error',
@@ -584,6 +656,7 @@ export default defineConfig({
 			'unicorn/no-useless-switch-case': 'error',
 			'unicorn/no-useless-undefined': 'error',
 			'unicorn/prefer-logical-operator-over-ternary': 'error',
+			'unicorn/prefer-optional-catch-binding': 'error',
 
 			// JavaScript globals and Vite Plus
 			'use-isnan': 'error',

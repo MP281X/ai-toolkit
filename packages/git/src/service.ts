@@ -255,9 +255,6 @@ function repositorySlug(realRoot: string) {
 	const hash = pipe(createHash('sha256').update(realRoot).digest('hex'), String.slice(0, 10))
 	return `${pathSlug(Option.getOrElse(Array.last(String.split('/')(realRoot)), () => realRoot))}-${hash}`
 }
-function branchSlug(branch: string) {
-	return pathSlug(branch)
-}
 function firstWorktreeRoot(worktrees: {root: string}[], fallback: string) {
 	return pipe(
 		Array.head(worktrees),
@@ -1034,7 +1031,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					'.deslop',
 					'worktrees',
 					repositorySlug(repositoryRoot),
-					branchSlug(input.branch)
+					pathSlug(input.branch)
 				)
 				const createdWorktreeRoot = pipe(
 					git.string(input.cwd, ['worktree', 'list', '--porcelain', '-z']),

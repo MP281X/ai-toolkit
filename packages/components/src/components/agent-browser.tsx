@@ -1,4 +1,4 @@
-import {Array, Match, Option, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Match, Number, Option, Predicate, Schema, String, pipe} from 'effect'
 
 import {MonitorIcon, RotateCwIcon} from 'lucide-react'
 import {useEffect, useRef, useState, type PointerEvent, type WheelEvent} from 'react'
@@ -78,7 +78,7 @@ function messageText(source: unknown) {
 
 async function decodeMessage(source: unknown) {
 	const text = source instanceof Blob ? await source.text() : messageText(source)
-	return pipe(Schema.decodeUnknownOption(AgentBrowserStreamMessageFromJson)(text), Option.getOrUndefined)
+	return pipe(Schema.decodeOption(AgentBrowserStreamMessageFromJson)(text), Option.getOrUndefined)
 }
 
 function sendSocket(input: AgentBrowserInput, socket: WebSocket) {
@@ -100,7 +100,7 @@ export function agentBrowserCanvasPoint(input: {
 	rect: {height: number; left: number; top: number; width: number}
 	viewport: {height: number; width: number}
 }) {
-	const scale = Math.min(input.rect.width / input.viewport.width, input.rect.height / input.viewport.height)
+	const scale = Number.min(input.rect.width / input.viewport.width, input.rect.height / input.viewport.height)
 	if (!Schema.is(Schema.Finite)(scale) || scale <= 0) return
 
 	const renderedWidth = input.viewport.width * scale
@@ -112,7 +112,7 @@ export function agentBrowserCanvasPoint(input: {
 		input.viewport.height
 	if (x < 0 || x > input.viewport.width || y < 0 || y > input.viewport.height) return
 
-	return {x: Math.round(x), y: Math.round(y)}
+	return {x: Number.round(x, 0), y: Number.round(y, 0)}
 }
 
 function pointerPoint(

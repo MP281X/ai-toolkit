@@ -169,6 +169,42 @@ const resolveCommentsActionAtom = Atom.family((cwd: string) =>
 	})
 )
 
+const saveCommentActionAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.fn<GitReviewCommentDraft>()(
+		Effect.fn('DiffPage.saveComment')(function* (comment) {
+			const client = yield* RpcClient
+			yield* pipe(
+				client('review.comments.save', {comment, cwd}),
+				Effect.catch(() => Effect.sync(() => toast.error('Failed to save comment.')))
+			)
+		})
+	)
+)
+
+const markReviewedActionAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.fn<GitReviewState['marks']>()(
+		Effect.fn('DiffPage.markReviewed')(function* (marks) {
+			const client = yield* RpcClient
+			yield* pipe(
+				client('review.state.mark', {cwd, marks}),
+				Effect.catch(() => Effect.sync(() => toast.error('Failed to mark file reviewed.')))
+			)
+		})
+	)
+)
+
+const unmarkReviewedActionAtom = Atom.family((cwd: string) =>
+	RpcClient.runtime.fn<GitReviewState['marks']>()(
+		Effect.fn('DiffPage.unmarkReviewed')(function* (marks) {
+			const client = yield* RpcClient
+			yield* pipe(
+				client('review.state.unmark', {cwd, marks}),
+				Effect.catch(() => Effect.sync(() => toast.error('Failed to unmark file reviewed.')))
+			)
+		})
+	)
+)
+
 function groupCommentsByFile<Comment extends {filePath: string}>(comments: Comment[]) {
 	return pipe(
 		comments,
@@ -209,8 +245,8 @@ function ReviewViewPanel(input: {cwd: string}) {
 	const search = Route.useSearch()
 	const suggestedMetadata = useAtomValue(suggestedMetadataAtom(input.cwd))
 	const reviewStateValue = useAtomValue(reviewStateValueAtom(input.cwd))
-	const shortcutsOpenState = useState(false)
-	const selectedScopeState = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
+	const [shortcutsOpen, setShortcutsOpen] = useState(false)
+	const [selectedScope, setSelectedScope] = useState<GitReviewTarget>(() => GitReviewChangesTarget.make({}))
 	if (AsyncResult.isFailure(suggestedMetadata)) throw suggestedMetadata.cause
 
 	const suggestedMetadataLoaded = AsyncResult.isSuccess(suggestedMetadata)
@@ -224,16 +260,13 @@ function ReviewViewPanel(input: {cwd: string}) {
 	const reviewTarget = pipe(
 		Array.appendAll(localCommits, branchCommits),
 		Array.findFirst(commit => commit.hash === search.commit),
-		Option.match({
-			onNone: () => selectedScopeState[0],
-			onSome: commit => GitReviewCommitTarget.make({hash: commit.hash})
-		})
+		Option.match({onNone: () => selectedScope, onSome: commit => GitReviewCommitTarget.make({hash: commit.hash})})
 	)
 	const reviewDiffs = reviewDiffsAtom(ReviewDiffsKey.make({cwd: input.cwd, target: reviewTarget}))
 	const changesReviewDiffs = reviewDiffsAtom(
 		ReviewDiffsKey.make({cwd: input.cwd, target: GitReviewChangesTarget.make({})})
 	)
-	const selectedFilePathState = useState('')
+	const [selectedFilePathValue, setSelectedFilePath] = useState('')
 	const reviewDiffsResult = useAtomValue(reviewDiffs)
 	const changesReviewDiffsResult = useAtomValue(changesReviewDiffs)
 	const reviewDiffsValue = AsyncResult.isSuccess(reviewDiffsResult)
@@ -242,9 +275,9 @@ function ReviewViewPanel(input: {cwd: string}) {
 	const changesReviewDiffsLoaded = AsyncResult.isSuccess(changesReviewDiffsResult)
 	const changesReviewDiffsValue = changesReviewDiffsLoaded ? changesReviewDiffsResult.value : Array.empty<GitDiff>()
 	const selectedFilePath =
-		String.isNonEmpty(selectedFilePathState[0]) &&
-		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathState[0])
-			? selectedFilePathState[0]
+		String.isNonEmpty(selectedFilePathValue) &&
+		Array.some(reviewDiffsValue, diff => diff.filePath === selectedFilePathValue)
+			? selectedFilePathValue
 			: ''
 	const selectedEntry =
 		(String.isNonEmpty(selectedFilePath)
@@ -258,12 +291,12 @@ function ReviewViewPanel(input: {cwd: string}) {
 	const refreshDiffs = useAtomRefresh(reviewDiffs)
 	const refreshChangesDiffs = useAtomRefresh(changesReviewDiffs)
 	const refreshReviewState = useAtomRefresh(reviewStateAtom(input.cwd))
-	const saveComment = useAtomSet(RpcClient.mutation('review.comments.save'), {mode: 'promise'})
+	const saveComment = useAtomSet(saveCommentActionAtom(input.cwd), {mode: 'promise'})
 	const resolveComment = useAtomSet(resolveCommentActionAtom(input.cwd), {mode: 'promise'})
 	const resolveComments = useAtomSet(resolveCommentsActionAtom(input.cwd), {mode: 'promise'})
 	const commentResolutionState = useAtomValue(commentResolutionStateAtom(input.cwd))
-	const markReviewed = useAtomSet(RpcClient.mutation('review.state.mark'), {mode: 'promise'})
-	const unmarkReviewed = useAtomSet(RpcClient.mutation('review.state.unmark'), {mode: 'promise'})
+	const markReviewed = useAtomSet(markReviewedActionAtom(input.cwd), {mode: 'promise'})
+	const unmarkReviewed = useAtomSet(unmarkReviewedActionAtom(input.cwd), {mode: 'promise'})
 	const effectiveComments = Array.map(reviewStateValue.comments, comment => ({
 		...comment,
 		resolving: HashSet.has(commentResolutionState.resolving, comment)
@@ -276,39 +309,23 @@ function ReviewViewPanel(input: {cwd: string}) {
 	const visibleSegmentKeys = pipe(reviewDiffsValue, Array.flatMap(gitReviewMarksForDiff), HashSet.fromIterable)
 	const validReviewMarks = Array.filter(reviewStateValue.marks, mark => HashSet.has(visibleSegmentKeys, mark))
 
-	async function markFileReviewed(marks: GitReviewState['marks']) {
-		try {
-			await markReviewed({payload: {cwd: input.cwd, marks}})
-		} catch {
-			toast.error('Failed to mark file reviewed.')
-		}
-	}
-
-	async function unmarkFileReviewed(marks: GitReviewState['marks']) {
-		try {
-			await unmarkReviewed({payload: {cwd: input.cwd, marks}})
-		} catch {
-			toast.error('Failed to unmark file reviewed.')
-		}
-	}
-
 	async function openFile(filePath: string) {
-		selectedFilePathState[1](filePath)
+		setSelectedFilePath(filePath)
 		const marks = pipe(
 			reviewDiffsValue,
 			Array.findFirst(diff => diff.filePath === filePath),
 			Option.map(gitReviewMarksForDiff),
 			Option.getOrElse(() => Array.empty<GitReviewMark>())
 		)
-		if (!Array.isReadonlyArrayEmpty(marks)) await markFileReviewed(marks)
+		if (!Array.isReadonlyArrayEmpty(marks)) await markReviewed(marks)
 	}
 
 	function selectTarget(target: GitReviewTarget) {
 		startTransition(() => {
 			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
 		})
-		if (target._tag !== 'commit') selectedScopeState[1](target)
-		selectedFilePathState[1]('')
+		if (target._tag !== 'commit') setSelectedScope(target)
+		setSelectedFilePath('')
 	}
 
 	function refreshReview() {
@@ -316,14 +333,6 @@ function ReviewViewPanel(input: {cwd: string}) {
 		refreshDiffs()
 		refreshChangesDiffs()
 		refreshReviewState()
-	}
-
-	async function saveQueuedComment(comment: GitReviewCommentDraft) {
-		try {
-			await saveComment({payload: {comment, cwd: input.cwd}})
-		} catch {
-			toast.error('Failed to save comment.')
-		}
 	}
 
 	async function resolveReviewComment(comment: GitReviewComment & {source: 'github' | 'local'}) {
@@ -347,12 +356,12 @@ function ReviewViewPanel(input: {cwd: string}) {
 	}
 
 	useHotkey({key: '?', shift: true}, () => {
-		shortcutsOpenState[1](true)
+		setShortcutsOpen(true)
 	})
 
 	return (
 		<>
-			<Dialog open={shortcutsOpenState[0]} onOpenChange={shortcutsOpenState[1]}>
+			<Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
 				<DialogContent>
 					<DialogHeader>
 						<DialogTitle>Shortcuts</DialogTitle>
@@ -391,8 +400,8 @@ function ReviewViewPanel(input: {cwd: string}) {
 										<DiffList
 											diffs={reviewDiffsValue}
 											marks={validReviewMarks}
-											markReviewed={markFileReviewed}
-											unmarkReviewed={unmarkFileReviewed}
+											markReviewed={markReviewed}
+											unmarkReviewed={unmarkReviewed}
 											selectedEntry={selectedEntry}
 											openReviewEntry={openFile}
 										/>
@@ -443,12 +452,7 @@ function ReviewViewPanel(input: {cwd: string}) {
 										patch={selectedEntry.patch}
 										comments={selectedEntryComments}
 										onSaveComment={comment => {
-											void saveQueuedComment({
-												body: comment.body,
-												filePath: comment.filePath,
-												lineNumber: comment.lineNumber,
-												side: comment.side
-											})
+											void saveComment(comment)
 										}}
 										onResolveComment={comment => {
 											void resolveReviewComment({...comment, source: comment.source ?? 'local'})
@@ -537,12 +541,12 @@ function CommitActionForm(input: {
 	unpushedCount: number
 	upstream?: {ahead: number; behind: number}
 }) {
-	const commitMessageState = useState('')
+	const [commitMessage, setCommitMessage] = useState('')
 	const actionState = useAtomValue(reviewActionsStateAtom(input.cwd))
 	const generatePublishMessage = useAtomSet(generatePublishMessageActionAtom(input.cwd), {mode: 'promise'})
 	const checkpoint = useAtomSet(checkpointActionAtom(input.cwd), {mode: 'promise'})
 	const publish = useAtomSet(publishActionAtom(input.cwd), {mode: 'promise'})
-	const trimmedCommitMessage = pipe(commitMessageState[0], String.trim)
+	const trimmedCommitMessage = pipe(commitMessage, String.trim)
 	const commitMessagePlaceholder = pipe(
 		Match.value({checkpoints: input.hasCheckpointCommits, dirty: input.dirty, loading: input.loading}),
 		Match.when({loading: true}, () => 'Loading'),
@@ -597,7 +601,7 @@ function CommitActionForm(input: {
 
 		try {
 			await publish(trimmedCommitMessage)
-			commitMessageState[1]('')
+			setCommitMessage('')
 			input.refreshReview()
 		} catch (error) {
 			toast.error(formatError(error))
@@ -616,7 +620,7 @@ function CommitActionForm(input: {
 		}
 
 		try {
-			commitMessageState[1](await generatePublishMessage(null))
+			setCommitMessage(await generatePublishMessage(null))
 		} catch (error) {
 			toast.error(formatError(error))
 		}
@@ -940,7 +944,7 @@ function DiffList(input: {
 	selectedEntry?: GitDiff
 	unmarkReviewed: (marks: GitReviewState['marks']) => unknown
 }) {
-	const collapsedFoldersState = useState(() => HashSet.empty<string>())
+	const [collapsedFolders, setCollapsedFolders] = useState(() => HashSet.empty<string>())
 	const fileTree = buildFileTree(input.diffs)
 	const marksByDiff = pipe(
 		input.diffs,
@@ -957,7 +961,7 @@ function DiffList(input: {
 					<TreeExplorerRow
 						icon={<FolderIcon />}
 						onClick={() => {
-							collapsedFoldersState[1](current =>
+							setCollapsedFolders(current =>
 								HashSet.has(current, node.path) ? HashSet.remove(current, node.path) : HashSet.add(current, node.path)
 							)
 						}}
@@ -965,7 +969,7 @@ function DiffList(input: {
 					>
 						{node.name}
 					</TreeExplorerRow>
-					{!HashSet.has(collapsedFoldersState[0], node.path) && (
+					{!HashSet.has(collapsedFolders, node.path) && (
 						<ul className="border-border/70 ml-[19px] flex flex-col border-l pl-2">
 							{Array.map(node.children, renderNode)}
 						</ul>

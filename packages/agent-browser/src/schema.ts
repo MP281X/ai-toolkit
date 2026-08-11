@@ -5,9 +5,6 @@ export class AgentBrowserError extends Schema.TaggedError<AgentBrowserError>()('
 	message: Schema.String
 }) {}
 
-export type AgentBrowserOpenTabs = typeof AgentBrowserOpenTabs.Type
-export const AgentBrowserOpenTabs = Schema.Struct({origins: Schema.Array(Schema.String), session: Schema.String})
-
 export type AgentBrowserTabSwitch = typeof AgentBrowserTabSwitch.Type
 export const AgentBrowserTabSwitch = Schema.Struct({origin: Schema.String, session: Schema.String})
 
@@ -134,8 +131,4 @@ export function agentBrowserOwnedTabLabels(origins: string[]) {
 			return {labels: HashMap.set(current.labels, entry.origin, label), used: HashSet.add(current.used, label)}
 		}
 	).labels
-}
-
-export function agentBrowserOwnedTabLabel(origin: string) {
-	return labelFor(agentBrowserOwnedTabLabels([origin]), origin)
 }

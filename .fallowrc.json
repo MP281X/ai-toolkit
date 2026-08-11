@@ -8,17 +8,9 @@
 		"packages/components/src/components/svgs/**",
 		"packages/components/src/components/ui/**"
 	],
-	"publicPackages": [
-		"@deslop/agent",
-		"@deslop/agent-browser",
-		"@deslop/ai",
-		"@deslop/components",
-		"@deslop/git",
-		"@deslop/opentelemetry",
-		"@deslop/os",
-		"@deslop/portless",
-		"@deslop/scripts",
-		"@deslop/terminal",
-		"@deslop/vite"
+	"ignoreExports": [
+		{"exports": ["*"], "file": "packages/*/src/schema.ts"},
+		{"exports": ["*"], "file": "packages/components/src/components/**"},
+		{"exports": ["default"], "file": "packages/oxlint-rules/src/oxlint-plugin.ts"}
 	]
 }

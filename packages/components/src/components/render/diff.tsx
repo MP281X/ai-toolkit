@@ -1,4 +1,4 @@
-import {Array, Match, Option, Predicate, String, pipe} from 'effect'
+import {Array, Match, Number, Option, Predicate, String, pipe} from 'effect'
 
 import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
@@ -336,7 +336,7 @@ export function PatchDiff(props: {
 		const rect = containerRef.current.getBoundingClientRect()
 		const clientY = Predicate.isNull(pointerClientYRef.current)
 			? rect.top + rect.height / 2
-			: Math.min(Math.max(pointerClientYRef.current, rect.top), rect.bottom)
+			: Number.clamp({maximum: rect.bottom, minimum: rect.top})(pointerClientYRef.current)
 		scrollAnchorRef.current = captureScrollAnchor(containerRef.current, clientY) ?? null
 		setModeState(current => ({
 			key: modeKey,

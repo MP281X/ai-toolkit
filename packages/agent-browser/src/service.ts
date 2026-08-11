@@ -188,9 +188,9 @@ const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
 	sessionId: string
 	spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
+	const output = yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
 	return pipe(
-		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab']),
-		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson),
+		Schema.decodeOption(AgentBrowserCliTabsFromJson)(output),
 		Option.map(decoded => decoded.data.tabs),
 		Option.getOrElse(() => Array.empty<AgentBrowserCliTab>())
 	)
