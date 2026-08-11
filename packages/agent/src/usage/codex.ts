@@ -27,8 +27,10 @@ import {HttpClient} from 'effect/unstable/http'
 
 import {AgentError, AgentSubscription, AgentUsageData, AgentUsageTokens} from '../schema.ts'
 
+type CodexCredentials = typeof CodexCredentials.Type
 const CodexCredentials = Schema.fromJsonString(Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})}))
 
+type CodexUsage = typeof CodexUsage.Type
 const CodexUsage = Schema.Struct({
 	plan_type: Schema.OptionFromOptionalNullOr(Schema.String, {onNoneEncoding: 'omit'}),
 	rate_limit: Schema.Struct({

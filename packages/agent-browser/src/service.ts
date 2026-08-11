@@ -172,30 +172,27 @@ function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['S
 	return pipe(runAgentBrowser(args), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 }
 
+type AgentBrowserCliTab = typeof AgentBrowserCliTab.Type
 const AgentBrowserCliTab = Schema.Struct({
 	label: Schema.OptionFromNullOr(Schema.String),
 	tabId: Schema.String,
 	url: Schema.String
 })
 
+type AgentBrowserCliTabsFromJson = typeof AgentBrowserCliTabsFromJson.Type
 const AgentBrowserCliTabsFromJson = Schema.fromJsonString(
 	Schema.Struct({data: Schema.Struct({tabs: Schema.Array(AgentBrowserCliTab)})})
 )
-
-function decodeAgentBrowserTabs(output: string) {
-	return pipe(
-		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson)(output),
-		Option.map(decoded => decoded.data.tabs),
-		Option.getOrElse(() => Array.empty<typeof AgentBrowserCliTab.Type>())
-	)
-}
 
 const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
 	sessionId: string
 	spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
-	return decodeAgentBrowserTabs(
-		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
+	return pipe(
+		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab']),
+		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson),
+		Option.map(decoded => decoded.data.tabs),
+		Option.getOrElse(() => Array.empty<AgentBrowserCliTab>())
 	)
 })
 

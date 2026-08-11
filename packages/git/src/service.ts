@@ -211,7 +211,10 @@ function discoveredWorktree(input: {
 	return {branch: input.branch, gitDirectory: input.gitDirectory, main: input.main, root: input.root}
 }
 
+type GitHubRepositoryResponse = typeof GitHubRepositoryResponse.Type
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
+
+type GitHubReviewThreadCommentResponse = typeof GitHubReviewThreadCommentResponse.Type
 const GitHubReviewThreadCommentResponse = Schema.Struct({
 	body: Schema.String,
 	line: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
@@ -219,16 +222,24 @@ const GitHubReviewThreadCommentResponse = Schema.Struct({
 	path: Schema.String,
 	url: Schema.optional(Schema.String)
 })
+
+type GitHubReviewThreadResponse = typeof GitHubReviewThreadResponse.Type
 const GitHubReviewThreadResponse = Schema.Struct({
 	comments: Schema.Struct({nodes: Schema.Array(GitHubReviewThreadCommentResponse)}),
 	diffSide: Schema.optional(Schema.String),
 	id: Schema.String,
 	isResolved: Schema.Boolean
 })
+
+type GitHubPullRequestResponse = typeof GitHubPullRequestResponse.Type
 const GitHubPullRequestResponse = Schema.Struct({
 	reviewThreads: Schema.optional(Schema.Struct({nodes: Schema.Array(GitHubReviewThreadResponse)}))
 })
+
+type GitHubReviewRepositoryResponse = typeof GitHubReviewRepositoryResponse.Type
 const GitHubReviewRepositoryResponse = Schema.Struct({pullRequest: Schema.optional(GitHubPullRequestResponse)})
+
+type GitHubReviewThreadsResponse = typeof GitHubReviewThreadsResponse.Type
 const GitHubReviewThreadsResponse = Schema.Struct({
 	data: Schema.optional(Schema.Struct({repository: Schema.optional(GitHubReviewRepositoryResponse)}))
 })

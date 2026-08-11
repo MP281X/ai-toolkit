@@ -59,9 +59,10 @@ const suggestedMetadataAtom = Atom.family((cwd: string) =>
 	)
 )
 
+type ReviewDiffsKey = typeof ReviewDiffsKey.Type
 const ReviewDiffsKey = Schema.Struct({cwd: Schema.String, target: GitReviewTarget})
 
-const reviewDiffsAtom = Atom.family((input: typeof ReviewDiffsKey.Type) =>
+const reviewDiffsAtom = Atom.family((input: ReviewDiffsKey) =>
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,

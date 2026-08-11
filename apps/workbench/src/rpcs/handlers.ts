@@ -44,6 +44,7 @@ import {Scripts} from '@deslop/scripts/service'
 import {TerminalError, terminalStatusActive} from '@deslop/terminal/schema'
 import {Terminal} from '@deslop/terminal/service'
 
+type AgentSessionKey = typeof AgentSessionKey.Type
 const AgentSessionKey = Schema.Struct({cwd: Schema.String, uuid: Schema.String})
 
 type ScriptSessionKey = typeof ScriptSessionKey.Type
@@ -134,7 +135,7 @@ function makeAgentSession(input: {
 	cwd: string
 	preparedCommand: ChildProcess.StandardCommand
 	profile: AgentProfile
-	sessions: HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>
+	sessions: HashMap.HashMap<AgentSessionKey, AgentSession>
 	uuid: string
 }) {
 	const labelCount = pipe(
@@ -626,10 +627,8 @@ export const RpcHandlers = RpcContracts.toLayer(
 			return {agentProfiles, projects: sidebarProjects}
 		})
 
-		const agents = yield* SubscriptionRef.make<HashMap.HashMap<typeof AgentSessionKey.Type, AgentSession>>(
-			HashMap.empty()
-		)
-		const removeAgent = Effect.fnUntraced(function* (payload: typeof AgentSessionKey.Type) {
+		const agents = yield* SubscriptionRef.make<HashMap.HashMap<AgentSessionKey, AgentSession>>(HashMap.empty())
+		const removeAgent = Effect.fnUntraced(function* (payload: AgentSessionKey) {
 			const session = pipe(yield* SubscriptionRef.get(agents), HashMap.get(payload), Option.getOrUndefined)
 			yield* SubscriptionRef.update(agents, current => HashMap.remove(current, payload))
 			if (Predicate.isUndefined(session)) return

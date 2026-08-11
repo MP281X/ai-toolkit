@@ -2,6 +2,7 @@ import {Array, Context, Effect, FileSystem, HashMap, Layer, Option, Path, Record
 
 import {ChildProcess} from 'effect/unstable/process'
 
+type ScriptsPackageJson = typeof ScriptsPackageJson.Type
 const ScriptsPackageJson = Schema.Struct({
 	deslop: Schema.optional(Schema.Struct({dev: Schema.optional(Schema.Array(Schema.String))})),
 	scripts: Schema.optional(Schema.Record(Schema.String, Schema.String))

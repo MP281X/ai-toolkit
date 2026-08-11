@@ -140,17 +140,14 @@ const portfolioAtom = Atom.keepAlive(
 function getDisplayCursorTarget(
 	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: Option.Option<{x: number; y: number}>,
-	viewport: {width: number; height: number}
+	viewport: {width: number; height: number},
+	localPointer?: {x: number; y: number}
 ) {
-	return pipe(
-		localPointer,
-		Option.filter(() => isMe),
-		Option.match({
-			onNone: () => ({x: cursor.x * viewport.width, y: cursor.y * viewport.height}),
-			onSome: pointer => ({x: pointer.x * viewport.width, y: pointer.y * viewport.height})
-		})
-	)
+	if (isMe && Predicate.isNotUndefined(localPointer)) {
+		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
+	}
+
+	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
 }
 
 function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
@@ -189,10 +186,10 @@ function syncCursorMotion(
 	motion: ReturnType<typeof createCursorMotion>,
 	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: Option.Option<{x: number; y: number}>,
-	viewport: {width: number; height: number}
+	viewport: {width: number; height: number},
+	localPointer?: {x: number; y: number}
 ) {
-	const nextTarget = getDisplayCursorTarget(cursor, isMe, localPointer, viewport)
+	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport, localPointer)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
 		return createCursorMotion(nextTarget, viewport)
@@ -314,13 +311,13 @@ function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width:
 function CursorEl(input: {
 	cursor: PortfolioVisitor
 	isMe: boolean
-	localPointer: Option.Option<{x: number; y: number}>
+	localPointer?: {x: number; y: number}
 	viewport: {width: number; height: number}
 }) {
 	const nodeRef = useRef<HTMLDivElement | null>(null)
 	const [initialMotion] = useState(() =>
 		createCursorMotion(
-			getDisplayCursorTarget(input.cursor, input.isMe, input.localPointer, input.viewport),
+			getDisplayCursorTarget(input.cursor, input.isMe, input.viewport, input.localPointer),
 			input.viewport
 		)
 	)
@@ -344,8 +341,8 @@ function CursorEl(input: {
 			motionRef.current,
 			input.cursor,
 			input.isMe,
-			input.localPointer,
-			input.viewport
+			input.viewport,
+			input.localPointer
 		)
 
 		if (nodeRef.current) setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
@@ -364,8 +361,8 @@ function CursorEl(input: {
 					motionRef.current,
 					latestRef.current.cursor,
 					latestRef.current.isMe,
-					latestRef.current.localPointer,
-					latestRef.current.viewport
+					latestRef.current.viewport,
+					latestRef.current.localPointer
 				),
 				now
 			)
@@ -820,7 +817,7 @@ function ShortcutsOverlay(input: {onClose: () => void}) {
 
 function RealtimeLayer(input: {
 	identityColor: string
-	localPointer: Option.Option<{x: number; y: number}>
+	localPointer?: {x: number; y: number}
 	viewport: {width: number; height: number}
 }) {
 	const portfolio = useAtomSuspense(portfolioAtom)
@@ -851,23 +848,18 @@ function RealtimeLayer(input: {
 
 function PortfolioRoute() {
 	const viewport = useViewport()
-	const sectionRefs = useRef<(HTMLElement | null)[] | null>(null)
+	const sectionRefs = useRef<(HTMLElement | null)[]>([])
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | null>(null)
-	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number} | null>(null)
+	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(void 0)
+	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number} | undefined>(void 0)
 	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [localPointer, setLocalPointer] = useState(() => Option.none<{x: number; y: number}>())
+	const [localPointer, setLocalPointer] = useState<{x: number; y: number}>()
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
-	function getSectionRefs() {
-		sectionRefs.current ??= Array.makeBy(7, () => null)
-		return sectionRefs.current
-	}
-
 	function registerSection(id: number, node: HTMLElement | null) {
-		getSectionRefs()[id] = node
+		sectionRefs.current[id] = node
 	}
 
 	useEffect(
@@ -878,7 +870,7 @@ function PortfolioRoute() {
 	)
 
 	function scrollTo(index: number) {
-		const target = getSectionRefs()[index]
+		const target = sectionRefs.current[index]
 		if (!target) return
 
 		target.scrollIntoView({behavior: 'smooth', block: 'start'})
@@ -887,10 +879,7 @@ function PortfolioRoute() {
 
 	function updateColor() {
 		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = pipe(
-			localPointer,
-			Option.getOrElse(() => lastSentPointerRef.current ?? {x: 0.5, y: 0.5})
-		)
+		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
 
 		identity.color = nextColor
 		setIdentityColor(nextColor)
@@ -907,7 +896,7 @@ function PortfolioRoute() {
 			y: Math.max(0, Math.min(0.999_999, clientY / viewport.height))
 		}
 
-		setLocalPointer(Option.some(nextPointer))
+		setLocalPointer(nextPointer)
 		queuedPointerRef.current = nextPointer
 
 		if (pointerFrameRef.current !== 0) return
@@ -915,21 +904,21 @@ function PortfolioRoute() {
 		pointerFrameRef.current = requestAnimationFrame(() => {
 			pointerFrameRef.current = 0
 
-			if (Predicate.isNull(queuedPointerRef.current)) return
+			if (Predicate.isUndefined(queuedPointerRef.current)) return
 
 			const now = performance.now()
 
-			if (Predicate.isNotNull(lastSentPointerRef.current)) {
+			if (Predicate.isNotUndefined(lastSentPointerRef.current)) {
 				const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
 				const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
 
 				if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-					queuedPointerRef.current = null
+					queuedPointerRef.current = undefined
 					return
 				}
 			}
 
-			if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
+			if (Predicate.isNotUndefined(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
 
 			lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 
@@ -937,7 +926,7 @@ function PortfolioRoute() {
 				payload: {color: identityColor, id: identity.id, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 			})
 
-			queuedPointerRef.current = null
+			queuedPointerRef.current = undefined
 		})
 	}
 
@@ -989,7 +978,7 @@ function PortfolioRoute() {
 			onScroll={event => {
 				const viewportMiddle = event.currentTarget.scrollTop + event.currentTarget.clientHeight / 2
 				currentSectionRef.current = pipe(
-					getSectionRefs(),
+					sectionRefs.current,
 					Array.findLastIndex(section => Predicate.isNotNull(section) && section.offsetTop <= viewportMiddle),
 					Option.getOrElse(() => 0)
 				)

@@ -24,15 +24,18 @@ import {HttpClient} from 'effect/unstable/http'
 
 import {AgentError, AgentUsageData, AgentUsageTokens} from '../schema.ts'
 
+type ClaudeCredentials = typeof ClaudeCredentials.Type
 const ClaudeCredentials = Schema.fromJsonString(
 	Schema.Struct({claudeAiOauth: Schema.Struct({accessToken: Schema.String})})
 )
 
+type ClaudeUsageWindow = typeof ClaudeUsageWindow.Type
 const ClaudeUsageWindow = Schema.Struct({
 	resets_at: Schema.OptionFromOptionalNullOr(Schema.String, {onNoneEncoding: 'omit'}),
 	utilization: Schema.Finite
 })
 
+type ClaudeUsage = typeof ClaudeUsage.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
@@ -216,7 +219,7 @@ export const makeLayerClaudeUsage = Effect.fnUntraced(function* (_config: {provi
 	return {subscription, usage}
 })
 
-function claudeWindow(input: typeof ClaudeUsageWindow.Type) {
+function claudeWindow(input: ClaudeUsageWindow) {
 	return {resetsAt: Option.getOrUndefined(input.resets_at), utilization: input.utilization}
 }
 

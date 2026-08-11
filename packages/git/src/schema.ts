@@ -5,6 +5,7 @@ export class GitError extends Schema.TaggedError<GitError>()('GitError', {
 	message: Schema.optional(Schema.String)
 }) {}
 
+type GitDiffStatus = typeof GitDiffStatus.Type
 const GitDiffStatus = Schema.Literals(['added', 'deleted', 'modified', 'renamed'])
 
 export type GitDiff = typeof GitDiff.Type

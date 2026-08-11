@@ -30,6 +30,7 @@ const AgentBrowserStreamTab = Schema.Struct({
 	url: Schema.String
 })
 
+type AgentBrowserStreamMessageFromJson = typeof AgentBrowserStreamMessageFromJson.Type
 const AgentBrowserStreamMessageFromJson = Schema.fromJsonString(
 	Schema.Union([
 		AgentBrowserFrame,
@@ -60,9 +61,9 @@ const AgentBrowserInput = Schema.Union([
 		windowsVirtualKeyCode: Schema.optional(Schema.Finite)
 	})
 ])
-const AgentBrowserInputFromJson = Schema.fromJsonString(AgentBrowserInput)
 
-const emptyTabs = Array.empty<{id: string; label: string; streamLabel: string; url: string}>()
+type AgentBrowserInputFromJson = typeof AgentBrowserInputFromJson.Type
+const AgentBrowserInputFromJson = Schema.fromJsonString(AgentBrowserInput)
 
 export function agentBrowserStreamUrl(session: string) {
 	const url = new URL(`/api/agent-browser/sessions/${encodeURIComponent(session)}/stream`, location.origin)
@@ -80,8 +81,8 @@ async function decodeMessage(source: unknown) {
 	return pipe(Schema.decodeUnknownOption(AgentBrowserStreamMessageFromJson)(text), Option.getOrUndefined)
 }
 
-function sendSocket(socket: WebSocket | null, input: AgentBrowserInput) {
-	if (Predicate.isNull(socket) || socket.readyState !== WebSocket.OPEN) return
+function sendSocket(socket: WebSocket | undefined, input: AgentBrowserInput) {
+	if (Predicate.isUndefined(socket) || socket.readyState !== WebSocket.OPEN) return
 	socket.send(Schema.encodeSync(AgentBrowserInputFromJson)(input))
 }
 
@@ -131,17 +132,17 @@ function mouseButton(eventType: 'mouseMoved' | 'mousePressed' | 'mouseReleased' 
 	return buttons === 1 ? ('left' as const) : ('none' as const)
 }
 
-function frameMessage(value: typeof AgentBrowserStreamMessageFromJson.Type | undefined) {
+function frameMessage(value: AgentBrowserStreamMessageFromJson | undefined) {
 	return value?.type === 'frame' ? value : undefined
 }
 
-function tabsMessage(value: typeof AgentBrowserStreamMessageFromJson.Type | undefined) {
+function tabsMessage(value: AgentBrowserStreamMessageFromJson | undefined) {
 	return value?.type === 'tabs' ? value.tabs : undefined
 }
 
 export function agentBrowserActiveOwnedTabId(input: {
 	ownedTabs: {id: string; label: string; streamLabel: string; url: string}[]
-	streamTabs: Extract<typeof AgentBrowserStreamMessageFromJson.Type, {type: 'tabs'}>['tabs']
+	streamTabs: Extract<AgentBrowserStreamMessageFromJson, {type: 'tabs'}>['tabs']
 }) {
 	return pipe(
 		input.streamTabs,
@@ -184,14 +185,14 @@ export function AgentBrowser(props: {
 	tabs?: {id: string; label: string; streamLabel: string; url: string}[]
 }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
-	const contextRef = useRef<CanvasRenderingContext2D | null>(null)
-	const socketRef = useRef<WebSocket | null>(null)
-	const tabsRef = useRef<typeof emptyTabs>(props.tabs ?? [])
-	const onSelectTabRef = useRef<typeof props.onSelectTab | null>(null)
+	const contextRef = useRef<CanvasRenderingContext2D | undefined>(void 0)
+	const socketRef = useRef<WebSocket | undefined>(void 0)
+	const tabsRef = useRef(props.tabs)
+	const onSelectTabRef = useRef(props.onSelectTab)
 	const viewportRef = useRef({height: 900, width: 1600})
 	const canvasSizeRef = useRef({height: 0, width: 0})
-	const latestFrameRef = useRef<{frame: AgentBrowserFrame; serial: number} | null>(null)
-	const rafRef = useRef<number | null>(null)
+	const latestFrameRef = useRef<{frame: AgentBrowserFrame; serial: number} | undefined>(void 0)
+	const rafRef = useRef<number | undefined>(void 0)
 	const drawingRef = useRef(false)
 	const drawnSerialRef = useRef(0)
 	const frameSerialRef = useRef(0)
@@ -200,21 +201,21 @@ export function AgentBrowser(props: {
 	const [hasFrame, setHasFrame] = useState(false)
 	const streamUrl =
 		props.streamUrl ?? (Predicate.isNotUndefined(props.session) ? agentBrowserStreamUrl(props.session) : undefined)
-	const tabs = props.tabs ?? emptyTabs
+	const tabs = props.tabs ?? []
 
 	useEffect(() => {
-		tabsRef.current = tabs
-	}, [tabs])
+		tabsRef.current = props.tabs
+	}, [props.tabs])
 
 	useEffect(() => {
 		onSelectTabRef.current = props.onSelectTab
 	}, [props.onSelectTab])
 
 	function requestDraw() {
-		if (Predicate.isNotNull(rafRef.current) || drawingRef.current) return
+		if (Predicate.isNotUndefined(rafRef.current) || drawingRef.current) return
 		rafRef.current = requestAnimationFrame(() => {
-			rafRef.current = null
-			if (Predicate.isNotNull(latestFrameRef.current)) void drawFrame(latestFrameRef.current)
+			rafRef.current = undefined
+			if (Predicate.isNotUndefined(latestFrameRef.current)) void drawFrame(latestFrameRef.current)
 		})
 	}
 
@@ -222,7 +223,7 @@ export function AgentBrowser(props: {
 		drawingRef.current = true
 		try {
 			const bitmap = await decodeFrame(queued.frame)
-			if (Predicate.isNull(latestFrameRef.current) || latestFrameRef.current.serial !== queued.serial) {
+			if (Predicate.isUndefined(latestFrameRef.current) || latestFrameRef.current.serial !== queued.serial) {
 				bitmap.close()
 				return
 			}
@@ -238,9 +239,9 @@ export function AgentBrowser(props: {
 				canvasRef.current.width = viewport.width
 				canvasRef.current.height = viewport.height
 				canvasSizeRef.current = viewport
-				contextRef.current = null
+				contextRef.current = undefined
 			}
-			const context = contextRef.current ?? canvasRef.current.getContext('2d')
+			const context = contextRef.current ?? canvasRef.current.getContext('2d') ?? undefined
 			contextRef.current = context
 			context?.drawImage(bitmap, 0, 0, viewport.width, viewport.height)
 			bitmap.close()
@@ -251,7 +252,7 @@ export function AgentBrowser(props: {
 			}
 		} finally {
 			drawingRef.current = false
-			if (Predicate.isNotNull(latestFrameRef.current) && latestFrameRef.current.serial > drawnSerialRef.current) {
+			if (Predicate.isNotUndefined(latestFrameRef.current) && latestFrameRef.current.serial > drawnSerialRef.current) {
 				requestDraw()
 			}
 		}
@@ -270,11 +271,11 @@ export function AgentBrowser(props: {
 			setActiveTabId(undefined)
 		})
 		hasFrameRef.current = false
-		latestFrameRef.current = null
+		latestFrameRef.current = undefined
 		drawnSerialRef.current = 0
 		frameSerialRef.current = 0
-		if (Predicate.isNotNull(rafRef.current)) cancelAnimationFrame(rafRef.current)
-		rafRef.current = null
+		if (Predicate.isNotUndefined(rafRef.current)) cancelAnimationFrame(rafRef.current)
+		rafRef.current = undefined
 		if (Predicate.isNull(canvasRef.current)) return
 		contextRef.current?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
 	}, [streamUrl])
@@ -304,7 +305,7 @@ export function AgentBrowser(props: {
 
 				const streamTabs = tabsMessage(message)
 				if (Predicate.isNotUndefined(streamTabs)) {
-					const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current, streamTabs})
+					const nextActive = agentBrowserActiveOwnedTabId({ownedTabs: tabsRef.current ?? [], streamTabs})
 					setActiveTabId(current => (current === nextActive ? current : nextActive))
 				}
 			}
@@ -318,13 +319,13 @@ export function AgentBrowser(props: {
 		return () => {
 			abort.abort()
 			socketRef.current?.close()
-			socketRef.current = null
+			socketRef.current = undefined
 		}
 	}, [streamUrl])
 
 	useEffect(
 		() => () => {
-			if (Predicate.isNotNull(rafRef.current)) cancelAnimationFrame(rafRef.current)
+			if (Predicate.isNotUndefined(rafRef.current)) cancelAnimationFrame(rafRef.current)
 		},
 		[]
 	)

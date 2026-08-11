@@ -22,6 +22,7 @@ import {OsError, Resources} from '@deslop/os/schema'
 import {PortlessRun} from '@deslop/portless/schema'
 import {TerminalError, TerminalFrame, TerminalInput, TerminalStatus} from '@deslop/terminal/schema'
 
+type CwdPayload = typeof CwdPayload.Type
 const CwdPayload = Schema.Struct({cwd: Schema.String})
 
 const TerminalPayloadFields = {
@@ -35,6 +36,7 @@ const TerminalPayloadFields = {
 export type TerminalPayload = typeof TerminalPayload.Type
 export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 
+type TerminalStatusPayload = typeof TerminalStatusPayload.Type
 const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
 
 export type AgentSession = typeof AgentSession.Type
@@ -80,6 +82,7 @@ const SidebarProject = Schema.Struct({
 export type HomeSidebar = typeof HomeSidebar.Type
 const HomeSidebar = Schema.Struct({agentProfiles: Schema.Array(AgentProfile), projects: Schema.Array(SidebarProject)})
 
+type PublishDraftError = typeof PublishDraftError.Type
 const PublishDraftError = Schema.Union([GitError, AiError])
 
 export class RpcContracts extends RpcGroup.make(

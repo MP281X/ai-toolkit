@@ -12,9 +12,10 @@ import {toast} from '@deslop/components/ui/sonner'
 import {formatError} from '@deslop/components/utils'
 import {terminalStatusActive} from '@deslop/terminal/schema'
 
+type AgentBrowserRouteSearch = typeof AgentBrowserRouteSearch.Type
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-export function WorktreeAgentBrowser(input: {origin?: string; worktree: string}) {
+export function WorktreeAgentBrowser(input: AgentBrowserRouteSearch & {worktree: string}) {
 	const activeSidebar = useAtomSuspense(activeSidebarAtom(input.worktree))
 	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'), {mode: 'promise'})
 	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'), {mode: 'promise'})

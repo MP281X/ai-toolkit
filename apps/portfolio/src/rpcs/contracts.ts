@@ -40,14 +40,13 @@ export const PortfolioVisitorRemoved = Schema.TaggedStruct('visitor-removed', {i
 export type PortfolioTrailAdded = typeof PortfolioTrailAdded.Type
 export const PortfolioTrailAdded = Schema.TaggedStruct('trail-added', {trail: PortfolioTrail})
 
+export type PortfolioEvent = typeof PortfolioEvent.Type
 const PortfolioEvent = Schema.Union([
 	PortfolioSnapshot,
 	PortfolioVisitorUpserted,
 	PortfolioVisitorRemoved,
 	PortfolioTrailAdded
 ])
-
-export type PortfolioEvent = typeof PortfolioEvent.Type
 
 export class RpcContracts extends RpcGroup.make(
 	Rpc.make('portfolio.join', {
