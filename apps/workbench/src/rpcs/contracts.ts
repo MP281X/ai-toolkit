@@ -36,6 +36,13 @@ const TerminalPayloadFields = {
 export type TerminalPayload = typeof TerminalPayload.Type
 export const TerminalPayload = Schema.Struct(TerminalPayloadFields)
 
+type TerminalBatchPayload = typeof TerminalBatchPayload.Type
+const TerminalBatchPayload = Schema.Struct({
+	active: Schema.Boolean,
+	cwd: Schema.String,
+	sessionIds: Schema.Array(Schema.String)
+})
+
 type TerminalStatusPayload = typeof TerminalStatusPayload.Type
 const TerminalStatusPayload = Schema.Struct(TerminalStatus.fields)
 
@@ -148,6 +155,7 @@ export class RpcContracts extends RpcGroup.make(
 		payload: Schema.Struct({...TerminalPayloadFields, cols: Schema.Finite, rows: Schema.Finite})
 	}),
 	Rpc.make('terminal.restart', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
+	Rpc.make('terminal.setActive', {error: TerminalError, payload: TerminalBatchPayload}),
 	Rpc.make('terminal.status', {error: TerminalError, payload: TerminalPayload, stream: true, success: TerminalStatus}),
 	Rpc.make('terminal.stop', {error: TerminalError, payload: TerminalPayload, success: TerminalStatus}),
 	Rpc.make('terminal.attach', {

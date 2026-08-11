@@ -1,7 +1,60 @@
-import {Array, Option, String, pipe} from 'effect'
+// Oxlint rules are synchronous; the manifest rule must read its repository boundary before reporting.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
+import {readFileSync, readdirSync} from 'node:fs'
+
+import {Array, HashSet, Option, Record, Schema, String, pipe} from 'effect'
 
 import {definePlugin} from '@oxlint/plugins'
 import type {Context, ESTree, Scope, Variable} from '@oxlint/plugins'
+
+type PackageManifest = typeof PackageManifest.Type
+const PackageManifest = Schema.fromJsonString(
+	Schema.Struct({
+		dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		peerDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String))
+	})
+)
+
+function dependencyNames(manifest: PackageManifest) {
+	return pipe(
+		[
+			manifest.dependencies ?? {},
+			manifest.devDependencies ?? {},
+			manifest.optionalDependencies ?? {},
+			manifest.peerDependencies ?? {}
+		],
+		Array.flatMap(Record.keys)
+	)
+}
+
+function duplicateRootDependencies() {
+	const root = new URL('../../../', import.meta.url)
+	const rootDependencies = pipe(
+		Schema.decodeSync(PackageManifest)(readFileSync(new URL('package.json', root), 'utf8')),
+		dependencyNames,
+		HashSet.fromIterable
+	)
+	return pipe(
+		['apps', 'packages'],
+		Array.flatMap(directory =>
+			Array.map(readdirSync(new URL(`${directory}/`, root)), name => ({
+				manifest: Schema.decodeSync(PackageManifest)(
+					readFileSync(new URL(`${directory}/${name}/package.json`, root), 'utf8')
+				),
+				path: `${directory}/${name}/package.json`
+			}))
+		),
+		Array.flatMap(input =>
+			pipe(
+				dependencyNames(input.manifest),
+				Array.filter(name => HashSet.has(rootDependencies, name)),
+				Array.map(name => ({name, path: input.path}))
+			)
+		)
+	)
+}
 
 function variableFromScope(input: {name: string; scope: Scope | null}): Option.Option<Variable> {
 	if (input.scope === null) return Option.none()
@@ -14,23 +67,6 @@ function variableFromScope(input: {name: string; scope: Scope | null}): Option.O
 
 function variableFor(context: Context, node: ESTree.IdentifierReference) {
 	return variableFromScope({name: node.name, scope: context.sourceCode.getScope(node)})
-}
-
-function importSource(variable: ReturnType<typeof variableFor>) {
-	return pipe(
-		variable,
-		Option.flatMap(resolvedVariable =>
-			Array.findFirst(
-				resolvedVariable.defs,
-				definition => definition.type === 'ImportBinding' && definition.parent?.type === 'ImportDeclaration'
-			)
-		),
-		Option.map(definition =>
-			definition.type === 'ImportBinding' && definition.parent?.type === 'ImportDeclaration'
-				? definition.parent.source.value
-				: ''
-		)
-	)
 }
 
 function isImportBinding(input: {
@@ -164,7 +200,7 @@ function isSchemaCompilerCall(input: {context: Context; node: ESTree.CallExpress
 	}
 	return pipe(
 		memberName(input.node.callee),
-		Option.exists(name => String.startsWith('decode')(name) || String.startsWith('encode')(name))
+		Option.exists(name => /^(?:decode|encode)(?:Unknown)?(?:Effect|Exit|Option|Promise|Result|Sync)$/u.test(name))
 	)
 }
 
@@ -273,6 +309,16 @@ function returnedExpression(node: ESTree.Function | ESTree.ArrowFunctionExpressi
 	return node.body.body[0].argument
 }
 
+function hasSingleStatementExpression(node: ESTree.Function | ESTree.ArrowFunctionExpression) {
+	if (node.body === null) return false
+	if (node.body.type !== 'BlockStatement') return true
+	if (node.body.body.length !== 1) return false
+	const statement = node.body.body[0]
+	return (
+		statement?.type === 'ExpressionStatement' || (statement?.type === 'ReturnStatement' && statement.argument !== null)
+	)
+}
+
 function exactForwardingFunction(node: ESTree.Function | ESTree.ArrowFunctionExpression) {
 	const names = pipe(node.params, Array.map(parameterName), Array.getSomes)
 	const returned = returnedExpression(node)
@@ -282,6 +328,27 @@ function exactForwardingFunction(node: ESTree.Function | ESTree.ArrowFunctionExp
 		(returned.type === 'CallExpression' || returned.type === 'NewExpression') &&
 		returned.callee.type === 'Identifier' &&
 		forwardedCall({names, node: returned})
+	)
+}
+
+function singleUseThunk(input: {context: Context; node: ESTree.Function | ESTree.ArrowFunctionExpression}) {
+	if (
+		input.node.params.length !== 0 ||
+		input.node.typeParameters !== null ||
+		!hasSingleStatementExpression(input.node)
+	) {
+		return false
+	}
+	let name = ''
+	if (input.node.type === 'FunctionDeclaration') {
+		name = input.node.id?.name ?? ''
+	} else if (input.node.parent.type === 'VariableDeclarator' && input.node.parent.id.type === 'Identifier') {
+		name = input.node.parent.id.name
+	}
+	if (String.isEmpty(name)) return false
+	return pipe(
+		variableFromScope({name, scope: input.context.sourceCode.getScope(input.node)}),
+		Option.exists(variable => Array.filter(variable.references, reference => reference.isRead()).length === 1)
 	)
 }
 
@@ -397,21 +464,25 @@ function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression
 	)
 }
 
-function directRpcPromise(input: {context: Context; node: ESTree.CallExpression}) {
+function promiseAtom(input: {context: Context; node: ESTree.CallExpression}) {
 	const options = input.node.arguments[1]
 	if (
 		!String.endsWith('.tsx')(input.context.filename) ||
 		input.node.callee.type !== 'Identifier' ||
-		!isImportBinding({
-			context: input.context,
-			importedName: 'useAtomSet',
-			node: input.node.callee,
-			source: '@effect/atom-react'
-		}) ||
-		input.node.arguments[0]?.type !== 'CallExpression' ||
-		input.node.arguments[0].callee.type !== 'MemberExpression' ||
-		!Option.contains(memberName(input.node.arguments[0].callee), 'mutation') ||
-		input.node.arguments[0].callee.object.type !== 'Identifier' ||
+		!(
+			isImportBinding({
+				context: input.context,
+				importedName: 'useAtom',
+				node: input.node.callee,
+				source: '@effect/atom-react'
+			}) ||
+			isImportBinding({
+				context: input.context,
+				importedName: 'useAtomSet',
+				node: input.node.callee,
+				source: '@effect/atom-react'
+			})
+		) ||
 		options?.type !== 'ObjectExpression' ||
 		!Array.some(
 			options.properties,
@@ -424,9 +495,29 @@ function directRpcPromise(input: {context: Context; node: ESTree.CallExpression}
 	) {
 		return false
 	}
+	return true
+}
+
+function promiseAtomSetter(input: {context: Context; node: ESTree.IdentifierReference}) {
 	return pipe(
-		importSource(variableFor(input.context, input.node.arguments[0].callee.object)),
-		Option.exists(source => /(?:^|\/)atomRuntime\.ts$/u.test(source))
+		variableFor(input.context, input.node),
+		Option.exists(variable =>
+			Array.some(variable.defs, definition => {
+				if (definition.type !== 'Variable' || definition.node.type !== 'VariableDeclarator') return false
+				if (
+					definition.node.init?.type !== 'CallExpression' ||
+					!promiseAtom({context: input.context, node: definition.node.init})
+				) {
+					return false
+				}
+				if (definition.node.id.type === 'Identifier') return definition.node.id.name === input.node.name
+				return (
+					definition.node.id.type === 'ArrayPattern' &&
+					definition.node.id.elements[1]?.type === 'Identifier' &&
+					definition.node.id.elements[1].name === input.node.name
+				)
+			})
+		)
 	)
 }
 
@@ -443,14 +534,12 @@ const plugin = definePlugin({
 			}),
 			meta: {type: 'problem'}
 		},
-		'no-direct-rpc-promise-in-component': {
-			create: context => ({
-				CallExpression: node => {
-					if (directRpcPromise({context, node})) {
-						context.report({
-							message: 'Move this RPC mutation, pending state, and failure policy into an action Atom.',
-							node
-						})
+		'no-duplicate-root-dependency': {
+			createOnce: context => ({
+				Program: program => {
+					if (!String.endsWith('/vite.config.ts')(context.filename)) return
+					for (const duplicate of duplicateRootDependencies()) {
+						context.report({message: `${duplicate.path} redeclares root dependency ${duplicate.name}.`, node: program})
 					}
 				}
 			}),
@@ -502,14 +591,14 @@ const plugin = definePlugin({
 					if (
 						!isRuleOrContextCallback(node) &&
 						(node.parent.type === 'VariableDeclarator' || node.parent.type === 'Property') &&
-						exactForwardingFunction(node)
+						(exactForwardingFunction(node) || singleUseThunk({context, node}))
 					) {
-						context.report({message: 'Inline this unchanged forwarding function.', node})
+						context.report({message: 'Inline this function at its only use site.', node})
 					}
 				},
 				FunctionDeclaration: node => {
-					if (exactForwardingFunction(node)) {
-						context.report({message: 'Inline this unchanged forwarding function.', node})
+					if (exactForwardingFunction(node) || singleUseThunk({context, node})) {
+						context.report({message: 'Inline this function at its only use site.', node})
 					}
 				},
 				FunctionExpression: node => {
@@ -518,9 +607,9 @@ const plugin = definePlugin({
 						(node.parent.type === 'VariableDeclarator' ||
 							node.parent.type === 'Property' ||
 							(node.parent.type === 'MethodDefinition' && node.parent.override !== true)) &&
-						exactForwardingFunction(node)
+						(exactForwardingFunction(node) || singleUseThunk({context, node}))
 					) {
-						context.report({message: 'Inline this unchanged forwarding function.', node})
+						context.report({message: 'Inline this function at its only use site.', node})
 					}
 				},
 				VariableDeclarator: node => {
@@ -550,6 +639,24 @@ const plugin = definePlugin({
 				CallExpression: node => {
 					if (unknownJsonSchema({context, node})) {
 						context.report({message: 'Decode JSON through its protocol Schema instead of Schema.Unknown.', node})
+					}
+				}
+			}),
+			meta: {type: 'problem'}
+		},
+		'no-void-promise-atom': {
+			create: context => ({
+				UnaryExpression: node => {
+					if (
+						node.operator === 'void' &&
+						node.argument.type === 'CallExpression' &&
+						node.argument.callee.type === 'Identifier' &&
+						promiseAtomSetter({context, node: node.argument.callee})
+					) {
+						context.report({
+							message: 'Await this Promise-mode Atom setter so its result and failure remain observable.',
+							node
+						})
 					}
 				}
 			}),

@@ -259,15 +259,21 @@ export default defineConfig({
 			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{
 				files: ['**/*.tsx'],
-				rules: {'effecttsgo/async-function': 'off', 'typescript/require-await': 'error', 'unicorn/no-null': 'off'}
+				rules: {
+					'effecttsgo/async-function': 'off',
+					'typescript/require-await': 'error',
+					'typescript/strict-void-return': 'off',
+					'unicorn/no-null': 'off'
+				}
 			}
 		],
 		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// Repository invariants that maintained rules cannot express.
 			'@deslop/oxlint-rules/inline-schema-operation': 'error',
-			'@deslop/oxlint-rules/no-direct-rpc-promise-in-component': 'error',
+			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
+			'@deslop/oxlint-rules/no-void-promise-atom': 'error',
 			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
 			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
 			'@deslop/oxlint-rules/no-trivial-indirection': 'error',

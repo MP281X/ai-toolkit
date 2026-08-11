@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto'
 
 import {
 	Array,
+	Boolean,
 	Context,
 	Duration,
 	Effect,
@@ -647,6 +648,32 @@ export const RpcHandlers = RpcContracts.toLayer(
 			)
 			yield* invalidateTerminal(input)
 		})
+		const restartTerminal = Effect.fn('WorkbenchRpc.terminal.restart')(function* (payload: TerminalPayload) {
+			const input = TerminalPayload.make(payload)
+			const sessionTerminal = yield* getTerminal(input)
+			const status = yield* sessionTerminal.restart
+			if (Predicate.isNotUndefined(input.sessionId)) {
+				const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
+				yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+				yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
+			}
+			yield* watchPortlessRoute(input, sessionTerminal)
+			return status
+		})
+		const stopTerminal = Effect.fn('WorkbenchRpc.terminal.stop')(function* (payload: TerminalPayload) {
+			const input = TerminalPayload.make(payload)
+			const status = yield* pipe(
+				getTerminal(input),
+				Effect.flatMap(sessionTerminal => sessionTerminal.stop)
+			)
+			if (Predicate.isNotUndefined(input.sessionId)) {
+				const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
+				yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
+				yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
+			}
+			yield* invalidateTerminal(input)
+			return status
+		})
 
 		return RpcContracts.of({
 			'agentBrowser.switchTab': payload =>
@@ -913,18 +940,17 @@ export const RpcHandlers = RpcContracts.toLayer(
 					getTerminal(TerminalPayload.make(payload)),
 					Effect.flatMap(sessionTerminal => sessionTerminal.resize({cols: payload.cols, rows: payload.rows}))
 				),
-			'terminal.restart': Effect.fn('WorkbenchRpc.terminal.restart')(function* (payload: TerminalPayload) {
-				const input = TerminalPayload.make(payload)
-				const sessionTerminal = yield* getTerminal(input)
-				const status = yield* sessionTerminal.restart
-				if (Predicate.isNotUndefined(input.sessionId)) {
-					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
-					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
-					yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
-				}
-				yield* watchPortlessRoute(input, sessionTerminal)
-				return status
-			}),
+			'terminal.restart': restartTerminal,
+			'terminal.setActive': payload =>
+				Effect.forEach(
+					payload.sessionIds,
+					sessionId =>
+						Boolean.match(payload.active, {
+							onFalse: () => restartTerminal({cwd: payload.cwd, sessionId}),
+							onTrue: () => stopTerminal({cwd: payload.cwd, sessionId})
+						}),
+					{discard: true}
+				),
 			'terminal.status': payload =>
 				Stream.unwrap(
 					Effect.gen(function* () {
@@ -972,20 +998,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 						return pipe(Stream.make(state), Stream.concat(SubscriptionRef.changes(sessionTerminal.status)))
 					})
 				),
-			'terminal.stop': Effect.fn('WorkbenchRpc.terminal.stop')(function* (payload: TerminalPayload) {
-				const input = TerminalPayload.make(payload)
-				const status = yield* pipe(
-					getTerminal(input),
-					Effect.flatMap(sessionTerminal => sessionTerminal.stop)
-				)
-				if (Predicate.isNotUndefined(input.sessionId)) {
-					const scriptKey = ScriptSessionKey.make({cwd: input.cwd, sessionId: input.sessionId})
-					yield* SubscriptionRef.update(runStatuses, current => HashMap.set(current, scriptKey, status))
-					yield* pipe(syncOrClosePortlessBrowser(input.cwd), Effect.ignore, Effect.forkDetach)
-				}
-				yield* invalidateTerminal(input)
-				return status
-			}),
+			'terminal.stop': stopTerminal,
 			'terminal.write': payload =>
 				pipe(
 					getTerminal(TerminalPayload.make(payload)),

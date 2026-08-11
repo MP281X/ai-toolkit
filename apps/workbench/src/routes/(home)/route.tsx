@@ -1,6 +1,6 @@
-import {useAtomSet, useAtomSuspense, useAtomValue} from '@effect/atom-react'
+import {useAtom, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Boolean, Effect, HashSet, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
+import {Array, Effect, Match, Option, Order, Predicate, Schema, String, pipe} from 'effect'
 
 import {
 	Outlet,
@@ -17,14 +17,7 @@ import {Suspense, startTransition, useState} from 'react'
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeSidebarAtom, worktreeRouteId} from '#lib/state.ts'
 import {UsageStrip, UsageStripFallback} from '#routes/components/-usage-strip.tsx'
-import type {
-	AgentProfile,
-	AgentSession,
-	HomeSidebar,
-	ScriptRun,
-	SidebarProject,
-	SidebarWorktree
-} from '#rpcs/contracts.ts'
+import type {AgentSession, HomeSidebar, ScriptRun, SidebarProject, SidebarWorktree} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	AgentIcon,
@@ -72,8 +65,7 @@ import {
 	GitBranchesSnapshot,
 	GitWorktreeLocalSource,
 	GitWorktreeNewSource,
-	GitWorktreeRemoteSource,
-	type GitWorktreeSource
+	GitWorktreeRemoteSource
 } from '@deslop/git/schema'
 import type {PortlessRun} from '@deslop/portless/schema'
 import {terminalStatusActive} from '@deslop/terminal/schema'
@@ -99,99 +91,6 @@ const branchesAtom = Atom.family((cwd: string) =>
 			{initialValue: GitBranchesSnapshot.make({branches: [], defaultBranch: 'main'})}
 		)
 	)
-)
-
-const terminalActionAtom = Atom.family((cwd: string) =>
-	Atom.family((sessionId: string) =>
-		RpcClient.runtime.fn<boolean>()(
-			Effect.fn('WorktreeManager.terminalAction')(function* (active) {
-				const client = yield* RpcClient
-				return yield* Boolean.match(active, {
-					onFalse: () => client('terminal.restart', {cwd, sessionId}),
-					onTrue: () => client('terminal.stop', {cwd, sessionId})
-				})
-			})
-		)
-	)
-)
-
-const portlessActionAtom = Atom.family((cwd: string) =>
-	RpcClient.runtime.fn<{active: boolean; sessionIds: string[]}>()(
-		Effect.fn('WorktreeManager.portlessAction')(function* (input) {
-			const client = yield* RpcClient
-			yield* Effect.forEach(
-				input.sessionIds,
-				sessionId =>
-					Boolean.match(input.active, {
-						onFalse: () => client('terminal.restart', {cwd, sessionId}),
-						onTrue: () => client('terminal.stop', {cwd, sessionId})
-					}),
-				{discard: true}
-			)
-		})
-	)
-)
-
-const createAgentActionAtom = RpcClient.runtime.fn<{cwd: string; provider: AgentProfile['id']}>()(
-	Effect.fn('WorktreeAgents.create')(function* (input) {
-		const client = yield* RpcClient
-		return yield* pipe(
-			client('agents.create', input),
-			Effect.map(Option.some),
-			Effect.catch(error =>
-				pipe(
-					Effect.sync(() => toast.error(formatError(error))),
-					Effect.as(Option.none())
-				)
-			)
-		)
-	})
-)
-
-const removeAgentActionAtom = RpcClient.runtime.fn<{cwd: string; uuid: string}>()(
-	Effect.fn('WorktreeAgents.remove')(function* (input) {
-		const client = yield* RpcClient
-		yield* pipe(
-			client('agents.remove', input),
-			Effect.catch(error => Effect.sync(() => toast.error(formatError(error))))
-		)
-	})
-)
-
-const maintainProjectActionAtom = RpcClient.runtime.fn<{cwd: string}>()(
-	Effect.fn('WorktreeManager.maintainProject')(function* (input) {
-		const client = yield* RpcClient
-		yield* pipe(
-			client('projects.maintenance', input),
-			Effect.catch(error => Effect.sync(() => toast.error(formatError(error))))
-		)
-	})
-)
-
-const createWorktreeActionAtom = RpcClient.runtime.fn<{branch: string; cwd: string; source: GitWorktreeSource}>()(
-	Effect.fn('WorktreeManager.createWorktree')(function* (input) {
-		const client = yield* RpcClient
-		return yield* pipe(
-			client('projects.createWorktree', input),
-			Effect.map(Option.some),
-			Effect.catch(error =>
-				pipe(
-					Effect.sync(() => toast.error(formatError(error))),
-					Effect.as(Option.none())
-				)
-			)
-		)
-	})
-)
-
-const deleteWorktreeActionAtom = RpcClient.runtime.fn<{cwd: string}>()(
-	Effect.fn('WorktreeManager.deleteWorktree')(function* (input) {
-		const client = yield* RpcClient
-		yield* pipe(
-			client('projects.deleteWorktree', input),
-			Effect.catch(error => Effect.sync(() => toast.error(formatError(error))))
-		)
-	})
 )
 
 function HomeLayout() {
@@ -267,14 +166,6 @@ function HomeLayout() {
 				</ResizablePanel>
 			</ResizablePanelGroup>
 		</div>
-	)
-}
-
-function UsageStripBoundary() {
-	return (
-		<Suspense fallback={<UsageStripFallback />}>
-			<UsageStrip />
-		</Suspense>
 	)
 }
 
@@ -360,17 +251,10 @@ function ScriptRunRow(input: {
 	status: AgentSession['state']
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const actionAtom = terminalActionAtom(input.cwd)(input.run.sessionId)
-	const actionResult = useAtomValue(actionAtom)
-	const runAction = useAtomSet(actionAtom, {mode: 'promise'})
-
-	async function toggleRun() {
-		try {
-			await runAction(terminalStatusActive(input.status.state) && input.status.state !== 'idle')
-		} catch (error) {
-			toast.error(formatError(error))
-		}
-	}
+	const [restartResult, restart] = useAtom(RpcClient.mutation('terminal.restart'), {mode: 'promise'})
+	const [stopResult, stop] = useAtom(RpcClient.mutation('terminal.stop'), {mode: 'promise'})
+	const pending = AsyncResult.isWaiting(restartResult) || AsyncResult.isWaiting(stopResult)
+	const active = terminalStatusActive(input.status.state) && input.status.state !== 'idle'
 
 	return (
 		<li className="w-full min-w-0">
@@ -382,22 +266,19 @@ function ScriptRunRow(input: {
 							variant="ghost"
 							size="icon-xs"
 							className="text-muted-foreground hover:text-foreground"
-							disabled={AsyncResult.isWaiting(actionResult)}
-							onClick={event => {
+							disabled={pending}
+							onClick={async event => {
 								event.stopPropagation()
-								void toggleRun()
+								try {
+									await (active ? stop : restart)({payload: {cwd: input.cwd, sessionId: input.run.sessionId}})
+								} catch (error) {
+									toast.error(formatError(error))
+								}
 							}}
-							title={
-								terminalStatusActive(input.status.state) && input.status.state !== 'idle'
-									? `Stop ${input.run.taskId}`
-									: `Start ${input.run.taskId}`
-							}
+							title={active ? `Stop ${input.run.taskId}` : `Start ${input.run.taskId}`}
 						>
 							{pipe(
-								Match.value({
-									active: terminalStatusActive(input.status.state) && input.status.state !== 'idle',
-									pending: AsyncResult.isWaiting(actionResult)
-								}),
+								Match.value({active, pending}),
 								Match.when({pending: true}, () => <Spinner className="size-2.5 border opacity-60" />),
 								Match.when({active: true}, () => <Square className="size-3" />),
 								Match.orElse(() => <PlayIcon className="size-3" />)
@@ -447,23 +328,7 @@ function PortlessGroup(input: {
 	selectPortless: (worktreeRoot: string) => void
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const actionAtom = portlessActionAtom(input.cwd)
-	const actionResult = useAtomValue(actionAtom)
-	const runAction = useAtomSet(actionAtom, {mode: 'promise'})
-
-	async function toggleRuns() {
-		try {
-			const active = Array.some(
-				input.runs,
-				candidate =>
-					terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
-					input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
-			)
-			await runAction({active, sessionIds: Array.map(input.runs, run => run.script.sessionId)})
-		} catch (error) {
-			toast.error(formatError(error))
-		}
-	}
+	const [actionResult, runAction] = useAtom(RpcClient.mutation('terminal.setActive'), {mode: 'promise'})
 
 	return (
 		<li className="w-full min-w-0">
@@ -475,9 +340,24 @@ function PortlessGroup(input: {
 						size="icon-xs"
 						className="text-muted-foreground hover:text-foreground"
 						disabled={AsyncResult.isWaiting(actionResult)}
-						onClick={event => {
+						onClick={async event => {
 							event.stopPropagation()
-							void toggleRuns()
+							try {
+								await runAction({
+									payload: {
+										active: Array.some(
+											input.runs,
+											candidate =>
+												terminalStatusActive(input.runStatuses[candidate.script.sessionId]?.state ?? 'idle') &&
+												input.runStatuses[candidate.script.sessionId]?.state !== 'idle'
+										),
+										cwd: input.cwd,
+										sessionIds: Array.map(input.runs, run => run.script.sessionId)
+									}
+								})
+							} catch (error) {
+								toast.error(formatError(error))
+							}
 						}}
 						title={
 							Array.some(
@@ -626,33 +506,10 @@ function WorktreeAgents(input: {
 	sessions: SidebarWorktree['agents']
 	selectAgent: (cwd: string, agentId: string) => void
 }) {
-	const create = useAtomSet(createAgentActionAtom, {mode: 'promise'})
-	const remove = useAtomSet(removeAgentActionAtom, {mode: 'promise'})
-	const [startingProfiles, setStartingProfiles] = useState(() => HashSet.empty<string>())
-	const [stoppingSessions, setStoppingSessions] = useState(() => HashSet.empty<string>())
-
-	async function startAgent(profile: AgentProfile) {
-		if (HashSet.has(startingProfiles, profile.id)) return
-
-		setStartingProfiles(current => HashSet.add(current, profile.id))
-		try {
-			const session = await create({cwd: input.cwd, provider: profile.id})
-			if (Option.isSome(session)) input.selectAgent(input.cwd, session.value.uuid)
-		} finally {
-			setStartingProfiles(current => HashSet.remove(current, profile.id))
-		}
-	}
-
-	async function stopAgent(session: AgentSession) {
-		if (HashSet.has(stoppingSessions, session.uuid)) return
-
-		setStoppingSessions(current => HashSet.add(current, session.uuid))
-		try {
-			await remove({cwd: input.cwd, uuid: session.uuid})
-		} finally {
-			setStoppingSessions(current => HashSet.remove(current, session.uuid))
-		}
-	}
+	const [createResult, create] = useAtom(RpcClient.mutation('agents.create'), {mode: 'promise'})
+	const [removeResult, remove] = useAtom(RpcClient.mutation('agents.remove'), {mode: 'promise'})
+	const creating = AsyncResult.isWaiting(createResult)
+	const removing = AsyncResult.isWaiting(removeResult)
 
 	return (
 		<li className="w-full min-w-0">
@@ -674,18 +531,19 @@ function WorktreeAgents(input: {
 										variant="ghost"
 										size="icon-xs"
 										className="text-muted-foreground hover:text-foreground"
-										disabled={HashSet.has(startingProfiles, profile.id)}
-										onClick={event => {
+										disabled={creating}
+										onClick={async event => {
 											event.stopPropagation()
-											void startAgent(profile)
+											try {
+												const session = await create({payload: {cwd: input.cwd, provider: profile.id}})
+												input.selectAgent(input.cwd, session.uuid)
+											} catch (error) {
+												toast.error(formatError(error))
+											}
 										}}
 										title={`Start ${profile.label}`}
 									>
-										{HashSet.has(startingProfiles, profile.id) ? (
-											<Spinner className="size-2.5 border opacity-60" />
-										) : (
-											<PlayIcon className="size-3" />
-										)}
+										{creating ? <Spinner className="size-2.5 border opacity-60" /> : <PlayIcon className="size-3" />}
 									</Button>
 								}
 								icon={<AgentIcon layer={profile.icon} />}
@@ -702,10 +560,14 @@ function WorktreeAgents(input: {
 											onSelect={() => {
 												input.selectAgent(input.cwd, session.uuid)
 											}}
-											onStop={() => {
-												void stopAgent(session)
+											onStop={async () => {
+												try {
+													await remove({payload: {cwd: input.cwd, uuid: session.uuid}})
+												} catch (error) {
+													toast.error(formatError(error))
+												}
 											}}
-											stopping={HashSet.has(stoppingSessions, session.uuid)}
+											stopping={removing}
 										/>
 									))}
 								</ul>
@@ -734,9 +596,16 @@ function WorktreeManager(input: {
 	selectAgent: (worktreeRoot: string, agentId: string) => void
 	selectRun: (worktreeRoot: string, sessionId: string, inactive?: boolean) => void
 }) {
-	const maintenanceProject = useAtomSet(maintainProjectActionAtom, {mode: 'promise'})
-	const createWorktree = useAtomSet(createWorktreeActionAtom, {mode: 'promise'})
-	const deleteWorktree = useAtomSet(deleteWorktreeActionAtom, {mode: 'promise'})
+	const [maintenanceResult, maintenanceProject] = useAtom(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
+	const [createWorktreeResult, createWorktree] = useAtom(RpcClient.mutation('projects.createWorktree'), {
+		mode: 'promise'
+	})
+	const [deleteWorktreeResult, deleteWorktree] = useAtom(RpcClient.mutation('projects.deleteWorktree'), {
+		mode: 'promise'
+	})
+	const maintaining = AsyncResult.isWaiting(maintenanceResult)
+	const creating = AsyncResult.isWaiting(createWorktreeResult)
+	const deleting = AsyncResult.isWaiting(deleteWorktreeResult)
 	const navigate = useNavigate()
 	const search = Route.useSearch()
 	const pathname = useLocation({select: location => location.pathname})
@@ -744,10 +613,7 @@ function WorktreeManager(input: {
 		actionsOpen: false,
 		branch: '',
 		createWorktreeProjectRoot: input.activeProject?.repository.root,
-		creatingBranch: '',
-		deleteDialogOpen: false,
-		deletingWorktree: false,
-		maintainingProject: ''
+		deleteDialogOpen: false
 	}))
 	const createWorktreeProject =
 		pipe(
@@ -787,7 +653,7 @@ function WorktreeManager(input: {
 	)
 	async function createFastWorktree(candidate?: (typeof availableBranches)[number]) {
 		const nextBranch = candidate?.name ?? newBranch
-		if (String.isEmpty(nextBranch) || String.isNonEmpty(state.creatingBranch)) return
+		if (String.isEmpty(nextBranch) || creating) return
 		if (Predicate.isUndefined(candidate) && !validNewWorktreeBranch(nextBranch)) {
 			toast.error('Branch names cannot contain spaces.')
 			return
@@ -801,38 +667,35 @@ function WorktreeManager(input: {
 					Match.orElse(remoteBranch => GitWorktreeRemoteSource.make({remote: remoteBranch.remote ?? 'origin'}))
 				)
 
-		setState(current => ({...current, creatingBranch: nextBranch}))
 		try {
 			const worktreeRoot = await createWorktree({
-				branch: nextBranch,
-				cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
-				source
+				payload: {
+					branch: nextBranch,
+					cwd: (createWorktreeProject ?? input.activeProject)?.repository.root ?? '',
+					source
+				}
 			})
-			if (Option.isSome(worktreeRoot)) {
-				setState(current => ({...current, actionsOpen: false, branch: ''}))
-				input.selectWorktree(worktreeRoot.value)
-			}
-		} finally {
-			setState(current => ({...current, creatingBranch: ''}))
+			setState(current => ({...current, actionsOpen: false, branch: ''}))
+			input.selectWorktree(worktreeRoot)
+		} catch (error) {
+			toast.error(formatError(error))
 		}
 	}
 	async function deleteActiveWorktree() {
-		if (!input.activeWorktree || state.deletingWorktree) return
+		if (!input.activeWorktree || deleting) return
 
-		setState(current => ({...current, deletingWorktree: true}))
 		try {
-			await deleteWorktree({cwd: input.activeWorktree.root})
+			await deleteWorktree({payload: {cwd: input.activeWorktree.root}})
 			setState(current => ({...current, deleteDialogOpen: false}))
-		} finally {
-			setState(current => ({...current, deletingWorktree: false}))
+		} catch (error) {
+			toast.error(formatError(error))
 		}
 	}
 	async function maintainRepository(cwd: string) {
-		setState(current => ({...current, maintainingProject: cwd}))
 		try {
-			await maintenanceProject({cwd})
-		} finally {
-			setState(current => ({...current, maintainingProject: ''}))
+			await maintenanceProject({payload: {cwd}})
+		} catch (error) {
+			toast.error(formatError(error))
 		}
 	}
 	return (
@@ -878,17 +741,13 @@ function WorktreeManager(input: {
 							variant="destructive"
 							size="icon"
 							className="h-8 w-8"
-							disabled={state.deletingWorktree}
+							disabled={deleting}
 							onClick={() => {
 								setState(current => ({...current, deleteDialogOpen: true}))
 							}}
 							title="Delete worktree"
 						>
-							{state.deletingWorktree ? (
-								<Spinner className="size-2.5 border opacity-60" />
-							) : (
-								<Trash className="size-3" />
-							)}
+							{deleting ? <Spinner className="size-2.5 border opacity-60" /> : <Trash className="size-3" />}
 						</Button>
 					)}
 				</span>
@@ -900,7 +759,7 @@ function WorktreeManager(input: {
 					setState(current => ({...current, deleteDialogOpen}))
 				}}
 			>
-				<DialogContent showCloseButton={!state.deletingWorktree}>
+				<DialogContent showCloseButton={!deleting}>
 					<DialogHeader>
 						<DialogTitle>Delete worktree</DialogTitle>
 						<DialogDescription>
@@ -913,7 +772,7 @@ function WorktreeManager(input: {
 						<Button
 							type="button"
 							variant="outline"
-							disabled={state.deletingWorktree}
+							disabled={deleting}
 							onClick={() => {
 								setState(current => ({...current, deleteDialogOpen: false}))
 							}}
@@ -923,17 +782,13 @@ function WorktreeManager(input: {
 						<Button
 							type="button"
 							variant="destructive"
-							disabled={!input.activeWorktree || state.deletingWorktree}
-							onClick={() => {
-								void deleteActiveWorktree()
+							disabled={!input.activeWorktree || deleting}
+							onClick={async () => {
+								await deleteActiveWorktree()
 								setState(current => ({...current, actionsOpen: false}))
 							}}
 						>
-							{state.deletingWorktree ? (
-								<Spinner className="size-2.5 border opacity-60" />
-							) : (
-								<Trash className="size-3" />
-							)}
+							{deleting ? <Spinner className="size-2.5 border opacity-60" /> : <Trash className="size-3" />}
 							Delete
 						</Button>
 					</DialogFooter>
@@ -961,10 +816,10 @@ function WorktreeManager(input: {
 						onValueChange={branch => {
 							setState(current => ({...current, branch}))
 						}}
-						onKeyDown={event => {
+						onKeyDown={async event => {
 							if (event.key === 'Enter' && String.isNonEmpty(newBranch) && createWorktreeProject) {
 								event.preventDefault()
-								void createFastWorktree(
+								await createFastWorktree(
 									pipe(
 										availableBranches,
 										Array.findFirst(candidate => candidate.name === newBranch),
@@ -983,25 +838,15 @@ function WorktreeManager(input: {
 						{createWorktreeProject && (
 							<CommandGroup>
 								{String.isNonEmpty(newBranch) && validNewWorktreeBranch(newBranch) && !branchAvailable && (
-									<CommandItem
-										value={newBranch}
-										disabled={String.isNonEmpty(state.creatingBranch)}
-										onSelect={() => {
-											void createFastWorktree()
-										}}
-									>
-										{state.creatingBranch === newBranch ? (
-											<Spinner className="size-2.5 border opacity-60" />
-										) : (
-											<GitBranchPlus />
-										)}
+									<CommandItem value={newBranch} disabled={creating} onSelect={async () => createFastWorktree()}>
+										{creating ? <Spinner className="size-2.5 border opacity-60" /> : <GitBranchPlus />}
 										<span className="min-w-0 truncate">Create {newBranch}</span>
 										<CommandShortcut>origin/{branchSnapshot.value.defaultBranch}</CommandShortcut>
 									</CommandItem>
 								)}
 								{Array.map(availableBranches, candidate => {
 									const icon =
-										state.creatingBranch === candidate.name ? (
+										creating && newBranch === candidate.name ? (
 											<Spinner className="size-2.5 border opacity-60" />
 										) : (
 											pipe(
@@ -1015,9 +860,9 @@ function WorktreeManager(input: {
 										<CommandItem
 											key={`${candidate.type}:${candidate.remote ?? ''}:${candidate.name}`}
 											value={candidate.name}
-											onSelect={() => {
+											onSelect={async () => {
 												setState(current => ({...current, branch: candidate.name}))
-												void createFastWorktree(candidate)
+												await createFastWorktree(candidate)
 											}}
 										>
 											{icon}
@@ -1070,14 +915,14 @@ function WorktreeManager(input: {
 											variant="ghost"
 											size="icon-xs"
 											className="h-5 w-5 rounded-none opacity-70 hover:opacity-100"
-											disabled={state.maintainingProject === project.repository.root}
-											onClick={event => {
+											disabled={maintaining}
+											onClick={async event => {
 												event.stopPropagation()
-												void maintainRepository(project.repository.root)
+												await maintainRepository(project.repository.root)
 											}}
 											title="Repository maintenance"
 										>
-											{state.maintainingProject === project.repository.root ? (
+											{maintaining ? (
 												<Spinner className="size-2.5 border opacity-60" />
 											) : (
 												<RefreshCwIcon className="size-3" />
@@ -1162,7 +1007,9 @@ function WorktreeManager(input: {
 				</TreeExplorerSection>
 			</TreeExplorer>
 
-			<UsageStripBoundary />
+			<Suspense fallback={<UsageStripFallback />}>
+				<UsageStrip />
+			</Suspense>
 		</div>
 	)
 }

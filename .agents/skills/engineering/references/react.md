@@ -12,20 +12,22 @@ Give each state one owner; keep components presentational.
 | React                  | ephemeral DOM interaction                                               |
 
 ```ts
-const maintainProjectAction = RpcClient.runtime.fn<{cwd: string}>()(
-	Effect.fn('WorktreeManager.maintainProject')(function* (input) {
-		const client = yield* RpcClient
-		yield* client('projects.maintenance', input)
-	})
-)
+const [result, maintainProject] = useAtom(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
+await maintainProject({payload: {cwd}})
 ```
 
 - Each frontend defines one always-available `AtomRpc.Service` client in its runtime module.
 - Expose current backend state through streaming RPCs.
 - Read `AsyncResult` atoms with `useAtomSuspense` when a Suspense boundary owns loading.
+- Join related async sources and derive the complete presentation model in one Atom; components read the finished model instead of coordinating `AsyncResult` branches.
+- Construct component-local and direct RPC Atoms at their use site; React Compiler stabilizes them. Use module scope for shared state, keyed families, or a composed Atom graph.
 - `Atom.family` identity uses a stable domain value, never array position or concatenated fields.
+- Optimistic state wraps the authoritative source Atom. Its reducer returns the provisional source value; success refreshes that source and failure rolls it back. Never model pending identifiers as an optimistic source.
 - Keep props beside their owner; reusable component packages receive no service-schema types.
-- Async commands expose pending and failure. Success follows backend confirmation.
+- `AsyncResult` owns pending and failure; never mirror either into React state. Subscribe to fire-and-react failures at the UI boundary.
+- Mount an Atom that owns related `AtomContext.subscribe` reactions instead of installing several component subscriptions.
+- Use generated RPC query and mutation Atoms directly. If composition needs an input type the RPC cannot infer, move that operation into its owning RPC contract instead of inventing a callback-shaped UI contract.
+- Use Promise mode only when its setter is awaited; never discard it with `void`.
 - Keep async operations in Atom. A TSX callback may use `async` / `await` only to sequence the documented Promise bridge of an existing Atom or an unavoidable browser API; never replace Atom ownership with Promise state or Promise-chain methods.
 - Reserve effects for browser synchronization and clean them up.
 - DOM scheduling uses explicit `window` APIs and cleanup when Effect has no synchronous presentation operation.

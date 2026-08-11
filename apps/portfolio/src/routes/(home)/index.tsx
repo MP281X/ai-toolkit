@@ -238,19 +238,6 @@ function Panel(input: {className?: string; children: React.ReactNode}) {
 
 export const Route = createFileRoute('/(home)/')({component: PortfolioRoute})
 
-function GridOverlay() {
-	return (
-		<div
-			className="pointer-events-none fixed inset-0 z-1"
-			style={{
-				backgroundImage:
-					'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
-				backgroundSize: '26px 26px'
-			}}
-		/>
-	)
-}
-
 function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width: number; height: number}}) {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -828,7 +815,14 @@ function RealtimeLayer(input: {
 
 	return (
 		<>
-			<GridOverlay />
+			<div
+				className="pointer-events-none fixed inset-0 z-1"
+				style={{
+					backgroundImage:
+						'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
+					backgroundSize: '26px 26px'
+				}}
+			/>
 			<TrailCanvas trails={portfolio.value.trails} viewport={input.viewport} />
 
 			{Array.map(portfolio.value.visitors, cursor => (

@@ -57,25 +57,30 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							name: 'invalid.tsx',
 							source: pipe(
 								[
-									"import {useAtomSet} from '@effect/atom-react'",
-									"import {Schema} from 'effect'",
+									"import {useAtom, useAtomSet} from '@effect/atom-react'",
+									"import {Schema, SchemaTransformation, pipe} from 'effect'",
 									"import {useRef, useState} from 'react'",
 									"import {RpcClient} from '#lib/atomRuntime.ts'",
 									'',
 									'declare const input: unknown',
 									'declare const source: string',
-									'const decode = Schema.decodeUnknown(Schema.String)',
+									'const decode = Schema.decodeUnknownSync(Schema.String)',
 									'const MissingType = Schema.Struct({value: Schema.String})',
 									'type Explicit = {readonly values: readonly string[]}',
 									'const ref = useRef<HTMLElement | null>(null)',
 									'const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(source)',
 									"const mutate = useAtomSet(RpcClient.mutation('save'), {mode: 'promise'})",
+									'void mutate(input)',
+									"const [result, mutateFromPair] = useAtom(RpcClient.mutation('save'), {mode: 'promise'})",
+									'void mutateFromPair(input)',
 									'function forward(value: string) { return consume(value) }',
+									'function ready() { return source.length > 0 }',
+									'function run() { consume(source) }',
 									'function consume(value: string) { return value.length }',
 									'const alias = source',
 									'const [fake] = useState(() => ({current: null}))',
 									'const state = useState(0)',
-									'void {MissingType, alias, decode, decoded, fake, forward, input, mutate, ref}',
+									'void {MissingType, alias, decode, decoded, fake, forward, input, mutate, ready, ref, result, run}',
 									'void (0 as unknown as Explicit)'
 								],
 								Array.join('\n')
@@ -86,11 +91,14 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							pipe(
 								[
 									'@deslop/oxlint-rules(inline-schema-operation)',
-									'@deslop/oxlint-rules(no-direct-rpc-promise-in-component)',
+									'@deslop/oxlint-rules(no-void-promise-atom)',
+									'@deslop/oxlint-rules(no-void-promise-atom)',
 									'@deslop/oxlint-rules(no-fake-ref-state)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
+									'@deslop/oxlint-rules(no-trivial-indirection)',
+									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-undestructured-use-state)',
@@ -129,6 +137,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const Public = Schema.Struct({name: Schema.String})',
 									'type Exported = typeof Exported.Type',
 									'export const Exported = Schema.Struct({name: Schema.String})',
+									'type Normalized = typeof Normalized.Type',
+									'const Normalized = pipe(Schema.Struct({value: Schema.String}), Schema.decodeTo(Schema.Struct({value: Schema.String}), SchemaTransformation.transform({decode: value => value, encode: value => value})))',
 									'const decoded = Schema.decodeUnknown(User)(input)',
 									'const encoded = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(input)',
 									'const ref = useRef<HTMLElement>(null)',
@@ -137,12 +147,35 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const [stable] = useState(() => actionAtom)',
 									'function transform(value: string) { return value.length }',
 									'const tuple = ["ready", 1] as const',
-									'void {decoded, encoded, fire, mutate, ref, stable, transform, tuple}'
+									'void {Normalized, decoded, encoded, fire, mutate, ref, stable, transform, tuple}'
 								],
 								Array.join('\n')
 							)
 						})
 						expect(customCodes(result.stdout)).toEqual([])
+					}),
+					Effect.scoped
+				),
+			20_000
+		)
+
+		testApi.effect(
+			'rejects workspace dependencies already owned by the root',
+			() =>
+				pipe(
+					Effect.gen(function* () {
+						const fs = yield* FileSystem.FileSystem
+						const path = yield* Path.Path
+						const workspace = yield* fs.makeTempDirectoryScoped({
+							directory: path.resolve(import.meta.dirname, '../..'),
+							prefix: 'duplicate-dependency-'
+						})
+						yield* fs.writeFileString(
+							path.join(workspace, 'package.json'),
+							'{"dependencies":{"effect":"latest"},"name":"@deslop/duplicate"}'
+						)
+						const result = yield* lintSource({name: 'vite.config.ts', source: 'export default {}'})
+						expect(customCodes(result.stdout)).toEqual(['@deslop/oxlint-rules(no-duplicate-root-dependency)'])
 					}),
 					Effect.scoped
 				),

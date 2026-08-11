@@ -189,10 +189,10 @@ const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
 	spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
 	const output = yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
-	return pipe(
-		Schema.decodeOption(AgentBrowserCliTabsFromJson)(output),
-		Option.map(decoded => decoded.data.tabs),
-		Option.getOrElse(() => Array.empty<AgentBrowserCliTab>())
+	return yield* pipe(
+		Schema.decodeEffect(AgentBrowserCliTabsFromJson)(output),
+		Effect.map(decoded => decoded.data.tabs),
+		Effect.mapError(cause => AgentBrowserError.make({cause, message: 'invalid agent-browser tab response'}))
 	)
 })
 

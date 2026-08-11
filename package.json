@@ -17,7 +17,7 @@
 		"build": "vp run -r build",
 		
 		"fix": "vp check --fix",
-		"check": "vp check && vp test packages/oxlint-rules/src/package-dependencies.test.ts && fallow dead-code --unused-files --unused-exports --unused-types --format compact --fail-on-issues",
+		"check": "vp check && fallow dead-code --unused-files --unused-exports --unused-types --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
@@ -33,7 +33,6 @@
 	},
 	"devDependencies": {
 		"typescript": "latest",
-		"@deslop/oxlint-rules": "workspace:*",
 		"@effect/tsgo": "latest",
 		"@types/node": "latest",
 		"@types/react": "^19",
@@ -44,6 +43,8 @@
 		"oxlint-plugin-react-doctor": "latest",
 		
 		"vite": "catalog:",
-		"vite-plus": "catalog:"
+		"vite-plus": "catalog:",
+
+		"@deslop/oxlint-rules": "workspace:*"
 	}
 }

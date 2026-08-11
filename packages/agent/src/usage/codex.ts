@@ -16,6 +16,7 @@ import {
 	Ref,
 	Schedule,
 	Schema,
+	SchemaTransformation,
 	Stream,
 	String,
 	SubscriptionRef,
@@ -46,23 +47,54 @@ const CodexUsage = Schema.Struct({
 })
 
 type CodexUsageTokens = typeof CodexUsageTokens.Type
-const CodexUsageTokens = Schema.Struct({
-	cached_input_tokens: Schema.optional(Schema.Finite),
-	input_tokens: Schema.optional(Schema.Finite),
-	output_tokens: Schema.optional(Schema.Finite)
-})
+const CodexUsageTokens = pipe(
+	Schema.Struct({
+		cached_input_tokens: pipe(Schema.Finite, Schema.withDecodingDefaultKey(Effect.succeed(0))),
+		input_tokens: pipe(Schema.Finite, Schema.withDecodingDefaultKey(Effect.succeed(0))),
+		output_tokens: pipe(Schema.Finite, Schema.withDecodingDefaultKey(Effect.succeed(0)))
+	}),
+	Schema.decodeTo(
+		AgentUsageTokens,
+		SchemaTransformation.transform({
+			decode: input =>
+				AgentUsageTokens.make({
+					cached: input.cached_input_tokens,
+					input: input.input_tokens,
+					output: input.output_tokens
+				}),
+			encode: tokens => ({cached_input_tokens: tokens.cached, input_tokens: tokens.input, output_tokens: tokens.output})
+		})
+	)
+)
 
 type CodexUsageLine = typeof CodexUsageLine.Type
 const CodexUsageLine = Schema.fromJsonString(
-	Schema.Struct({
-		payload: Schema.optional(
-			Schema.Struct({
-				info: Schema.optional(Schema.Struct({last_token_usage: Schema.optional(CodexUsageTokens)})),
-				usage: Schema.optional(CodexUsageTokens)
-			})
+	Schema.Union([
+		pipe(
+			Schema.Struct({payload: Schema.Struct({info: Schema.Struct({last_token_usage: CodexUsageTokens})})}),
+			Schema.decodeTo(
+				AgentUsageTokens,
+				SchemaTransformation.transform({
+					decode: input => input.payload.info.last_token_usage,
+					encode: usage => ({payload: {info: {last_token_usage: usage}}})
+				})
+			)
 		),
-		usage: Schema.optional(CodexUsageTokens)
-	})
+		pipe(
+			Schema.Struct({payload: Schema.Struct({usage: CodexUsageTokens})}),
+			Schema.decodeTo(
+				AgentUsageTokens,
+				SchemaTransformation.transform({decode: input => input.payload.usage, encode: usage => ({payload: {usage}})})
+			)
+		),
+		pipe(
+			Schema.Struct({usage: CodexUsageTokens}),
+			Schema.decodeTo(
+				AgentUsageTokens,
+				SchemaTransformation.transform({decode: input => input.usage, encode: usage => ({usage})})
+			)
+		)
+	])
 )
 
 const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
@@ -76,10 +108,6 @@ const codexJsonlFiles = Effect.fnUntraced(function* (root: string) {
 		Array.map(entry => path.join(root, entry))
 	)
 })
-
-function codexUsageTokens(input: CodexUsageTokens) {
-	return {cached: input.cached_input_tokens ?? 0, input: input.input_tokens ?? 0, output: input.output_tokens ?? 0}
-}
 
 function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
@@ -165,13 +193,7 @@ function totalUsageTokensFromContent(content: string) {
 }
 
 function explicitUsageFromLine(line: string) {
-	return pipe(
-		Schema.decodeOption(CodexUsageLine)(line),
-		Option.flatMap(decoded =>
-			Option.fromNullishOr(decoded.payload?.info?.last_token_usage ?? decoded.payload?.usage ?? decoded.usage)
-		),
-		Option.getOrUndefined
-	)
+	return pipe(Schema.decodeOption(CodexUsageLine)(line), Option.getOrUndefined)
 }
 
 function explicitUsageTokensFromContent(content: string) {
@@ -185,12 +207,11 @@ function explicitUsageTokensFromContent(content: string) {
 					const usage = explicitUsageFromLine(line)
 					if (Predicate.isUndefined(usage)) return current
 
-					const next = codexUsageTokens(usage)
 					return {
-						previous: Option.some(next),
-						total: sameTokens(next, Option.getOrUndefined(current.previous))
+						previous: Option.some(usage),
+						total: sameTokens(usage, Option.getOrUndefined(current.previous))
 							? current.total
-							: addTokens(current.total, next)
+							: addTokens(current.total, usage)
 					}
 				}
 

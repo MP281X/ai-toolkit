@@ -20,7 +20,7 @@ Keep module values only when they own shared identity, lifecycle, caching, schem
 
 ## Types
 
-- Infer local and return types. Annotate a return only for recursion.
+- Infer every type the owning API can provide, including generic arguments, locals, callbacks, and returns. An explicit inferable type signals broken composition; repair the dataflow instead. Annotate a return only for recursion.
 - Name only public, recursive, boundary, or independently shared types.
 - Keep operation inputs inline unless they cross an unknown, serialized, or persisted boundary or are independently shared.
 - Keep an owning schema property type only at its decoded boundary; never widen a consumer to absorb a type mismatch.

@@ -1,12 +1,13 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, HashMap, Option, Predicate, Schema, pipe} from 'effect'
+import {Array, Cause, HashMap, Option, Predicate, Schema, pipe} from 'effect'
 
+import {AsyncResult} from 'effect/unstable/reactivity'
 import {useEffect} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
 import {activeSidebarAtom} from '#lib/state.ts'
-import {agentBrowserOwnedTabLabels, type AgentBrowserTabSwitch} from '@deslop/agent-browser/schema'
+import {agentBrowserOwnedTabLabels} from '@deslop/agent-browser/schema'
 import {AgentBrowser} from '@deslop/components/agent-browser'
 import {toast} from '@deslop/components/ui/sonner'
 import {formatError} from '@deslop/components/utils'
@@ -15,30 +16,10 @@ import {terminalStatusActive} from '@deslop/terminal/schema'
 type AgentBrowserRouteSearch = typeof AgentBrowserRouteSearch.Type
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-const syncAgentBrowserAtom = RpcClient.runtime.fn<{cwd: string}>()(
-	Effect.fn('WorktreeAgentBrowser.sync')(function* (input) {
-		const client = yield* RpcClient
-		yield* pipe(
-			client('agentBrowser.sync', input),
-			Effect.catch(error => Effect.sync(() => toast.error(formatError(error))))
-		)
-	})
-)
-
-const switchAgentBrowserTabAtom = RpcClient.runtime.fn<AgentBrowserTabSwitch>()(
-	Effect.fn('WorktreeAgentBrowser.switchTab')(function* (input) {
-		const client = yield* RpcClient
-		yield* pipe(
-			client('agentBrowser.switchTab', input),
-			Effect.catch(error => Effect.sync(() => toast.error(formatError(error))))
-		)
-	})
-)
-
 export function WorktreeAgentBrowser(input: AgentBrowserRouteSearch & {worktree: string}) {
 	const activeSidebar = useAtomSuspense(activeSidebarAtom(input.worktree))
-	const sync = useAtomSet(syncAgentBrowserAtom, {mode: 'promise'})
-	const switchTab = useAtomSet(switchAgentBrowserTabAtom, {mode: 'promise'})
+	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'))
+	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'))
 	const origins = pipe(
 		activeSidebar.value.activeWorktree?.portlessRuns ?? [],
 		Array.filter(run => {
@@ -72,8 +53,14 @@ export function WorktreeAgentBrowser(input: AgentBrowserRouteSearch & {worktree:
 
 	useEffect(() => {
 		if (origins.length === 0 || Predicate.isUndefined(activeSidebar.value.activeWorktree?.root)) return
-		void sync({cwd: activeSidebar.value.activeWorktree.root})
+		sync({payload: {cwd: activeSidebar.value.activeWorktree.root}})
 	}, [activeSidebar.value.activeWorktree?.root, input.worktree, originKey, origins.length, sync])
+	useAtomSubscribe(RpcClient.mutation('agentBrowser.sync'), result => {
+		if (AsyncResult.isFailure(result) && !Cause.hasInterruptsOnly(result.cause)) toast.error(formatError(result.cause))
+	})
+	useAtomSubscribe(RpcClient.mutation('agentBrowser.switchTab'), result => {
+		if (AsyncResult.isFailure(result) && !Cause.hasInterruptsOnly(result.cause)) toast.error(formatError(result.cause))
+	})
 
 	return (
 		<AgentBrowser
@@ -82,7 +69,7 @@ export function WorktreeAgentBrowser(input: AgentBrowserRouteSearch & {worktree:
 			tabs={tabs}
 			onSelectTab={tab => {
 				if (Predicate.isUndefined(session)) return
-				void switchTab({origin: tab.id, session})
+				switchTab({payload: {origin: tab.id, session}})
 			}}
 		/>
 	)

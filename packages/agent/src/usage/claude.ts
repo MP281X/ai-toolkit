@@ -14,6 +14,7 @@ import {
 	Ref,
 	Schedule,
 	Schema,
+	SchemaTransformation,
 	Stream,
 	String,
 	SubscriptionRef,
@@ -39,20 +40,52 @@ type ClaudeUsage = typeof ClaudeUsage.Type
 const ClaudeUsage = Schema.Struct({five_hour: ClaudeUsageWindow, seven_day: ClaudeUsageWindow})
 
 type ClaudeUsageTokens = typeof ClaudeUsageTokens.Type
-const ClaudeUsageTokens = Schema.Struct({
-	cache_creation_input_tokens: Schema.optional(Schema.Finite),
-	cache_read_input_tokens: Schema.optional(Schema.Finite),
-	cached_input_tokens: Schema.optional(Schema.Finite),
-	input_tokens: Schema.optional(Schema.Finite),
-	output_tokens: Schema.optional(Schema.Finite)
-})
+const ClaudeUsageTokens = pipe(
+	Schema.Struct({
+		cache_creation_input_tokens: Schema.optional(Schema.Finite),
+		cache_read_input_tokens: Schema.optional(Schema.Finite),
+		cached_input_tokens: Schema.optional(Schema.Finite),
+		input_tokens: Schema.optional(Schema.Finite),
+		output_tokens: Schema.optional(Schema.Finite)
+	}),
+	Schema.decodeTo(
+		AgentUsageTokens,
+		SchemaTransformation.transform({
+			decode: input =>
+				AgentUsageTokens.make({
+					cached:
+						(input.cache_read_input_tokens ?? 0) +
+						(input.cache_creation_input_tokens ?? input.cached_input_tokens ?? 0),
+					input: input.input_tokens ?? 0,
+					output: input.output_tokens ?? 0
+				}),
+			encode: tokens => ({
+				cache_read_input_tokens: tokens.cached,
+				input_tokens: tokens.input,
+				output_tokens: tokens.output
+			})
+		})
+	)
+)
 
 type ClaudeUsageLine = typeof ClaudeUsageLine.Type
 const ClaudeUsageLine = Schema.fromJsonString(
-	Schema.Struct({
-		message: Schema.optional(Schema.Struct({usage: Schema.optional(ClaudeUsageTokens)})),
-		usage: Schema.optional(ClaudeUsageTokens)
-	})
+	Schema.Union([
+		pipe(
+			Schema.Struct({message: Schema.Struct({usage: ClaudeUsageTokens})}),
+			Schema.decodeTo(
+				AgentUsageTokens,
+				SchemaTransformation.transform({decode: input => input.message.usage, encode: usage => ({message: {usage}})})
+			)
+		),
+		pipe(
+			Schema.Struct({usage: ClaudeUsageTokens}),
+			Schema.decodeTo(
+				AgentUsageTokens,
+				SchemaTransformation.transform({decode: input => input.usage, encode: usage => ({usage})})
+			)
+		)
+	])
 )
 
 const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
@@ -66,15 +99,6 @@ const claudeJsonlFiles = Effect.fnUntraced(function* (root: string) {
 		Array.map(entry => path.join(root, entry))
 	)
 })
-
-function claudeUsageTokens(input: ClaudeUsageTokens) {
-	return {
-		cached:
-			(input.cache_read_input_tokens ?? 0) + (input.cache_creation_input_tokens ?? input.cached_input_tokens ?? 0),
-		input: input.input_tokens ?? 0,
-		output: input.output_tokens ?? 0
-	}
-}
 
 function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
@@ -90,8 +114,7 @@ function claudeTokensFromContent(content: string) {
 
 				return pipe(
 					Schema.decodeOption(ClaudeUsageLine)(line),
-					Option.flatMap(decoded => Option.fromNullishOr(decoded.message?.usage ?? decoded.usage)),
-					Option.match({onNone: () => current, onSome: usage => addTokens(current, claudeUsageTokens(usage))})
+					Option.match({onNone: () => current, onSome: usage => addTokens(current, usage)})
 				)
 			})
 		)
