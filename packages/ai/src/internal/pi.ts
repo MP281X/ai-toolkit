@@ -27,8 +27,6 @@ import {
 	getAgentDir,
 	type AgentToolResult,
 	type AgentSessionEvent,
-	type AgentToolUpdateCallback,
-	type ExtensionContext,
 	type ToolDefinition
 } from '@earendil-works/pi-coding-agent'
 import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
@@ -201,36 +199,32 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 
 		return {
 			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute: (
-				_toolCallId: string,
-				params: Tool.Parameters<ToolSet[string]>,
-				_signal: AbortSignal | undefined,
-				onUpdate: AgentToolUpdateCallback<unknown> | undefined,
-				_ctx: ExtensionContext
-			) =>
+			execute: (_toolCallId, params: Tool.Parameters<ToolSet[string]>, _signal, onUpdate, _ctx) =>
 				Effect.runPromiseWith(context)(
 					pipe(
 						toolkit.handle(name, params),
 						Effect.flatMap(stream =>
-							Stream.runFold<Tool.HandlerResult<ToolSet[string]> | undefined, Tool.HandlerResult<ToolSet[string]>>(
-								() => {},
+							Stream.runFold<Option.Option<Tool.HandlerResult<ToolSet[string]>>, Tool.HandlerResult<ToolSet[string]>>(
+								Option.none,
 								(current, result) => {
 									if (result.preliminary) {
 										onUpdate?.(agentToolResult(result.encodedResult))
 										return current
 									}
 
-									return result
+									return Option.some(result)
 								}
 							)(stream)
 						),
-						Effect.flatMap(finalResult => {
-							if (Predicate.isUndefined(finalResult)) return Effect.succeed(agentToolResult(void 0))
-							if (finalResult.isFailure) {
-								return Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
-							}
-							return Effect.succeed(agentToolResult(finalResult.encodedResult))
-						})
+						Effect.flatMap(
+							Option.match({
+								onNone: () => Effect.succeed(agentToolResult(void 0)),
+								onSome: finalResult =>
+									finalResult.isFailure
+										? Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
+										: Effect.succeed(agentToolResult(finalResult.encodedResult))
+							})
+						)
 					)
 				),
 			label: name,
@@ -364,7 +358,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 						})
 
 						const events = yield* Queue.bounded<AgentSessionEvent>(1_024)
-						const finishPart = yield* Ref.make<Response.StreamPart<ToolSet> | undefined>(void 0)
+						const finishPart = yield* Ref.make(Option.none<Response.StreamPart<ToolSet>>())
 						const termination = yield* Ref.make<'active' | 'completed' | 'finalizer' | 'overflow'>('active')
 						const terminationLock = yield* Semaphore.make(1)
 						const assistantText = yield* Ref.make('')
@@ -446,7 +440,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 														)
 													),
 													Match.when({type: 'turn_end'}, turnEnd =>
-														Ref.set(finishPart, finishPartFromTurnEnd(turnEnd))
+														Ref.set(finishPart, Option.some(finishPartFromTurnEnd(turnEnd)))
 													),
 													Match.orElse(() => Effect.void)
 												)
@@ -457,8 +451,10 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 													const ownsTermination = yield* claimTermination('completed')
 													if (!ownsTermination) return
 
-													const finish = yield* Ref.get(finishPart)
-													if (Predicate.isNotUndefined(finish)) yield* Queue.offer(queue, finish)
+													yield* pipe(
+														yield* Ref.get(finishPart),
+														Option.match({onNone: () => Effect.void, onSome: finish => Queue.offer(queue, finish)})
+													)
 													yield* appendAssistantHistory(
 														yield* Ref.get(assistantText),
 														yield* Ref.get(assistantReasoning)

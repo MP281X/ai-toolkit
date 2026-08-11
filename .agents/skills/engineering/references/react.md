@@ -19,7 +19,7 @@ RpcClient.mutation('projects.maintenance')
 - Each frontend defines one always-available `AtomRpc.Service` client in its runtime module.
 - Expose current backend state through streaming RPCs.
 - Read `AsyncResult` atoms with `useAtomSuspense` when a Suspense boundary owns loading.
-- A ref-shaped value uses `useRef`, not state containing `{current}`.
+- A ref-shaped value uses `useRef`, not state containing `{current}`; initialize React refs with `null` and rely on the inferred null lifecycle.
 - `Atom.family` identity uses a stable domain value, never array position or concatenated fields.
 - Keep props beside their owner; reusable component packages receive no service-schema types.
 - Async commands expose pending and failure. Success follows backend confirmation.

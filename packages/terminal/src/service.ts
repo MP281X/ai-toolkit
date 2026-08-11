@@ -48,10 +48,10 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 		const resizeQueue = yield* Queue.sliding<TerminalSize>(1)
 		const lifecycleLock = yield* Semaphore.make(1)
 		const screenLock = yield* Semaphore.make(1)
-		const processRef = yield* Ref.make<
-			{data: {dispose: () => void}; exit: {dispose: () => void}; process: IPty} | undefined
-		>(void 0)
-		const replayProcessRef = yield* Ref.make<IPty | undefined>(void 0)
+		const processRef = yield* Ref.make(
+			Option.none<{data: {dispose: () => void}; exit: {dispose: () => void}; process: IPty}>()
+		)
+		const replayProcessRef = yield* Ref.make(Option.none<IPty>())
 		const sizeRef = yield* Ref.make<TerminalSize>({cols: 120, rows: 32})
 		const oscRef = yield* Ref.make('')
 		const attachedRef = yield* Ref.make<Queue.Queue<TerminalFrame, Cause.Done>[]>([])
@@ -106,7 +106,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			)
 		}
 
-		function setTitle(title: string | undefined, state: TerminalStatus['state'] | undefined) {
+		function setTitle(title?: string, state?: TerminalStatus['state']) {
 			return pipe(
 				SubscriptionRef.get(status),
 				Effect.flatMap(current => {
@@ -136,7 +136,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const processOutput = Effect.fnUntraced(function* (output: {data: string; process: IPty}) {
 			const replayProcess = yield* Ref.get(replayProcessRef)
-			if (replayProcess !== output.process) return
+			if (!pipe(replayProcess, Option.contains(output.process))) return
 
 			for (const chunk of terminalChunks(output.data)) {
 				yield* pipe(writeOutput(chunk), Semaphore.withPermit(screenLock))
@@ -167,7 +167,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 			if (size.cols === nextSize.cols && size.rows === nextSize.rows) return
 
 			yield* Ref.set(sizeRef, nextSize)
-			const process = yield* Ref.get(processRef)
+			const process = pipe(yield* Ref.get(processRef), Option.getOrUndefined)
 			yield* Effect.try({
 				catch: cause => TerminalError.make({cause, message: 'failed to resize terminal'}),
 				try: () => {
@@ -185,26 +185,29 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const stopProcess = Effect.fnUntraced(function* (state?: TerminalStatus['state']) {
 			const handle = yield* Ref.get(processRef)
-			if (!handle) {
+			if (Option.isNone(handle)) {
 				if (state) yield* setStatus(state)
 				return
 			}
 
 			yield* Effect.sync(() => {
-				handle.data.dispose()
-				handle.exit.dispose()
+				handle.value.data.dispose()
+				handle.value.exit.dispose()
 			})
-			yield* Ref.update(processRef, current => (current === handle ? undefined : current))
+			yield* Ref.update(
+				processRef,
+				Option.filter(current => current !== handle.value)
+			)
 			yield* pipe(
 				Effect.sync(() => {
-					handle.process.kill('SIGTERM')
+					handle.value.process.kill('SIGTERM')
 				}),
 				Effect.ignore
 			)
 			yield* Effect.sleep('250 millis')
 			yield* pipe(
 				Effect.sync(() => {
-					handle.process.kill('SIGKILL')
+					handle.value.process.kill('SIGKILL')
 				}),
 				Effect.ignore
 			)
@@ -213,7 +216,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const spawnProcess = Effect.fnUntraced(function* () {
 			yield* stopProcess()
-			yield* Ref.set(replayProcessRef, undefined)
+			yield* Ref.set(replayProcessRef, Option.none())
 			yield* Ref.set(oscRef, '')
 			yield* pipe(resetScreen(), Semaphore.withPermit(screenLock))
 			yield* publishStatus({state: 'starting', title: ''})
@@ -277,9 +280,12 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 						lifecycleLock,
 						Effect.gen(function* () {
 							const current = yield* Ref.get(processRef)
-							if (current !== handle) return
+							if (!pipe(current, Option.contains(handle))) return
 
-							yield* Ref.update(processRef, value => (value === handle ? undefined : value))
+							yield* Ref.update(
+								processRef,
+								Option.filter(value => value !== handle)
+							)
 							if (Predicate.isUndefined(config.command)) {
 								yield* pipe(
 									Effect.sleep('1 second'),
@@ -294,8 +300,8 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				)
 			})
 			const handle = {data, exit, process: subprocess}
-			yield* Ref.set(processRef, handle)
-			yield* Ref.set(replayProcessRef, subprocess)
+			yield* Ref.set(processRef, Option.some(handle))
+			yield* Ref.set(replayProcessRef, Option.some(subprocess))
 			yield* setStatus('running')
 
 			return yield* SubscriptionRef.get(status)
@@ -303,11 +309,11 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 
 		const startDefaultProcess = Effect.fnUntraced(function* () {
 			if (Predicate.isNotUndefined(config.command)) return
-			if (yield* Ref.get(processRef)) return
+			if (Option.isSome(yield* Ref.get(processRef))) return
 
 			yield* pipe(
 				Effect.gen(function* () {
-					if (yield* Ref.get(processRef)) return
+					if (Option.isSome(yield* Ref.get(processRef))) return
 					yield* spawnProcess()
 				}),
 				Semaphore.withPermit(lifecycleLock),
@@ -429,7 +435,7 @@ export class Terminal extends Context.Service<Terminal>()('@deslop/terminal/serv
 				if (data === '') return
 
 				yield* Effect.annotateCurrentSpan({byteLength: data.length, cwd: config.cwd, inputType: input.type})
-				const process = yield* Ref.get(processRef)
+				const process = pipe(yield* Ref.get(processRef), Option.getOrUndefined)
 				if (!process) return
 
 				yield* Effect.try({

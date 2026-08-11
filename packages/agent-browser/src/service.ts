@@ -26,7 +26,7 @@ import {Socket} from 'effect/unstable/socket'
 
 import {AgentBrowserError, agentBrowserOwnedTabLabels} from './schema.ts'
 
-function agentBrowserEnableEnv(enable: string | undefined) {
+function agentBrowserEnableEnv(enable?: string) {
 	if (Predicate.isUndefined(enable) || String.isEmpty(enable)) return 'react-devtools'
 	if (String.includes('react-devtools')(enable)) return enable
 	return `${enable},react-devtools`

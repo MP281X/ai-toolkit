@@ -298,7 +298,7 @@ export function PatchDiff(props: {
 }) {
 	const containerRef = useRef<HTMLElement>(null)
 	const pointerClientYRef = useRef<number>(null)
-	const scrollAnchorRef = useRef<Exclude<ReturnType<typeof captureScrollAnchor>, undefined>>(null)
+	const scrollAnchorRef = useRef<NonNullable<ReturnType<typeof captureScrollAnchor>>>(null)
 	const [draftComment, setDraftComment] = useState<PatchDiff.Comment>()
 	const patch = Predicate.isString(props.patch) && String.isNonEmpty(props.patch) ? props.patch : undefined
 	const fileContent = Predicate.isString(props.fileContent) ? props.fileContent : undefined

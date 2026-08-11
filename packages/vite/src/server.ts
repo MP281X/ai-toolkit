@@ -6,7 +6,21 @@ import type {Duplex} from 'node:stream'
 import type {NodeServices} from '@effect/platform-node'
 import {NodeHttpServer, NodeSocket} from '@effect/platform-node'
 
-import {Array, Cause, Context, Effect, Exit, Layer, Predicate, Record, Scope, Semaphore, String, pipe} from 'effect'
+import {
+	Array,
+	Cause,
+	Context,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	Predicate,
+	Record,
+	Scope,
+	Semaphore,
+	String,
+	pipe
+} from 'effect'
 
 import {HttpRouter, HttpServer} from 'effect/unstable/http'
 import type {Connect, EnvironmentModuleNode, Plugin} from 'vite'
@@ -21,13 +35,11 @@ function isBackendRequest(request: IncomingMessage) {
 }
 
 export function serverEnvironment(config?: {external: string[]}): Plugin {
-	let active:
-		| {
-				request: (request: IncomingMessage, response: ServerResponse) => void
-				scope: Scope.Scope
-				upgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => void
-		  }
-		| undefined
+	let active = Option.none<{
+		request: (request: IncomingMessage, response: ServerResponse) => void
+		scope: Scope.Scope
+		upgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => void
+	}>()
 	let pendingReplacement = false
 	let reloadBackend = Effect.void
 	const reloadLock = Semaphore.makeUnsafe(1)
@@ -35,9 +47,9 @@ export function serverEnvironment(config?: {external: string[]}): Plugin {
 	const runPromise = Effect.runPromiseWith(Context.empty())
 
 	const close = Effect.suspend(() => {
-		if (active === undefined) return Effect.void
-		const scope = active.scope
-		active = undefined
+		if (Option.isNone(active)) return Effect.void
+		const scope = active.value.scope
+		active = Option.none()
 		return Scope.close(scope, Exit.void)
 	})
 	return {
@@ -64,7 +76,7 @@ export function serverEnvironment(config?: {external: string[]}): Plugin {
 		configureServer: server => {
 			const environment = server.environments['server']
 			const httpServer = server.httpServer
-			if (environment === undefined || !isRunnableDevEnvironment(environment)) {
+			if (Predicate.isUndefined(environment) || !isRunnableDevEnvironment(environment)) {
 				throw new TypeError('Vite environment "server" must be runnable')
 			}
 			if (Predicate.isNull(httpServer)) throw new TypeError('Vite must own an HTTP server')
@@ -97,11 +109,11 @@ export function serverEnvironment(config?: {external: string[]}): Plugin {
 									})
 							)
 							const httpEffect = yield* HttpRouter.toHttpEffect(application.default)
-							active = {
+							active = Option.some({
 								request: yield* NodeHttpServer.makeHandler(httpEffect, {scope}),
 								scope,
 								upgrade: yield* NodeHttpServer.makeUpgradeHandler(Effect.succeed(webSocketServer), httpEffect, {scope})
-							}
+							})
 						}),
 						Scope.provide(scope),
 						// The dynamically loaded server application receives its complete platform layer here.
@@ -135,19 +147,19 @@ export function serverEnvironment(config?: {external: string[]}): Plugin {
 					next()
 					return
 				}
-				if (active === undefined) {
+				if (Option.isNone(active)) {
 					response.writeHead(503).end()
 					return
 				}
-				active.request(request, response)
+				active.value.request(request, response)
 			})
 			viteServer.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
 				if (!isBackendRequest(request)) return
-				if (active === undefined) {
+				if (Option.isNone(active)) {
 					socket.destroy()
 					return
 				}
-				active.upgrade(request, socket, head)
+				active.value.upgrade(request, socket, head)
 			})
 		},
 		hotUpdate: {

@@ -564,6 +564,7 @@ export default defineConfig({
 						Map: 'Use HashMap.',
 						Promise: 'Use Effect.',
 						Set: 'Use HashSet.',
+						undefined: 'Use an optional property, optional parameter, inference, or Option.',
 						WeakMap: 'Use Effect-owned state.',
 						WeakSet: 'Use Effect-owned state.'
 					}

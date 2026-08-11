@@ -34,7 +34,7 @@ function loopDetectedResponse(hops: number) {
 
 const portlessInstrumentationLoader = `<script>(()=>{if(navigator.webdriver===true)return;const load=src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;(document.head||document.documentElement||document.body).appendChild(script)});void load('https://unpkg.com/react-scan/dist/auto.global.js').then(()=>{window.reactScan?.({allowInIframe:true,_debug:'verbose'});return load('https://unpkg.com/react-grab/dist/index.global.js')}).catch(()=>{})})()</script>`
 
-function htmlContentType(contentType: string | null | undefined) {
+function htmlContentType(contentType?: string | null) {
 	return pipe(contentType ?? '', String.toLowerCase, String.includes('text/html'))
 }
 
@@ -258,7 +258,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	return HttpServerResponse.empty()
 })
 
-function hostname(host: string | undefined) {
+function hostname(host?: string) {
 	return pipe(
 		Option.fromUndefinedOr(host),
 		Option.flatMap(value => pipe(value, String.split(':'), Array.head))

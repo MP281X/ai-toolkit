@@ -203,7 +203,7 @@ const checkpointCommit = {trailer: 'Deslop-Checkpoint: true'} as const
 type DiscoveredWorktree = {branch?: string; gitDirectory: string; main: boolean; root: string}
 
 function discoveredWorktree(input: {
-	branch: string | undefined
+	branch?: string
 	gitDirectory: string
 	main: boolean
 	root: string

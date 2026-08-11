@@ -68,7 +68,6 @@ class Item<TValue extends RichTextArea.Value> extends MenuOption {
 }
 
 function editorSnapshot<TValue extends RichTextArea.Value>(
-	editor: Lexical.LexicalEditor | undefined,
 	tokensMap: HashMap.HashMap<string, RichTextArea.Token<TValue>>,
 	setTokensMap: (
 		update:
@@ -76,7 +75,8 @@ function editorSnapshot<TValue extends RichTextArea.Value>(
 			| ((
 					current: HashMap.HashMap<string, RichTextArea.Token<TValue>>
 			  ) => HashMap.HashMap<string, RichTextArea.Token<TValue>>)
-	) => void
+	) => void,
+	editor?: Lexical.LexicalEditor
 ) {
 	if (!editor) {
 		const emptyEditor = Lexical.createEditor({namespace: 'rich-text-area', nodes: [TokenNode]})
@@ -121,9 +121,9 @@ function editorSnapshot<TValue extends RichTextArea.Value>(
 }
 
 function restore<TValue extends RichTextArea.Value>(
-	editor: Lexical.LexicalEditor | undefined,
 	snapshot: RichTextArea.Snapshot<TValue>,
-	setTokensMap: (tokensMap: HashMap.HashMap<string, RichTextArea.Token<TValue>>) => void
+	setTokensMap: (tokensMap: HashMap.HashMap<string, RichTextArea.Token<TValue>>) => void,
+	editor?: Lexical.LexicalEditor
 ) {
 	if (!editor) return
 
@@ -133,8 +133,8 @@ function restore<TValue extends RichTextArea.Value>(
 }
 
 function getItems<TValue extends RichTextArea.Value>(
-	search: {trigger: string; query: string} | undefined,
-	options: Record<string, {color: string; values: TValue[]}> | undefined
+	search?: {trigger: string; query: string},
+	options?: Record<string, {color: string; values: TValue[]}>
 ) {
 	if (!search) return Array.empty<Item<TValue>>()
 
@@ -224,7 +224,7 @@ function lineBeforeCursor(text: string, offset: number) {
 	return {line: String.slice(index + 1)(before), start: index + 1}
 }
 
-function continueList(event: KeyboardEvent | undefined) {
+function continueList(event?: KeyboardEvent) {
 	if (event?.shiftKey !== true) return false
 
 	const current = currentTextNodeSelection()
@@ -301,7 +301,7 @@ function EditorPlugin<TValue extends RichTextArea.Value>(props: {
 					if (event?.shiftKey === true || props.isMenuOpen() || Predicate.isUndefined(props.onSubmit)) return false
 
 					event?.preventDefault()
-					props.onSubmit(editorSnapshot(editor, props.tokensMap, props.setTokensMap))
+					props.onSubmit(editorSnapshot(props.tokensMap, props.setTokensMap, editor))
 					return true
 				},
 				Lexical.COMMAND_PRIORITY_LOW
@@ -373,7 +373,7 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 	) => void
 	options?: Record<string, {color: string; values: TValue[]}>
 }) {
-	const [search, setSearch] = useState<{trigger: string; query: string} | undefined>()
+	const [search, setSearch] = useState<{trigger: string; query: string}>()
 	return (
 		<LexicalTypeaheadMenuPlugin<Item<TValue>>
 			onQueryChange={() => {}}
@@ -547,10 +547,10 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 				editorRef.current?.focus()
 			},
 			getSnapshot() {
-				return editorSnapshot(editorRef.current ?? undefined, tokensMap, setTokensMap)
+				return editorSnapshot(tokensMap, setTokensMap, editorRef.current ?? undefined)
 			},
 			restore(nextSnapshot: RichTextArea.Snapshot<TValue>) {
-				restore(editorRef.current ?? undefined, nextSnapshot, setTokensMap)
+				restore(nextSnapshot, setTokensMap, editorRef.current ?? undefined)
 			}
 		}),
 		[setTokensMap, tokensMap]
@@ -594,7 +594,7 @@ export function RichTextArea<TValue extends RichTextArea.Value = RichTextArea.Va
 						if (editor && !initialSnapshotRestoredRef.current) {
 							initialSnapshotRestoredRef.current = true
 							if (Predicate.isNotUndefined(input.initialSnapshot)) {
-								restore(editor, input.initialSnapshot, setTokensMap)
+								restore(input.initialSnapshot, setTokensMap, editor)
 							}
 						}
 					}}

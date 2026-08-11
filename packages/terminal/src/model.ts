@@ -200,7 +200,7 @@ export function terminalOscUpdates(data: string, carry = '') {
 		index: 0,
 		nextCarry: '',
 		updates: Array.empty<
-			| {state: TerminalStatus['state'] | undefined; title: string | undefined; type: 'title'}
+			| {state?: TerminalStatus['state']; title?: string; type: 'title'}
 			| {state: TerminalStatus['state']; type: 'progress'}
 		>()
 	}

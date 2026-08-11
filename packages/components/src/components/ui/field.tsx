@@ -157,7 +157,7 @@ function FieldError({
 	children,
 	errors,
 	...props
-}: React.ComponentProps<'div'> & {errors?: Array<{message?: string} | undefined>}) {
+}: React.ComponentProps<'div'> & {errors?: Array<{message?: string}>}) {
 	if (Array.isArrayEmpty(errors ?? [])) return null
 
 	return (

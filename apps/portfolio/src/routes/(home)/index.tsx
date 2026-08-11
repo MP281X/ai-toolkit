@@ -143,11 +143,15 @@ function getDisplayCursorTarget(
 	viewport: {width: number; height: number},
 	localPointer?: {x: number; y: number}
 ) {
-	if (isMe && Predicate.isNotUndefined(localPointer)) {
-		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
-	}
-
-	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
+	return pipe(
+		localPointer,
+		Option.fromUndefinedOr,
+		Option.filter(() => isMe),
+		Option.match({
+			onNone: () => ({x: cursor.x * viewport.width, y: cursor.y * viewport.height}),
+			onSome: pointer => ({x: pointer.x * viewport.width, y: pointer.y * viewport.height})
+		})
+	)
 }
 
 function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
@@ -852,8 +856,8 @@ function PortfolioRoute() {
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{x: number; y: number} | undefined>(void 0)
-	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number} | undefined>(void 0)
+	const queuedPointerRef = useRef<{x: number; y: number}>(null)
+	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number}>(null)
 	const [identityColor, setIdentityColor] = useState(identity.color)
 	const [localPointer, setLocalPointer] = useState<{x: number; y: number}>()
 	const [showShortcuts, setShowShortcuts] = useState(false)
@@ -904,21 +908,21 @@ function PortfolioRoute() {
 		pointerFrameRef.current = requestAnimationFrame(() => {
 			pointerFrameRef.current = 0
 
-			if (Predicate.isUndefined(queuedPointerRef.current)) return
+			if (Predicate.isNull(queuedPointerRef.current)) return
 
 			const now = performance.now()
 
-			if (Predicate.isNotUndefined(lastSentPointerRef.current)) {
+			if (Predicate.isNotNull(lastSentPointerRef.current)) {
 				const deltaX = queuedPointerRef.current.x - lastSentPointerRef.current.x
 				const deltaY = queuedPointerRef.current.y - lastSentPointerRef.current.y
 
 				if (now - lastSentPointerRef.current.sentAt < 50 && deltaX * deltaX + deltaY * deltaY < 0.0025 * 0.0025) {
-					queuedPointerRef.current = undefined
+					queuedPointerRef.current = null
 					return
 				}
 			}
 
-			if (Predicate.isNotUndefined(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
+			if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
 
 			lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 
@@ -926,7 +930,7 @@ function PortfolioRoute() {
 				payload: {color: identityColor, id: identity.id, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 			})
 
-			queuedPointerRef.current = undefined
+			queuedPointerRef.current = null
 		})
 	}
 

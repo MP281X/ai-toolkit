@@ -85,7 +85,7 @@ function addTokens(left: AgentUsageTokens, right: AgentUsageTokens) {
 	return {cached: left.cached + right.cached, input: left.input + right.input, output: left.output + right.output}
 }
 
-function sameTokens(left: AgentUsageTokens | undefined, right: AgentUsageTokens) {
+function sameTokens(right: AgentUsageTokens, left?: AgentUsageTokens) {
 	return (
 		Predicate.isNotUndefined(left) &&
 		left.cached === right.cached &&
@@ -134,7 +134,7 @@ function totalUsageFromMarker(content: string, markerIndex: number) {
 	}
 }
 
-function totalDelta(previous: AgentUsageTokens | undefined, next: AgentUsageTokens) {
+function totalDelta(next: AgentUsageTokens, previous?: AgentUsageTokens) {
 	if (Predicate.isUndefined(previous)) return next
 	if (next.cached < previous.cached || next.input < previous.input || next.output < previous.output) return next
 
@@ -158,7 +158,7 @@ function totalUsageTokensFromContent(content: string) {
 				? current
 				: {
 						previous: Option.some(next),
-						total: addTokens(current.total, totalDelta(Option.getOrUndefined(current.previous), next))
+						total: addTokens(current.total, totalDelta(next, Option.getOrUndefined(current.previous)))
 					}
 		}
 	).total
@@ -187,7 +187,7 @@ function explicitUsageTokensFromContent(content: string) {
 					const next = codexUsageTokens(usage)
 					return {
 						previous: Option.some(next),
-						total: sameTokens(Option.getOrUndefined(current.previous), next)
+						total: sameTokens(next, Option.getOrUndefined(current.previous))
 							? current.total
 							: addTokens(current.total, next)
 					}

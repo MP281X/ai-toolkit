@@ -116,7 +116,7 @@ const homeSidebarAtom = Atom.keepAlive(
 	)
 )
 
-export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
+export const activeHomeAtom = Atom.family((worktreeId?: string) =>
 	Atom.keepAlive(
 		Atom.make(get =>
 			pipe(
@@ -143,7 +143,7 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 	)
 )
 
-export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
+export const activeSidebarAtom = Atom.family((worktreeId?: string) =>
 	Atom.keepAlive(
 		Atom.make(get =>
 			pipe(
