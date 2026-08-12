@@ -12,5 +12,6 @@
 		{"exports": ["*"], "file": "packages/*/src/schema.ts"},
 		{"exports": ["*"], "file": "packages/components/src/components/**"},
 		{"exports": ["default"], "file": "packages/oxlint-rules/src/oxlint-plugin.ts"}
-	]
+	],
+	"rules": {"require-suppression-reason": "error"}
 }

@@ -23,7 +23,7 @@ import {
 
 import {HttpClient} from 'effect/unstable/http'
 
-import {AgentError, AgentUsageData, AgentUsageTokens} from '../schema.ts'
+import {AgentError, AgentUsageData, AgentUsageTokens} from '#schema'
 
 type ClaudeCredentials = typeof ClaudeCredentials.Type
 const ClaudeCredentials = Schema.fromJsonString(

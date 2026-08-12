@@ -1,16 +1,17 @@
 ---
 name: testing
-description: 'Use when independently acceptance-testing a complete candidate without editing repository files.'
+description: 'Use for independent read-only acceptance testing of a complete candidate.'
 ---
 
-Treat the issue as the contract. Independently derive and execute adversarial scenarios from acceptance, changed public behavior, boundaries, concurrency, lifecycle, regressions, and counterexamples; treat the candidate and its claims as untrusted.
+Load every matching `engineering` reference. Derive adversarial scenarios from the issue, changed public behavior, boundaries, concurrency, lifecycle, and counterexamples. Execute through consumer-visible interfaces.
 
-For rendered UI or browser behavior, load `references/browser-evidence.md`.
+Rendered behavior → `references/browser-evidence.md`.
 
 ```text
 Failure — scenario · expected · observed · evidence
-Gap     — untested requirement · missing capability/evidence
+Gap     — required behavior · missing capability or evidence
 Skipped — check · reason
+Clean   — scenarios executed · evidence
 ```
 
-Order by impact. A material skip is a gap.
+Order by impact. A skipped check required to prove issue behavior is a gap.

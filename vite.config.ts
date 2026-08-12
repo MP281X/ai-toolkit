@@ -168,11 +168,8 @@ const noRestrictedProperties: NonNullable<NonNullable<ViteUserConfig['lint']>['r
 	{message: 'React Compiler owns memoization.', object: 'React', property: 'useCallback'},
 	{message: 'Pass refs as props in React 19.', object: 'React', property: 'forwardRef'},
 	{message: 'Use useRef in function components.', object: 'React', property: 'createRef'},
-	{message: 'Compose JSX directly.', object: 'React', property: 'cloneElement'},
-	{message: 'Compose JSX directly.', object: 'React', property: 'Children'},
 	{message: 'Use function components.', object: 'React', property: 'Component'},
 	{message: 'Use function components.', object: 'React', property: 'PureComponent'},
-	{message: 'Use JSX.', object: 'React', property: 'createFactory'},
 	{message: 'Use Schema.Struct.', object: 'Schema', property: 'Class'},
 	{message: 'Use a branded schema.', object: 'Schema', property: 'Opaque'},
 	{message: 'Use Schema.Struct.', object: 'Schema', property: 'TaggedClass'},
@@ -273,7 +270,6 @@ export default defineConfig({
 			'@deslop/oxlint-rules/inline-schema-operation': 'error',
 			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
-			'@deslop/oxlint-rules/no-void-promise-atom': 'error',
 			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
 			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
 			'@deslop/oxlint-rules/no-trivial-indirection': 'error',
@@ -417,6 +413,10 @@ export default defineConfig({
 			'@typescript-eslint/no-unsafe-return': 'error',
 			'@typescript-eslint/no-useless-empty-export': 'error',
 			'@typescript-eslint/unified-signatures': 'error',
+			'typescript/await-thenable': 'error',
+			'typescript/no-unnecessary-qualifier': 'error',
+			'typescript/no-wrapper-object-types': 'error',
+			'typescript/unbound-method': 'error',
 
 			// TypeScript preferences
 			'@typescript-eslint/prefer-as-const': 'error',
@@ -432,63 +432,57 @@ export default defineConfig({
 			// JavaScript style
 			'arrow-body-style': ['error', 'as-needed'],
 			curly: ['error', 'multi-line', 'consistent'],
+			eqeqeq: 'error',
 			'func-names': ['error', 'as-needed', {generators: 'never'}],
 			'func-style': ['error', 'declaration'],
 
 			// Imports
 			'import/newline-after-import': 'error',
 			'import/no-commonjs': 'error',
+			'import/no-absolute-path': 'error',
 			'import/no-default-export': 'error',
 			'import/no-duplicates': 'error',
 			'import/no-empty-named-blocks': 'error',
 			'import/no-mutable-exports': 'error',
+			'import/no-relative-parent-imports': 'error',
 			'import/no-self-import': 'error',
 			'no-restricted-imports': [
 				'error',
 				{
 					paths: [
 						{
-							importNames: [
-								'Children',
-								'Component',
-								'PureComponent',
-								'cloneElement',
-								'createFactory',
-								'createRef',
-								'forwardRef',
-								'memo',
-								'useCallback',
-								'useMemo'
-							],
+							importNames: ['Component', 'PureComponent', 'createRef', 'forwardRef', 'memo', 'useCallback', 'useMemo'],
 							message: 'Use React 19 function components and let React Compiler own memoization.',
 							name: 'react'
 						}
 					],
-					patterns: [
-						{
-							message: 'Use public package exports.',
-							regex: '^(?:@deslop/[^/]+/(?:src|lib)(?:/|$)|(?:\\.\\./)+[^/]+/(?:src|lib)(?:/|$))'
-						}
-					]
+					patterns: [{message: 'Use public package exports.', regex: '^@deslop/[^/]+/(?:src|lib)(?:/|$)'}]
 				}
 			],
 
 			// JavaScript correctness
 			'no-continue': 'error',
+			'no-cond-assign': 'error',
+			'no-control-regex': 'error',
 			'no-debugger': 'error',
 			'no-else-return': 'error',
 			'no-empty-function': ['error', {allow: ['arrowFunctions']}],
 			'no-eval': 'error',
 			'no-extend-native': 'error',
+			'no-extra-bind': 'error',
+			'no-extra-boolean-cast': 'error',
 			'no-implied-eval': 'error',
+			'no-invalid-regexp': 'error',
 			'no-iterator': 'error',
 			'no-lonely-if': 'error',
+			'no-misleading-character-class': 'error',
 			'no-multi-assign': 'error',
 			'no-negated-condition': 'error',
 			'no-nested-ternary': 'error',
-			'no-new-func': 'error',
+			'no-new': 'error',
 			'no-param-reassign': ['error', {props: true}],
 			'no-proto': 'error',
+			'no-plusplus': 'error',
 			'no-restricted-globals': [
 				'error',
 				'AbortController',
@@ -513,28 +507,35 @@ export default defineConfig({
 				'error',
 				{allow: ['Array', 'Boolean', 'Console', 'Effect', 'HashMap', 'Number', 'Option', 'Schema', 'String']}
 			],
+			'no-self-assign': 'error',
+			'no-sparse-arrays': 'error',
 			'no-throw-literal': 'error',
+			'no-unmodified-loop-condition': 'error',
 			'no-unneeded-ternary': 'error',
+			'no-unsafe-finally': 'error',
 			'no-useless-assignment': 'error',
+			'no-useless-backreference': 'error',
 			'no-useless-catch': 'error',
 			'no-useless-call': 'error',
 			'no-useless-computed-key': 'error',
 			'no-useless-concat': 'error',
 			'no-useless-constructor': 'error',
+			'no-useless-escape': 'error',
 			'no-useless-rename': 'error',
 			'no-useless-return': 'error',
 			'no-unused-expressions': 'error',
+			'no-void': 'error',
 			'object-shorthand': 'error',
 
 			// Oxc
 			'oxc/branches-sharing-code': 'error',
 			'oxc/no-accumulating-spread': 'error',
 			'oxc/no-map-spread': 'error',
+			'oxc/only-used-in-recursion': 'error',
 
 			// JavaScript preferences
 			'prefer-arrow-callback': 'error',
 			'prefer-const': ['error', {destructuring: 'all'}],
-			'prefer-regexp-test': 'error',
 			'prefer-template': 'error',
 			'require-unicode-regexp': 'error',
 
@@ -569,8 +570,6 @@ export default defineConfig({
 			// React Doctor browser and legacy APIs
 			'react-doctor/no-event-handler': 'error',
 			'react-doctor/no-flush-sync': 'error',
-			'react-doctor/no-react-dom-deprecated-apis': 'error',
-			'react-doctor/no-react19-deprecated-apis': 'error',
 
 			// React Doctor rendering and compiler
 			'react-doctor/no-render-in-render': 'error',
@@ -597,23 +596,20 @@ export default defineConfig({
 			'react/jsx-curly-brace-presence': ['error', {children: 'never', propElementValues: 'always', props: 'never'}],
 			'react/jsx-fragments': ['error', 'syntax'],
 			'react/jsx-key': 'error',
-			'react/jsx-no-duplicate-props': 'error',
 			'react/jsx-no-script-url': 'error',
 			'react/jsx-no-target-blank': 'error',
-			'react/jsx-no-undef': 'error',
 			'react/jsx-no-useless-fragment': 'error',
 			'react/no-children-prop': 'error',
 			'react/no-array-index-key': 'error',
+			'react/no-clone-element': 'error',
 			'react/no-danger': 'error',
-			'react/no-danger-with-children': 'error',
+			'react/no-object-type-as-default-prop': 'error',
+			'react/no-react-children': 'error',
 			'react/no-unknown-property': 'error',
 			'react/no-unstable-nested-components': ['error', {allowAsProps: true}],
-			'react/prefer-function-component': 'error',
 			'react/react-compiler': 'error',
-			'react/require-render-return': 'error',
 			'react/rules-of-hooks': 'error',
 			'react/self-closing-comp': 'error',
-			'react/style-prop-object': 'error',
 			'react/void-dom-elements-no-children': 'error',
 
 			// JavaScript object order
@@ -621,7 +617,6 @@ export default defineConfig({
 
 			// TypeScript syntax
 			'typescript/ban-ts-comment': ['error', {'ts-nocheck': true}],
-			'typescript/no-meaningless-void-operator': 'error',
 			'typescript/no-restricted-types': [
 				'error',
 				{
@@ -660,7 +655,6 @@ export default defineConfig({
 			'unicorn/no-useless-length-check': 'error',
 			'unicorn/no-useless-spread': 'error',
 			'unicorn/no-useless-switch-case': 'error',
-			'unicorn/no-useless-undefined': 'error',
 			'unicorn/prefer-logical-operator-over-ternary': 'error',
 			'unicorn/prefer-optional-catch-binding': 'error',
 

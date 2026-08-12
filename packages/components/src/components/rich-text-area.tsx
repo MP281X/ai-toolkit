@@ -450,7 +450,9 @@ function TypeaheadPlugin<TValue extends RichTextArea.Value>(props: {
 									tabIndex={0}
 									key={option.key}
 									id={`typeahead-item-${index}`}
-									ref={option.setRefElement}
+									ref={element => {
+										option.setRefElement(element)
+									}}
 									value={option.key}
 									aria-selected={menuProps.selectedIndex === index}
 									className={cn('px-3', menuProps.selectedIndex === index && 'bg-muted')}

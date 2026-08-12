@@ -123,7 +123,7 @@ function TerminalAttachment(input: {
 		activeRef.current = true
 		lastSequenceRef.current = -1
 		writingRef.current = false
-		pullFrames(void 0)
+		pullFrames()
 
 		return () => {
 			activeRef.current = false
@@ -154,7 +154,7 @@ function TerminalAttachment(input: {
 
 			const next = terminalAttachmentOperations({frames: result.value.items, lastSequence: lastSequenceRef.current})
 			if (next.operations.length === 0) {
-				pullFrames(void 0)
+				pullFrames()
 				return
 			}
 
@@ -172,7 +172,7 @@ function TerminalAttachment(input: {
 				if (Predicate.isUndefined(operation)) {
 					lastSequenceRef.current = next.lastSequence
 					writingRef.current = false
-					pullFrames(void 0)
+					pullFrames()
 					return
 				}
 				if (Predicate.isNull(input.terminalRef.current)) {

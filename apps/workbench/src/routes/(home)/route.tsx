@@ -122,23 +122,23 @@ function HomeLayout() {
 						agentProfiles={activeHome.value.agentProfiles}
 						projects={activeHome.value.projects}
 						selectWorktree={worktreeRoot => {
-							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/diff'})
+							startTransition(async () => {
+								await navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/diff'})
 							})
 						}}
 						selectTerminal={worktreeRoot => {
-							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
+							startTransition(async () => {
+								await navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/terminal'})
 							})
 						}}
 						selectPortless={worktreeRoot => {
-							startTransition(() => {
-								void navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/agent-browser'})
+							startTransition(async () => {
+								await navigate({params: {worktree: worktreeRouteId(worktreeRoot)}, to: '/$worktree/agent-browser'})
 							})
 						}}
 						selectAgent={(worktreeRoot, agentId) => {
-							startTransition(() => {
-								void navigate({
+							startTransition(async () => {
+								await navigate({
 									params: {worktree: worktreeRouteId(worktreeRoot)},
 									search: {agentId},
 									to: '/$worktree/agent'
@@ -146,8 +146,8 @@ function HomeLayout() {
 							})
 						}}
 						selectRun={(worktreeRoot, sessionId, inactive) => {
-							startTransition(() => {
-								void navigate({
+							startTransition(async () => {
+								await navigate({
 									params: {worktree: worktreeRouteId(worktreeRoot)},
 									search: {inactive, sessionId},
 									to: '/$worktree/run'
@@ -706,8 +706,8 @@ function WorktreeManager(input: {
 					variant="ghost"
 					size="sm"
 					className="text-muted-foreground hover:text-foreground flex h-full w-full min-w-0 justify-start px-3 text-left"
-					onClick={() => {
-						if (input.activeWorktree) void navigator.clipboard.writeText(input.activeWorktree.root)
+					onClick={async () => {
+						if (input.activeWorktree) await navigator.clipboard.writeText(input.activeWorktree.root)
 					}}
 				>
 					<span className="min-w-0 truncate">
@@ -723,8 +723,8 @@ function WorktreeManager(input: {
 						aria-label={search.filterActiveWorktrees ? 'Showing agent worktrees' : 'Showing all worktrees'}
 						className={search.filterActiveWorktrees ? 'bg-muted text-foreground h-8 w-8' : 'h-8 w-8'}
 						onClick={() => {
-							startTransition(() => {
-								void navigate({
+							startTransition(async () => {
+								await navigate({
 									replace: true,
 									search: current => ({...current, filterActiveWorktrees: !search.filterActiveWorktrees}),
 									to: pathname

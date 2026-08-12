@@ -57,10 +57,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							name: 'invalid.tsx',
 							source: pipe(
 								[
-									"import {useAtom, useAtomSet} from '@effect/atom-react'",
 									"import {Schema, SchemaTransformation, pipe} from 'effect'",
 									"import {useRef, useState} from 'react'",
-									"import {RpcClient} from '#lib/atomRuntime.ts'",
 									'',
 									'declare const input: unknown',
 									'declare const source: string',
@@ -69,19 +67,16 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'type Explicit = {readonly values: readonly string[]}',
 									'const ref = useRef<HTMLElement | null>(null)',
 									'const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(source)',
-									"const mutate = useAtomSet(RpcClient.mutation('save'), {mode: 'promise'})",
-									'void mutate(input)',
-									"const [result, mutateFromPair] = useAtom(RpcClient.mutation('save'), {mode: 'promise'})",
-									'void mutateFromPair(input)',
 									'function forward(value: string) { return consume(value) }',
 									'function ready() { return source.length > 0 }',
 									'function run() { consume(source) }',
 									'function consume(value: string) { return value.length }',
+									'const callbacks = {consume: (value: string) => consume(value)}',
 									'const alias = source',
 									'const [fake] = useState(() => ({current: null}))',
 									'const state = useState(0)',
-									'void {MissingType, alias, decode, decoded, fake, forward, input, mutate, ready, ref, result, run}',
-									'void (0 as unknown as Explicit)'
+									'export {MissingType, alias, callbacks, decode, decoded, fake, forward, input, ready, ref, run}',
+									'export type {Explicit}'
 								],
 								Array.join('\n')
 							)
@@ -91,12 +86,11 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							pipe(
 								[
 									'@deslop/oxlint-rules(inline-schema-operation)',
-									'@deslop/oxlint-rules(no-void-promise-atom)',
-									'@deslop/oxlint-rules(no-void-promise-atom)',
 									'@deslop/oxlint-rules(no-fake-ref-state)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
+									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
@@ -125,12 +119,13 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							source: pipe(
 								[
 									"import {useAtomSet} from '@effect/atom-react'",
-									"import {Schema} from 'effect'",
+									"import {Schema, SchemaTransformation, identity, pipe} from 'effect'",
 									"import {useRef, useState} from 'react'",
 									"import {RpcClient} from '#lib/atomRuntime.ts'",
 									'',
 									'declare const input: unknown',
 									'declare const actionAtom: object',
+									'declare function combine(left: string, right: string): string',
 									'type User = typeof User.Type',
 									'const User = Schema.Struct({name: Schema.String})',
 									'export type Public = typeof Public.Type',
@@ -138,7 +133,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'type Exported = typeof Exported.Type',
 									'export const Exported = Schema.Struct({name: Schema.String})',
 									'type Normalized = typeof Normalized.Type',
-									'const Normalized = pipe(Schema.Struct({value: Schema.String}), Schema.decodeTo(Schema.Struct({value: Schema.String}), SchemaTransformation.transform({decode: value => value, encode: value => value})))',
+									'const Normalized = pipe(Schema.Struct({value: Schema.String}), Schema.decodeTo(Schema.Struct({value: Schema.String}), SchemaTransformation.transform({decode: identity, encode: identity})))',
 									'const decoded = Schema.decodeUnknown(User)(input)',
 									'const encoded = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(input)',
 									'const ref = useRef<HTMLElement>(null)',
@@ -146,8 +141,11 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const fire = useAtomSet(RpcClient.mutation("save"))',
 									'const [stable] = useState(() => actionAtom)',
 									'function transform(value: string) { return value.length }',
+									'function swap(left: string, right: string) { return combine(right, left) }',
+									'function first(head: string, tail: string) { return head }',
+									'function withDefault(value = "ready") { return transform(value) }',
 									'const tuple = ["ready", 1] as const',
-									'void {Normalized, decoded, encoded, fire, mutate, ref, stable, transform, tuple}'
+									'export {Normalized, decoded, encoded, fire, first, mutate, ref, stable, swap, transform, tuple, withDefault}'
 								],
 								Array.join('\n')
 							)
@@ -195,8 +193,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'  return Schema.decode("ok")',
 									'}',
 									'function useRef<T>() { return undefined as T | undefined }',
-									'void useRef<string | null>()',
-									'void compile'
+									'const ref = useRef<string | null>()',
+									'export {compile, ref}'
 								],
 								Array.join('\n')
 							)

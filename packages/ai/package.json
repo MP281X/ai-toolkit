@@ -3,6 +3,11 @@
 	"sideEffects": false,
 	"name": "@deslop/ai",
 
+	"imports": {
+		"#schema": "./src/schema.ts",
+		"#service": "./src/service.ts"
+	},
+
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts",

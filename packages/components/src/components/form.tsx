@@ -342,9 +342,9 @@ export function Form(props: Form.Props) {
 		<props.form.AppForm>
 			<form
 				className={cn('flex flex-1 items-center justify-center', props.className)}
-				onSubmit={event => {
+				onSubmit={async event => {
 					event.preventDefault()
-					void submit()
+					await submit()
 				}}
 			>
 				{props.children}

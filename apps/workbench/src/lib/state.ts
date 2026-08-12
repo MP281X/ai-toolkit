@@ -100,7 +100,7 @@ const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('projects', void 0)),
+			Effect.map(client => client('projects', undefined)),
 			Stream.unwrap
 		)
 	)
@@ -110,7 +110,7 @@ const homeSidebarAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('home.sidebar', void 0)),
+			Effect.map(client => client('home.sidebar', undefined)),
 			Stream.unwrap
 		)
 	)
@@ -201,7 +201,7 @@ export const systemUsageAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('usage.system', void 0)),
+			Effect.map(client => client('usage.system', undefined)),
 			Stream.unwrap
 		)
 	)

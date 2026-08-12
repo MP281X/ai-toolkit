@@ -9,18 +9,17 @@ Keep every review boundary valid without rewriting published history.
 - Inspect the complete topology before mutation.
 
 ```bash
-gh stack add
-gh stack view
-gh stack submit
+gh stack add          # create a branch atop the current stack
+gh stack init --adopt # adopt existing branches
+gh stack view         # inspect topology
+gh stack submit       # publish the stack as draft pull requests
 ```
 
-In `gh stack submit`, set every pull request to draft; never use `--open`.
+In `gh stack submit`, set every pull request to draft.
 
 ## Published alignment
 
 - Align root → tip, one node at a time.
 - Merge the updated immediate base into each published descendant; validate and push normally.
-- If intended conflict resolution is not provable, stop.
+- Provable conflict resolution is the continuation condition.
 - After a parent merges, retarget its direct child to the parent's destination and recheck the topology.
-
-Reject `gh stack sync`, rebase, amend, squash, reset, and force-push for published branches.

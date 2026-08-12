@@ -22,6 +22,7 @@ import {
 	Schema,
 	Stream,
 	String,
+	Struct,
 	SubscriptionRef,
 	pipe
 } from 'effect'
@@ -353,7 +354,7 @@ export const RpcHandlers = RpcContracts.toLayer(
 				)
 				const browser = Context.get(context, AgentBrowser)
 				return {
-					switchTab: browser.switchTab,
+					...Struct.pick(browser, ['switchTab']),
 					sync: Effect.fnUntraced(function* (runs: PortlessRun[]) {
 						yield* browser.openTabs(Array.map(runs, run => run.origin.origin))
 					})

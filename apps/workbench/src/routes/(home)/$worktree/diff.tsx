@@ -267,8 +267,8 @@ function ReviewViewPanel(input: {cwd: string}) {
 	useAtomMount(reviewMutationNotificationsAtom(input.cwd))
 
 	function selectTarget(target: GitReviewTarget) {
-		startTransition(() => {
-			void navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
+		startTransition(async () => {
+			await navigate({search: target._tag === 'commit' ? {commit: target.hash} : {}})
 		})
 		setSelection({filePath: '', scope: target._tag === 'commit' ? view.selection.scope : target})
 	}

@@ -9,8 +9,7 @@ Preserve the linked issue as the contract; describe only the delivered outcome a
 ```
 
 - At most 50 characters after the type.
-- No trailing period or body.
-- Match repository vocabulary; reject `support`, `improve`, `update`, and `draft`.
+- Use repository vocabulary and a specific outcome in one unpunctuated line.
 
 ## Pull request
 
@@ -23,5 +22,3 @@ Use a concise final-outcome title.
 
 Closes #<number>
 ```
-
-Exclude issue restatement, superseded requirements, iterations, workflow, validation, commit chronology, file narration, and recoverable facts.

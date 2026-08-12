@@ -20,14 +20,14 @@ importers:
   .:
     dependencies:
       '@effect/atom-react':
-        specifier: ^4.0.0-beta
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)(react@19.2.8)(scheduler@0.27.0)
+        specifier: ^4.0.0-rc
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(react@19.2.8)(scheduler@0.27.0)
       '@effect/platform-node':
-        specifier: ^4.0.0-beta
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)(ioredis@5.11.1)
+        specifier: ^4.0.0-rc
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)
       effect:
-        specifier: ^4.0.0-beta
-        version: 4.0.0-beta.107
+        specifier: ^4.0.0-rc
+        version: 4.0.0-rc.108
     devDependencies:
       '@deslop/oxlint-rules':
         specifier: workspace:*
@@ -36,8 +36,8 @@ importers:
         specifier: latest
         version: 0.36.4
       '@effect/vitest':
-        specifier: ^4.0.0-beta
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)(vitest@4.1.10)
+        specifier: ^4.0.0-rc
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@types/node':
         specifier: latest
         version: 26.2.0
@@ -145,7 +145,7 @@ importers:
     dependencies:
       agent-browser:
         specifier: latest
-        version: 0.33.2
+        version: 0.34.0
 
   packages/ai:
     dependencies:
@@ -166,7 +166,7 @@ importers:
         version: 5.3.0
       '@legendapp/list':
         specifier: ^3.0.0-beta
-        version: 3.3.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 3.3.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@lexical/react':
         specifier: latest
         version: 0.49.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2)(yjs@13.6.32)
@@ -175,7 +175,7 @@ importers:
         version: 1.3.5(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-form':
         specifier: latest
-        version: 1.33.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-hotkeys':
         specifier: latest
         version: 0.10.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -251,8 +251,8 @@ importers:
   packages/opentelemetry:
     dependencies:
       '@effect/opentelemetry':
-        specifier: ^4.0.0-beta
-        version: 4.0.0-beta.107(@opentelemetry/api-logs@0.221.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-beta.107)
+        specifier: ^4.0.0-rc
+        version: 4.0.0-rc.108(@opentelemetry/api-logs@0.221.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.108)
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: latest
         version: 0.221.0(@opentelemetry/api@1.9.1)
@@ -618,15 +618,15 @@ packages:
     resolution: {integrity: sha512-udeXFbgEhJ6JiB0uguwNVNkDy2FENfmtQwPcY+/iJ8GWeq18wkal1tKqa5YyeH0IqtX1vG0cGh8zfSYzyzVuLA==}
     engines: {node: '>=22.19.0'}
 
-  '@effect/atom-react@4.0.0-beta.107':
-    resolution: {integrity: sha512-dSx8Mmgge8oy3On8k95V3dyaRo9od8Eg0our56PIrTlRZBBRLXM2vc/X7GsxAYtHs2PMracVFUJqizXCcPsCyQ==}
+  '@effect/atom-react@4.0.0-rc.108':
+    resolution: {integrity: sha512-GNHQ4ildpnI00AdyL3cKRBo387aEpoY6tIIfwPrrZoNbMGCVNupiAIReoD6dBwWIgOEIASd/YLwx1DR42Jqx7g==}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
       react: '>=19.2.7 <20.0.0'
       scheduler: '>=0.27.0 <0.28.0'
 
-  '@effect/opentelemetry@4.0.0-beta.107':
-    resolution: {integrity: sha512-WxR3OEcwVtckNYGxvERA4kiS8cb2B46lSWxQw8P6dCCzW0j0VC7hkWyzryJ16MVXfI/5xQHS3r5j9mud+JVvsg==}
+  '@effect/opentelemetry@4.0.0-rc.108':
+    resolution: {integrity: sha512-jlJ3XmYhPQv3XV75mIBWUdggkCLIhSNQK2lGM3M89/ifdwkYfKBsPbW1AP36l54ImH79Hi0JrNdL8lOUhctHmg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0 <2.0.0'
@@ -638,7 +638,7 @@ packages:
       '@opentelemetry/sdk-trace-node': '>=2.0.0 <3.0.0'
       '@opentelemetry/sdk-trace-web': '>=2.0.0 <3.0.0'
       '@opentelemetry/semantic-conventions': '>=1.33.0 <2.0.0'
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
     peerDependenciesMeta:
       '@opentelemetry/api':
         optional: true
@@ -657,17 +657,17 @@ packages:
       '@opentelemetry/sdk-trace-web':
         optional: true
 
-  '@effect/platform-node-shared@4.0.0-beta.107':
-    resolution: {integrity: sha512-y6BqcRi86BfTJv+tvDrob4ozYVHxxlHYcn/zIQqZjXI9CvKnkgD6ng+38G1o45c4f2ucU+6HRI9POCmFdMoVGA==}
+  '@effect/platform-node-shared@4.0.0-rc.108':
+    resolution: {integrity: sha512-g5dSRR+tHzFcWav5A6zbug78oV8WPJL5BJqgKlKtow0cQ2IpULcLZaP2xCYR3RJDvz5SETREmPCJ+BNONIsalw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
 
-  '@effect/platform-node@4.0.0-beta.107':
-    resolution: {integrity: sha512-k+6YNbV4Ck0L6YXtlgkvEnuP5tlxWD8EeWOrpn46PDqbGEwt4ONpRltTwm3tn2cyBXD0i+2P11cUH/6sdFagTA==}
+  '@effect/platform-node@4.0.0-rc.108':
+    resolution: {integrity: sha512-Nof78154BaHGdSYr4TPQFZ5+Dg+HkpmbI3SQUdwsby5QNs6yahGJPu2AgdIVqdx7pKZ2w7j/bvdnqoMmkG0PbA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
       ioredis: '>=5.7.0 <6.0.0'
 
   '@effect/tsgo-darwin-arm64@0.36.4':
@@ -709,10 +709,10 @@ packages:
     resolution: {integrity: sha512-fNmdUV6FgXnvIcG18AVS1SRXt7z9jsyBh5CKuJYmTsE+DgbLaWF0CevKHx7hQPcidDWRVmdJYfU66Jvc/ZEt6w==}
     hasBin: true
 
-  '@effect/vitest@4.0.0-beta.107':
-    resolution: {integrity: sha512-n4/qsx4DnT4dEI/wNgMivxyUeJoeiU1TCSz0WnoHWk/dny40Oxjip2P9IXGQDgPb9fsYVnerF0QRA6nPUuExQA==}
+  '@effect/vitest@4.0.0-rc.108':
+    resolution: {integrity: sha512-XD2GP1JATN28wnIeFGsBqYMuQDCHIodKKgFulGyG91GvuHqgf2gz+WxR2LPdyNoKMtr7lsbRzVj07niSYtIKzA==}
     peerDependencies:
-      effect: ^4.0.0-beta.107
+      effect: ^4.0.0-rc.108
       vitest: '>=4.1.0 <5.0.0'
 
   '@emnapi/core@1.11.2':
@@ -828,8 +828,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@legendapp/list@3.3.4':
-    resolution: {integrity: sha512-XsKCM7F8Fmy1jE7dZ9UEBCihouVOJ6B5pbAI1ssooadBu+YQHGoSQdxHs5dPXHb4qkGOIfUIAljIXnDzMYUCCQ==}
+  '@legendapp/list@3.3.5':
+    resolution: {integrity: sha512-XTsLYtpg41SVb5uLBYA+YcDSA3w0tgoPq/W8ZggQ2tx+3lrC/rf+ehTP9KYHea9oFaZIuePAgzACs5/auVMJlQ==}
     peerDependencies:
       react: '*'
       react-dom: '*'
@@ -2269,8 +2269,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@tanstack/form-core@1.33.4':
-    resolution: {integrity: sha512-nqNaVAS+FfdWq6pfVqLC7SkgvRFyQEM9UEruIMTQULQ5SGF2X6+7RduFgr5ofpHftAHw/2yVs2vvIafx4WCVGQ==}
+  '@tanstack/form-core@1.33.5':
+    resolution: {integrity: sha512-3dfx9MBP0aq5sXKteikG629X9oviptrQj0IFRk9YGcb+lB7Kv5x8S17oOSk1wUWgjQZ4xVJEMbKwOAODymocgA==}
 
   '@tanstack/history@1.162.1':
     resolution: {integrity: sha512-DR9t6lfLVdrjgCwpglrR9DR7Ok8/HlXjcOE+goWXF3zyuLUO/ug7vMbSFxTqrQTtbRghJfyhmIZ0S6LhPIy44w==}
@@ -2284,8 +2284,8 @@ packages:
     resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
     engines: {node: '>=18'}
 
-  '@tanstack/react-form@1.33.4':
-    resolution: {integrity: sha512-EnPxwYq+QPmW+BovL58IW9ioSGPmpkLZk2zpEZKj11n2TleonJ/ASZAEb6tsdzTkHTX2JFKwJv8cpYozYnNZXw==}
+  '@tanstack/react-form@1.33.5':
+    resolution: {integrity: sha512-LlRB28qJwO/QCGaHvWnbdh4haBgTFiZVmzA2uzxSBS3YA7/IqrQ6HOBK70CkFQ+DbflZ7NawsmSln13h5iIdTA==}
     peerDependencies:
       '@tanstack/react-start': '*'
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -2969,8 +2969,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  agent-browser@0.33.2:
-    resolution: {integrity: sha512-e+TZ0G04uw2rs+lVB8gn0IWTT7ErfiAl3jQ4zNNwyqDhgXWJKhqxYKkyibjuBGXLzx/APlzU3IWAsOVdRwh0DA==}
+  agent-browser@0.34.0:
+    resolution: {integrity: sha512-eR6Ey4I/DMs9zZ60b3ziV6pgLIgpxXWzggr3dfFbtskLmeXPJAgXCIIwVL4PihVYJqEUpvWgUKlZ2CIjY1u44g==}
     engines: {node: '>=24.0.0', pnpm: '>=11.0.0'}
     hasBin: true
 
@@ -3241,8 +3241,8 @@ packages:
     peerDependencies:
       cytoscape: ^3.2.0
 
-  cytoscape@3.34.0:
-    resolution: {integrity: sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg==}
+  cytoscape@3.34.1:
+    resolution: {integrity: sha512-Lr0RvH9H75y9ar8h9Toy6u4lxRSCcxUq+hHcQ26sVWo6BnaQp1gwEZOYqwuYTZhyW7npyKnNLP8oJ2p1/3OZ7g==}
     engines: {node: '>=0.10'}
 
   d3-array@2.12.1:
@@ -3492,11 +3492,11 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-beta.107:
-    resolution: {integrity: sha512-OoBAv8eF+yanc+C6xhgEUnWeXUSHA6ynnscYqpkAY9GSnzZWystsIjBowVqCkLpHGlnRtdIqYT3wHwpOY6JDnQ==}
+  effect@4.0.0-rc.108:
+    resolution: {integrity: sha512-KmI3DlKZWPvCL4QQ2FMaPOuxMt/7DrKMENCY/gQ+MkDR5QYw25wgU5Zmh/wVLboNjIci1gNOgNCFe4xqgxli3A==}
 
-  electron-to-chromium@1.5.403:
-    resolution: {integrity: sha512-MQsYmdaLzvaCX5j+ZZBr5Fm6uCCnPQcRtlvmvRlWqrXy+BH2O4ffXIAScF+JQznQWB9brWp4lSD9Z4yNmaf2BA==}
+  electron-to-chromium@1.5.404:
+    resolution: {integrity: sha512-3WJtd7/lVq2Jnuz6wed1l9+1ZD2u2Tet1/1NBc4Iedkmgbu+I7YuAqdAQ8T+VZtnwysMsAf3IqSq9D1gyZjA2g==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -5811,16 +5811,16 @@ snapshots:
       get-east-asian-width: 1.6.0
       marked: 18.0.5
 
-  '@effect/atom-react@4.0.0-beta.107(effect@4.0.0-beta.107)(react@19.2.8)(scheduler@0.27.0)':
+  '@effect/atom-react@4.0.0-rc.108(effect@4.0.0-rc.108)(react@19.2.8)(scheduler@0.27.0)':
     dependencies:
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
       react: 19.2.8
       scheduler: 0.27.0
 
-  '@effect/opentelemetry@4.0.0-beta.107(@opentelemetry/api-logs@0.221.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-beta.107)':
+  '@effect/opentelemetry@4.0.0-rc.108(@opentelemetry/api-logs@0.221.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.221.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.108)':
     dependencies:
       '@opentelemetry/semantic-conventions': 1.43.0
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.221.0
@@ -5831,19 +5831,19 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 2.10.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-web': 2.10.0(@opentelemetry/api@1.9.1)
 
-  '@effect/platform-node-shared@4.0.0-beta.107(effect@4.0.0-beta.107)':
+  '@effect/platform-node-shared@4.0.0-rc.108(effect@4.0.0-rc.108)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0-beta.107(effect@4.0.0-beta.107)(ioredis@5.11.1)':
+  '@effect/platform-node@4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.107(effect@4.0.0-beta.107)
-      effect: 4.0.0-beta.107
+      '@effect/platform-node-shared': 4.0.0-rc.108(effect@4.0.0-rc.108)
+      effect: 4.0.0-rc.108
       ioredis: 5.11.1
       mime: 4.1.0
       undici: 8.10.0
@@ -5882,9 +5882,9 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.36.4
       '@effect/tsgo-win32-x64': 0.36.4
 
-  '@effect/vitest@4.0.0-beta.107(effect@4.0.0-beta.107)(vitest@4.1.10)':
+  '@effect/vitest@4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)':
     dependencies:
-      effect: 4.0.0-beta.107
+      effect: 4.0.0-rc.108
       vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.8(@types/node@26.2.0)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
 
   '@emnapi/core@1.11.2':
@@ -6000,7 +6000,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@legendapp/list@3.3.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@legendapp/list@3.3.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       react: 19.2.8
       use-sync-external-store: 1.6.0(react@19.2.8)
@@ -7145,7 +7145,7 @@ snapshots:
 
   '@tanstack/devtools-event-client@0.4.4': {}
 
-  '@tanstack/form-core@1.33.4':
+  '@tanstack/form-core@1.33.5':
     dependencies:
       '@tanstack/devtools-event-client': 0.4.4
       '@tanstack/pacer-lite': 0.1.1
@@ -7159,9 +7159,9 @@ snapshots:
 
   '@tanstack/pacer-lite@0.1.1': {}
 
-  '@tanstack/react-form@1.33.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@tanstack/form-core': 1.33.4
+      '@tanstack/form-core': 1.33.5
       '@tanstack/react-store': 0.11.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
     transitivePeerDependencies:
@@ -7737,7 +7737,7 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agent-browser@0.33.2: {}
+  agent-browser@0.34.0: {}
 
   ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:
@@ -7831,7 +7831,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.11.13
       caniuse-lite: 1.0.30001809
-      electron-to-chromium: 1.5.403
+      electron-to-chromium: 1.5.404
       node-releases: 2.0.53
       update-browserslist-db: 1.3.1(browserslist@4.28.8)
 
@@ -7968,17 +7968,17 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.0):
+  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.1):
     dependencies:
       cose-base: 1.0.3
-      cytoscape: 3.34.0
+      cytoscape: 3.34.1
 
-  cytoscape-fcose@2.2.0(cytoscape@3.34.0):
+  cytoscape-fcose@2.2.0(cytoscape@3.34.1):
     dependencies:
       cose-base: 2.2.0
-      cytoscape: 3.34.0
+      cytoscape: 3.34.1
 
-  cytoscape@3.34.0: {}
+  cytoscape@3.34.1: {}
 
   d3-array@2.12.1:
     dependencies:
@@ -8225,7 +8225,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-beta.107:
+  effect@4.0.0-rc.108:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.9.0
@@ -8233,7 +8233,7 @@ snapshots:
       msgpackr: 2.0.5
       uuid: 14.0.1
 
-  electron-to-chromium@1.5.403: {}
+  electron-to-chromium@1.5.404: {}
 
   emoji-regex@10.6.0: {}
 
@@ -8944,9 +8944,9 @@ snapshots:
       '@mermaid-js/parser': 1.2.0
       '@types/d3': 7.4.3
       '@upsetjs/venn.js': 2.0.0
-      cytoscape: 3.34.0
-      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.0)
-      cytoscape-fcose: 2.2.0(cytoscape@3.34.0)
+      cytoscape: 3.34.1
+      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.1)
+      cytoscape-fcose: 2.2.0(cytoscape@3.34.1)
       d3: 7.9.0
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14

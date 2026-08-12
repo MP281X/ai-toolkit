@@ -1,36 +1,184 @@
-# React
+# React and Effect Atom
 
-## Intent
+| State                                      | Owner                  |
+| ------------------------------------------ | ---------------------- |
+| Shareable or restorable view               | TanStack Router search |
+| Cross-component, async, derived, real-time | Effect Atom            |
+| Backend operation and stream               | Effect RPC             |
+| Ephemeral DOM handle                       | React                  |
 
-Give each state one owner; keep components presentational.
-
-| Owner                  | State                                                                   |
-| ---------------------- | ----------------------------------------------------------------------- |
-| TanStack Router search | shareable/restorable view, selection, filter, sort, tab, panel, cursor  |
-| Effect Atom            | frontend logic, derived values, async state, actions, pending, failures |
-| Effect RPC             | typed backend requests, success, failure, and streams                   |
-| React                  | ephemeral DOM interaction                                               |
+## Real-time vertical slice
 
 ```ts
-const [result, maintainProject] = useAtom(RpcClient.mutation('projects.maintenance'), {mode: 'promise'})
-await maintainProject({payload: {cwd}})
+// BAD: component.tsx
+function Items() {
+	const [items, setItems] = useState<Item[]>([])
+
+	useEffect(() => {
+		const close = subscribe(next => setItems(next))
+		return close
+	}, [])
+
+	return items.map(item => <ItemRow key={item.id} item={item} />)
+}
+
+// GOOD: contracts.ts
+Rpc.make('items.changes', {
+	stream: true,
+	success: Schema.Array(Item)
+})
+
+// GOOD: handlers.ts
+'items.changes': () => SubscriptionRef.changes(items.state)
+
+// GOOD: atoms.ts
+export const itemsAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(
+		Stream.unwrap(
+			RpcClient.useSync(client => client('items.changes', undefined))
+		)
+	)
+)
+
+// GOOD: component.tsx
+function Items() {
+	const items = useAtomSuspense(itemsAtom).value
+
+	return Array.map(items, item => <ItemRow key={item.id} item={item} />)
+}
 ```
 
-- Each frontend defines one always-available `AtomRpc.Service` client in its runtime module.
-- Expose current backend state through streaming RPCs.
-- Read `AsyncResult` atoms with `useAtomSuspense` when a Suspense boundary owns loading.
-- Join related async sources and derive the complete presentation model in one Atom; components read the finished model instead of coordinating `AsyncResult` branches.
-- Construct component-local and direct RPC Atoms at their use site; React Compiler stabilizes them. Use module scope for shared state, keyed families, or a composed Atom graph.
-- `Atom.family` identity uses a stable domain value, never array position or concatenated fields.
-- Optimistic state wraps the authoritative source Atom. Its reducer returns the provisional source value; success refreshes that source and failure rolls it back. Never model pending identifiers as an optimistic source.
-- Keep props beside their owner; reusable component packages receive no service-schema types.
-- `AsyncResult` owns pending and failure; never mirror either into React state. Subscribe to fire-and-react failures at the UI boundary.
-- Mount an Atom that owns related `AtomContext.subscribe` reactions instead of installing several component subscriptions.
-- Use generated RPC query and mutation Atoms directly. If composition needs an input type the RPC cannot infer, move that operation into its owning RPC contract instead of inventing a callback-shaped UI contract.
-- Use Promise mode only when its setter is awaited; never discard it with `void`.
-- Keep async operations in Atom. A TSX callback may use `async` / `await` only to sequence the documented Promise bridge of an existing Atom or an unavoidable browser API; never replace Atom ownership with Promise state or Promise-chain methods.
-- Reserve effects for browser synchronization and clean them up.
-- DOM scheduling uses explicit `window` APIs and cleanup when Effect has no synchronous presentation operation.
-- Synchronous presentation uses Effect module unsafe operations when available, such as `DateTime.nowUnsafe()` and `Random.Random.defaultValue().nextDoubleUnsafe()`. When no synchronous Effect operation exists, move the behavior to Effect Atom; never run an Effect during render.
+## Presentation action
 
-Reject domain validation, Promise state, duplicated backend state, optional/local RPC runtimes, wrapper atoms, and effects that derive application data.
+```tsx
+// BAD
+const saveAtom = RpcClient.mutation('item.save')
+
+function SaveButton(props: {item: Item}) {
+	const save = useAtomSet(saveAtom, {mode: 'promise'})
+	return <Button onClick={() => void save({payload: props.item})}>Save</Button>
+}
+
+// GOOD
+function SaveButton(props: {item: Item}) {
+	const [result, save] = useAtom(RpcClient.mutation('item.save'))
+
+	return (
+		<>
+			<Button aria-label="Save" disabled={AsyncResult.isWaiting(result)} onClick={() => save({payload: props.item})}>
+				<SaveIcon />
+			</Button>
+			{AsyncResult.isFailure(result) && <p role="alert">{Cause.pretty(result.cause)}</p>}
+		</>
+	)
+}
+```
+
+## Stable family identity
+
+```ts
+// BAD
+const itemAtom = Atom.family((key: string) => RpcClient.query('item', {key}))
+const item = itemAtom(`${workspaceId}:${itemId}`)
+
+// GOOD
+type ItemKey = typeof ItemKey.Type
+const ItemKey = Schema.Struct({itemId: Schema.String, workspaceId: Schema.String})
+
+const itemAtom = Atom.family((key: ItemKey) => RpcClient.query('item', key))
+const item = itemAtom(ItemKey.make({itemId, workspaceId}))
+```
+
+## Derived state
+
+```ts
+// BAD
+function Items() {
+	const items = useAtomSuspense(itemsAtom).value
+	const visible = items.filter(item => item.visible)
+
+	return visible.map(item => <ItemRow key={item.id} item={item} />)
+}
+
+// GOOD
+const visibleItemsAtom = Atom.mapResult(
+	itemsAtom,
+	Array.filter(item => item.visible)
+)
+
+function Items() {
+	const items = useAtomSuspense(visibleItemsAtom).value
+
+	return Array.map(items, item => <ItemRow key={item.id} item={item} />)
+}
+```
+
+## Material optimism
+
+```ts
+// BAD: infrequent background action
+const refreshAtom = Atom.optimisticFn(Atom.optimistic(statusAtom), {
+	fn: RpcClient.mutation('status.refresh'),
+	reducer: () => 'refreshing'
+})
+
+// GOOD: immediate editable interaction
+const saveItemAtom = Atom.family((id: string) =>
+	Atom.optimisticFn(Atom.optimistic(RpcClient.query('item', {id})), {
+		fn: RpcClient.mutation('item.save'),
+		reducer: (result, input) => AsyncResult.map(result, item => Item.update(item, input.payload))
+	})
+)
+```
+
+## Placement
+
+| Value                                            | Scope                      |
+| ------------------------------------------------ | -------------------------- |
+| Direct RPC query or mutation                     | component consumption site |
+| Shared Atom, derived graph, family, subscription | module                     |
+| DOM ref or browser synchronization               | component                  |
+
+Suspense and error boundaries own async presentation. React APIs with native `null` emptiness use their implicit form.
+
+```tsx
+// BAD
+const inputRef = useRef<HTMLInputElement | null>(null)
+
+// GOOD
+const inputRef = useRef<HTMLInputElement>(null)
+```
+
+## Synchronous React boundary
+
+```tsx
+// BAD
+const random = Random.Random.defaultValue()
+
+function Sparkle() {
+	const [angle] = useState(() => random.nextDoubleUnsafe())
+	return <span style={{rotate: `${angle}turn`}} />
+}
+
+// GOOD
+function Sparkle() {
+	const [angle] = useState(() => Random.Random.defaultValue().nextDoubleUnsafe())
+	return <span style={{rotate: `${angle}turn`}} />
+}
+```
+
+## Source
+
+| API                                | Import                       |
+| ---------------------------------- | ---------------------------- |
+| `Atom` · `AsyncResult` · `AtomRpc` | `effect/unstable/reactivity` |
+| `Rpc` · `RpcGroup`                 | `effect/unstable/rpc`        |
+| React Atom hooks                   | `@effect/atom-react`         |
+
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/Atom.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/AtomRpc.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/AsyncResult.ts`
+- `.agents/repos/effect/packages/atom/react/src/Hooks.ts`
+- `.agents/repos/react/packages/react/src/ReactHooks.js`
+- `.agents/repos/react/compiler`
+- `.agents/repos/tanstack-router/packages/router-core/src`

@@ -1,26 +1,44 @@
-# Tests
+# Package behavior tests
 
-## Intent
-
-Protect breakable public behavior with deterministic evidence.
-
-- Test a current requirement, consumer, protocol, or regression risk.
-- Exercise packages through public exports.
-- Replace commands, APIs, CLIs, and networks at their system boundary.
-- Derive expected values independently from implementation logic.
-- Colocate tests as `name.test.ts` or `name.test.tsx`.
-- Do not test types, schema shape, framework shape, method existence, library behavior, or compile-time guarantees.
+## Public behavior across implementations
 
 ```ts
-it.effect('behavior', () =>
+// BAD
+it.effect('writes memory state', () =>
 	Effect.gen(function* () {
-		assert.deepStrictEqual(yield* program, expected)
-	})
+		const storage = yield* MemoryStorageRef
+		yield* Ref.set(storage, HashMap.make(['1', Item.make({id: '1'})]))
+		expect(yield* Ref.get(storage)).toHaveLength(1)
+	}).pipe(Effect.provide(Items.layerMemory))
 )
-it('pure behavior', () => assert.deepStrictEqual(actual, expected))
+
+// GOOD
+describe.each([
+	['memory', Items.layerMemory],
+	['sql', Items.layerSqlTest]
+])('%s', (_, layer) => {
+	it.effect('saves and reads an item', () =>
+		Effect.gen(function* () {
+			const items = yield* Items
+
+			yield* items.save(Item.make({id: '1'}))
+
+			expect(yield* items.get('1')).toEqual(Item.make({id: '1'}))
+		}).pipe(Effect.provide(layer))
+	)
+})
 ```
 
-- Supply requirements through layers or in-memory services.
-- Use scoped tests for resources and finalizers, the test clock for time, and the failure channel for typed errors.
+| Include                                                                    | Exclude                                       |
+| -------------------------------------------------------------------------- | --------------------------------------------- |
+| Public service and helper behavior with independently derived expectations | Type and schema shape                         |
+| Reachable typed failures                                                   | Impossible inputs and implementation branches |
+| Logic across mocked surrounding Layers                                     | External tools, APIs, packages, transports    |
+| Current contract across implementations                                    | Removed behavior and compatibility history    |
 
-Reject manual runtimes, private imports, implementation-coupled harnesses, and copied assertions.
+Colocate `name.test.ts` with `name.ts`. Packages own durable behavior tests. Applications compose packages, retain minimal application-specific logic, and use browser acceptance for UI and UX.
+
+## Source
+
+- `.agents/repos/effect/packages/vitest/src/index.ts`
+- `.agents/repos/effect/packages/effect/src/testing/TestClock.ts`

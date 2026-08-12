@@ -35,10 +35,12 @@ function terminalInputString(input: TerminalInput) {
 }
 
 function pauseProcess(process: IPty) {
+	// oxlint-disable-next-line typescript/unbound-method -- IPty omits the this contract for optional prototype methods.
 	if ('pause' in process && Predicate.isFunction(process.pause)) process.pause()
 }
 
 function resumeProcess(process: IPty) {
+	// oxlint-disable-next-line typescript/unbound-method -- IPty omits the this contract for optional prototype methods.
 	if ('resume' in process && Predicate.isFunction(process.resume)) process.resume()
 }
 

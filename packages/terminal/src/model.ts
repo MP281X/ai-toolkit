@@ -148,7 +148,7 @@ function terminalOscStart(input: string, index: number) {
 	)
 	if (code === 0x9d) return {length: 1, payloadStart: index + 1}
 	if (code === 0x1b && input[index + 1] === ']') return {length: 2, payloadStart: index + 2}
-	return void 0
+	return undefined
 }
 
 function terminalOscEnd(input: string, payloadStart: number) {

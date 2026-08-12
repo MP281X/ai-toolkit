@@ -31,9 +31,9 @@ export function Error(props: {error: unknown; reset: () => void}) {
 	return (
 		<Button
 			variant="ghost"
-			onClick={() => {
-				void navigator.clipboard.writeText(message)
+			onClick={async () => {
 				props.reset()
+				await navigator.clipboard.writeText(message)
 			}}
 			className="flex h-full w-full cursor-pointer items-center justify-center p-4 select-text"
 		>

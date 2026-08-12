@@ -140,7 +140,7 @@ function tabsMessage(value?: AgentBrowserStreamMessageFromJson) {
 	return value?.type === 'tabs' ? value.tabs : undefined
 }
 
-export function agentBrowserActiveOwnedTabId(input: {
+function agentBrowserActiveOwnedTabId(input: {
 	ownedTabs: {id: string; label: string; streamLabel: string; url: string}[]
 	streamTabs: Extract<AgentBrowserStreamMessageFromJson, {type: 'tabs'}>['tabs']
 }) {
@@ -213,9 +213,9 @@ export function AgentBrowser(props: {
 
 	function requestDraw() {
 		if (Predicate.isNotNull(rafRef.current) || drawingRef.current) return
-		rafRef.current = requestAnimationFrame(() => {
+		rafRef.current = requestAnimationFrame(async () => {
 			rafRef.current = null
-			if (Predicate.isNotNull(latestFrameRef.current)) void drawFrame(latestFrameRef.current)
+			if (Predicate.isNotNull(latestFrameRef.current)) await drawFrame(latestFrameRef.current)
 		})
 	}
 
@@ -309,8 +309,8 @@ export function AgentBrowser(props: {
 					setActiveTabId(current => (current === nextActive ? current : nextActive))
 				}
 			}
-			socket.addEventListener('message', event => {
-				void handleMessage(event.data)
+			socket.addEventListener('message', async event => {
+				await handleMessage(event.data)
 			})
 		}
 

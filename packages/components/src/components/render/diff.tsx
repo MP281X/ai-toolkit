@@ -7,10 +7,9 @@ import {useHotkey} from '@tanstack/react-hotkeys'
 import {CircleCheckIcon, CopyIcon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
-import {GithubLight} from '../svgs/githubLight.tsx'
-
 import {Markdown} from './markdown.tsx'
 
+import {GithubLight} from '#components/svgs/githubLight.tsx'
 import {Spinner} from '#components/ui/spinner.tsx'
 import {HIGHLIGHT_THEMES, resolveLanguage} from '#lib/shiki.ts'
 
@@ -261,9 +260,9 @@ function CommentAnnotation(props: {
 					className="hover:bg-muted hover:text-foreground p-1"
 					aria-label="Copy comment"
 					title="Copy comment"
-					onClick={event => {
+					onClick={async event => {
 						event.stopPropagation()
-						void navigator.clipboard.writeText(formatCopiedComment(props.comment))
+						await navigator.clipboard.writeText(formatCopiedComment(props.comment))
 					}}
 				>
 					<CopyIcon className="size-3" />

@@ -265,25 +265,8 @@ function propertyName(node: ESTree.ObjectProperty) {
 	return Option.none()
 }
 
-function isRuleOrContextCallback(node: ESTree.Function | ESTree.ArrowFunctionExpression) {
-	if (node.parent.type !== 'Property') return false
-	if (
-		(!node.parent.computed &&
-			node.parent.key.type === 'Identifier' &&
-			(node.parent.key.name === 'create' || node.parent.key.name === 'createOnce')) ||
-		(node.parent.key.type === 'Literal' &&
-			(node.parent.key.value === 'create' || node.parent.key.value === 'createOnce'))
-	) {
-		return true
-	}
-	return node.parent.parent.type === 'ObjectExpression' && node.parent.parent.parent.type === 'CallExpression'
-}
-
 function parameterName(parameter: ESTree.ParamPattern) {
 	if (parameter.type === 'Identifier') return Option.some(parameter.name)
-	if (parameter.type === 'AssignmentPattern' && parameter.left.type === 'Identifier') {
-		return Option.some(parameter.left.name)
-	}
 	if (parameter.type === 'RestElement' && parameter.argument.type === 'Identifier') {
 		return Option.some(parameter.argument.name)
 	}
@@ -292,12 +275,13 @@ function parameterName(parameter: ESTree.ParamPattern) {
 
 function forwardedCall(input: {names: string[]; node: ESTree.CallExpression | ESTree.NewExpression}) {
 	return (
-		input.node.arguments.length > 0 &&
-		Array.every(input.node.arguments, argument => {
+		input.node.arguments.length === input.names.length &&
+		Array.every(input.node.arguments, (argument, index) => {
+			const name = input.names[index]
 			if (argument.type === 'SpreadElement') {
-				return argument.argument.type === 'Identifier' && Array.contains(input.names, argument.argument.name)
+				return argument.argument.type === 'Identifier' && argument.argument.name === name
 			}
-			return argument.type === 'Identifier' && Array.contains(input.names, argument.name)
+			return argument.type === 'Identifier' && argument.name === name
 		})
 	)
 }
@@ -322,8 +306,10 @@ function hasSingleStatementExpression(node: ESTree.Function | ESTree.ArrowFuncti
 function exactForwardingFunction(node: ESTree.Function | ESTree.ArrowFunctionExpression) {
 	const names = pipe(node.params, Array.map(parameterName), Array.getSomes)
 	const returned = returnedExpression(node)
-	if (names.length === 0 || returned === null || returned === undefined) return false
-	if (returned.type === 'Identifier' && Array.contains(names, returned.name)) return true
+	if (names.length === 0 || names.length !== node.params.length || returned === null || returned === undefined) {
+		return false
+	}
+	if (returned.type === 'Identifier') return names.length === 1 && returned.name === names[0]
 	return (
 		(returned.type === 'CallExpression' || returned.type === 'NewExpression') &&
 		returned.callee.type === 'Identifier' &&
@@ -464,63 +450,6 @@ function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression
 	)
 }
 
-function promiseAtom(input: {context: Context; node: ESTree.CallExpression}) {
-	const options = input.node.arguments[1]
-	if (
-		!String.endsWith('.tsx')(input.context.filename) ||
-		input.node.callee.type !== 'Identifier' ||
-		!(
-			isImportBinding({
-				context: input.context,
-				importedName: 'useAtom',
-				node: input.node.callee,
-				source: '@effect/atom-react'
-			}) ||
-			isImportBinding({
-				context: input.context,
-				importedName: 'useAtomSet',
-				node: input.node.callee,
-				source: '@effect/atom-react'
-			})
-		) ||
-		options?.type !== 'ObjectExpression' ||
-		!Array.some(
-			options.properties,
-			property =>
-				property.type === 'Property' &&
-				Option.contains(propertyName(property), 'mode') &&
-				property.value.type === 'Literal' &&
-				property.value.value === 'promise'
-		)
-	) {
-		return false
-	}
-	return true
-}
-
-function promiseAtomSetter(input: {context: Context; node: ESTree.IdentifierReference}) {
-	return pipe(
-		variableFor(input.context, input.node),
-		Option.exists(variable =>
-			Array.some(variable.defs, definition => {
-				if (definition.type !== 'Variable' || definition.node.type !== 'VariableDeclarator') return false
-				if (
-					definition.node.init?.type !== 'CallExpression' ||
-					!promiseAtom({context: input.context, node: definition.node.init})
-				) {
-					return false
-				}
-				if (definition.node.id.type === 'Identifier') return definition.node.id.name === input.node.name
-				return (
-					definition.node.id.type === 'ArrayPattern' &&
-					definition.node.id.elements[1]?.type === 'Identifier' &&
-					definition.node.id.elements[1].name === input.node.name
-				)
-			})
-		)
-	)
-}
-
 const plugin = definePlugin({
 	meta: {name: '@deslop/oxlint-rules'},
 	rules: {
@@ -589,7 +518,6 @@ const plugin = definePlugin({
 			create: context => ({
 				ArrowFunctionExpression: node => {
 					if (
-						!isRuleOrContextCallback(node) &&
 						(node.parent.type === 'VariableDeclarator' || node.parent.type === 'Property') &&
 						(exactForwardingFunction(node) || singleUseThunk({context, node}))
 					) {
@@ -603,7 +531,6 @@ const plugin = definePlugin({
 				},
 				FunctionExpression: node => {
 					if (
-						!isRuleOrContextCallback(node) &&
 						(node.parent.type === 'VariableDeclarator' ||
 							node.parent.type === 'Property' ||
 							(node.parent.type === 'MethodDefinition' && node.parent.override !== true)) &&
@@ -644,24 +571,6 @@ const plugin = definePlugin({
 			}),
 			meta: {type: 'problem'}
 		},
-		'no-void-promise-atom': {
-			create: context => ({
-				UnaryExpression: node => {
-					if (
-						node.operator === 'void' &&
-						node.argument.type === 'CallExpression' &&
-						node.argument.callee.type === 'Identifier' &&
-						promiseAtomSetter({context, node: node.argument.callee})
-					) {
-						context.report({
-							message: 'Await this Promise-mode Atom setter so its result and failure remain observable.',
-							node
-						})
-					}
-				}
-			}),
-			meta: {type: 'problem'}
-		},
 		'schema-type-pair': {
 			createOnce: context => ({
 				Program: program => {
@@ -682,8 +591,7 @@ const plugin = definePlugin({
 										})
 									) {
 										context.report({
-											message:
-												'Place the matching schema type immediately before this schema with the same export visibility.',
+											message: `Place \`type ${variable.id.name} = typeof ${variable.id.name}.Type\` immediately before this Schema.`,
 											node: variable
 										})
 									}

@@ -26,7 +26,7 @@ import {
 
 import {HttpClient} from 'effect/unstable/http'
 
-import {AgentError, AgentSubscription, AgentUsageData, AgentUsageTokens} from '../schema.ts'
+import {AgentError, AgentSubscription, AgentUsageData, AgentUsageTokens} from '#schema'
 
 type CodexCredentials = typeof CodexCredentials.Type
 const CodexCredentials = Schema.fromJsonString(Schema.Struct({tokens: Schema.Struct({access_token: Schema.String})}))

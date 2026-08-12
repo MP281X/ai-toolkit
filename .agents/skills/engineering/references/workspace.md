@@ -1,19 +1,48 @@
 # Workspace
 
-## Intent
+## Topology
 
-Keep package and generated-file ownership explicit.
+Use only paths required by the owning package:
 
-- Edit `package.json` directly; never use `vp add`.
-- Preserve existing manifest key, dependency, and intentional blank-line grouping/order.
-- Put a dependency or script in its owning manifest; do not duplicate a root dependency in workspaces.
-- New versions use `latest` unless the repository's current explicit case requires a range or channel.
-- All-dependency upgrade → `vp run upgrade`; otherwise preserve unrelated ranges and lockfile resolution.
-- Root scripts orchestrate repository behavior; package scripts own package behavior; CLIs use `bin`.
-- Packages expose public entrypoints through `exports` and package-private modules through `imports`.
-- Cross-workspace import → package export; intra-package import → subpath alias.
-- Reject workspace `src`/`lib` imports and parent traversal.
-- Extract a service package only for a generic independently reusable capability whose contract contains no application shapes or sibling-service requirements.
-- Keep application services under `apps/<app>/src/services/<name>/{schema.ts,service.ts,internal/*}` and expose `#services/*` through the owning application manifest.
-- Compose service packages in the application. When two capabilities cannot remain independent, keep their services in one owning package or keep the composition application-local.
-- Change routes, SVGs, primitives, lockfiles, and other generated files through their owner; retain only reproducible output.
+```text
+apps/<app>/src/
+	lib/atomRuntime.ts
+	lib/serverRuntime.ts
+	rpcs/{contracts.ts,handlers.ts}
+	services/<name>/{schema.ts,service.ts,internal/*}
+
+packages/<name>/src/
+	schema.ts
+	service.ts
+	utils.ts
+	internal/*
+```
+
+| Ownership              | Rule                                                  |
+| ---------------------- | ----------------------------------------------------- |
+| Dependency             | highest shared manifest                               |
+| Root script            | repository orchestration                              |
+| Package script         | package-local behavior                                |
+| CLI                    | `bin`; `effect/unstable/cli`                          |
+| Cross-package import   | public package export                                 |
+| Intra-package parent   | package subpath alias                                 |
+| Intra-package sibling  | relative import                                       |
+| Frontend-safe contract | `schema.ts` or `utils.ts`; no backend-only dependency |
+| Implementation         | private `internal/*`                                  |
+| Generated file         | reproducible output changed through its owner         |
+
+Edit manifests directly; retain existing dependency sections and blank-line groups. Full dependency upgrade uses:
+
+```bash
+vp run upgrade
+```
+
+```json
+{"exports": {"./schema": "./src/schema.ts", "./service": "./src/service.ts", "./utils": "./src/utils.ts"}}
+```
+
+Extract a package only for an application-neutral, independently satisfiable capability. Applications minimally compose packages and application-specific behavior.
+
+## Source
+
+- `.agents/repos/effect/packages/effect/src/unstable/cli/index.ts`

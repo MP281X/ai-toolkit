@@ -9,7 +9,7 @@
 	},
 
 	"dependencies": {
-		"@effect/opentelemetry": "^4.0.0-beta",
+		"@effect/opentelemetry": "^4.0.0-rc",
 
 		"@opentelemetry/sdk-trace-web": "latest",
 		"@opentelemetry/sdk-trace-node": "latest",

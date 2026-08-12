@@ -17,7 +17,7 @@
 		"build": "vp run -r build",
 		
 		"fix": "vp check --fix",
-		"check": "vp check && fallow dead-code --unused-files --unused-exports --unused-types --format compact --fail-on-issues",
+		"check": "vp check && fallow dead-code --unused-files --unused-exports --unused-types --duplicate-exports --circular-deps --re-export-cycles --stale-suppressions --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
@@ -27,9 +27,9 @@
 	},
 	
 	"dependencies": {
-		"effect": "^4.0.0-beta",
-		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta"
+		"effect": "^4.0.0-rc",
+		"@effect/atom-react": "^4.0.0-rc",
+		"@effect/platform-node": "^4.0.0-rc"
 	},
 	"devDependencies": {
 		"typescript": "latest",
@@ -39,7 +39,7 @@
 		"@types/react-dom": "^19",
 		
 		"fallow": "latest",
-		"@effect/vitest": "^4.0.0-beta",
+		"@effect/vitest": "^4.0.0-rc",
 		"oxlint-plugin-react-doctor": "latest",
 		
 		"vite": "catalog:",

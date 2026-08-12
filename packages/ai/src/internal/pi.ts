@@ -31,8 +31,8 @@ import {
 } from '@earendil-works/pi-coding-agent'
 import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
 
-import {AiError, type AiStatus} from '../schema.ts'
-import {Ai} from '../service.ts'
+import {AiError, type AiStatus} from '#schema'
+import {Ai} from '#service'
 
 function finishReason(reason: StopReason) {
 	return pipe(
@@ -218,7 +218,7 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 						),
 						Effect.flatMap(
 							Option.match({
-								onNone: () => Effect.succeed(agentToolResult(void 0)),
+								onNone: () => Effect.succeed(agentToolResult(undefined)),
 								onSome: finalResult =>
 									finalResult.isFailure
 										? Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
