@@ -1,50 +1,59 @@
 # React and Effect Atom
 
-| State                                      | Owner                  |
-| ------------------------------------------ | ---------------------- |
-| Shareable or restorable view               | TanStack Router search |
-| Cross-component, async, derived, real-time | Effect Atom            |
-| Backend operation and stream               | Effect RPC             |
-| Ephemeral DOM handle                       | React                  |
+| State                                         | Owner                  |
+| --------------------------------------------- | ---------------------- |
+| Shareable or restorable view                  | TanStack Router search |
+| Cross-component, async, derived, or real-time | Effect Atom            |
+| Backend operation and stream                  | Effect RPC             |
+| Ephemeral DOM handle                          | React                  |
 
 ## Real-time vertical slice
 
 ```ts
 // BAD: component.tsx
-function Items() {
-	const [items, setItems] = useState<Item[]>([])
+function NotesList() {
+	const [notes, setNotes] = useState<Note[]>([])
 
 	useEffect(() => {
-		const close = subscribe(next => setItems(next))
+		const close = subscribe(next => setNotes(next))
 		return close
 	}, [])
 
-	return items.map(item => <ItemRow key={item.id} item={item} />)
+	return notes.map(note => <NoteRow key={note.id} note={note} />)
 }
 
 // GOOD: contracts.ts
-Rpc.make('items.changes', {
+Rpc.make('notes.changes', {
 	stream: true,
-	success: Schema.Array(Item)
+	success: Schema.Array(Note)
 })
 
 // GOOD: handlers.ts
-'items.changes': () => SubscriptionRef.changes(items.state)
+export const NotesRpcsLayer = NotesRpcs.toLayer(
+	Effect.gen(function* () {
+		const notes = yield* Notes
+
+		return NotesRpcs.of({
+			'notes.changes': () => SubscriptionRef.changes(notes.state),
+			'notes.create': input => notes.create(input)
+		})
+	})
+)
 
 // GOOD: atoms.ts
-export const itemsAtom = Atom.keepAlive(
+export const notesAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		Stream.unwrap(
-			RpcClient.useSync(client => client('items.changes', undefined))
+			RpcClient.useSync(client => client('notes.changes', undefined))
 		)
 	)
 )
 
 // GOOD: component.tsx
-function Items() {
-	const items = useAtomSuspense(itemsAtom).value
+function NotesList() {
+	const notes = useAtomSuspense(notesAtom).value
 
-	return Array.map(items, item => <ItemRow key={item.id} item={item} />)
+	return Array.map(notes, note => <NoteRow key={note.id} note={note} />)
 }
 ```
 
@@ -52,21 +61,25 @@ function Items() {
 
 ```tsx
 // BAD
-const saveAtom = RpcClient.mutation('item.save')
+const createNoteAtom = RpcClient.mutation('notes.create')
 
-function SaveButton(props: {item: Item}) {
-	const save = useAtomSet(saveAtom, {mode: 'promise'})
-	return <Button onClick={() => void save({payload: props.item})}>Save</Button>
+function CreateNoteForm() {
+	const [result, create] = useAtom(createNoteAtom)
+	return (
+		<Button disabled={AsyncResult.isWaiting(result)} onClick={() => create({payload: {text: 'Note'}})}>
+			Create
+		</Button>
+	)
 }
 
 // GOOD
-function SaveButton(props: {item: Item}) {
-	const [result, save] = useAtom(RpcClient.mutation('item.save'))
+function CreateNoteForm() {
+	const [result, create] = useAtom(RpcClient.mutation('notes.create'))
 
 	return (
 		<>
-			<Button aria-label="Save" disabled={AsyncResult.isWaiting(result)} onClick={() => save({payload: props.item})}>
-				<SaveIcon />
+			<Button disabled={AsyncResult.isWaiting(result)} onClick={() => create({payload: {text: 'Note'}})}>
+				Create
 			</Button>
 			{AsyncResult.isFailure(result) && <p role="alert">{Cause.pretty(result.cause)}</p>}
 		</>
@@ -86,7 +99,7 @@ type ItemKey = typeof ItemKey.Type
 const ItemKey = Schema.Struct({itemId: Schema.String, workspaceId: Schema.String})
 
 const itemAtom = Atom.family((key: ItemKey) => RpcClient.query('item', key))
-const item = itemAtom(ItemKey.make({itemId, workspaceId}))
+const item = itemAtom({itemId, workspaceId})
 ```
 
 ## Derived state
@@ -95,9 +108,9 @@ const item = itemAtom(ItemKey.make({itemId, workspaceId}))
 // BAD
 function Items() {
 	const items = useAtomSuspense(itemsAtom).value
-	const visible = items.filter(item => item.visible)
+	const visible = Array.filter(items, item => item.visible)
 
-	return visible.map(item => <ItemRow key={item.id} item={item} />)
+	return Array.map(visible, item => <ItemRow key={item.id} item={item} />)
 }
 
 // GOOD
@@ -113,24 +126,6 @@ function Items() {
 }
 ```
 
-## Material optimism
-
-```ts
-// BAD: infrequent background action
-const refreshAtom = Atom.optimisticFn(Atom.optimistic(statusAtom), {
-	fn: RpcClient.mutation('status.refresh'),
-	reducer: () => 'refreshing'
-})
-
-// GOOD: immediate editable interaction
-const saveItemAtom = Atom.family((id: string) =>
-	Atom.optimisticFn(Atom.optimistic(RpcClient.query('item', {id})), {
-		fn: RpcClient.mutation('item.save'),
-		reducer: (result, input) => AsyncResult.map(result, item => Item.update(item, input.payload))
-	})
-)
-```
-
 ## Placement
 
 | Value                                            | Scope                      |
@@ -139,7 +134,7 @@ const saveItemAtom = Atom.family((id: string) =>
 | Shared Atom, derived graph, family, subscription | module                     |
 | DOM ref or browser synchronization               | component                  |
 
-Suspense and error boundaries own async presentation. React APIs with native `null` emptiness use their implicit form.
+Presentation components read Atom state, render, and dispatch writes. DOM-local input state remains in React. Queries and streams render through Suspense/error boundaries; mutations expose pending failure at the launcher. React APIs with native `null` emptiness use their implicit form.
 
 ```tsx
 // BAD
@@ -149,21 +144,18 @@ const inputRef = useRef<HTMLInputElement | null>(null)
 const inputRef = useRef<HTMLInputElement>(null)
 ```
 
-## Synchronous React boundary
+## Pure render
 
 ```tsx
 // BAD
-const random = Random.Random.defaultValue()
-
-function Sparkle() {
-	const [angle] = useState(() => random.nextDoubleUnsafe())
+function Sparkle(props: {random: Random.Random}) {
+	const [angle] = useState(() => props.random.nextDoubleUnsafe())
 	return <span style={{rotate: `${angle}turn`}} />
 }
 
 // GOOD
-function Sparkle() {
-	const [angle] = useState(() => Random.Random.defaultValue().nextDoubleUnsafe())
-	return <span style={{rotate: `${angle}turn`}} />
+function Sparkle(props: {angle: number}) {
+	return <span style={{rotate: `${props.angle}turn`}} />
 }
 ```
 

@@ -20,10 +20,9 @@ stateDiagram-v2
 
 ## Resolve
 
-1. Load `engineering`; inspect related issues, ownership, and matching cloned source.
-2. Compare removal, current dependency capability, and repository-owned behavior.
-3. Present only evidence changing a decision.
-4. Prototype affected UI in repository DevTools; discard before persistence.
+1. Load `engineering`; inspect related issues and ownership.
+2. Remove unnecessary behavior; otherwise use current dependency capability; add repository behavior only for the remainder.
+3. Prototype affected UI in repository DevTools; discard before persistence.
 
 ## Output
 
@@ -42,4 +41,4 @@ Retain observable outcome, material interface, ownership, lifecycle, architectur
 > [!IMPORTANT]
 > Save this issue?
 
-An explicit affirmative authorizes persistence. Load `git-operations`; verify a clean worktree; delegate persistence to a full-history fork inheriting model and effort.
+An explicit affirmative authorizes persistence. Load `git-operations`; delegate the issue write per `AGENTS.md#Delegation`.

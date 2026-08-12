@@ -1,26 +1,22 @@
 # Effect data
 
-## RPC boundary
+## Boundary schema: type first, decode once
 
 ```ts
-// BAD: contracts.ts
-type CreateItem = typeof CreateItem.Type
-const CreateItem = Schema.Struct({label: Schema.optional(Schema.Trim)})
+// BAD: schema.ts
+type CreateNote = typeof CreateNote.Type
+const CreateNote = Schema.Struct({text: Schema.optional(Schema.Trim)})
 
 // BAD: handlers.ts
-create: input => pipe(input, Schema.decodeUnknownEffect(CreateItem), Effect.flatMap(items.create))
+create: input => pipe(input, Schema.decodeUnknownEffect(CreateNote), Effect.flatMap(notes.create))
 
-// GOOD: contracts.ts
-type CreateItem = typeof CreateItem.Type
-const CreateItem = Schema.Struct({
-	label: pipe(Schema.Trim, Schema.optional, Schema.withDecodingDefault(Effect.succeed('Untitled')))
-})
+// GOOD: schema.ts
+type CreateNote = typeof CreateNote.Type
+const CreateNote = Schema.Struct({text: pipe(Schema.Trim, Schema.withDecodingDefault(Effect.succeed('Untitled')))})
 
 // GOOD: handlers.ts
-create: input => items.create(input)
+create: input => notes.create(input)
 ```
-
-## External unknown boundary
 
 ```ts
 // BAD
@@ -58,24 +54,8 @@ return pipe(
 )
 ```
 
-## Filter and order
-
-```ts
-// BAD
-const active = input.users.filter(user => user.active).sort((left, right) => left.name.localeCompare(right.name))
-
-// GOOD
-const active = pipe(
-	input.users,
-	Array.filter(user => user.active),
-	Array.sortWith(user => user.name, Order.String)
-)
-```
-
 ## Source
 
 - `.agents/repos/effect/packages/effect/src/Schema.ts`
 - `.agents/repos/effect/packages/effect/src/UndefinedOr.ts`
 - `.agents/repos/effect/packages/effect/src/Option.ts`
-- `.agents/repos/effect/packages/effect/src/Filter.ts`
-- `.agents/repos/effect/packages/effect/src/Order.ts`

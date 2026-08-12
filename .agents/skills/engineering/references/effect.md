@@ -46,7 +46,7 @@ save: Effect.fnUntraced(function* (input) {
 refresh: Effect.fn('Items.refresh')(function* () {
 	yield* storage.clear
 	yield* storage.load
-})
+})()
 
 // GOOD
 refresh: Effect.withSpan('Items.refresh')(
@@ -97,24 +97,24 @@ const exported = Stream.withSpan('Document.exportAll')(
 
 ```ts
 // BAD
-return RpcContracts.of({
-	'item.changes': input =>
+return NotesRpcs.of({
+	'notes.changes': input =>
 		Effect.gen(function* () {
-			const item = yield* ItemMap.get(input.id)
-			return SubscriptionRef.changes(item.state)
+			const notes = yield* NotesMap.get(input.workspaceId)
+			return SubscriptionRef.changes(notes.state)
 		})
 })
 
 // GOOD
-return RpcContracts.of({
-	'item.changes': Effect.fnUntraced(function* (input) {
-		const item = yield* ItemMap.get(input.id)
-		return SubscriptionRef.changes(item.state)
+return NotesRpcs.of({
+	'notes.changes': Effect.fnUntraced(function* (input) {
+		const notes = yield* NotesMap.get(input.workspaceId)
+		return SubscriptionRef.changes(notes.state)
 	}, Stream.unwrap)
 })
 ```
 
-## Failure accumulation
+## Contract-required failure accumulation
 
 ```ts
 // BAD: every operation must run

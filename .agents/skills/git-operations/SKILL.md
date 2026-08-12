@@ -12,7 +12,6 @@ description: 'Use when mutating Git or GitHub state: branches, commits, issues, 
 | Reset · discard · delete · local rewrite | explicit request and exact target                                         |
 | Published branch                         | preserve history; add normal commits                                      |
 | Conflict                                 | issue-required behavior and current APIs; never choose one side wholesale |
-| Ready · merge                            | user-owned                                                                |
 
 ## GitHub
 

@@ -15,12 +15,9 @@
 
 ```text
 configured maintained rule
-→ available maintained rule
-→ stricter maintained option
-→ compatible maintained rule group
-→ maintained generic restriction
+→ compatible maintained rule or option
 → custom Oxlint
-→ skill-only semantic guidance
+→ domain skill
 ```
 
 ## Custom Oxlint

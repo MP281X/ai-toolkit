@@ -2,7 +2,7 @@
 
 ## Topology
 
-Use only paths required by the owning package:
+Create only owner-required paths:
 
 ```text
 apps/<app>/src/
@@ -20,7 +20,7 @@ packages/<name>/src/
 
 | Ownership              | Rule                                                  |
 | ---------------------- | ----------------------------------------------------- |
-| Dependency             | highest shared manifest                               |
+| Dependency             | highest manifest shared by every direct consumer      |
 | Root script            | repository orchestration                              |
 | Package script         | package-local behavior                                |
 | CLI                    | `bin`; `effect/unstable/cli`                          |

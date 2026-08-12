@@ -1,6 +1,6 @@
 # Stacked pull requests
 
-Keep every review boundary valid without rewriting published history.
+Keep every review boundary valid.
 
 ## Topology
 
@@ -10,9 +10,9 @@ Keep every review boundary valid without rewriting published history.
 
 ```bash
 gh stack add          # create a branch atop the current stack
-gh stack init --adopt # adopt existing branches
+gh stack init <bottom-branch> [<child-branch>...] # adopt existing branches
 gh stack view         # inspect topology
-gh stack submit       # publish the stack as draft pull requests
+gh stack submit       # publish; set every pull request to draft in the editor
 ```
 
 In `gh stack submit`, set every pull request to draft.

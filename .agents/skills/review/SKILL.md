@@ -9,13 +9,13 @@ description: 'Use for an independent read-only audit of the complete issue-to-ca
 | Other pull request    | actual pull-request base   |
 | No pull request       | default branch             |
 
-Review committed, uncommitted, and untracked changes as one candidate. Load every matching `engineering` reference; treat the issue as the contract.
+Review committed, uncommitted, and untracked changes as one candidate. Load `engineering`; use the contract.
 
-| Pass                     | Search                                                                                    |
-| ------------------------ | ----------------------------------------------------------------------------------------- |
-| Contract                 | missing or incorrect behavior · edge state · missing proof                                |
-| Design                   | boundary drift · accidental complexity · stale path · duplication · lifecycle defect      |
-| Affected product surface | security · accessibility · responsiveness · loading · empty · failure · console · network |
+| Pass                     | Search                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Contract                 | missing or incorrect behavior · reachable edge state · missing proof                                       |
+| Design                   | boundary drift · accidental complexity · code outside construction · semantic duplicate · lifecycle defect |
+| Affected product surface | security · accessibility · responsiveness · loading · empty · failure · console · network                  |
 
 Report reproducible actionable defects. Deduplicate shared causes; order by severity, then user impact.
 

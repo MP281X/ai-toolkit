@@ -1,7 +1,7 @@
 ## Repository
 
 - Workspace: use `vp`; members live under `apps/*` and `packages/*`.
-- Runtime: Effect owns application logic; other code is boundary interop.
+- Runtime: Effect owns behavior and state; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
 - Dependencies: inspect cloned repositories; never inspect `node_modules` source.
 
 | Question                         | Authority                         |
@@ -12,12 +12,29 @@
 | Active dependency or enforcement | manifests, lockfiles, config      |
 | Installed command interface      | CLI help                          |
 
+## Vocabulary
+
+| Term               | Meaning                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| Contract           | Requested current behavior from the task or canonical issue                                    |
+| Owner              | Sole abstraction responsible for a behavior, state, fact, or lifecycle                         |
+| Coupled path       | Dataflow, lifecycle, configuration, and proof directly required by the owner                   |
+| Boundary           | Point where unknown external data is decoded once                                              |
+| Typed value        | Internal value guaranteed by its type or boundary schema                                       |
+| Reachable failure  | Typed failure permitted by the contract                                                        |
+| Semantic duplicate | Repeated meaning, responsibility, behavior, or representation regardless of syntax or name     |
+| Construction       | Smallest explicit sole implementation completing the contract                                  |
+| Instructions       | Mandatory constraints from this file plus every invoked skill and loaded reference             |
+| Enforcement        | TypeScript, Oxlint, Oxfmt, effect-tsgo, React Compiler/Doctor, Fallow, and custom static rules |
+
 ## Change
 
-- Align: changed behavior, owning abstraction, and directly coupled dataflow.
-- Preserve: unrelated behavior and user changes.
-- Simplify: remove obsolete architecture, compatibility paths, empty directories, and alternate implementations; retain one current path.
-- Break: internal compatibility when the resulting current design is smaller and the requested behavior remains complete.
+- Implement the contract at its owner with the construction.
+- Trust typed values; validate only boundaries; omit states excluded by types or schemas.
+- Propagate the first reachable failure; retry or recover only when required by the contract.
+- Treat enforcement diagnostics as evidence of their earliest shared cause; correct the owner, not symptoms.
+- Complete the owner and coupled path; aggressively remove everything outside the construction, including semantic duplicates, empty directories, and unused branches, props, schema fields, state, types, exports, dependencies, and wrappers; internal compatibility does not preserve it.
+- Preserve unrelated behavior and user changes.
 
 ## Authorization
 
@@ -52,17 +69,12 @@
 ## Writing
 
 - Audience: expert software developer.
-- Delta: include only information absent from source, instructions, workflow, and linked artifacts.
-- Ownership: state each fact once at its semantic owner.
+- Delta: retain only authoritative-input delta that changes behavior, precision, routing, decision, or correction.
+- Ownership: state each fact once, at its semantic owner, in one representation.
 - Order: complete one topic before starting another.
-- Evidence: code or command → fitting visualization → table or list → prose.
 - Representation: use the smallest complete GFM structure; prose only when structure cannot express the fact.
 - Language: technical, direct, unambiguous.
-- Reason: retain only reasoning that changes a decision or correction.
-- Visual: one representation owns each fact; never narrate it.
-- Keep: every retained word changes behavior, precision, routing, or correction.
 - Remove: introductions, recaps, conclusions, filler, tutorials, history, rhetoric, and visual narration.
-- Output: workflow-specific final contract.
 
 | Information                      | Representation                |
 | -------------------------------- | ----------------------------- |

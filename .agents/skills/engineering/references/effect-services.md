@@ -1,6 +1,6 @@
 # Effect services
 
-## Detached implementations
+## Service class owns the inline contract and every named Layer
 
 ```ts
 // BAD: service.ts
@@ -8,22 +8,19 @@ export class Notes extends Context.Service<Notes>()('Notes', {
 	make: Effect.gen(function* () {
 		const storage = yield* MemoryStorage
 
-		return {
-			create: Effect.fn('Notes.create')(function* (input) {
-				return yield* storage.create(input)
-			})
-		}
+		return {create: input => storage.create(input)}
 	})
 }) {}
 
 // GOOD: service.ts
-// fallow-ignore-next-line circular-dependency -- named static Layers and Notes.of share the service class.
+// fallow-ignore-file circular-dependency -- Service modules own implementation constructor dispatch.
 import {makeMemory} from './internal/memory.ts'
 import {makeSql} from './internal/sql.ts'
 
-export class Notes extends Context.Service<Notes, {create: (input: CreateNote) => Effect.Effect<Note, NoteError>}>()(
-	'Notes'
-) {
+export class Notes extends Context.Service<
+	Notes,
+	{create: (input: CreateNote) => Effect.Effect<Note, NoteError>; state: SubscriptionRef.SubscriptionRef<Note[]>}
+>()('Notes') {
 	static layerMemory = Layer.effect(this, makeMemory)
 	static layerSql = Layer.effect(this, makeSql)
 }
@@ -34,11 +31,7 @@ import {Notes} from '#service'
 export const makeMemory = Effect.gen(function* () {
 	const storage = yield* MemoryStorage
 
-	return Notes.of({
-		create: Effect.fn('Notes.create')(function* (input) {
-			return yield* storage.create(input)
-		})
-	})
+	return Notes.of({create: input => storage.create(input), state: storage.state})
 })
 ```
 
@@ -69,7 +62,7 @@ return Workspace.of({
 })
 ```
 
-Consumers treat the exposed `SubscriptionRef` as immutable; its service alone mutates it.
+Only the service implementation mutates its exposed `SubscriptionRef`.
 
 ## Keyed lifetime
 

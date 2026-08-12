@@ -5,38 +5,44 @@
 ```ts
 // BAD
 it.effect('writes memory state', () =>
-	Effect.gen(function* () {
-		const storage = yield* MemoryStorageRef
-		yield* Ref.set(storage, HashMap.make(['1', Item.make({id: '1'})]))
-		expect(yield* Ref.get(storage)).toHaveLength(1)
-	}).pipe(Effect.provide(Items.layerMemory))
+	pipe(
+		Effect.gen(function* () {
+			const storage = yield* MemoryStorageRef
+			yield* Ref.set(storage, HashMap.make(['1', Item.make({id: '1'})]))
+			expect(HashMap.size(yield* Ref.get(storage))).toBe(1)
+		}),
+		Effect.provide(Items.layerMemory)
+	)
 )
 
 // GOOD
 describe.each([
 	['memory', Items.layerMemory],
 	['sql', Items.layerSqlTest]
-])('%s', (_, layer) => {
+] as const)('%s', (_, layer) => {
 	it.effect('saves and reads an item', () =>
-		Effect.gen(function* () {
-			const items = yield* Items
+		pipe(
+			Effect.gen(function* () {
+				const items = yield* Items
 
-			yield* items.save(Item.make({id: '1'}))
+				yield* items.save(Item.make({id: '1'}))
 
-			expect(yield* items.get('1')).toEqual(Item.make({id: '1'}))
-		}).pipe(Effect.provide(layer))
+				expect(yield* items.get('1')).toEqual(Item.make({id: '1'}))
+			}),
+			Effect.provide(layer)
+		)
 	)
 })
 ```
 
-| Include                                                                    | Exclude                                       |
-| -------------------------------------------------------------------------- | --------------------------------------------- |
-| Public service and helper behavior with independently derived expectations | Type and schema shape                         |
-| Reachable typed failures                                                   | Impossible inputs and implementation branches |
-| Logic across mocked surrounding Layers                                     | External tools, APIs, packages, transports    |
-| Current contract across implementations                                    | Removed behavior and compatibility history    |
+| Include                                                                    | Exclude                                          |
+| -------------------------------------------------------------------------- | ------------------------------------------------ |
+| Public service and helper behavior with independently derived expectations | Static type shape and unreachable decoded inputs |
+| Reachable typed failures                                                   | Implementation branches                          |
+| Logic across mocked surrounding Layers                                     | External tools, APIs, packages, transports       |
+| Current contract across implementations                                    | Removed behavior and compatibility history       |
 
-Colocate `name.test.ts` with `name.ts`. Packages own durable behavior tests. Applications compose packages, retain minimal application-specific logic, and use browser acceptance for UI and UX.
+Colocate `name.test.ts` with `name.ts`. Packages own durable behavior tests; applications use browser acceptance for UI and UX.
 
 ## Source
 

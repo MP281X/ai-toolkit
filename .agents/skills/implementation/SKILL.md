@@ -18,13 +18,13 @@ stateDiagram-v2
 
 ## Analyze
 
-For each issue clause, identify its owning public seam and proof; record only applicable invariants, dependency APIs, and risks. Re-read the issue after compaction.
+Map each contract clause to its owner and consumer-visible proof; stop on conflict. Re-read the contract after compaction.
 
-Load every matching `engineering` reference. Inspect current ownership and linked cloned source.
+Load `engineering`.
 
 ## Implement
 
-Own all repository writes. Inspect the complete base-to-worktree diff and every changed or untracked file.
+Inspect the complete base-to-worktree diff and every changed or untracked file.
 
 ## Assurance
 

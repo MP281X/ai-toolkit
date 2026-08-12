@@ -18,10 +18,4 @@ description: 'Use for repository code, configuration, Effect, React, tests, and 
 | Product interaction and visual design                                        | `references/ui-design.md`       |
 
 Read every matching reference before editing, reviewing, or testing.
-
-```text
-route references
-→ inspect linked cloned source for every dependency API
-→ write
-→ validate
-```
+Adapt matching canonical examples by changing domain data only; verify every dependency signature in cloned source before use.

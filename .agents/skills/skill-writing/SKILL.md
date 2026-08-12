@@ -7,11 +7,11 @@ Make independent runs choose the same valid construction.
 
 ## Route
 
-| Work                                               | Read                                 |
-| -------------------------------------------------- | ------------------------------------ |
-| Existing or custom static enforcement              | `references/enforcement.md`          |
-| Skill structure, examples, metadata, or evaluation | `references/evaluation.md`           |
-| Repeated failures from Codex histories             | `references/conversation-history.md` |
+| Work                                               | Read                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| Existing or custom static enforcement              | `references/enforcement.md`                                       |
+| Skill structure, examples, metadata, or evaluation | `references/evaluation.md`                                        |
+| Repeated failures from Codex histories             | `references/conversation-history.md` + `references/evaluation.md` |
 
 ## Own
 
@@ -24,13 +24,3 @@ Make independent runs choose the same valid construction.
 ## Retain
 
 Keep skill guidance only when the pattern is frequent, architectural, or routinely misfixed from diagnostics alone.
-
-## Finish
-
-```text
-baseline
-→ minimum correction
-→ regression tasks
-→ unseen holdouts
-→ user review
-```

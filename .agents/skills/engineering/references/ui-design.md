@@ -1,6 +1,6 @@
 # UI design
 
-Dense · bordered · high-contrast · square · scan-first.
+Dense scan-first layout · square corners · visible borders · accessible contrast.
 
 Use current `@deslop/components` primitives, adapters, icons, and theme tokens. Add a missing generated primitive only through:
 
@@ -14,10 +14,9 @@ vp run shadcn add <component>
 | Visualization                   | one representation unless comparison is the task                          |
 | Composition                     | flat surfaces; borders and spacing carry hierarchy                        |
 | Decoration                      | solid theme tokens; no gradients, shadows, blur, glass, or background art |
-| Content loading                 | stable-shape skeleton                                                     |
-| Local pending work              | spinner in the launching control                                          |
-| Repeated mutation               | pending state keyed by identity                                           |
-| Destructive action              | confirmation and failure at launching control or dialog                   |
+| Query or stream                 | loading and failure at nearest Suspense/error boundary                    |
+| Mutation                        | pending and failure at launcher; concurrent work keyed by identity        |
+| Destructive mutation            | confirmation plus mutation behavior                                       |
 | Dense or secondary action       | icon with accessible name; tooltip when unfamiliar                        |
 | Primary, rare, ambiguous action | shortest complete text label                                              |
 

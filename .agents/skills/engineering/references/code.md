@@ -1,6 +1,6 @@
 # Code
 
-## Review-local dataflow
+## Narrowest owner
 
 ```ts
 // BAD
@@ -14,7 +14,17 @@ return result
 return load(input.session.user.id)
 ```
 
-## Meaningful reused computation
+## Standalone composition
+
+```ts
+// BAD
+const CreateNote = Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed('Untitled')))
+
+// GOOD
+const CreateNote = pipe(Schema.String, Schema.withDecodingDefault(Effect.succeed('Untitled')))
+```
+
+## Evaluate reused effects once
 
 ```ts
 // BAD
@@ -55,7 +65,7 @@ const setValue = state[1]
 const [value, setValue] = useState(initial)
 ```
 
-## Inferred types
+## Inference
 
 ```ts
 // BAD
@@ -65,9 +75,7 @@ const [target, setTarget] = useState<ReviewTarget>(ReviewTarget.make({}))
 const [target, setTarget] = useState(ReviewTarget.make({}))
 ```
 
-Name types only for schema pairs, public boundaries, recursive structures, or large independently shared shapes.
-
-## Module scope
+Annotate only schema pairs, public boundaries, recursive structures, or independently shared large shapes.
 
 ```ts
 // BAD
@@ -83,9 +91,11 @@ export function Label(props: {value: string}) {
 }
 ```
 
-Module scope owns stable identity or lifecycle: schema, service, component, Atom, cache, `RcMap`, `LayerMap`, or reused expensive computation.
+Module scope owns reuse, public boundaries, recursive or shared shapes, expensive shared computation, identity, or lifecycle: schema, service, component, Atom, cache, `RcMap`, `LayerMap`.
 
 ## Immutable ownership
+
+Immutability is behavior; omit `readonly` syntax.
 
 ```ts
 // BAD
@@ -100,4 +110,4 @@ function normalize(input: Item[]) {
 }
 ```
 
-Arguments, returned values, service values, and exposed refs remain immutable outside their owning Effect implementation.
+Arguments, returned values, and service values remain immutable outside their owner.

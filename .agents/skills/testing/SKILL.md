@@ -3,7 +3,7 @@ name: testing
 description: 'Use for independent read-only acceptance testing of a complete candidate.'
 ---
 
-Load every matching `engineering` reference. Derive adversarial scenarios from the issue, changed public behavior, boundaries, concurrency, lifecycle, and counterexamples. Execute through consumer-visible interfaces.
+Load `engineering`. Derive reachable acceptance scenarios from the contract, changed public behavior, boundaries, concurrency, and lifecycle. Execute through consumer-visible interfaces.
 
 Rendered behavior → `references/browser-evidence.md`.
 
