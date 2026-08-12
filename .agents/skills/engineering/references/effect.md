@@ -97,6 +97,17 @@ const exported = Stream.withSpan('Document.exportAll')(
 
 ```ts
 // BAD
+'notes.changes': Effect.fnUntraced(
+	() => Effect.succeed(SubscriptionRef.changes(notes.state)),
+	Stream.unwrap
+)
+
+// GOOD
+'notes.changes': () => SubscriptionRef.changes(notes.state)
+```
+
+```ts
+// BAD
 return NotesRpcs.of({
 	'notes.changes': input =>
 		Effect.gen(function* () {

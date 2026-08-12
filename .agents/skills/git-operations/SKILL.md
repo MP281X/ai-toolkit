@@ -5,13 +5,13 @@ description: 'Use when mutating Git or GitHub state: branches, commits, issues, 
 
 ## Safety
 
-| Operation                                | Invariant                                                                 |
-| ---------------------------------------- | ------------------------------------------------------------------------- |
-| Any mutation                             | resolve target; inspect status and relevant remote, PR, and stack         |
-| Default branch                           | explicit operation-specific authority                                     |
-| Reset · discard · delete · local rewrite | explicit request and exact target                                         |
-| Published branch                         | preserve history; add normal commits                                      |
-| Conflict                                 | issue-required behavior and current APIs; never choose one side wholesale |
+| Operation                                | Invariant                                                                   |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| Any mutation                             | explicit request for exact operation; resolve target; inspect related state |
+| Default branch                           | read-only without explicit operation-specific authority                     |
+| Reset · discard · delete · local rewrite | explicit request and exact target                                           |
+| Published branch                         | preserve history; add normal commits                                        |
+| Conflict                                 | issue-required behavior and current APIs; never choose one side wholesale   |
 
 ## GitHub
 

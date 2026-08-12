@@ -93,6 +93,24 @@ export function Label(props: {value: string}) {
 
 Module scope owns reuse, public boundaries, recursive or shared shapes, expensive shared computation, identity, or lifecycle: schema, service, component, Atom, cache, `RcMap`, `LayerMap`.
 
+## Direct names
+
+```ts
+// BAD
+import {Status as StatusSchema} from './schema.ts'
+
+type StatusValue = typeof StatusSchema.Type
+
+// GOOD
+import {Status} from './schema.ts'
+
+function render(status: Status) {
+	return status
+}
+```
+
+Name distinct owners to avoid import, type, property-access, or binding aliases. Schema pairs are the only mandatory same-name type declarations.
+
 ## Immutable ownership
 
 Immutability is behavior; omit `readonly` syntax.

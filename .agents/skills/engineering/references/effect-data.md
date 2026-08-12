@@ -1,6 +1,6 @@
 # Effect data
 
-## Boundary schema: type first, decode once
+## Boundary: decode once
 
 ```ts
 // BAD: schema.ts
@@ -30,7 +30,7 @@ const response = yield * Schema.decodeUnknownEffect(Schema.fromJsonString(Search
 
 ```ts
 // BAD
-function label(value: string | undefined) {
+function label(value?: string) {
 	return Option.match(Option.fromNullishOr(value), {onNone: () => '*', onSome: String.trim})
 }
 

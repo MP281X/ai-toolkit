@@ -1,6 +1,0 @@
-interface:
-  display_name: 'Implementation'
-  short_description: 'Implement one issue and publish its draft PR'
-  default_prompt: 'Use $implementation to implement this issue and publish its draft pull request.'
-policy:
-  allow_implicit_invocation: false

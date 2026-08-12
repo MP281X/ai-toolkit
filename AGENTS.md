@@ -14,22 +14,25 @@
 
 ## Vocabulary
 
-| Term               | Meaning                                                                                        |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| Contract           | Requested current behavior from the task or canonical issue                                    |
-| Owner              | Sole abstraction responsible for a behavior, state, fact, or lifecycle                         |
-| Coupled path       | Dataflow, lifecycle, configuration, and proof directly required by the owner                   |
-| Boundary           | Point where unknown external data is decoded once                                              |
-| Typed value        | Internal value guaranteed by its type or boundary schema                                       |
-| Reachable failure  | Typed failure permitted by the contract                                                        |
-| Semantic duplicate | Repeated meaning, responsibility, behavior, or representation regardless of syntax or name     |
-| Construction       | Smallest explicit sole implementation completing the contract                                  |
-| Instructions       | Mandatory constraints from this file plus every invoked skill and loaded reference             |
-| Enforcement        | TypeScript, Oxlint, Oxfmt, effect-tsgo, React Compiler/Doctor, Fallow, and custom static rules |
+| Term               | Meaning                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Contract           | Requested current behavior from the task or canonical issue                                                 |
+| Owner              | Sole abstraction responsible for a behavior, state, fact, or lifecycle                                      |
+| Coupled path       | Dataflow, lifecycle, configuration, and proof directly required by the owner                                |
+| Boundary           | Point where unknown external data is decoded once                                                           |
+| Typed value        | Internal value guaranteed by its type or boundary schema                                                    |
+| Reachable failure  | Typed failure permitted by the contract                                                                     |
+| Semantic duplicate | Repeated meaning, responsibility, behavior, or representation regardless of syntax or name                  |
+| Construction       | Smallest explicit sole implementation completing the contract                                               |
+| Instructions       | Mandatory constraints from this file plus every invoked skill and loaded reference                          |
+| Enforcement        | TypeScript, Oxlint, Oxfmt, effect-tsgo, React Compiler/Doctor, Fallow, and custom static rules              |
+| Base               | Explicit comparison ref: preceding stack branch, actual pull-request base, or fetched remote default branch |
+| Candidate          | Every commit after the base plus staged, unstaged, deleted, renamed, generated, and untracked files         |
 
 ## Change
 
 - Implement the contract at its owner with the construction.
+- Resolve missing material behavior from an authority; ask when none exists. Never invent domain values, defaults, compatibility, or policy.
 - Trust typed values; validate only boundaries; omit states excluded by types or schemas.
 - Propagate the first reachable failure; retry or recover only when required by the contract.
 - Treat enforcement diagnostics as evidence of their earliest shared cause; correct the owner, not symptoms.
@@ -38,8 +41,10 @@
 
 ## Authorization
 
+- Invoke `workflow` only when the user explicitly requests planning or implementation.
 - Repository writes stay with the primary agent.
-- Git and GitHub writes require explicit authority or an invoked workflow that authorizes them.
+- Every Git or GitHub mutation requires an explicit request for that exact operation; workflows never imply authority.
+- Never commit, push, create or switch branches, create or edit issues or pull requests, merge, reset, discard, delete, or rewrite Git state without that request.
 - Ready and merge remain user-owned.
 
 ## Delegation
@@ -49,8 +54,7 @@
 | Known lookup · one command                         | primary                    | inherited                | none                      |
 | Unclear · multi-command exploration                | clean                      | `gpt-5.6-terra` · medium | none                      |
 | Multi-source synthesis · disputed research         | clean; parallel viewpoints | `gpt-5.6-sol` · high     | none                      |
-| Independent acceptance testing                     | clean                      | `gpt-5.6-sol` · high     | delegated runtime         |
-| Independent adversarial review                     | clean                      | `gpt-5.6-sol` · xhigh    | none                      |
+| Independent assurance                              | clean                      | `gpt-5.6-sol` · xhigh    | delegated runtime         |
 | Token-heavy external action requiring conversation | full history               | inherited                | authorized external state |
 | Repository implementation · integration            | primary                    | inherited                | repository                |
 
@@ -61,10 +65,7 @@
 
 ## Verification
 
-| Change                                                             | Finish with                                                                                 |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Code · executable config · dependencies · generated source · tests | `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause |
-| Markdown · instructions only                                       | `git diff --check`; inspect rendered GFM; synchronize affected metadata                     |
+Finish every repository change with `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause. Inspect rendered GFM for Markdown changes.
 
 ## Writing
 

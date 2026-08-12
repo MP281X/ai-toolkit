@@ -1,40 +1,5 @@
 # Effect services
 
-## Service class owns the inline contract and every named Layer
-
-```ts
-// BAD: service.ts
-export class Notes extends Context.Service<Notes>()('Notes', {
-	make: Effect.gen(function* () {
-		const storage = yield* MemoryStorage
-
-		return {create: input => storage.create(input)}
-	})
-}) {}
-
-// GOOD: service.ts
-// fallow-ignore-file circular-dependency -- Service modules own implementation constructor dispatch.
-import {makeMemory} from './internal/memory.ts'
-import {makeSql} from './internal/sql.ts'
-
-export class Notes extends Context.Service<
-	Notes,
-	{create: (input: CreateNote) => Effect.Effect<Note, NoteError>; state: SubscriptionRef.SubscriptionRef<Note[]>}
->()('Notes') {
-	static layerMemory = Layer.effect(this, makeMemory)
-	static layerSql = Layer.effect(this, makeSql)
-}
-
-// GOOD: internal/memory.ts
-import {Notes} from '#service'
-
-export const makeMemory = Effect.gen(function* () {
-	const storage = yield* MemoryStorage
-
-	return Notes.of({create: input => storage.create(input), state: storage.state})
-})
-```
-
 ## Live state
 
 ```ts
@@ -46,15 +11,13 @@ return Workspace.of({
 })
 
 // GOOD
-const equivalent = Schema.toEquivalence(WorkspaceState)
-
 return Workspace.of({
 	state,
 	update: Effect.fn('Workspace.update')(input =>
 		SubscriptionRef.modifySome(state, current => {
 			const next = WorkspaceState.make({...current, name: input.name})
 
-			if (equivalent(current, next)) return Tuple.make(undefined, Option.none())
+			if (Schema.toEquivalence(WorkspaceState)(current, next)) return Tuple.make(undefined, Option.none())
 
 			return Tuple.make(undefined, Option.some(next))
 		})
@@ -102,8 +65,6 @@ const connection = yield * Effect.acquireRelease(driver.connect(input.url), conn
 
 ## Source
 
-- `.agents/repos/effect/packages/effect/src/Context.ts`
-- `.agents/repos/effect/packages/effect/src/Layer.ts`
 - `.agents/repos/effect/packages/effect/src/SubscriptionRef.ts`
 - `.agents/repos/effect/packages/effect/src/LayerMap.ts`
 - `.agents/repos/effect/packages/effect/src/RcMap.ts`

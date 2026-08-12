@@ -1,0 +1,6 @@
+interface:
+  display_name: 'Workflow'
+  short_description: 'Plan a contract or implement an approved contract'
+  default_prompt: 'Use $workflow to plan or implement this work.'
+policy:
+  allow_implicit_invocation: false

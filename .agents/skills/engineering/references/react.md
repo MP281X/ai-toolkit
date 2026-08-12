@@ -19,10 +19,10 @@ function NotesList() {
 		return close
 	}, [])
 
-	return notes.map(note => <NoteRow key={note.id} note={note} />)
+	return Array.map(notes, note => <NoteRow key={note.id} note={note} />)
 }
 
-// GOOD: contracts.ts
+// GOOD: apps/<app>/src/rpcs/contracts.ts
 Rpc.make('notes.changes', {
 	stream: true,
 	success: Schema.Array(Note)
@@ -40,7 +40,7 @@ export const NotesRpcsLayer = NotesRpcs.toLayer(
 	})
 )
 
-// GOOD: atoms.ts
+// GOOD: apps/<app>/src/lib/state.ts
 export const notesAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		Stream.unwrap(
@@ -49,12 +49,24 @@ export const notesAtom = Atom.keepAlive(
 	)
 )
 
-// GOOD: component.tsx
+// GOOD: apps/<app>/src/routes/notes.tsx
 function NotesList() {
 	const notes = useAtomSuspense(notesAtom).value
 
 	return Array.map(notes, note => <NoteRow key={note.id} note={note} />)
 }
+```
+
+`RpcClient` is the existing `AtomRpc.Service` from `apps/<app>/src/lib/atomRuntime.ts`. Feature code never declares another client service or transport Layer.
+
+```ts
+// BAD: pull-oriented stream batches require explicit writes
+const notesAtom = RpcClient.query('notes.changes', undefined)
+
+// GOOD: latest authoritative emission stays synchronized
+const notesAtom = Atom.keepAlive(
+	RpcClient.runtime.atom(Stream.unwrap(RpcClient.useSync(client => client('notes.changes', undefined))))
+)
 ```
 
 ## Presentation action
@@ -170,6 +182,14 @@ function Sparkle(props: {angle: number}) {
 - `.agents/repos/effect/packages/effect/src/unstable/reactivity/Atom.ts`
 - `.agents/repos/effect/packages/effect/src/unstable/reactivity/AtomRpc.ts`
 - `.agents/repos/effect/packages/effect/src/unstable/reactivity/AsyncResult.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/AtomRegistry.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/Reactivity.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/reactivity/Hydration.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/rpc/Rpc.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/rpc/RpcGroup.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/rpc/RpcClient.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/rpc/RpcServer.ts`
+- `.agents/repos/effect/packages/effect/src/unstable/rpc/RpcSchema.ts`
 - `.agents/repos/effect/packages/atom/react/src/Hooks.ts`
 - `.agents/repos/react/packages/react/src/ReactHooks.js`
 - `.agents/repos/react/compiler`

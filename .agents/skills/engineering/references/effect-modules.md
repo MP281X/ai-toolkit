@@ -1,21 +1,35 @@
 # Effect modules
 
-Search before adding a helper. Use only exact exports read from `.agents/repos/effect/packages/effect/src/<Module>.ts`.
+Search before adding a helper. Read exact exports from the cloned source.
 
-| Domain        | Modules                                                                                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Values        | `String` · `Number` · `BigInt` · `BigDecimal` · `Boolean` · `Array` · `Record` · `Struct` · `Tuple` · `Iterable` · `NonEmptyIterable` · `Data` · `Brand` · `Newtype`           |
-| Decisions     | `Predicate` · `Filter` · `Match` · `Order` · `Ordering` · `Equivalence` · `Equal` · `Hash` · `Reducer` · `Combiner` · `Optic`                                                  |
-| Outcomes      | `UndefinedOr` · `Option` · `Result` · `Exit` · `Cause` · `Take`                                                                                                                |
-| Collections   | `HashMap` · `HashSet` · `Chunk` · `Trie` · `Graph` · `HashRing`                                                                                                                |
-| Boundary      | `Schema` · `JsonSchema` · `JsonPatch` · `JsonPointer` · `Encoding` · `Redacted` · `Redactable` · `Config` · `ConfigProvider` · `Formatter` · `ErrorReporter` · `PlatformError` |
-| Time          | `Duration` · `DateTime` · `Clock` · `Schedule` · `Cron`                                                                                                                        |
-| Program       | `Effect` · `Stream` · `Channel` · `Sink` · `ExecutionPlan`                                                                                                                     |
-| State         | `Ref` · `SubscriptionRef` · `SynchronizedRef` · `ScopedRef` · `References` · `Queue` · `PubSub`                                                                                |
-| Resources     | `Scope` · `Resource` · `Cache` · `ScopedCache` · `RcMap` · `RcRef` · `LayerMap` · `LayerRef` · `Pool`                                                                          |
-| Concurrency   | `Deferred` · `Latch` · `Semaphore` · `PartitionedSemaphore` · `Fiber` · `FiberHandle` · `FiberMap` · `FiberSet`                                                                |
-| Requests      | `Request` · `RequestResolver`                                                                                                                                                  |
-| Observability | `Logger` · `LogLevel` · `Metric` · `Tracer` · `Inspectable`                                                                                                                    |
-| Runtime       | `Context` · `Layer` · `ManagedRuntime` · `Runtime` · `Scheduler`                                                                                                               |
-| Transactional | `TxRef` · `TxSubscriptionRef` · `TxHashMap` · `TxHashSet` · `TxQueue` · `TxPubSub` · `TxSemaphore` · `TxReentrantLock` · `TxDeferred`                                          |
-| Platform      | `FileSystem` · `Path` · `Console` · `Stdio` · `Terminal` · `Random` · `Crypto` · `unstable/cli`                                                                                |
+| Domain        | Stable modules                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Composition   | `Function` · `Effect` · `Stream` · `Channel` · `Sink`                                                                                                  |
+| Values        | `String` · `Number` · `Boolean` · `Array` · `Record` · `Struct` · `Tuple` · `Iterable` · `Data`                                                        |
+| Decisions     | `Predicate` · `Filter` · `Match` · `Order` · `Ordering` · `Equivalence` · `Equal` · `Hash`                                                             |
+| Outcomes      | `UndefinedOr` · `Option` · `Result` · `Exit` · `Cause`                                                                                                 |
+| Collections   | `HashMap` · `HashSet` · `Chunk`                                                                                                                        |
+| Schema        | `Schema` · `SchemaAST` · `SchemaGetter` · `SchemaIssue` · `SchemaParser` · `SchemaRepresentation` · `SchemaTransformation` · `JsonSchema` · `Encoding` |
+| Configuration | `Config` · `ConfigProvider` · `Redacted` · `PlatformError`                                                                                             |
+| Time          | `Duration` · `DateTime` · `Clock` · `Schedule`                                                                                                         |
+| State         | `Ref` · `SubscriptionRef` · `SynchronizedRef` · `Queue` · `PubSub`                                                                                     |
+| Resources     | `Scope` · `Resource` · `Cache` · `ScopedCache` · `RcMap` · `RcRef` · `LayerMap` · `Pool`                                                               |
+| Concurrency   | `Deferred` · `Semaphore` · `Fiber` · `FiberHandle` · `FiberMap` · `FiberSet` · `Request` · `RequestResolver`                                           |
+| Observability | `Logger` · `LogLevel` · `Metric` · `Tracer`                                                                                                            |
+| Runtime       | `Context` · `Layer` · `ManagedRuntime` · `Runtime`                                                                                                     |
+| Platform      | `FileSystem` · `Path` · `Console` · `Terminal` · `Random` · `Crypto`                                                                                   |
+
+Stable source: `.agents/repos/effect/packages/effect/src/<Module>.ts`.
+
+| Public entrypoint            | Material modules                                                                                                                                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `effect/unstable/reactivity` | `Atom` · `AsyncResult` · `AtomRpc` · `AtomRegistry` · `AtomRef` · `Reactivity` · `Hydration` · `AtomHttpApi`                                                                                                                                                                          |
+| `effect/unstable/rpc`        | `Rpc` · `RpcGroup` · `RpcSchema` · `RpcClient` · `RpcServer` · `RpcSerialization` · `RpcMessage` · `RpcMiddleware` · `RpcClientError` · `RpcTest` · `RpcWorker`                                                                                                                       |
+| `effect/unstable/ai`         | `Model` · `LanguageModel` · `EmbeddingModel` · `Tokenizer` · `Chat` · `Prompt` · `Response` · `Tool` · `Toolkit` · `AiError` · `Telemetry` · `IdGenerator` · `ResponseIdTracker` · `McpSchema` · `McpProtocol` · `McpServer` · `OpenAiStructuredOutput` · `AnthropicStructuredOutput` |
+| `effect/unstable/http`       | `HttpServer` · `HttpRouter` · `HttpServerRequest` · `HttpServerResponse` · `HttpMiddleware` · `HttpClient` · `HttpClientRequest` · `HttpClientResponse` · `FetchHttpClient` · `HttpBody` · `Headers` · `UrlParams` · `Multipart`                                                      |
+| `effect/unstable/httpapi`    | `HttpApi` · `HttpApiGroup` · `HttpApiEndpoint` · `HttpApiSchema` · `HttpApiBuilder` · `HttpApiClient` · security · middleware · errors · tests · OpenAPI                                                                                                                              |
+| `effect/unstable/process`    | `ChildProcess` · `ChildProcessSpawner`                                                                                                                                                                                                                                                |
+| `effect/unstable/socket`     | `Socket` · `SocketServer`                                                                                                                                                                                                                                                             |
+| `effect/unstable/cli`        | `Command` · `Argument` · `Flag` · `Param` · `Primitive` · `CliConfig` · `CliError` · `CliOutput` · `Completions` · `HelpDoc` · `GlobalFlag` · `Prompt`                                                                                                                                |
+
+Unstable entrypoint: `.agents/repos/effect/packages/effect/src/unstable/<entrypoint>/index.ts`. Module source: adjacent `<Module>.ts`.

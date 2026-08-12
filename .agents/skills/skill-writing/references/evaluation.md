@@ -59,6 +59,8 @@ Exclude:
   other-run artifacts
 ```
 
+Reject a fixture that requires invented domain values, defaults, compatibility, policy, or product structure.
+
 Run at least five clean generations per task. Parallelize per `AGENTS.md#Delegation`; use the primary model for unseen holdouts. Invalidate forbidden-source access.
 
 ## Trajectory
@@ -100,3 +102,7 @@ flowchart LR
 ```
 
 Systemic cause: repeated in two independent runs or matching a repeated user correction. Change one owner at a time. Accept only improved first-pass trajectory, non-regressed final quality, passing holdouts, and user approval.
+
+## Result
+
+Present every generation, trajectory, finding, shared cause, correction, and holdout result to the user. Never replace artifacts with an aggregate score.
