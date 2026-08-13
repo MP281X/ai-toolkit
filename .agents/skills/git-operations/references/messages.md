@@ -1,6 +1,28 @@
 # Messages
 
-Preserve the linked issue as the contract; describe only the delivered outcome and reasoning it does not contain.
+## Issue
+
+Use a concise required-outcome title.
+
+```md
+## Problem
+
+<observable problem and material consequence>
+
+## Outcome
+
+<required current behavior>
+
+## Acceptance
+
+- <consumer-visible proof>
+
+## Constraints
+
+- <material constraint or exclusion>
+```
+
+Serialize the supplied or approved contract without adding or reconciling requirements. Omit research logs, implementation steps, rejected alternatives, and history.
 
 ## Commit
 
@@ -11,7 +33,7 @@ Preserve the linked issue as the contract; describe only the delivered outcome a
 - At most 50 characters after the type.
 - Use repository vocabulary and a specific outcome in one unpunctuated line.
 
-## Pull request
+## Pull request with issue
 
 Use a concise final-outcome title.
 
@@ -22,3 +44,17 @@ Use a concise final-outcome title.
 
 Closes #<number>
 ```
+
+## Pull request without issue
+
+```md
+## Problem
+
+<problem solved and material consequence>
+
+## Changes
+
+- <delivered final state>
+```
+
+Omit empty sections, routine validation, implementation narration, file lists, and duplicated commit history.

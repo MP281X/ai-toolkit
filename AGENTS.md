@@ -36,36 +36,39 @@
 - Trust typed values; validate only boundaries; omit states excluded by types or schemas.
 - Propagate the first reachable failure; retry or recover only when required by the contract.
 - Treat enforcement diagnostics as evidence of their earliest shared cause; correct the owner, not symptoms.
-- Complete the owner and coupled path; aggressively remove everything outside the construction, including semantic duplicates, empty directories, and unused branches, props, schema fields, state, types, exports, dependencies, and wrappers; internal compatibility does not preserve it.
+- Complete the owner and coupled path; remove dead, superseded, duplicate, or contract-obsolete branches, props, schema fields, state, types, exports, dependencies, wrappers, and empty directories; internal compatibility does not preserve them.
 - Preserve unrelated behavior and user changes.
 
 ## Authorization
 
-- Invoke `workflow` only when the user explicitly requests planning or implementation.
-- Repository writes stay with the primary agent.
-- Every Git or GitHub mutation requires an explicit request for that exact operation; workflows never imply authority.
+- The primary is the read-only planner. Delegate each implementation task to exactly one persistent native worker; reuse it for every requirement delta until the task ends.
+- The implementer executes the supplied contract and requirement deltas; it never plans, changes requirements, or invents missing authority.
+- Missing or conflicting authority returns to the planner; its replacement or refinement delta is reconciled by the same implementer.
+- Every Git or GitHub mutation requires an explicit request for that exact operation; other requests never imply authority.
 - Never commit, push, create or switch branches, create or edit issues or pull requests, merge, reset, discard, delete, or rewrite Git state without that request.
 - Ready and merge remain user-owned.
 
 ## Delegation
 
-| Work                                               | Context                    | Model · effort           | Mutation                  |
-| -------------------------------------------------- | -------------------------- | ------------------------ | ------------------------- |
-| Known lookup · one command                         | primary                    | inherited                | none                      |
-| Unclear · multi-command exploration                | clean                      | `gpt-5.6-terra` · medium | none                      |
-| Multi-source synthesis · disputed research         | clean; parallel viewpoints | `gpt-5.6-sol` · high     | none                      |
-| Independent assurance                              | clean                      | `gpt-5.6-sol` · xhigh    | delegated runtime         |
-| Token-heavy external action requiring conversation | full history               | inherited                | authorized external state |
-| Repository implementation · integration            | primary                    | inherited                | repository                |
+| Work                                               | Native agent         | Context                   | Model · effort           | Mutation                  |
+| -------------------------------------------------- | -------------------- | ------------------------- | ------------------------ | ------------------------- |
+| Known lookup · one command                         | primary              | current                   | inherited                | none                      |
+| Unclear · multi-command exploration                | explorer             | clean                     | `gpt-5.6-terra` · medium | none                      |
+| Multi-source synthesis · disputed research         | parallel explorers   | clean; independent views  | `gpt-5.6-sol` · high     | none                      |
+| Repository implementation · reconciliation         | implementer · worker | initial contract → deltas | inherited                | repository                |
+| Independent assurance                              | assurance · default  | clean; one focus each     | `gpt-5.6-sol` · xhigh    | none                      |
+| Token-heavy external action requiring conversation | full-history default | current                   | inherited                | authorized external state |
 
 - Clean context: `fork_turns: "none"`.
-- Full history: inherit model and effort; complete the external action.
-- Parallelize independent work; serialize overlapping writes.
+- Full history: inherit model and effort.
+- Delegate uncertain exploration; parallelize independent work; keep one repository writer.
+- Planner → implementer: approved contract or delta. Implementer → assurance: resolved base, contract or delta, and one focus. Omit automatically loaded instructions and repository context.
+- Assurance reports only to the implementer; the implementer launches every assurance batch and owns tests, verification, finding reconciliation, and correction.
 - Present delegated results after they arrive.
 
 ## Verification
 
-Finish every repository change with `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause. Inspect rendered GFM for Markdown changes.
+The implementer finishes every repository change with `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause. Inspect rendered GFM for Markdown changes.
 
 ## Writing
 

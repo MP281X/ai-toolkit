@@ -12,10 +12,10 @@ Keep every review boundary valid.
 gh stack add          # create a branch atop the current stack
 gh stack init <bottom-branch> [<child-branch>...] # adopt existing branches
 gh stack view         # inspect topology
-gh stack submit       # publish; set every pull request to draft in the editor
+gh stack submit       # publish
 ```
 
-In `gh stack submit`, set every pull request to draft.
+Set each pull request's draft or ready state only when explicitly requested.
 
 ## Published alignment
 

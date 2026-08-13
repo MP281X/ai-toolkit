@@ -3,11 +3,11 @@ name: browser
 description: 'Use for product exploration, UI prototyping, rendered acceptance or review, screenshots, recordings, console, or network evidence.'
 ---
 
-Use the attached product-native browser. Otherwise use `vpx agent-browser`; never load its bundled skills.
+Use `vpx agent-browser`; never load its bundled skills.
 
 ## Session
 
-Create one isolated fallback session; reuse its ID; store artifacts outside the repository; close only that session.
+Create one isolated session; reuse its ID; store artifacts outside the repository; close only that session.
 
 ```bash
 browser_session="$(vpx agent-browser session id --scope worktree --prefix browser)"
@@ -26,7 +26,9 @@ vpx agent-browser --session "$browser_session" wait --text "Saved"
 vpx agent-browser --session "$browser_session" snapshot -i
 ```
 
-## React
+## React diagnosis
+
+Use when component identity, rerenders, or suspense behavior is material.
 
 ```bash
 vpx agent-browser --session "$browser_session" react tree

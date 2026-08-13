@@ -12,6 +12,7 @@ Make independent runs choose the same valid construction.
 | Existing or custom static enforcement              | `references/enforcement.md`                                       |
 | Skill structure, examples, metadata, or evaluation | `references/evaluation.md`                                        |
 | Repeated failures from Codex histories             | `references/conversation-history.md` + `references/evaluation.md` |
+| Codex prompting, configuration, skills, or agents  | `references/codex.md`                                             |
 
 ## Own
 

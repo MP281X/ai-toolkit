@@ -15,12 +15,12 @@ description: 'Use when mutating Git or GitHub state: branches, commits, issues, 
 
 ## GitHub
 
-Infer the repository from the checkout. Use an installed GitHub workflow for covered operations; use `gh` only for gaps. Keep an issue open until its closing pull request merges.
+Infer the repository from the checkout. Use an enabled GitHub workflow for covered operations; otherwise use `gh`. Create or edit an issue only after an explicit request. When a pull request closes an issue, do not close the issue separately.
 
 ## Branches
 
 ```text
-one issue → one semantic branch → one pull request
+one semantic change → one branch → one pull request
 independent branch → fetched remote default branch
 dependent branch → immediate preceding stack branch
 ```
@@ -29,5 +29,5 @@ dependent branch → immediate preceding stack branch
 
 | Work                                                                | Read                        |
 | ------------------------------------------------------------------- | --------------------------- |
-| Commit or pull-request text                                         | `references/messages.md`    |
+| Issue, commit, or pull-request text                                 | `references/messages.md`    |
 | Stack creation, publication, alignment, merge recovery, retargeting | `references/stacked-prs.md` |

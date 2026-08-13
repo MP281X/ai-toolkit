@@ -54,7 +54,21 @@ export const makeMemory = Effect.gen(function* () {
 
 The class owns the sole public interface and every named Layer. Constructors infer requirements, errors, and output through `Service.of`.
 
-## Props preserve ownership
+## One independent value
+
+```tsx
+// BAD
+function NoteTitle(props: {note: Note}) {
+	return <span>{props.note.title}</span>
+}
+
+// GOOD
+function NoteTitle(props: {title: string}) {
+	return <span>{props.title}</span>
+}
+```
+
+## Cohesive owner
 
 ```tsx
 // BAD
@@ -68,7 +82,7 @@ function NoteRow(props: {note: Note; onOpen: (note: Note) => void}) {
 }
 ```
 
-Expose the smallest owner values and actions. Preserve intact objects.
+One independent value → direct prop. Identity, action, or multiple cohesive fields → existing owner. Omit values derived from another prop and duplicate actions.
 
 ## Source
 
