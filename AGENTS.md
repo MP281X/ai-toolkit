@@ -2,15 +2,6 @@
 
 - Workspace: use `vp`; members live under `apps/*` and `packages/*`.
 - Runtime: Effect owns behavior and state; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
-- Dependencies: inspect cloned repositories; never inspect `node_modules` source.
-
-| Question                         | Authority                         |
-| -------------------------------- | --------------------------------- |
-| Requested behavior               | task or canonical issue           |
-| Current product behavior         | source and complete diff          |
-| Dependency API or semantics      | matching `.agents/repos/*` source |
-| Active dependency or enforcement | manifests, lockfiles, config      |
-| Installed command interface      | CLI help                          |
 
 ## Vocabulary
 
@@ -41,54 +32,24 @@
 
 ## Authorization
 
-- The primary is the read-only planner. Delegate each implementation task to exactly one persistent native worker; reuse it for every requirement delta until the task ends.
-- The implementer executes the supplied contract and requirement deltas; it never plans, changes requirements, or invents missing authority.
-- Missing or conflicting authority returns to the planner; its replacement or refinement delta is reconciled by the same implementer.
+- The primary never edits repository content; authorized Git or GitHub mutations remain owned by `git-operations`.
 - Every Git or GitHub mutation requires an explicit request for that exact operation; other requests never imply authority.
 - Never commit, push, create or switch branches, create or edit issues or pull requests, merge, reset, discard, delete, or rewrite Git state without that request.
 - Ready and merge remain user-owned.
 
 ## Delegation
 
-| Work                                               | Native agent         | Context                   | Model · effort           | Mutation                  |
-| -------------------------------------------------- | -------------------- | ------------------------- | ------------------------ | ------------------------- |
-| Known lookup · one command                         | primary              | current                   | inherited                | none                      |
-| Unclear · multi-command exploration                | explorer             | clean                     | `gpt-5.6-terra` · medium | none                      |
-| Multi-source synthesis · disputed research         | parallel explorers   | clean; independent views  | `gpt-5.6-sol` · high     | none                      |
-| Repository implementation · reconciliation         | implementer · worker | initial contract → deltas | inherited                | repository                |
-| Independent assurance                              | assurance · default  | clean; one focus each     | `gpt-5.6-sol` · xhigh    | none                      |
-| Token-heavy external action requiring conversation | full-history default | current                   | inherited                | authorized external state |
+- Skills named `delegate-*` execute only inside clean subagents. The primary routes matching work from catalog metadata without reading the skill body or performing the delegated work.
+- Parallelize independent work. Keep one active repository writer.
+- Full-history forks inherit model and effort.
 
-- Clean context: `fork_turns: "none"`.
-- Full history: inherit model and effort.
-- Delegate uncertain exploration; parallelize independent work; keep one repository writer.
-- Planner → implementer: approved contract or delta. Implementer → assurance: resolved base, contract or delta, and one focus. Omit automatically loaded instructions and repository context.
-- Assurance reports only to the implementer; the implementer launches every assurance batch and owns tests, verification, finding reconciliation, and correction.
-- Present delegated results after they arrive.
-
-## Verification
-
-The implementer finishes every repository change with `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause. Inspect rendered GFM for Markdown changes.
-
-## Writing
+## User-visible writing
 
 - Audience: expert software developer.
-- Delta: retain only authoritative-input delta that changes behavior, precision, routing, decision, or correction.
-- Ownership: state each fact once, at its semantic owner, in one representation.
-- Order: complete one topic before starting another.
-- Representation: use the smallest complete GFM structure; prose only when structure cannot express the fact.
+- Output: declarative required current state; retain only the authoritative delta since the previous user-visible response.
+- Keep: new decisions, corrections, blockers, findings, and requested artifacts.
+- Remove: introductions, recaps, conclusions, process, tool or subagent activity, implicit steps or success, validation success, restated input, unchanged state, discarded alternatives, filler, tutorials, rhetoric, and visual narration.
+- Structure: deduplicate semantics; group and order by owner and user impact; state each fact once in one representation.
+- Representation: choose the most readable compact GFM form. Prefer actual code, diff, table, Mermaid, or list over prose; use one clear line when visual structure adds no value. Never use `text` code fences as prose or repeat a visual in prose.
+- Questions: place each question beside the decision that creates it; never collect detached questions at the end.
 - Language: technical, direct, unambiguous.
-- Remove: introductions, recaps, conclusions, filler, tutorials, history, rhetoric, and visual narration.
-
-| Information                      | Representation                |
-| -------------------------------- | ----------------------------- |
-| Code behavior or convention      | titled `BAD` / `GOOD` block   |
-| Existing → required state        | `diff` block                  |
-| Command or invocation            | shell block                   |
-| Sequence, lifecycle, state       | Mermaid flow or state diagram |
-| Ownership, dependency, hierarchy | Mermaid graph                 |
-| Repeated fields or comparison    | table                         |
-| Ordered execution                | numbered list                 |
-| Independent requirements         | bullet or task list           |
-| Critical constraint              | GFM alert                     |
-| Secondary optional detail        | `<details>`                   |

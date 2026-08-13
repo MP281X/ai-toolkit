@@ -1,9 +1,13 @@
 ---
 name: browser
-description: 'Use for product exploration, UI prototyping, rendered acceptance or review, screenshots, recordings, console, or network evidence.'
+description: 'Use for interacting with apps in a browser, UI/UX exploration or review, browser acceptance, screenshots, recordings, DOM or React DevTools inspection, and console, page-error, network, or performance evidence.'
 ---
 
 Use `vpx agent-browser`; never load its bundled skills.
+
+Use browser automation only for explicit browser work or final assurance; the user exercises planning prototypes manually.
+
+Use the supplied running origin, target flow, and expected state. Otherwise delegate repository/configuration fact-finding through `delegate-exploration`; ask only when no authority resolves them.
 
 ## Session
 
@@ -41,7 +45,7 @@ vpx agent-browser --session "$browser_session" react suspense --only-dynamic --j
 
 ## Evidence
 
-Retain final accessibility state and screenshot. Inspect page errors, console, and relevant requests. Record only material motion or sequence.
+For UI acceptance, exercise the complete affected flow visually and behaviorally at desktop and mobile viewports. Retain final state and screenshots. Inspect page errors, console, and relevant requests; inspect React renders or performance only when material. Record only material motion or sequence. Accessibility and tracing are not dedicated targets.
 
 ```bash
 vpx agent-browser --session "$browser_session" screenshot --full "$artifact_dir/final.png"
@@ -56,7 +60,7 @@ vpx agent-browser --session "$browser_session" record start "$artifact_dir/flow.
 vpx agent-browser --session "$browser_session" record stop
 ```
 
-Report scenario, expected state, observed state, and artifact paths. Keep credentials out of commands and output.
+Report only expected state → observed state and material artifact paths. Keep credentials out of commands and output.
 
 ```bash
 vpx agent-browser --session "$browser_session" close

@@ -13,29 +13,25 @@
 
 ## Choose
 
-```text
-configured maintained rule
-→ compatible maintained rule or option
-→ custom Oxlint
-→ domain skill
-```
+1. Configured maintained rule.
+2. Compatible maintained rule or option.
+3. Custom Oxlint.
+4. Domain skill.
 
 ## Custom Oxlint
 
-```text
-Required:
-frequent
-+ precise
-+ statically detectable
-+ no maintained equivalent
-+ stable canonical correction
-```
+| Gate       | Requirement                   |
+| ---------- | ----------------------------- |
+| Frequency  | Frequent                      |
+| Detection  | Precise and static            |
+| Ownership  | No maintained equivalent      |
+| Correction | Stable canonical construction |
 
-```text
-Specify: exact invalid form · architectural reason
-Prove: BAD cases · valid counterexamples · unsupported cases
-Detect: narrowest syntax · scope · path
-Report: root cause · canonical correction
-```
+| Phase   | Required artifact                                     |
+| ------- | ----------------------------------------------------- |
+| Specify | Exact invalid form · architectural reason             |
+| Prove   | BAD cases · valid counterexamples · unsupported cases |
+| Detect  | Narrowest syntax · scope · path                       |
+| Report  | Root cause · canonical correction                     |
 
 Suppress only an irreducible boundary: narrow, inline, reasoned.

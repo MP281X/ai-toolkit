@@ -1,18 +1,19 @@
 ---
 name: skill-writing
-description: 'Use for repository instructions, skill metadata, progressive references, and enforcement ownership.'
+description: 'Use for repository instructions, skills, static-analysis configuration, instruction evaluation, and enforcement ownership.'
 ---
 
 Make independent runs choose the same valid construction.
 
 ## Route
 
-| Work                                               | Read                                                              |
-| -------------------------------------------------- | ----------------------------------------------------------------- |
-| Existing or custom static enforcement              | `references/enforcement.md`                                       |
-| Skill structure, examples, metadata, or evaluation | `references/evaluation.md`                                        |
-| Repeated failures from Codex histories             | `references/conversation-history.md` + `references/evaluation.md` |
-| Codex prompting, configuration, skills, or agents  | `references/codex.md`                                             |
+Read every matching reference completely once before acting. Open the linked path directly relative to this `SKILL.md`; never list, glob, grep, or search this skill directory. Continue a read only when the tool reports truncation.
+
+| Work                                               | Reference                                |
+| -------------------------------------------------- | ---------------------------------------- |
+| Existing or custom static enforcement              | [Enforcement](references/enforcement.md) |
+| Skill structure, examples, metadata, or evaluation | [Evaluation](references/evaluation.md)   |
+| Codex prompting, configuration, skills, or agents  | [Codex](references/codex.md)             |
 
 ## Own
 
@@ -25,3 +26,7 @@ Make independent runs choose the same valid construction.
 ## Retain
 
 Keep skill guidance only when the pattern is frequent, architectural, or routinely misfixed from diagnostics alone.
+
+## Output
+
+Return only the requested enforcement or instruction artifact, material failures, earliest shared causes, and semantic delta.

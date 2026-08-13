@@ -2,107 +2,70 @@
 
 ## Structure
 
-```text
-frontmatter
-  name · trigger · capability
+| Owner       | Content                                                      |
+| ----------- | ------------------------------------------------------------ |
+| Frontmatter | Name · exact trigger · capability                            |
+| `SKILL.md`  | Cross-branch outcome · construction · exact reference routes |
+| Reference   | One conditional branch safely omitted elsewhere              |
 
-SKILL.md
-  outcome · routes · decisions
+Group related topics. One policy, one semantic owner. Link every reference directly from its owner `SKILL.md`, one level deep, with an exhaustive predicate.
 
-reference.md
-  conditional depth omitted safely from other tasks
+## Examples
+
+```ts
+// BAD: same behavior; one isolated failure
+const output: Result = compute(input)
+
+// GOOD: direct refactor; inferred type; verified API; valid under every instruction
+const output = compute(input)
 ```
 
-Group related topics. One policy, one owner.
+Use the minimum surrounding code. Imports are outside example scope. Rewrite examples requiring explanatory prose.
 
-## Example contract
-
-```text
-title
-→ connected BAD/GOOD block
-→ minimum surrounding code
-→ current cloned-source path when dependency semantics apply
-```
-
-```text
-BAD: same behavior · one failure
-GOOD: direct refactor · verified API · cross-rule valid · construction
-```
-
-Rewrite any example requiring explanatory prose. Imports and unrelated surrounding code are outside example scope.
-
-## Cross-check
-
-```text
-all instructions
-+ enforcement
-+ linked cloned source
-+ every GOOD example
-```
-
-Reject incompatible examples, stale APIs, semantic duplicates, unsafe exceptions, trigger collisions, and metadata drift.
+Cross-check every instruction and GOOD example against enforcement, other examples, and current cloned source. Reject stale APIs, incompatibility, semantic duplication, unsafe exceptions, trigger collision, and metadata drift.
 
 ## Fixture
 
-```text
-Allow:
-  instructions
-  skill metadata
-  cloned repositories
-  enforcement config and custom-rule source/tests
-  neutral synthetic task and fixture
+| Allow                                                  | Exclude                            |
+| ------------------------------------------------------ | ---------------------------------- |
+| Instructions and skill metadata                        | `apps/*`                           |
+| Cloned repositories                                    | Production package implementations |
+| Enforcement configuration and custom-rule source/tests | Git and conversation history       |
+| Neutral synthetic task and fixture                     | Other-run artifacts                |
 
-Exclude:
-  apps/*
-  production package implementations
-  git and conversation history
-  other-run artifacts
-```
+Reject fixtures requiring invented domain values, defaults, compatibility, policy, or product structure.
 
-Reject a fixture that requires invented domain values, defaults, compatibility, policy, or product structure.
+## Runs
 
-Run at least five clean generations per task. Parallelize per `AGENTS.md#Delegation`; use the primary model for unseen holdouts. Invalidate forbidden-source access.
+- Run at least three independent clean generations for semantic or routing changes; increase count with breadth, variance, and risk.
+- Use smaller proof only for mechanical edits with unchanged semantics and routing.
+- Use the primary model for unseen holdouts.
+- Invalidate forbidden-source access.
 
-## Trajectory
-
-| Point | Snapshot                                                   |
-| ----- | ---------------------------------------------------------- |
-| `P0`  | tree before first formatter, fixer, or mutating validation |
-| `P1`  | tree immediately after the first fixer                     |
-| `Pn`  | tree after each evidence-driven correction                 |
-| `PF`  | submitted tree                                             |
-
-Run read-only checks against a copy of `P0`.
-
-| Observe      | Evidence                                                         |
-| ------------ | ---------------------------------------------------------------- |
-| Sources      | ordered reads/searches before first edit; missed or forbidden    |
-| Assumptions  | unsupported choices identified from actions and artifacts        |
-| Stalls       | repeated actions without new evidence, decision, or artifact     |
-| Failures     | command/tool error classified by cause                           |
-| Iterations   | edit → new evidence → edit                                       |
-| Autofix      | exact `P0 → P1` and later fixer changes                          |
-| Architecture | contract · owner · primitive · boundary · lifetime · current API |
-| Minimality   | construction · no semantic duplicate · no remaining cleanup      |
-
-Inspect architecture at `P0` and `PF`. A clean `PF` does not erase poor `P0`, avoidable stalls, or semantic autofix churn.
+| Measure           | Evidence                                                                    |
+| ----------------- | --------------------------------------------------------------------------- |
+| Routing           | Selected skills and missed/extra invocation                                 |
+| Reference loading | Ordered reads; partial, repeated, speculative, or directory-discovery calls |
+| Assumptions       | Unsupported choices visible in actions or artifacts                         |
+| Trajectory        | Stalls, tool failures, edit/correction count, fixer churn                   |
+| First pass        | Contract, owner, primitive, boundary, lifetime, current API, minimality     |
+| Final             | Behavior, architecture, semantic/output adherence, remaining cleanup        |
+| Persistence       | Long-context and post-compaction adherence                                  |
 
 ## Correction
 
 ```mermaid
 flowchart LR
-	B[5 clean baselines] --> T[Compare trajectories]
-	T --> R[Earliest shared cause]
+	B[Independent baselines] --> R[Earliest shared cause]
 	R --> C[One owner correction]
-	C --> G[Regressions]
-	G --> H[Unseen + long-context holdouts]
+	C --> H[Unseen + long-context holdouts]
 	H --> U[User review]
 	U -->|revise| R
 	U -->|accept| D[Done]
 ```
 
-Systemic cause: repeated in two independent runs or matching a repeated user correction. Change one owner at a time. Accept only improved first-pass trajectory, non-regressed final quality, passing holdouts, and user approval.
+Treat a cause as systemic when repeated independently or matching a repeated user correction. Accept only improved first-pass trajectory, non-regressed final quality, passing holdouts, and user approval.
 
-## Result
+## Output
 
-Present every generation, trajectory, finding, shared cause, correction, and holdout result to the user. Never replace artifacts with an aggregate score.
+Present material failures, shared causes, corrections, and changed holdout results. Omit unchanged artifacts and aggregate scores that hide failures.

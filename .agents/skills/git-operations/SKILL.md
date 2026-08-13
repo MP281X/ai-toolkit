@@ -1,6 +1,6 @@
 ---
 name: git-operations
-description: 'Use when mutating Git or GitHub state: branches, commits, issues, pull requests, stacks, or conflicts.'
+description: 'Use for Git or GitHub work.'
 ---
 
 ## Safety
@@ -27,7 +27,13 @@ dependent branch → immediate preceding stack branch
 
 ## Route
 
-| Work                                                                | Read                        |
-| ------------------------------------------------------------------- | --------------------------- |
-| Issue, commit, or pull-request text                                 | `references/messages.md`    |
-| Stack creation, publication, alignment, merge recovery, retargeting | `references/stacked-prs.md` |
+Read every matching reference completely once before acting. Open the linked path directly relative to this `SKILL.md`; never list, glob, grep, or search this skill directory. Continue a read only when the tool reports truncation.
+
+| Work                                                                   | Reference                                          |
+| ---------------------------------------------------------------------- | -------------------------------------------------- |
+| Issue, commit, or pull-request text                                    | [Messages](references/messages.md)                 |
+| Stack creation, publication, alignment, merge recovery, or retargeting | [Stacked pull requests](references/stacked-prs.md) |
+
+## Output
+
+Return only the requested Git or GitHub artifact, resulting state, or material blocker.
