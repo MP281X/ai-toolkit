@@ -23,10 +23,16 @@ function NotesList() {
 }
 
 // GOOD: apps/<app>/src/rpcs/contracts.ts
-Rpc.make('notes.changes', {
-	stream: true,
-	success: Schema.Array(Note)
-})
+export class NotesRpcs extends RpcGroup.make(
+	Rpc.make('notes.changes', {
+		stream: true,
+		success: Schema.Array(Note)
+	}),
+	Rpc.make('notes.create', {
+		payload: CreateNote,
+		success: Note
+	})
+) {}
 
 // GOOD: handlers.ts
 export const NotesRpcsLayer = NotesRpcs.toLayer(
@@ -43,8 +49,10 @@ export const NotesRpcsLayer = NotesRpcs.toLayer(
 // GOOD: apps/<app>/src/lib/state.ts
 export const notesAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
-		Stream.unwrap(
-			RpcClient.useSync(client => client('notes.changes', undefined))
+		pipe(
+			RpcClient,
+			Effect.map(client => client('notes.changes', undefined)),
+			Stream.unwrap
 		)
 	)
 )
@@ -65,7 +73,13 @@ const notesAtom = RpcClient.query('notes.changes', undefined)
 
 // GOOD: latest authoritative emission stays synchronized
 const notesAtom = Atom.keepAlive(
-	RpcClient.runtime.atom(Stream.unwrap(RpcClient.useSync(client => client('notes.changes', undefined))))
+	RpcClient.runtime.atom(
+		pipe(
+			RpcClient,
+			Effect.map(client => client('notes.changes', undefined)),
+			Stream.unwrap
+		)
+	)
 )
 ```
 
@@ -128,7 +142,7 @@ function Items() {
 // GOOD
 const visibleItemsAtom = Atom.mapResult(
 	itemsAtom,
-	Array.filter(item => item.visible)
+	Array.filter(Struct.get('visible'))
 )
 
 function Items() {

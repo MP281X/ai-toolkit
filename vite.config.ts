@@ -174,9 +174,9 @@ const noRestrictedProperties: NonNullable<NonNullable<ViteUserConfig['lint']>['r
 	{message: 'Use a branded schema.', object: 'Schema', property: 'Opaque'},
 	{message: 'Use Schema.Struct.', object: 'Schema', property: 'TaggedClass'},
 	{message: 'Use schema-backed data.', object: 'Data', property: 'Class'},
-	{message: 'Use Schema.TaggedErrorClass.', object: 'Data', property: 'Error'},
+	{message: 'Use Schema.TaggedError.', object: 'Data', property: 'Error'},
 	{message: 'Use schema-backed data.', object: 'Data', property: 'TaggedClass'},
-	{message: 'Use Schema.TaggedErrorClass.', object: 'Data', property: 'TaggedError'}
+	{message: 'Use Schema.TaggedError.', object: 'Data', property: 'TaggedError'}
 ]
 
 export default defineConfig({
@@ -267,11 +267,11 @@ export default defineConfig({
 		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// Repository invariants that maintained rules cannot express.
-			'@deslop/oxlint-rules/inline-schema-operation': 'error',
 			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
 			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
 			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
+			'@deslop/oxlint-rules/no-stored-schema-operation': 'error',
 			'@deslop/oxlint-rules/no-trivial-indirection': 'error',
 			'@deslop/oxlint-rules/no-undestructured-use-state': 'error',
 			'@deslop/oxlint-rules/no-unvalidated-json-decode': 'error',
@@ -623,7 +623,7 @@ export default defineConfig({
 					types: {
 						AbortController: 'Use Effect interruption.',
 						Date: 'Use DateTime.',
-						Error: 'Use Schema.TaggedErrorClass.',
+						Error: 'Use Schema.TaggedError.',
 						Map: 'Use HashMap.',
 						Promise: 'Use Effect.',
 						Readonly: 'Use a mutable type shape.',

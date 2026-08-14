@@ -1,18 +1,27 @@
 ---
 name: engineering
-description: 'Use for product source, Effect, React, tests, product UI, package topology, manifests, scripts, exports, or generated files.'
+description: 'Use inside implementer or assurance agents for product code, tests, UI, package topology, manifests, scripts, exports, or generated files.'
 ---
 
-Effect owns behavior and state; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
+Effect is the language and functional mental model: Effect owns behavior, immutable data, state, resources, concurrency, and failure; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
 
 - Trust typed values; decode unknown external data once at its boundary.
+- Preserve intact typed values; transform shape only when the contract requires it.
 - Omit states excluded by types or schemas.
 - Propagate the first reachable failure; retry or recover only when required by the contract.
-- Remove dead, superseded, duplicate, contract-obsolete, or compatibility-only surface across the coupled path.
-- Compose every matching canonical example without changing its structure; change only domain data.
-- Verify current dependency signatures from their authoritative source; never infer them from memory.
+- Keep arguments, props, service values, and returned values immutable without `readonly` syntax.
+- Remove dead, superseded, semantically duplicated, contract-obsolete, or compatibility-only surface across the coupled path.
+- Verify dependency signatures from authoritative cloned source; never infer from memory.
 
 ## Construction
+
+```mermaid
+flowchart LR
+	Owner[Existing owner] --> Domain[Effect domain module]
+	Domain --> Shape[Struct or Record]
+	Shape --> Dependency[Installed dependency]
+	Dependency --> New[New construction]
+```
 
 ### Narrowest owner
 
@@ -32,27 +41,17 @@ return load(input.session.user.id)
 
 ```tsx
 // BAD
-function Row({item: {id, title}}: {item: Item}) {
-	return <ItemView id={id} title={title} />
+function Row(props: {id: Item['id']; title: Item['title']}) {
+	return <button data-id={props.id}>{props.title}</button>
 }
 
 // GOOD
 function Row(props: {item: Item}) {
-	return <ItemView id={props.item.id} title={props.item.title} />
+	return <button data-id={props.item.id}>{props.item.title}</button>
 }
 ```
 
-Tuple and array destructuring remain canonical.
-
-```ts
-// BAD
-const state = useState(initial)
-const value = state[0]
-const setValue = state[1]
-
-// GOOD
-const [value, setValue] = useState(initial)
-```
+One independent leaf remains a direct prop. Identity, actions, or multiple cohesive fields retain their existing owner. Tuple and array destructuring remain canonical.
 
 ### Inference
 
@@ -63,8 +62,6 @@ const [target, setTarget] = useState<ReviewTarget>(ReviewTarget.make({}))
 // GOOD
 const [target, setTarget] = useState(ReviewTarget.make({}))
 ```
-
-Annotate only schema pairs, public boundaries, recursive structures, or independently shared large shapes.
 
 ```ts
 // BAD
@@ -80,11 +77,11 @@ export function Label(props: {value: string}) {
 }
 ```
 
-Module scope owns reuse, public boundaries, recursive or shared shapes, expensive shared computation, identity, or lifecycle: schema, service, component, Atom, cache, `RcMap`, `LayerMap`.
+Module scope: schema, service, component, Atom, cache, `RcMap`, `LayerMap`, recursive or independently shared large shape, expensive shared computation, identity, or lifecycle.
 
 ### Direct names
 
-```ts
+```tsx
 // BAD
 import {Status as StatusSchema} from './schema.ts'
 
@@ -93,23 +90,23 @@ type StatusValue = typeof StatusSchema.Type
 // GOOD
 import {Status} from './schema.ts'
 
-function render(status: Status) {
-	return status
+function Badge(props: {status: Status}) {
+	return <span>{props.status}</span>
 }
 ```
 
-Name distinct owners to avoid import, type, property-access, or binding aliases. Schema pairs are the only mandatory same-name type declarations.
+Name distinct owners; omit import, type, property-access, and binding aliases. Schema pairs are the sole mandatory same-name type declarations.
 
 ## References
 
-Read every matching reference completely once before acting. Open the link directly relative to this `SKILL.md`; never list, glob, grep, or search this skill directory. Continue only after reported truncation.
+Read every matching reference completely once with `cat` before acting. Open the linked path directly relative to this file; never discover this directory. Continue only after reported truncation.
 
-| Work                                                                                                                               | Reference                                                                                |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Effect primitives, modules, operations, Stream, tracing, errors, or concurrency                                                    | [Effect](references/effect.md)                                                           |
-| Schema defaults, transformations, validation, missing values, public types/interfaces/props/services, RPC contracts, or boundaries | [Contracts and data](references/contracts.md) + [Effect data](references/effect-data.md) |
-| Services, Layers, scoped resources, SubscriptionRef, keyed instances, or caches                                                    | [Effect services](references/effect-services.md)                                         |
-| Router, RPC client, Atom, or React                                                                                                 | [Frontend](references/react.md)                                                          |
-| Service or helper behavior tests                                                                                                   | [Testing](references/testing.md)                                                         |
-| Product interaction or visual design                                                                                               | [UI design](references/ui-design.md)                                                     |
-| Package topology, manifests, dependencies, scripts, exports, CLI, or generated files                                               | [Workspace](references/workspace.md)                                                     |
+| Work                                                                              | Reference                                                                       |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Effect primitives, modules, operations, Stream, tracing, errors, concurrency      | [Effect](references/effect.md)                                                  |
+| Schema, missing values, public shapes, RPC contracts, boundaries                  | [Contracts](references/contracts.md) + [Effect data](references/effect-data.md) |
+| Services, Layers, resources, SubscriptionRef, keyed instances, caches             | [Services](references/effect-services.md)                                       |
+| Router, RPC client, Atom, React                                                   | [Frontend](references/react.md)                                                 |
+| Service or helper behavior tests                                                  | [Testing](references/testing.md)                                                |
+| Product interaction or visual design                                              | [UI design](references/ui-design.md)                                            |
+| Package topology, manifests, dependencies, scripts, exports, CLI, generated files | [Workspace](references/workspace.md)                                            |

@@ -3,16 +3,12 @@
 ## Boundary: decode once
 
 ```ts
-// BAD: schema.ts
+// schema.ts
 type CreateNote = typeof CreateNote.Type
 const CreateNote = Schema.Struct({text: Schema.optional(Schema.Trim)})
 
 // BAD: handlers.ts
 create: input => pipe(input, Schema.decodeUnknownEffect(CreateNote), Effect.flatMap(notes.create))
-
-// GOOD: schema.ts
-type CreateNote = typeof CreateNote.Type
-const CreateNote = Schema.Struct({text: pipe(Schema.Trim, Schema.withDecodingDefault(Effect.succeed(defaultTitle)))})
 
 // GOOD: handlers.ts
 create: input => notes.create(input)
@@ -42,14 +38,14 @@ function label(value?: string) {
 
 ```ts
 // BAD
-const owner = repository.find(input.id)
+const owner = repository.lookup(input.id)
 if (Option.isNone(owner)) return Option.none()
 
 return permissions.read(owner.value.ownerId)
 
 // GOOD
 return pipe(
-	repository.find(input.id),
+	repository.lookup(input.id),
 	Option.flatMap(item => permissions.read(item.ownerId))
 )
 ```

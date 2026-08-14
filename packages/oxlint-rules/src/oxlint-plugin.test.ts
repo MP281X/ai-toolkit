@@ -39,11 +39,14 @@ const lintSource = Effect.fnUntraced(function* (input: {name: string; source: st
 
 function customCodes(output: OxlintOutput) {
 	return pipe(
-		output.diagnostics,
-		Array.filter(diagnostic => String.startsWith('@deslop/oxlint-rules(')(diagnostic.code)),
+		customDiagnostics(output),
 		Array.map(diagnostic => diagnostic.code),
 		Array.sort(String.Order)
 	)
+}
+
+function customDiagnostics(output: OxlintOutput) {
+	return Array.filter(output.diagnostics, diagnostic => String.startsWith('@deslop/oxlint-rules(')(diagnostic.code))
 }
 
 describe('deslop Oxlint plugin', {concurrent: false}, () => {
@@ -58,15 +61,28 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							source: pipe(
 								[
 									"import {Schema, SchemaTransformation, pipe} from 'effect'",
+									"import * as React from 'react'",
 									"import {useRef, useState} from 'react'",
 									'',
 									'declare const input: unknown',
 									'declare const source: string',
 									'const decode = Schema.decodeUnknownSync(Schema.String)',
+									'const operations = {decode: Schema.decodeUnknownSync(Schema.String)}',
+									'class Codecs { decode = Schema.decodeUnknownSync(Schema.String) }',
+									'const decoders = [Schema.decodeUnknownSync(Schema.String)]',
+									'let assigned = decode',
+									'assigned = Schema.decodeUnknownSync(Schema.String)',
 									'const MissingType = Schema.Struct({value: Schema.String})',
+									'const MissingFluent = Schema.String.annotate({description: "value"})',
+									'const MissingTransform = Schema.decodeTo(Schema.Number, SchemaTransformation.transform({decode: Number, encode: String}))(Schema.String)',
 									'type Explicit = {readonly values: readonly string[]}',
+									'type Mapped<T> = {readonly [K in keyof T]: T[K]}',
+									'type Index = {readonly [key: string]: string}',
+									'class Input { readonly field = "value"; constructor(readonly value: string) {} }',
 									'const ref = useRef<HTMLElement | null>(null)',
+									'const namespaceRef = React.useRef<HTMLElement | null>(null)',
 									'const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(source)',
+									'const directDecoded = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(source)',
 									'function forward(value: string) { return consume(value) }',
 									'function ready() { return source.length > 0 }',
 									'function run() { consume(source) }',
@@ -75,8 +91,10 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const alias = source',
 									'const [fake] = useState(() => ({current: null}))',
 									'const state = useState(0)',
-									'export {MissingType, alias, callbacks, decode, decoded, fake, forward, input, ready, ref, run}',
-									'export type {Explicit}'
+									'const [fakeNamespace] = React.useState(() => ({current: null}))',
+									'const stateNamespace = React.useState(0)',
+									'export {Codecs, Input, MissingFluent, MissingTransform, MissingType, alias, assigned, callbacks, decode, decoded, decoders, directDecoded, fake, fakeNamespace, forward, input, namespaceRef, operations, ready, ref, run, stateNamespace}',
+									'export type {Explicit, Index, Mapped}'
 								],
 								Array.join('\n')
 							)
@@ -85,21 +103,47 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 						expect(customCodes(result.stdout)).toEqual(
 							pipe(
 								[
-									'@deslop/oxlint-rules(inline-schema-operation)',
+									'@deslop/oxlint-rules(no-fake-ref-state)',
 									'@deslop/oxlint-rules(no-fake-ref-state)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-readonly-type-syntax)',
+									'@deslop/oxlint-rules(no-readonly-type-syntax)',
+									'@deslop/oxlint-rules(no-readonly-type-syntax)',
+									'@deslop/oxlint-rules(no-readonly-type-syntax)',
+									'@deslop/oxlint-rules(no-readonly-type-syntax)',
 									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
+									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-undestructured-use-state)',
+									'@deslop/oxlint-rules(no-undestructured-use-state)',
 									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
+									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
+									'@deslop/oxlint-rules(schema-type-pair)',
+									'@deslop/oxlint-rules(schema-type-pair)',
 									'@deslop/oxlint-rules(schema-type-pair)'
 								],
 								Array.sort(String.Order)
+							)
+						)
+						expect(
+							pipe(
+								customDiagnostics(result.stdout),
+								Array.filter(diagnostic => diagnostic.code === '@deslop/oxlint-rules(no-stored-schema-operation)'),
+								Array.map(diagnostic => diagnostic.message)
+							)
+						).toEqual(
+							Array.makeBy(
+								5,
+								() => 'Inline this Schema compiler at its consumption site; never store decoders or encoders.'
 							)
 						)
 						expect(result.stderr).toBe('')
@@ -110,7 +154,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 		)
 
 		testApi.effect(
-			'allows maintained-tool counterparts and semantic ownership',
+			'allows valid schemas and semantic owners',
 			() =>
 				pipe(
 					Effect.gen(function* () {
@@ -118,39 +162,35 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							name: 'valid.tsx',
 							source: pipe(
 								[
-									"import {useAtomSet} from '@effect/atom-react'",
-									"import {Schema, SchemaTransformation, identity, pipe} from 'effect'",
-									"import {useRef, useState} from 'react'",
-									"import {RpcClient} from '#lib/atomRuntime.ts'",
+									"import {Array, Schema, SchemaTransformation, identity, pipe} from 'effect'",
 									'',
 									'declare const input: unknown',
-									'declare const actionAtom: object',
 									'declare function combine(left: string, right: string): string',
 									'type User = typeof User.Type',
 									'const User = Schema.Struct({name: Schema.String})',
+									'type Annotated = typeof Annotated.Type',
+									'const Annotated = Schema.String.annotate({description: "value"})',
 									'export type Public = typeof Public.Type',
 									'const Public = Schema.Struct({name: Schema.String})',
 									'type Exported = typeof Exported.Type',
 									'export const Exported = Schema.Struct({name: Schema.String})',
 									'type Normalized = typeof Normalized.Type',
 									'const Normalized = pipe(Schema.Struct({value: Schema.String}), Schema.decodeTo(Schema.Struct({value: Schema.String}), SchemaTransformation.transform({decode: identity, encode: identity})))',
-									'const decoded = Schema.decodeUnknown(User)(input)',
-									'const encoded = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(input)',
-									'const ref = useRef<HTMLElement>(null)',
-									'const mutate = useAtomSet(actionAtom, {mode: "promise"})',
-									'const fire = useAtomSet(RpcClient.mutation("save"))',
-									'const [stable] = useState(() => actionAtom)',
+									'const decoded = Schema.decodeUnknownEffect(User)(input)',
+									'const encoded = Schema.encodeUnknownSync(Schema.fromJsonString(User))(input)',
+									'const decodedMany = Array.map([input], value => Schema.decodeUnknownSync(User)(value))',
 									'function transform(value: string) { return value.length }',
 									'function swap(left: string, right: string) { return combine(right, left) }',
-									'function first(head: string, tail: string) { return head }',
 									'function withDefault(value = "ready") { return transform(value) }',
 									'const tuple = ["ready", 1] as const',
-									'export {Normalized, decoded, encoded, fire, first, mutate, ref, stable, swap, transform, tuple, withDefault}'
+									'export {Annotated, Normalized, decoded, decodedMany, encoded, swap, transform, tuple, withDefault}'
 								],
 								Array.join('\n')
 							)
 						})
+						expect(result.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
 						expect(customCodes(result.stdout)).toEqual([])
+						expect(result.stderr).toBe('')
 					}),
 					Effect.scoped
 				),

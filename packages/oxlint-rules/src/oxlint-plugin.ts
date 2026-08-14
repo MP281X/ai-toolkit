@@ -156,10 +156,11 @@ function schemaDefinitionMember(node: ESTree.Expression): Option.Option<ESTree.M
 	if (node.type === 'CallExpression' && node.callee.type !== 'Super') return schemaDefinitionMember(node.callee)
 	if (node.type === 'TSInstantiationExpression') return schemaDefinitionMember(node.expression)
 	if (node.type === 'TSSatisfiesExpression') return schemaDefinitionMember(node.expression)
-	if (node.type === 'MemberExpression' && Option.contains(memberName(node), 'pipe')) {
-		return schemaDefinitionMember(node.object)
+	if (node.type === 'MemberExpression') {
+		if (node.object.type === 'Identifier') return Option.some(node)
+		if (node.object.type !== 'Super') return schemaDefinitionMember(node.object)
 	}
-	return node.type === 'MemberExpression' ? Option.some(node) : Option.none()
+	return Option.none()
 }
 
 function isSchemaDefinition(input: {context: Context; node: ESTree.Expression}): boolean {
@@ -180,15 +181,13 @@ function isSchemaDefinition(input: {context: Context; node: ESTree.Expression}):
 		schemaDefinitionMember(input.node),
 		Option.exists(member => {
 			if (!importedMember({context: input.context, importedName: 'Schema', node: member})) return false
-			return pipe(
-				memberName(member),
-				Option.match({
-					onNone: () => true,
-					onSome: name => !String.startsWith('decode')(name) && !String.startsWith('encode')(name)
-				})
-			)
+			return pipe(memberName(member), Option.match({onNone: () => true, onSome: name => !isSchemaCompilerName(name)}))
 		})
 	)
+}
+
+function isSchemaCompilerName(name: string) {
+	return /^(?:decode|encode)(?:Unknown)?(?:Effect|Exit|Option|Promise|Result|Sync)?$/u.test(name)
 }
 
 function isSchemaCompilerCall(input: {context: Context; node: ESTree.CallExpression}) {
@@ -198,19 +197,16 @@ function isSchemaCompilerCall(input: {context: Context; node: ESTree.CallExpress
 	) {
 		return false
 	}
-	return pipe(
-		memberName(input.node.callee),
-		Option.exists(name => /^(?:decode|encode)(?:Unknown)?(?:Effect|Exit|Option|Promise|Result|Sync)$/u.test(name))
-	)
+	return pipe(memberName(input.node.callee), Option.exists(isSchemaCompilerName))
 }
 
-function isInlineSchemaCompiler(input: {context: Context; node: ESTree.CallExpression}) {
-	if (input.node.parent.type !== 'CallExpression') return false
-	if (input.node.parent.callee === input.node) return true
+function storedSchemaCompiler(node: ESTree.CallExpression) {
 	return (
-		input.node.parent.callee.type === 'MemberExpression' &&
-		(importedMember({context: input.context, importedName: 'Effect', node: input.node.parent.callee}) ||
-			importedMember({context: input.context, importedName: 'Stream', node: input.node.parent.callee}))
+		(node.parent.type === 'VariableDeclarator' && node.parent.init === node) ||
+		(node.parent.type === 'Property' && node.parent.value === node) ||
+		(node.parent.type === 'PropertyDefinition' && node.parent.value === node) ||
+		node.parent.type === 'ArrayExpression' ||
+		(node.parent.type === 'AssignmentExpression' && node.parent.right === node)
 	)
 }
 
@@ -374,8 +370,7 @@ function redundantConstAlias(input: {context: Context; node: ESTree.VariableDecl
 
 function isFakeRefState(input: {context: Context; node: ESTree.CallExpression}) {
 	if (
-		input.node.callee.type !== 'Identifier' ||
-		!isImportBinding({context: input.context, importedName: 'useState', node: input.node.callee, source: 'react'}) ||
+		!isReactUseState(input) ||
 		input.node.arguments[0]?.type !== 'ArrowFunctionExpression' ||
 		input.node.arguments[0].body.type !== 'ObjectExpression'
 	) {
@@ -388,9 +383,14 @@ function isFakeRefState(input: {context: Context; node: ESTree.CallExpression}) 
 }
 
 function isReactUseState(input: {context: Context; node: ESTree.CallExpression}) {
+	if (input.node.callee.type === 'Identifier') {
+		return isImportBinding({context: input.context, importedName: 'useState', node: input.node.callee, source: 'react'})
+	}
 	return (
-		input.node.callee.type === 'Identifier' &&
-		isImportBinding({context: input.context, importedName: 'useState', node: input.node.callee, source: 'react'})
+		input.node.callee.type === 'MemberExpression' &&
+		Option.contains(memberName(input.node.callee), 'useState') &&
+		input.node.callee.object.type === 'Identifier' &&
+		isNamespaceImport({context: input.context, node: input.node.callee.object, source: 'react'})
 	)
 }
 
@@ -418,6 +418,20 @@ function redundantUseRefNullType(input: {context: Context; node: ESTree.CallExpr
 }
 
 function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression}) {
+	if (
+		isSchemaCompilerCall(input) &&
+		input.node.callee.type === 'MemberExpression' &&
+		pipe(memberName(input.node.callee), Option.exists(String.startsWith('decode'))) &&
+		input.node.arguments[0]?.type === 'MemberExpression' &&
+		importedMember({
+			context: input.context,
+			importedName: 'Schema',
+			node: input.node.arguments[0],
+			propertyName: 'UnknownFromJsonString'
+		})
+	) {
+		return true
+	}
 	if (
 		input.node.callee.type !== 'MemberExpression' ||
 		!importedMember({
@@ -453,16 +467,6 @@ function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression
 const plugin = definePlugin({
 	meta: {name: '@deslop/oxlint-rules'},
 	rules: {
-		'inline-schema-operation': {
-			create: context => ({
-				CallExpression: node => {
-					if (isSchemaCompilerCall({context, node}) && !isInlineSchemaCompiler({context, node})) {
-						context.report({message: 'Invoke this Schema operation at its consumption site.', node})
-					}
-				}
-			}),
-			meta: {type: 'problem'}
-		},
 		'no-duplicate-root-dependency': {
 			createOnce: context => ({
 				Program: program => {
@@ -492,6 +496,14 @@ const plugin = definePlugin({
 				TSIndexSignature: node => {
 					if (node.readonly) context.report({message: 'Remove the readonly index modifier.', node})
 				},
+				TSMappedType: node => {
+					if (node.readonly === true || node.readonly === '+') {
+						context.report({message: 'Remove the readonly mapped-type modifier.', node})
+					}
+				},
+				TSParameterProperty: node => {
+					if (node.readonly) context.report({message: 'Remove the readonly parameter-property modifier.', node})
+				},
 				TSPropertySignature: node => {
 					if (node.readonly) context.report({message: 'Remove the readonly property modifier.', node})
 				},
@@ -507,6 +519,19 @@ const plugin = definePlugin({
 					if (redundantUseRefNullType({context, node})) {
 						context.report({
 							message: 'Remove null from the explicit useRef type; the null initializer already owns it.',
+							node
+						})
+					}
+				}
+			}),
+			meta: {type: 'problem'}
+		},
+		'no-stored-schema-operation': {
+			create: context => ({
+				CallExpression: node => {
+					if (isSchemaCompilerCall({context, node}) && storedSchemaCompiler(node)) {
+						context.report({
+							message: 'Inline this Schema compiler at its consumption site; never store decoders or encoders.',
 							node
 						})
 					}
@@ -565,7 +590,7 @@ const plugin = definePlugin({
 			create: context => ({
 				CallExpression: node => {
 					if (unknownJsonSchema({context, node})) {
-						context.report({message: 'Decode JSON through its protocol Schema instead of Schema.Unknown.', node})
+						context.report({message: 'Replace Schema.Unknown with the protocol Schema at this JSON boundary.', node})
 					}
 				}
 			}),

@@ -1,33 +1,32 @@
 ---
 name: planning
-description: 'Use to discover and resolve product or repository requirements with the user.'
+description: 'Use to challenge, discover, prototype, and resolve product or repository requirements with the user.'
 ---
 
-Challenge assumptions; treat every proposal as a discussion starter. Resolve facts from authority.
+Challenge assumptions; treat proposals as discussion starters. Planning owns prototype decisions; Implementer owns prototype execution. Resolve uncertain or multi-command facts through Explorer.
 
 ## Frontier
 
 1. Derive every independent unresolved decision whose prerequisites are resolved.
-2. Build a working prototype when behavior or UI can answer the decision better than prose.
-3. Ask the remaining frontier together without recommendations.
-4. Apply the user's descriptive feedback once; remove resolved decisions.
+2. Prefer a working prototype when behavior or UI resolves the decision better than prose.
+3. Ask remaining independent questions together; no recommendations or multiple choice.
+4. Apply descriptive feedback once; remove resolved decisions.
 5. Repeat without duplicate, premature, dependent, or out-of-scope questions.
 
-| Decision                                              | Present                                   |
-| ----------------------------------------------------- | ----------------------------------------- |
-| Architecture: ownership, organization, file structure | Minimal Mermaid graph or nested list      |
-| Interfaces: TypeScript types and interfaces           | Minimal self-contained TypeScript         |
-| UI/UX or interactive behavior                         | Working prototype                         |
-| Missing user authority                                | Question at the point it becomes blocking |
+| Decision                      | Present                                                          |
+| ----------------------------- | ---------------------------------------------------------------- |
+| Program design                | Minimal Mermaid graph, nested list, or self-contained TypeScript |
+| UI/UX or interactive behavior | Working prototype                                                |
+| Missing user authority        | Question beside the blocked decision                             |
 
-The user never inspects repository code during planning.
+The user does not inspect repository code during planning.
 
 ## Prototype
 
-Delegate the MVP to one persistent background `delegate-implementation` builder. For UI, require at least five materially and structurally distinct variants through existing DevTools components. The user manually exercises the result; send each feedback delta to the same builder. Omit browser automation and assurance during iteration.
+Use one persistent implementer for the MVP and every feedback delta. UI: at least five materially and structurally distinct variants through existing DevTools components. The user exercises prototypes manually; omit browser automation and assurance.
 
-After the user explicitly approves the MVP for production, stop the builder. Delegate a declarative accepted contract and current candidate to a fresh persistent `delegate-implementation` finisher. The finisher performs reconciliation to accepted behavior and returns only after assurance passes.
+After explicit production approval: stop the prototype implementer; send the accepted contract and current candidate to a fresh persistent implementer for reconciliation and assurance.
 
 ## Output
 
-Return only the current resolved contract, runnable prototype location/invocation when present, and unresolved frontier. Embed questions beside the decision they affect.
+Return only current resolved contract, runnable prototype location or invocation, and unresolved frontier.

@@ -7,6 +7,7 @@
 const State = Schema.Literal('open', 'done')
 
 // GOOD
+type State = typeof State.Type
 const State = Schema.Literals(['open', 'done'])
 ```
 
