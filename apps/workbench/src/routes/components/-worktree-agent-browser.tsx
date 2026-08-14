@@ -1,7 +1,8 @@
-import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
+import {useAtomSet, useAtomSubscribe, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, HashMap, Option, Predicate, Schema, pipe} from 'effect'
+import {Array, Cause, HashMap, Option, Predicate, Schema, pipe} from 'effect'
 
+import {AsyncResult} from 'effect/unstable/reactivity'
 import {useEffect} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
@@ -12,12 +13,13 @@ import {toast} from '@deslop/components/ui/sonner'
 import {formatError} from '@deslop/components/utils'
 import {terminalStatusActive} from '@deslop/terminal/schema'
 
+type AgentBrowserRouteSearch = typeof AgentBrowserRouteSearch.Type
 export const AgentBrowserRouteSearch = Schema.Struct({origin: Schema.optional(Schema.String)})
 
-export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly worktree: string}) {
+export function WorktreeAgentBrowser(input: AgentBrowserRouteSearch & {worktree: string}) {
 	const activeSidebar = useAtomSuspense(activeSidebarAtom(input.worktree))
-	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'), {mode: 'promise'})
-	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'), {mode: 'promise'})
+	const sync = useAtomSet(RpcClient.mutation('agentBrowser.sync'))
+	const switchTab = useAtomSet(RpcClient.mutation('agentBrowser.switchTab'))
 	const origins = pipe(
 		activeSidebar.value.activeWorktree?.portlessRuns ?? [],
 		Array.filter(run => {
@@ -50,18 +52,15 @@ export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly 
 	}))
 
 	useEffect(() => {
-		async function syncBrowser() {
-			if (origins.length === 0 || Predicate.isUndefined(activeSidebar.value.activeWorktree?.root)) return
-
-			try {
-				await sync({payload: {cwd: activeSidebar.value.activeWorktree.root}})
-			} catch (error) {
-				toast.error(formatError(error))
-			}
-		}
-
-		void syncBrowser()
+		if (origins.length === 0 || Predicate.isUndefined(activeSidebar.value.activeWorktree?.root)) return
+		sync({payload: {cwd: activeSidebar.value.activeWorktree.root}})
 	}, [activeSidebar.value.activeWorktree?.root, input.worktree, originKey, origins.length, sync])
+	useAtomSubscribe(RpcClient.mutation('agentBrowser.sync'), result => {
+		if (AsyncResult.isFailure(result) && !Cause.hasInterruptsOnly(result.cause)) toast.error(formatError(result.cause))
+	})
+	useAtomSubscribe(RpcClient.mutation('agentBrowser.switchTab'), result => {
+		if (AsyncResult.isFailure(result) && !Cause.hasInterruptsOnly(result.cause)) toast.error(formatError(result.cause))
+	})
 
 	return (
 		<AgentBrowser
@@ -70,7 +69,7 @@ export function WorktreeAgentBrowser(input: {readonly origin?: string; readonly 
 			tabs={tabs}
 			onSelectTab={tab => {
 				if (Predicate.isUndefined(session)) return
-				void switchTab({payload: {origin: tab.id, session}})
+				switchTab({payload: {origin: tab.id, session}})
 			}}
 		/>
 	)

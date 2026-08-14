@@ -1,29 +1,39 @@
-## Repository
+## Authority
 
-- `vp`; workspaces `apps/*`, `packages/*`.
-- Effect owns application logic; other code is boundary interop.
+| Question                         | Authority                           |
+| -------------------------------- | ----------------------------------- |
+| Requested behavior               | Task or canonical issue             |
+| Current behavior                 | Source and complete candidate       |
+| Dependency API or semantics      | Matching `.agents/repos/*` source   |
+| Active dependency or enforcement | Manifests, lockfiles, configuration |
+| Installed command interface      | CLI help                            |
 
-## Work
+## Vocabulary
 
-- Decide from current source, status, and the complete relevant diff. Application behavior follows its nearest source; tool APIs follow installed schema/source/help; matching `.agents/repos/*` supplies rationale. Memory is last.
-- Preserve behavior outside scope and remove emptied directories.
-- Remove obsolete architecture first; leave one root-cause solution without transitional or compatibility paths.
+| Term               | Meaning                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Contract           | Requested current behavior from the task or canonical issue                                                       |
+| Owner              | Sole abstraction responsible for a behavior, state, fact, or lifecycle                                            |
+| Coupled path       | Dataflow, lifecycle, configuration, and proof directly required by the owner                                      |
+| Boundary           | Point where unknown external data is decoded once                                                                 |
+| Typed value        | Internal value guaranteed by its type or boundary schema                                                          |
+| Reachable failure  | Typed failure permitted by the contract                                                                           |
+| Semantic duplicate | Repeated meaning, responsibility, behavior, functionality, effect, or representation regardless of syntax or name |
+| Construction       | Smallest explicit sole implementation completing the contract                                                     |
+| Program design     | Files, ownership, types, signatures, call paths, and test seams                                                   |
+| Instructions       | Mandatory constraints from this file plus every invoked skill and loaded reference                                |
+| Enforcement        | TypeScript, Oxlint, Oxfmt, effect-tsgo, React Compiler/Doctor, Fallow, and custom static rules                    |
+| Base               | Explicit comparison ref: preceding stack branch, actual pull-request base, or fetched remote default branch       |
+| Candidate          | Every commit after the base plus staged, unstaged, deleted, renamed, generated, and untracked files               |
 
-## Authorization
+## User-visible writing
 
-- Subagents may inspect and mutate delegated runtime or external state, never repository files.
-- Git and GitHub mutations require workflow or explicit user authority. Agents never merge.
-
-## Verification
-
-| Change                                                             | Finish with                                                                                 |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Code · executable config · dependencies · generated source · tests | `vp run fix && vp run check && vp run test`; resolve related failures at their shared cause |
-| Markdown · instructions only                                       | `git diff --check`; inspect rendered GFM; synchronize affected metadata                     |
-
-## Communication
-
-- Show, do not describe: code/commands, UI prototypes, Mermaid relationships, tables for repeated fields, then minimal prose.
-- Use dense GFM, semantic labels, and simple English. State only the decision/action delta; represent each fact once.
-- Never explain visuals, recap, mirror lists, duplicate policy, or add introductions, transitions, or conclusions.
-- Never present delegated work as completed before its result arrives. Follow workflow-specific final-output contracts.
+- Audience: expert software developer.
+- Output: declarative current state; retain only authoritative delta since the previous user-visible response.
+- Keep: current decisions, unresolved questions, requested artifacts, material corrections or evidence, required user actions.
+- Remove: acknowledgements, introductions, recaps, summaries, conclusions, transitions, unchanged or resolved history, discarded alternatives, reasoning, process, tool activity, implicit steps or success, validation success, filler, tutorials, rhetoric, formatting commentary, and visual narration.
+- Structure: one semantic owner and representation per fact; deduplicate, group, and order by owner and user impact.
+- Representation: Mermaid for relationships, sequence, state, lifecycle, or hierarchy; tables for repeated fields or comparison; diffs for state changes; typed code blocks for code; shell blocks for commands; literal blocks only when whitespace or literal content matters; otherwise minimal technical prose.
+- Never use `text` code fences as prose or repeat a visual in prose.
+- Questions: place each beside the decision that creates it.
+- Language: technical, direct, unambiguous.

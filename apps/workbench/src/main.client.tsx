@@ -1,3 +1,5 @@
+import {Option, pipe} from 'effect'
+
 import {RouterProvider, createRouter} from '@tanstack/react-router'
 import {StrictMode} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -19,11 +21,11 @@ const router = createRouter({
 declare module '@tanstack/react-router' {
 	// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- TanStack Router augments this interface by name.
 	interface Register {
-		readonly router: typeof router
+		router: typeof router
 	}
 }
 
-createRoot(document.querySelector('#root')!).render(
+createRoot(pipe(document.querySelector('#root'), Option.fromNullOr, Option.getOrThrow)).render(
 	<StrictMode>
 		<RouterProvider router={router} />
 	</StrictMode>

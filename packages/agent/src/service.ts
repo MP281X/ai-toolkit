@@ -6,20 +6,13 @@ import type {ChildProcess} from 'effect/unstable/process'
 import {makeLayerClaude} from './agents/claude.ts'
 import {makeLayerCodex} from './agents/codex.ts'
 import {makeLayerOpencode} from './agents/opencode.ts'
-import {
-	type AgentError,
-	type AgentLayerConfig,
-	type AgentSubscription,
-	type AgentUsageData,
-	type AgentUsageProvider
-} from './schema.ts'
+import type {AgentError, AgentLayerConfig, AgentSubscription, AgentUsageData, AgentUsageProvider} from './schema.ts'
 import {makeLayerClaudeUsage} from './usage/claude.ts'
 import {makeLayerCodexUsage} from './usage/codex.ts'
 
-export class Agent extends Context.Service<
-	Agent,
-	{readonly create: Effect.Effect<ChildProcess.StandardCommand, AgentError>}
->()('@deslop/agent/service/Agent') {
+export class Agent extends Context.Service<Agent, {create: Effect.Effect<ChildProcess.StandardCommand, AgentError>}>()(
+	'@deslop/agent/service/Agent'
+) {
 	public static layer(config: AgentLayerConfig) {
 		return pipe(
 			Match.value(config),
@@ -43,11 +36,11 @@ export class Agent extends Context.Service<
 export class AgentUsage extends Context.Service<
 	AgentUsage,
 	{
-		readonly subscription: Effect.Effect<AgentSubscription, AgentError>
-		readonly usage: SubscriptionRef.SubscriptionRef<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>
+		subscription: Effect.Effect<AgentSubscription, AgentError>
+		usage: SubscriptionRef.SubscriptionRef<Option.Option<Exit.Exit<AgentUsageData, AgentError>>>
 	}
 >()('@deslop/agent/service/AgentUsage') {
-	public static layer(config: {readonly provider: AgentUsageProvider}) {
+	public static layer(config: {provider: AgentUsageProvider}) {
 		return pipe(
 			Match.value(config),
 			Match.when({provider: 'codex'}, input => AgentUsage.layerCodex(input)),
@@ -56,9 +49,9 @@ export class AgentUsage extends Context.Service<
 		)
 	}
 
-	public static layerCodex = (config: {readonly provider: 'codex'}) =>
+	public static layerCodex = (config: {provider: 'codex'}) =>
 		Layer.effect(this, pipe(makeLayerCodexUsage(config), Effect.map(AgentUsage.of)))
 
-	public static layerClaude = (config: {readonly provider: 'claude'}) =>
+	public static layerClaude = (config: {provider: 'claude'}) =>
 		Layer.effect(this, pipe(makeLayerClaudeUsage(config), Effect.map(AgentUsage.of)))
 }

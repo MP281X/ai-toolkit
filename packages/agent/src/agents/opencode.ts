@@ -2,7 +2,7 @@ import {Effect, String} from 'effect'
 
 import {ChildProcess} from 'effect/unstable/process'
 
-import {AgentError, type AgentLayerConfig} from '../schema.ts'
+import {AgentError, type AgentLayerConfig} from '#schema'
 
 const opencodeCreate = Effect.fnUntraced(function* (config: AgentLayerConfig) {
 	const command = ChildProcess.make('vpx', ['opencode-ai@latest', '--auto', '--model', 'openai/gpt-5.6-sol'], {

@@ -16,20 +16,20 @@
 	"scripts": {
 		"build": "vp run -r build",
 		
-		"fix": "fallow fix --yes && vp check --fix",
-		"check": "vp check && effect-tsgo diagnostics --project tsconfig.json --strict && fallow --only dead-code --format compact --fail-on-issues",
+		"fix": "vp check --fix",
+		"check": "vp check && fallow dead-code --unused-files --unused-exports --unused-types --duplicate-exports --circular-deps --re-export-cycles --stale-suppressions --format compact --fail-on-issues",
 		"test": "vp test",
 		
 		"shadcn": "cd packages/components && vpx shadcn@latest",
 		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
 		
-		"postinstall": "chmod +x \"$(effect-tsgo get-exe-path)\" && node scripts/clone-source-repos.ts"
+		"prepare": "effect-tsgo patch --no-typescript --oxlint && node scripts/clone-source-repos.ts"
 	},
 	
 	"dependencies": {
-		"effect": "^4.0.0-beta",
-		"@effect/atom-react": "^4.0.0-beta",
-		"@effect/platform-node": "^4.0.0-beta"
+		"effect": "^4.0.0-rc",
+		"@effect/atom-react": "^4.0.0-rc",
+		"@effect/platform-node": "^4.0.0-rc"
 	},
 	"devDependencies": {
 		"typescript": "latest",
@@ -39,10 +39,12 @@
 		"@types/react-dom": "^19",
 		
 		"fallow": "latest",
-		"@effect/vitest": "^4.0.0-beta",
+		"@effect/vitest": "^4.0.0-rc",
 		"oxlint-plugin-react-doctor": "latest",
 		
 		"vite": "catalog:",
-		"vite-plus": "catalog:"
+		"vite-plus": "catalog:",
+
+		"@deslop/oxlint-rules": "workspace:*"
 	}
 }

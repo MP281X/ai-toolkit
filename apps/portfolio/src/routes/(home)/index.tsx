@@ -1,6 +1,6 @@
 import {useAtomSet, useAtomSuspense} from '@effect/atom-react'
 
-import {Array, Effect, Function, HashMap, Match, Number, Option, Predicate, Stream, String, pipe} from 'effect'
+import {Array, Effect, Function, HashMap, Number, Option, Predicate, Random, Stream, String, pipe} from 'effect'
 
 import {useHotkey} from '@tanstack/react-hotkeys'
 import {createFileRoute} from '@tanstack/react-router'
@@ -8,8 +8,8 @@ import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
 import {RpcClient} from '#lib/atomRuntime.ts'
-import type {PortfolioEvent, PortfolioTrail, PortfolioVisitor} from '#rpcs/contracts.ts'
-import {PortfolioState} from '#rpcs/contracts.ts'
+import {portfolioPalette} from '#lib/utils.ts'
+import type {PortfolioTrail, PortfolioVisitor, PortfolioState} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {
 	ArrowUpRight,
@@ -24,249 +24,63 @@ import {
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@deslop/components/ui/dialog'
 import {cn} from '@deslop/components/utils'
 
-const cursorPalette = [
-	'oklch(0.74 0.19 118)',
-	'oklch(0.76 0.2 128)',
-	'oklch(0.75 0.18 138)',
-	'oklch(0.73 0.17 150)',
-	'oklch(0.74 0.18 162)',
-	'oklch(0.76 0.17 174)',
-	'oklch(0.75 0.18 186)',
-	'oklch(0.73 0.19 198)',
-	'oklch(0.72 0.2 210)',
-	'oklch(0.74 0.18 222)',
-	'oklch(0.71 0.18 234)',
-	'oklch(0.73 0.19 246)',
-	'oklch(0.75 0.19 258)',
-	'oklch(0.74 0.2 270)',
-	'oklch(0.73 0.21 282)',
-	'oklch(0.74 0.2 296)',
-	'oklch(0.75 0.19 310)',
-	'oklch(0.74 0.18 324)',
-	'oklch(0.73 0.19 338)',
-	'oklch(0.72 0.2 352)'
-]
+function randomIndex(length: number) {
+	return Math.floor(Random.Random.defaultValue().nextDoubleUnsafe() * length)
+}
+
+function randomSeed() {
+	const alphabet = '0123456789abcdef'
+	return pipe(
+		Array.makeBy(6, () => alphabet[randomIndex(String.length(alphabet))] ?? '0'),
+		Array.join('')
+	)
+}
 
 function pickNextCursorColor(currentColor: string) {
-	const nextPalette = Array.filter(cursorPalette, color => color !== currentColor)
-	return nextPalette[Math.floor(Math.random() * nextPalette.length)] ?? cursorPalette[0] ?? 'oklch(0.72 0.2 210)'
+	const nextPalette = Array.filter(portfolioPalette, color => color !== currentColor)
+	return nextPalette[randomIndex(Array.length(nextPalette))] ?? portfolioPalette[0]
 }
 
 function getIdentity() {
 	const existingId = sessionStorage.getItem('portfolio.id')
 	const existingName = sessionStorage.getItem('portfolio.name')
+	const color = portfolioPalette[randomIndex(Array.length(portfolioPalette))] ?? portfolioPalette[0]
 
 	if (Predicate.isNotNullish(existingId) && Predicate.isNotNullish(existingName)) {
-		return {
-			color: cursorPalette[Math.floor(Math.random() * cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
-			id: existingId,
-			name: existingName
-		}
+		return {color, id: existingId, name: existingName}
 	}
 
-	const seed = pipe(crypto.randomUUID(), String.replaceAll('-', ''), String.slice(0, 6))
+	const seed = randomSeed()
 
-	const next = {
-		color: cursorPalette[Math.floor(Math.random() * cursorPalette.length)] ?? 'oklch(0.72 0.2 210)',
-		id: `v-${seed}`,
-		name: `Guest-${pipe(seed, String.slice(0, 3))}`
-	}
+	const next = {color, id: `v-${seed}`, name: `Guest-${pipe(seed, String.slice(0, 3))}`}
 
 	sessionStorage.setItem('portfolio.id', next.id)
 	sessionStorage.setItem('portfolio.name', next.name)
-	sessionStorage.removeItem('portfolio.color')
 
 	return next
 }
 
 const identity = getIdentity()
 
-function upsertVisitor(visitors: readonly PortfolioVisitor[], visitor: PortfolioVisitor) {
-	return Array.some(visitors, current => current.id === visitor.id)
-		? Array.map(visitors, current => (current.id === visitor.id ? visitor : current))
-		: Array.append(visitors, visitor)
-}
-
-function removeVisitor(visitors: readonly PortfolioVisitor[], id: string) {
-	const nextVisitors = Array.filter(visitors, visitor => visitor.id !== id)
-
-	return nextVisitors.length === visitors.length ? visitors : nextVisitors
-}
-
-function appendTrail(trails: readonly PortfolioTrail[], trail: PortfolioTrail) {
-	const nextTrails = Array.append(trails, trail)
-	return nextTrails.length > 180 ? Array.drop(nextTrails, nextTrails.length - 180) : nextTrails
-}
-
-function applyPortfolioEvent(state: PortfolioState, event: PortfolioEvent) {
-	return pipe(
-		Match.value(event),
-		Match.tag('snapshot', next => PortfolioState.make({trails: next.trails, visitors: next.visitors})),
-		Match.tag('visitor-upserted', next =>
-			PortfolioState.make({trails: state.trails, visitors: upsertVisitor(state.visitors, next.visitor)})
-		),
-		Match.tag('visitor-removed', next =>
-			PortfolioState.make({trails: state.trails, visitors: removeVisitor(state.visitors, next.id)})
-		),
-		Match.tag('trail-added', next =>
-			PortfolioState.make({trails: appendTrail(state.trails, next.trail), visitors: state.visitors})
-		),
-		Match.exhaustive
-	)
-}
-
 const portfolioAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
 			Effect.map(client => client('portfolio.join', {color: identity.color, id: identity.id, name: identity.name})),
-			Stream.unwrap,
-			Stream.scan(PortfolioState.make({}), applyPortfolioEvent)
+			Stream.unwrap
 		)
 	)
 )
 
-const SUMMARY_LINES = [
-	"I'm a full-stack TypeScript developer specializing in Effect, React, and AI agents, with experience building and shipping full-stack applications.",
-	'Currently, I’m focusing on building stable, reusable primitives that coding agents can compose to build high-quality applications with minimal effort, while specialized skills, lint rules, and feedback loops steer the agent toward consistent patterns and rigorous review.'
-]
-
-const TECHNICAL_SKILLS = [
-	{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
-	{area: 'Backend', icon: Server, items: 'Effect, Node.js, type-safe RPC, REST APIs'},
-	{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
-	{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
-	{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
-	{area: 'AI Tooling', icon: Sparkles, items: 'Codex, OpenCode, Github Copilot, Claude Code'}
-]
-
-const FEATURED_PROJECT = {
-	currentWork:
-		'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
-	description:
-		'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
-	href: 'https://github.com/MP281X/deslop',
-	name: 'deslop',
-	role: 'Full-Stack TypeScript Monorepo',
-	stack: 'Effect · React · TypeScript · WebSockets · PostgreSQL · Docker'
-}
-
-const SUPPORTING_PROJECTS = [
-	{
-		description:
-			'A starter for React and Kotlin/Spring applications with generated API types, PostgreSQL migrations, real-time sync, authentication, and reusable UI components.',
-		href: 'https://github.com/MP281X/kotlin-react-template',
-		name: 'Kotlin React Template',
-		role: 'Full-Stack Starter',
-		stack: 'React · Kotlin · Spring · Effect · PostgreSQL · ElectricSQL'
-	},
-	{
-		description:
-			'An open-source video platform with FFmpeg/HLS processing, background jobs, real-time upload progress, PostgreSQL, Redis, S3-compatible storage, and Kubernetes deployment.',
-		href: 'https://github.com/MP281X/blixter_video',
-		name: 'Blixter',
-		role: 'Video Streaming Platform',
-		stack: 'TypeScript · FFmpeg · PostgreSQL · Redis · Kubernetes'
-	}
-]
-
-const WORK_EXPERIENCE = [
-	{
-		company: 'Humans.Tech',
-		highlights: [
-			'Built the shared frontend foundation used to start new products, defining reusable architecture, tooling, and development conventions',
-			'Developed reusable messaging interfaces for person-to-person and AI-agent conversations',
-			'Created reusable data-display primitives, including tables and virtualized lists for large datasets',
-			'Collaborated closely with backend engineers to design, integrate, and refine product functionality',
-			'Introduced AI-assisted development workflows that accelerated implementation for both individual and team delivery'
-		],
-		location: 'Frosinone, Italy',
-		note: '',
-		period: 'Apr 2026 – Jul 2026',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'Tinexta Cyber',
-		highlights: [
-			'Developed a real-time network inventory application for a major telecommunications company',
-			'Built the real-time frontend in React with ElectricSQL for live updates across all users',
-			'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
-			'Gathered requirements directly from end users and iterated through feedback rounds',
-			'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
-			'Used AI coding agents daily with project-specific guidelines for development'
-		],
-		location: 'Udine, Italy',
-		note: '',
-		period: 'Oct 2024 – Mar 2026',
-		role: 'Full-Stack Developer'
-	},
-	{
-		company: 'Altitudo',
-		highlights: [
-			'Migrated the build system from Create React App to Vite',
-			'Improved rendering performance by adding proper memoization',
-			'Migrated legacy class components to modern functional components using React hooks',
-			'Recreated and restyled multiple pages using React and Tailwind CSS'
-		],
-		location: 'Salzburg, Austria',
-		note: 'Erasmus Internship',
-		period: 'Jan 2024 – Mar 2024',
-		role: 'Frontend Developer'
-	},
-	{
-		company: 'BizAway',
-		highlights: [
-			'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
-			'Built a type-safe email template framework using TSX-style components',
-			'Migrated API endpoints from the old OpenAPI version to the new specification',
-			'Built and updated multiple Angular components and features'
-		],
-		location: 'Spilimbergo, Italy',
-		note: 'Internship',
-		period: 'Jun 2023 – Aug 2023',
-		role: 'Backend Developer'
-	}
-]
-
-const EDUCATION_DATA = [
-	{
-		degree: 'Cloud Developer Diploma',
-		description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
-		grade: '95/100',
-		period: '2022 – 2024',
-		school: 'ITS Alto Adriatico'
-	},
-	{
-		degree: 'High School Diploma – IT and Telecommunications',
-		description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
-		grade: '',
-		period: '2017 – 2022',
-		school: 'ISIS A. Malignani'
-	}
-]
-
-const LANGUAGES_DATA = [
-	{language: 'Italian', level: 'Native'},
-	{language: 'English', level: 'C1'},
-	{language: 'Spanish', level: 'Basic'}
-]
-
-const CONTACT_ITEMS = [
-	{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
-	{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
-	{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
-]
-
 function getDisplayCursorTarget(
-	cursor: Readonly<PortfolioVisitor>,
+	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {readonly x: number; readonly y: number} | null,
-	viewport: {readonly width: number; readonly height: number}
+	viewport: {width: number; height: number},
+	localPointer?: {x: number; y: number}
 ) {
-	if (isMe && Predicate.isNotNull(localPointer)) {
+	if (isMe && Predicate.isNotUndefined(localPointer)) {
 		return {x: localPointer.x * viewport.width, y: localPointer.y * viewport.height}
 	}
-
 	return {x: cursor.x * viewport.width, y: cursor.y * viewport.height}
 }
 
@@ -274,10 +88,7 @@ function setCursorTransform(node: HTMLDivElement, x: number, y: number) {
 	node.style.setProperty('transform', `translate3d(${x}px, ${y}px, 0)`)
 }
 
-function createCursorMotion(
-	target: {readonly x: number; readonly y: number},
-	viewport: {readonly width: number; readonly height: number}
-) {
+function createCursorMotion(target: {x: number; y: number}, viewport: {width: number; height: number}) {
 	return {
 		lastFrameAt: 0,
 		targetX: target.x,
@@ -290,29 +101,29 @@ function createCursorMotion(
 }
 
 function stepCursorMotion(motion: ReturnType<typeof createCursorMotion>, now: number) {
-	const frameDelta = motion.lastFrameAt > 0 ? Math.max(8, Math.min(64, now - motion.lastFrameAt)) : 16
+	const frameDelta = motion.lastFrameAt > 0 ? Number.clamp({maximum: 64, minimum: 8})(now - motion.lastFrameAt) : 16
 	const deltaX = motion.targetX - motion.x
 	const deltaY = motion.targetY - motion.y
-	const catchUp = Math.min(1, (1 - Math.exp(-frameDelta / 130)) * (1 + Math.hypot(deltaX, deltaY) / 220))
+	const catchUp = Number.min(1, (1 - Math.exp(-frameDelta / 130)) * (1 + Math.hypot(deltaX, deltaY) / 220))
 	const nextX = motion.x + deltaX * catchUp
 	const nextY = motion.y + deltaY * catchUp
 
 	return {
 		...motion,
 		lastFrameAt: now,
-		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Math.max(0, Math.min(motion.viewportWidth, nextX)),
-		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Math.max(0, Math.min(motion.viewportHeight, nextY))
+		x: Math.abs(deltaX) < 0.3 ? motion.targetX : Number.clamp({maximum: motion.viewportWidth, minimum: 0})(nextX),
+		y: Math.abs(deltaY) < 0.3 ? motion.targetY : Number.clamp({maximum: motion.viewportHeight, minimum: 0})(nextY)
 	}
 }
 
 function syncCursorMotion(
 	motion: ReturnType<typeof createCursorMotion>,
-	cursor: Readonly<PortfolioVisitor>,
+	cursor: PortfolioVisitor,
 	isMe: boolean,
-	localPointer: {readonly x: number; readonly y: number} | null,
-	viewport: {readonly width: number; readonly height: number}
+	viewport: {width: number; height: number},
+	localPointer?: {x: number; y: number}
 ) {
-	const nextTarget = getDisplayCursorTarget(cursor, isMe, localPointer, viewport)
+	const nextTarget = getDisplayCursorTarget(cursor, isMe, viewport, localPointer)
 
 	if (motion.viewportWidth !== viewport.width || motion.viewportHeight !== viewport.height) {
 		return createCursorMotion(nextTarget, viewport)
@@ -347,7 +158,7 @@ function useViewport() {
 	}
 }
 
-function Panel(input: {readonly className?: string; readonly children: React.ReactNode}) {
+function Panel(input: {className?: string; children: React.ReactNode}) {
 	return (
 		<div className={cn('border-border/70 bg-background/88 border backdrop-blur-sm', input.className)}>
 			{input.children}
@@ -357,30 +168,14 @@ function Panel(input: {readonly className?: string; readonly children: React.Rea
 
 export const Route = createFileRoute('/(home)/')({component: PortfolioRoute})
 
-function GridOverlay() {
-	return (
-		<div
-			className="pointer-events-none fixed inset-0 z-1"
-			style={{
-				backgroundImage:
-					'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
-				backgroundSize: '26px 26px'
-			}}
-		/>
-	)
-}
-
-function TrailCanvas(input: {
-	readonly trails: readonly PortfolioTrail[]
-	readonly viewport: {readonly width: number; readonly height: number}
-}) {
-	const canvasRef = useRef<HTMLCanvasElement | null>(null)
+function TrailCanvas(input: {trails: PortfolioState['trails']; viewport: {width: number; height: number}}) {
+	const canvasRef = useRef<HTMLCanvasElement>(null)
 
 	useEffect(() => {
 		if (!(canvasRef.current && input.viewport.width && input.viewport.height)) return
 
-		const canvasWidth = Math.max(1, Math.round(input.viewport.width * (window.devicePixelRatio || 1)))
-		const canvasHeight = Math.max(1, Math.round(input.viewport.height * (window.devicePixelRatio || 1)))
+		const canvasWidth = Number.max(1, Number.round(input.viewport.width * (window.devicePixelRatio || 1), 0))
+		const canvasHeight = Number.max(1, Number.round(input.viewport.height * (window.devicePixelRatio || 1), 0))
 
 		if (canvasRef.current.width !== canvasWidth || canvasRef.current.height !== canvasHeight) {
 			canvasRef.current.width = canvasWidth
@@ -398,7 +193,7 @@ function TrailCanvas(input: {
 
 		Array.reduce(
 			input.trails,
-			HashMap.empty<string, {readonly trail: PortfolioTrail; readonly col: number; readonly row: number}>(),
+			HashMap.empty<string, {trail: PortfolioTrail; col: number; row: number}>(),
 			(previousByVisitor, trail) => {
 				const current = {
 					col: Math.floor((trail.x * input.viewport.width) / 26),
@@ -413,12 +208,12 @@ function TrailCanvas(input: {
 					return HashMap.set(previousByVisitor, trail.visitorId, current)
 				}
 
-				const stepCount = Math.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
+				const stepCount = Number.max(Math.abs(current.col - previous.col), Math.abs(current.row - previous.row))
 
 				for (const step of Array.makeBy(stepCount + 1, Function.identity)) {
 					const progress = stepCount === 0 ? 1 : step / stepCount
-					const col = Math.round(previous.col + (current.col - previous.col) * progress)
-					const row = Math.round(previous.row + (current.row - previous.row) * progress)
+					const col = Number.round(previous.col + (current.col - previous.col) * progress, 0)
+					const row = Number.round(previous.row + (current.row - previous.row) * progress, 0)
 
 					context.fillStyle = progress < 1 ? previous.trail.color : current.trail.color
 					context.fillRect(col * 26 + 1, row * 26 + 1, 24, 24)
@@ -435,46 +230,30 @@ function TrailCanvas(input: {
 }
 
 function CursorEl(input: {
-	readonly cursor: PortfolioVisitor
-	readonly isMe: boolean
-	readonly localPointer: {readonly x: number; readonly y: number} | null
-	readonly viewport: {readonly width: number; readonly height: number}
+	cursor: PortfolioVisitor
+	isMe: boolean
+	localPointerRef: React.RefObject<{x: number; y: number} | null>
+	viewport: {width: number; height: number}
 }) {
-	const nodeRef = useRef<HTMLDivElement | null>(null)
+	const nodeRef = useRef<HTMLDivElement>(null)
 	const [initialMotion] = useState(() =>
 		createCursorMotion(
-			getDisplayCursorTarget(input.cursor, input.isMe, input.localPointer, input.viewport),
+			getDisplayCursorTarget(input.cursor, input.isMe, input.viewport, input.localPointerRef.current ?? undefined),
 			input.viewport
 		)
 	)
-	const latestRef = useRef({
-		cursor: input.cursor,
-		isMe: input.isMe,
-		localPointer: input.localPointer,
-		viewport: input.viewport
-	})
 	const motionRef = useRef(initialMotion)
 	const animationFrameRef = useRef(0)
 
 	useEffect(() => {
-		latestRef.current = {
-			cursor: input.cursor,
-			isMe: input.isMe,
-			localPointer: input.localPointer,
-			viewport: input.viewport
-		}
 		motionRef.current = syncCursorMotion(
 			motionRef.current,
 			input.cursor,
 			input.isMe,
-			input.localPointer,
-			input.viewport
+			input.viewport,
+			input.localPointerRef.current ?? undefined
 		)
 
-		if (nodeRef.current) setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
-	}, [input.cursor, input.isMe, input.localPointer, input.viewport])
-
-	useEffect(() => {
 		if (!nodeRef.current) return
 
 		setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
@@ -485,23 +264,28 @@ function CursorEl(input: {
 			motionRef.current = stepCursorMotion(
 				syncCursorMotion(
 					motionRef.current,
-					latestRef.current.cursor,
-					latestRef.current.isMe,
-					latestRef.current.localPointer,
-					latestRef.current.viewport
+					input.cursor,
+					input.isMe,
+					input.viewport,
+					input.localPointerRef.current ?? undefined
 				),
 				now
 			)
 
 			setCursorTransform(nodeRef.current, motionRef.current.x, motionRef.current.y)
-			animationFrameRef.current = requestAnimationFrame(tick)
+			animationFrameRef.current =
+				input.isMe ||
+				motionRef.current.x !== motionRef.current.targetX ||
+				motionRef.current.y !== motionRef.current.targetY
+					? requestAnimationFrame(tick)
+					: 0
 		}
 		animationFrameRef.current = requestAnimationFrame(tick)
 
 		return () => {
 			cancelAnimationFrame(animationFrameRef.current)
 		}
-	}, [])
+	}, [input.cursor, input.isMe, input.localPointerRef, input.viewport])
 
 	return (
 		<div
@@ -524,10 +308,10 @@ function CursorEl(input: {
 }
 
 function Section(input: {
-	readonly id: number
-	readonly className?: string
-	readonly children: React.ReactNode
-	readonly registerSection: (id: number, node: HTMLElement | null) => void
+	id: number
+	className?: string
+	children: React.ReactNode
+	registerSection: (id: number, node: HTMLElement | null) => void
 }) {
 	return (
 		<section
@@ -545,7 +329,7 @@ function Section(input: {
 	)
 }
 
-function SectionLabel(input: {readonly title: string}) {
+function SectionLabel(input: {title: string}) {
 	return (
 		<div className="mb-6 flex w-full max-w-5xl items-center gap-4 sm:mb-8">
 			<div className="bg-primary/25 h-px flex-1" />
@@ -557,7 +341,7 @@ function SectionLabel(input: {readonly title: string}) {
 	)
 }
 
-function HeroSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function HeroSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={0} registerSection={input.registerSection} className="min-h-dvh justify-center py-16">
 			<Panel className="flex w-full max-w-5xl flex-col items-center gap-6 p-8 sm:gap-8 sm:p-12">
@@ -589,18 +373,24 @@ function HeroSection(input: {readonly registerSection: (id: number, node: HTMLEl
 	)
 }
 
-function AboutSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function AboutSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={1} registerSection={input.registerSection}>
 			<SectionLabel title="About" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
 				<Panel className="p-5 sm:p-6">
 					<div className="flex flex-col gap-4">
-						{Array.map(SUMMARY_LINES, line => (
-							<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
-								{line}
-							</p>
-						))}
+						{Array.map(
+							[
+								"I'm a full-stack TypeScript developer specializing in Effect, React, and AI agents, with experience building and shipping full-stack applications.",
+								'Currently, I’m focusing on building stable, reusable primitives that coding agents can compose to build high-quality applications with minimal effort, while specialized skills, lint rules, and feedback loops steer the agent toward consistent patterns and rigorous review.'
+							],
+							line => (
+								<p key={line} className="text-foreground/90 font-mono text-sm leading-7 sm:text-base">
+									{line}
+								</p>
+							)
+						)}
 					</div>
 				</Panel>
 			</div>
@@ -608,36 +398,39 @@ function AboutSection(input: {readonly registerSection: (id: number, node: HTMLE
 	)
 }
 
-function SkillsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function SkillsSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={2} registerSection={input.registerSection}>
 			<SectionLabel title="Skills" />
 			<div className="grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				{Array.map(TECHNICAL_SKILLS, skill => (
-					<Panel key={skill.area} className="p-4 sm:p-5">
-						<div className="mb-3 flex items-center gap-3">
-							<skill.icon className="text-primary size-4" />
-							<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
-								{skill.area}
-							</h3>
-						</div>
-						<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
-					</Panel>
-				))}
+				{Array.map(
+					[
+						{area: 'Frontend', icon: Monitor, items: 'React, TypeScript, TanStack (Router, Table, Form), Tailwind CSS'},
+						{area: 'Backend', icon: Server, items: 'Effect, Node.js, type-safe RPC, REST APIs'},
+						{area: 'Data & Real-Time', icon: Database, items: 'PostgreSQL, Redis, WebSockets, SSE'},
+						{area: 'DevOps', icon: Boxes, items: 'Docker, GitHub Actions, Git, Linux'},
+						{area: 'Testing', icon: FlaskConical, items: 'Type-safe APIs, End-to-end testing, Unit testing'},
+						{area: 'AI Tooling', icon: Sparkles, items: 'Codex, OpenCode, Github Copilot, Claude Code'}
+					],
+					skill => (
+						<Panel key={skill.area} className="p-4 sm:p-5">
+							<div className="mb-3 flex items-center gap-3">
+								<skill.icon className="text-primary size-4" />
+								<h3 className="text-foreground font-mono text-sm font-semibold tracking-[0.18em] uppercase">
+									{skill.area}
+								</h3>
+							</div>
+							<p className="text-muted-foreground font-mono text-xs leading-6 sm:text-sm">{skill.items}</p>
+						</Panel>
+					)
+				)}
 			</div>
 		</Section>
 	)
 }
 
 function ProjectCard(input: {
-	readonly project: {
-		readonly currentWork?: string
-		readonly description: string
-		readonly href: string
-		readonly name: string
-		readonly role: string
-		readonly stack: string
-	}
+	project: {currentWork?: string; description: string; href: string; name: string; role: string; stack: string}
 }) {
 	return (
 		<Panel className="flex h-full flex-col p-4 sm:p-5">
@@ -669,15 +462,44 @@ function ProjectCard(input: {
 	)
 }
 
-function ProjectsSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ProjectsSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const featuredProject = {
+		currentWork:
+			'An orchestration workflow that uses GPT-5.6 and Fable to plan with the user, then delegates implementation, testing, blind review, and publication to cheaper models, with self-improvement loops that learn from failures.',
+		description:
+			'A full-stack TypeScript monorepo that brings my applications, shared packages, and development tooling into one workspace.',
+		href: 'https://github.com/MP281X/deslop',
+		name: 'deslop',
+		role: 'Full-Stack TypeScript Monorepo',
+		stack: 'Effect · React · TypeScript · WebSockets · PostgreSQL · Docker'
+	}
+	const supportingProjects = [
+		{
+			description:
+				'A starter for React and Kotlin/Spring applications with generated API types, PostgreSQL migrations, real-time sync, authentication, and reusable UI components.',
+			href: 'https://github.com/MP281X/kotlin-react-template',
+			name: 'Kotlin React Template',
+			role: 'Full-Stack Starter',
+			stack: 'React · Kotlin · Spring · Effect · PostgreSQL · ElectricSQL'
+		},
+		{
+			description:
+				'An open-source video platform with FFmpeg/HLS processing, background jobs, real-time upload progress, PostgreSQL, Redis, S3-compatible storage, and Kubernetes deployment.',
+			href: 'https://github.com/MP281X/blixter_video',
+			name: 'Blixter',
+			role: 'Video Streaming Platform',
+			stack: 'TypeScript · FFmpeg · PostgreSQL · Redis · Kubernetes'
+		}
+	]
+
 	return (
 		<Section id={3} registerSection={input.registerSection}>
 			<SectionLabel title="Personal Projects" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				<ProjectCard project={FEATURED_PROJECT} />
+				<ProjectCard project={featuredProject} />
 
 				<div className="grid gap-4 md:grid-cols-2">
-					{Array.map(SUPPORTING_PROJECTS, project => (
+					{Array.map(supportingProjects, project => (
 						<ProjectCard key={project.name} project={project} />
 					))}
 				</div>
@@ -686,12 +508,70 @@ function ProjectsSection(input: {readonly registerSection: (id: number, node: HT
 	)
 }
 
-function ExperienceSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ExperienceSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const experience = [
+		{
+			company: 'Humans.Tech',
+			highlights: [
+				'Built the shared frontend foundation used to start new products, defining reusable architecture, tooling, and development conventions',
+				'Developed reusable messaging interfaces for person-to-person and AI-agent conversations',
+				'Created reusable data-display primitives, including tables and virtualized lists for large datasets',
+				'Collaborated closely with backend engineers to design, integrate, and refine product functionality',
+				'Introduced AI-assisted development workflows that accelerated implementation for both individual and team delivery'
+			],
+			location: 'Frosinone, Italy',
+			note: '',
+			period: 'Apr 2026 – Jul 2026',
+			role: 'Frontend Developer'
+		},
+		{
+			company: 'Tinexta Cyber',
+			highlights: [
+				'Developed a real-time network inventory application for a major telecommunications company',
+				'Built the real-time frontend in React with ElectricSQL for live updates across all users',
+				'Implemented a custom type-safe RPC-like client from the Kotlin backend OpenAPI schema',
+				'Gathered requirements directly from end users and iterated through feedback rounds',
+				'Containerized and deployed multiple services using Docker with Jenkins CI/CD',
+				'Used AI coding agents daily with project-specific guidelines for development'
+			],
+			location: 'Udine, Italy',
+			note: '',
+			period: 'Oct 2024 – Mar 2026',
+			role: 'Full-Stack Developer'
+		},
+		{
+			company: 'Altitudo',
+			highlights: [
+				'Migrated the build system from Create React App to Vite',
+				'Improved rendering performance by adding proper memoization',
+				'Migrated legacy class components to modern functional components using React hooks',
+				'Recreated and restyled multiple pages using React and Tailwind CSS'
+			],
+			location: 'Salzburg, Austria',
+			note: 'Erasmus Internship',
+			period: 'Jan 2024 – Mar 2024',
+			role: 'Frontend Developer'
+		},
+		{
+			company: 'BizAway',
+			highlights: [
+				'Developed a type-safe E2E testing framework on top of the OpenAPI schema using Playwright',
+				'Built a type-safe email template framework using TSX-style components',
+				'Migrated API endpoints from the old OpenAPI version to the new specification',
+				'Built and updated multiple Angular components and features'
+			],
+			location: 'Spilimbergo, Italy',
+			note: 'Internship',
+			period: 'Jun 2023 – Aug 2023',
+			role: 'Backend Developer'
+		}
+	]
+
 	return (
 		<Section id={4} registerSection={input.registerSection}>
 			<SectionLabel title="Experience" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(WORK_EXPERIENCE, job => (
+				{Array.map(experience, job => (
 					<Panel key={job.company} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 							<div className="space-y-1">
@@ -707,7 +587,7 @@ function ExperienceSection(input: {readonly registerSection: (id: number, node: 
 								{job.period} · {job.location}
 							</p>
 						</div>
-						{job.highlights.length > 0 && (
+						{Array.isReadonlyArrayNonEmpty(job.highlights) && (
 							<ul className="mt-3 flex flex-col gap-1.5">
 								{Array.map(job.highlights, highlight => (
 									<li
@@ -727,12 +607,29 @@ function ExperienceSection(input: {readonly registerSection: (id: number, node: 
 	)
 }
 
-function EducationSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function EducationSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
+	const education = [
+		{
+			degree: 'Cloud Developer Diploma',
+			description: 'Cloud-native architectures, CI/CD, Docker & Kubernetes, full-stack web application development.',
+			grade: '95/100',
+			period: '2022 – 2024',
+			school: 'ITS Alto Adriatico'
+		},
+		{
+			degree: 'High School Diploma – IT and Telecommunications',
+			description: 'Telecommunications, electronics, networking fundamentals, and programming foundations.',
+			grade: '',
+			period: '2017 – 2022',
+			school: 'ISIS A. Malignani'
+		}
+	]
+
 	return (
 		<Section id={5} registerSection={input.registerSection}>
 			<SectionLabel title="Education & Languages" />
 			<div className="flex w-full max-w-5xl flex-col gap-4">
-				{Array.map(EDUCATION_DATA, entry => (
+				{Array.map(education, entry => (
 					<Panel key={entry.school} className="px-4 py-4 sm:px-5">
 						<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
 							<div className="flex flex-wrap items-baseline gap-x-3">
@@ -746,35 +643,49 @@ function EducationSection(input: {readonly registerSection: (id: number, node: H
 					</Panel>
 				))}
 				<div className="grid gap-3 sm:grid-cols-3">
-					{Array.map(LANGUAGES_DATA, lang => (
-						<Panel key={lang.language} className="px-4 py-3">
-							<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
-							<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
-						</Panel>
-					))}
+					{Array.map(
+						[
+							{language: 'Italian', level: 'Native'},
+							{language: 'English', level: 'C1'},
+							{language: 'Spanish', level: 'Basic'}
+						],
+						lang => (
+							<Panel key={lang.language} className="px-4 py-3">
+								<span className="text-foreground font-mono text-xs font-semibold">{lang.language}</span>
+								<span className="text-muted-foreground/80 ml-2 font-mono text-[10px]">{lang.level}</span>
+							</Panel>
+						)
+					)}
 				</div>
 			</div>
 		</Section>
 	)
 }
 
-function ContactSection(input: {readonly registerSection: (id: number, node: HTMLElement | null) => void}) {
+function ContactSection(input: {registerSection: (id: number, node: HTMLElement | null) => void}) {
 	return (
 		<Section id={6} registerSection={input.registerSection}>
 			<SectionLabel title="Contact" />
 			<div className="flex w-full max-w-5xl flex-col gap-3">
-				{Array.map(CONTACT_ITEMS, item => (
-					<a
-						key={item.label}
-						href={item.href}
-						className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
-						<span className="text-foreground break-all">{item.value}</span>
-					</a>
-				))}
+				{Array.map(
+					[
+						{href: 'mailto:paludgnachmatteo.dev@gmail.com', label: 'Email', value: 'paludgnachmatteo.dev@gmail.com'},
+						{href: 'tel:+393518853376', label: 'Phone', value: '+39 351 885 3376'},
+						{href: 'https://github.com/MP281X', label: 'GitHub', value: 'github.com/MP281X'}
+					],
+					item => (
+						<a
+							key={item.label}
+							href={item.href}
+							className="border-border/70 bg-background/90 hover:border-primary/50 hover:text-primary flex flex-col gap-2 border px-4 py-4 font-mono text-xs backdrop-blur-sm transition-colors sm:flex-row sm:items-center sm:justify-between sm:text-sm"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span className="text-muted-foreground text-[10px] tracking-[0.15em] uppercase">{item.label}</span>
+							<span className="text-foreground break-all">{item.value}</span>
+						</a>
+					)
+				)}
 			</div>
 			<p className="text-muted-foreground/70 mt-6 font-mono text-[10px]">
 				© 2026 Matteo Paludgnach · Moimacco (UD), Italy
@@ -783,7 +694,7 @@ function ContactSection(input: {readonly registerSection: (id: number, node: HTM
 	)
 }
 
-function ShortcutsOverlay(input: {readonly onClose: () => void}) {
+function ShortcutsOverlay(input: {onClose: () => void}) {
 	return (
 		<Dialog
 			open
@@ -815,15 +726,32 @@ function ShortcutsOverlay(input: {readonly onClose: () => void}) {
 }
 
 function RealtimeLayer(input: {
-	readonly identityColor: string
-	readonly localPointer: {readonly x: number; readonly y: number} | null
-	readonly viewport: {readonly width: number; readonly height: number}
+	localPointerRef: React.RefObject<{x: number; y: number} | null>
+	onIdentityColor: (color: string) => void
+	viewport: {width: number; height: number}
 }) {
+	const {onIdentityColor} = input
 	const portfolio = useAtomSuspense(portfolioAtom)
+	const identityColor = pipe(
+		portfolio.value.visitors,
+		Array.findFirst(visitor => visitor.id === identity.id),
+		Option.map(visitor => visitor.color),
+		Option.getOrElse(() => identity.color)
+	)
+	useEffect(() => {
+		onIdentityColor(identityColor)
+	}, [identityColor, onIdentityColor])
 
 	return (
 		<>
-			<GridOverlay />
+			<div
+				className="pointer-events-none fixed inset-0 z-1"
+				style={{
+					backgroundImage:
+						'linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px)',
+					backgroundSize: '26px 26px'
+				}}
+			/>
 			<TrailCanvas trails={portfolio.value.trails} viewport={input.viewport} />
 
 			{Array.map(portfolio.value.visitors, cursor => (
@@ -831,15 +759,17 @@ function RealtimeLayer(input: {
 					key={cursor.id}
 					cursor={cursor}
 					isMe={cursor.id === identity.id}
-					localPointer={input.localPointer}
+					localPointerRef={input.localPointerRef}
 					viewport={input.viewport}
 				/>
 			))}
 
 			<div className="border-border/70 bg-background/95 pointer-events-none fixed bottom-3 left-3 z-50 flex items-center gap-2 border px-3 py-2 font-mono text-[11px] backdrop-blur-sm sm:bottom-4 sm:left-4">
-				<span className="size-2" style={{backgroundColor: input.identityColor}} />
-				<span className="text-primary">{portfolio.value.visitors.length}</span>
-				<span className="text-muted-foreground">{portfolio.value.visitors.length === 1 ? 'visitor' : 'visitors'}</span>
+				<span className="size-2" style={{backgroundColor: identityColor}} />
+				<span className="text-primary">{Array.length(portfolio.value.visitors)}</span>
+				<span className="text-muted-foreground">
+					{Array.length(portfolio.value.visitors) === 1 ? 'visitor' : 'visitors'}
+				</span>
 			</div>
 		</>
 	)
@@ -847,23 +777,22 @@ function RealtimeLayer(input: {
 
 function PortfolioRoute() {
 	const viewport = useViewport()
-	const sectionRefs = useRef<(HTMLElement | null)[] | null>(null)
+	const sectionRefs = useRef<(HTMLElement | null)[]>([])
 	const currentSectionRef = useRef(0)
 	const moveRpc = useAtomSet(RpcClient.mutation('portfolio.move'))
 	const pointerFrameRef = useRef(0)
-	const queuedPointerRef = useRef<{readonly x: number; readonly y: number} | null>(null)
-	const lastSentPointerRef = useRef<{readonly sentAt: number; readonly x: number; readonly y: number} | null>(null)
-	const [identityColor, setIdentityColor] = useState(identity.color)
-	const [localPointer, setLocalPointer] = useState<{readonly x: number; readonly y: number} | null>(null)
+	const queuedPointerRef = useRef<{x: number; y: number}>(null)
+	const localPointerRef = useRef<{x: number; y: number}>(null)
+	const lastSentPointerRef = useRef<{sentAt: number; x: number; y: number}>(null)
+	const identityColorRef = useRef<string>(identity.color)
 	const [showShortcuts, setShowShortcuts] = useState(false)
 
-	function getSectionRefs() {
-		sectionRefs.current ??= Array.makeBy(7, () => null)
-		return sectionRefs.current
+	function syncIdentityColor(color: string) {
+		identityColorRef.current = color
 	}
 
 	function registerSection(id: number, node: HTMLElement | null) {
-		getSectionRefs()[id] = node
+		sectionRefs.current[id] = node
 	}
 
 	useEffect(
@@ -874,7 +803,7 @@ function PortfolioRoute() {
 	)
 
 	function scrollTo(index: number) {
-		const target = getSectionRefs()[index]
+		const target = sectionRefs.current[index]
 		if (!target) return
 
 		target.scrollIntoView({behavior: 'smooth', block: 'start'})
@@ -882,11 +811,9 @@ function PortfolioRoute() {
 	}
 
 	function updateColor() {
-		const nextColor = pickNextCursorColor(identityColor)
-		const currentPointer = localPointer ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
+		const nextColor = pickNextCursorColor(identityColorRef.current)
+		const currentPointer = localPointerRef.current ?? lastSentPointerRef.current ?? {x: 0.5, y: 0.5}
 
-		identity.color = nextColor
-		setIdentityColor(nextColor)
 		lastSentPointerRef.current = {sentAt: performance.now(), x: currentPointer.x, y: currentPointer.y}
 
 		moveRpc({payload: {color: nextColor, id: identity.id, x: currentPointer.x, y: currentPointer.y}})
@@ -896,16 +823,16 @@ function PortfolioRoute() {
 		if (viewport.width === 0 || viewport.height === 0) return
 
 		const nextPointer = {
-			x: Math.max(0, Math.min(0.999_999, clientX / viewport.width)),
-			y: Math.max(0, Math.min(0.999_999, clientY / viewport.height))
+			x: Number.clamp({maximum: 0.999_999, minimum: 0})(clientX / viewport.width),
+			y: Number.clamp({maximum: 0.999_999, minimum: 0})(clientY / viewport.height)
 		}
 
-		setLocalPointer(nextPointer)
+		localPointerRef.current = nextPointer
 		queuedPointerRef.current = nextPointer
 
 		if (pointerFrameRef.current !== 0) return
 
-		pointerFrameRef.current = requestAnimationFrame(() => {
+		function flushPointer() {
 			pointerFrameRef.current = 0
 
 			if (Predicate.isNull(queuedPointerRef.current)) return
@@ -922,23 +849,33 @@ function PortfolioRoute() {
 				}
 			}
 
-			if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) return
+			if (Predicate.isNotNull(lastSentPointerRef.current) && now - lastSentPointerRef.current.sentAt < 50) {
+				pointerFrameRef.current = requestAnimationFrame(flushPointer)
+				return
+			}
 
 			lastSentPointerRef.current = {sentAt: now, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
 
 			moveRpc({
-				payload: {color: identityColor, id: identity.id, x: queuedPointerRef.current.x, y: queuedPointerRef.current.y}
+				payload: {
+					color: identityColorRef.current,
+					id: identity.id,
+					x: queuedPointerRef.current.x,
+					y: queuedPointerRef.current.y
+				}
 			})
 
 			queuedPointerRef.current = null
-		})
+		}
+
+		pointerFrameRef.current = requestAnimationFrame(flushPointer)
 	}
 
 	useHotkey('J', () => {
-		scrollTo(Math.min(currentSectionRef.current + 1, 6))
+		scrollTo(Number.min(currentSectionRef.current + 1, 6))
 	})
 	useHotkey('K', () => {
-		scrollTo(Math.max(currentSectionRef.current - 1, 0))
+		scrollTo(Number.max(currentSectionRef.current - 1, 0))
 	})
 	useHotkey('1', () => {
 		scrollTo(0)
@@ -982,7 +919,7 @@ function PortfolioRoute() {
 			onScroll={event => {
 				const viewportMiddle = event.currentTarget.scrollTop + event.currentTarget.clientHeight / 2
 				currentSectionRef.current = pipe(
-					getSectionRefs(),
+					sectionRefs.current,
 					Array.findLastIndex(section => Predicate.isNotNull(section) && section.offsetTop <= viewportMiddle),
 					Option.getOrElse(() => 0)
 				)
@@ -997,7 +934,7 @@ function PortfolioRoute() {
 			<ContactSection registerSection={registerSection} />
 
 			<Suspense fallback={<Loading />}>
-				<RealtimeLayer identityColor={identityColor} localPointer={localPointer} viewport={viewport} />
+				<RealtimeLayer localPointerRef={localPointerRef} onIdentityColor={syncIdentityColor} viewport={viewport} />
 			</Suspense>
 
 			<button

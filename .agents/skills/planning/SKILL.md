@@ -1,53 +1,32 @@
 ---
 name: planning
-description: 'Use only when explicitly invoked to turn an idea or existing issue into one implementation-ready GitHub issue.'
+description: 'Mandatory when product or repository requirements remain unresolved, or when the user requests discovery, planning, or a prototype; never use for an approved implementation or review.'
 ---
 
-Find the smallest complete solution to the root problem.
+Challenge assumptions; treat proposals as discussion starters.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Research
-    Research --> Prototype: affected UI
-    Prototype --> Research
-    Research --> Decision: user choice required
-    Decision --> Research
-    Research --> Contract: choices resolved
-    Contract --> Research: correction
-    Contract --> SaveApproval
-    SaveApproval --> Contract: correction
-    SaveApproval --> SaveIssue: explicit approval
-    SaveIssue --> [*]
-```
+## Frontier
 
-## Resolve
+1. Derive every independent unresolved decision whose prerequisites are resolved.
+2. Prefer a working prototype when behavior or UI resolves the decision better than prose.
+3. Ask remaining independent questions together; no recommendations or multiple choice.
+4. Apply descriptive feedback once; remove resolved decisions.
+5. Repeat without duplicate, premature, dependent, or out-of-scope questions.
 
-- Begin clean. Read related issues; inspect local ownership and cloned APIs.
-- Treat proposals and current shape as hypotheses. Compare removal, native, smaller/larger coherent, architecture, and interaction; recommend one evidenced design.
-- Keep research, mechanics, and rejections internal unless they change the user decision.
+| Decision                      | Present                                                          |
+| ----------------------------- | ---------------------------------------------------------------- |
+| Program design                | Minimal Mermaid graph, nested list, or self-contained TypeScript |
+| UI/UX or interactive behavior | Working prototype                                                |
+| Missing user authority        | Question beside the blocked decision                             |
+
+The user does not inspect repository code during planning.
+
+## Prototype
+
+Keep one persistent MVP candidate through every feedback delta. UI: at least five materially and structurally distinct variants through existing DevTools components. The user exercises prototypes manually.
+
+After explicit production approval, freeze the accepted contract and current candidate for production reconciliation.
 
 ## Output
 
-| State               | User sees                                                                     | Write              |
-| ------------------- | ----------------------------------------------------------------------------- | ------------------ |
-| Research · Decision | `result → consequence → recommendation → ## Decision`; one necessary question | None               |
-| Prototype           | Affected UI in repository DevTools                                            | Disposable preview |
-| Contract            | Final issue after every decision resolves                                     | None               |
-| SaveIssue           | Persistence result                                                            | Canonical issue    |
-
-Before decisions resolve: no status, acceptance, implementation detail, complete issue, or product/configuration/instruction edits.
-
-## Issue
-
-| Retain only when unrecoverable                                                                                                               | Exclude                                                                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Outcome/behavior · material interface/ownership/lifecycle/architecture · fixed constraint/exclusion/risk · reasoning preventing a wrong path | Transcript/backtracking · prototype code · workflow/validation/order · private mechanics/lines · source facts · repetition |
-
-Persist the smallest GFM contract allowing one clean-context implementation. Use no template. Keep acceptance beside behavior only when it adds a boundary and rejections only when likely to recur. Remove every redundancy.
-
-Present the final issue once, then end with:
-
-> [!IMPORTANT]
-> Save this issue?
-
-Only an explicit affirmative response to this question authorizes persistence. Before saving, discard prototypes, verify a clean worktree while preserving ignored runtime state, load `git-operations`, persist, and stop.
+Return only current resolved contract, runnable prototype location or invocation, and unresolved frontier.

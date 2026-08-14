@@ -1,5 +1,4 @@
 import {createHash, randomUUID} from 'node:crypto'
-import * as NodeFs from 'node:fs'
 import {homedir} from 'node:os'
 
 import {
@@ -48,7 +47,6 @@ import {
 	GitReviewState,
 	GitRepository,
 	type GitReviewCommentDraft,
-	type GitReviewMark,
 	type GitReviewTarget,
 	type GitWorktreeSource,
 	GitWorktree,
@@ -62,7 +60,7 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 	make: Effect.gen(function* () {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
-		const string = Effect.fn('GitCommand.string')(function* (cwd: string, args: readonly string[]) {
+		const string = Effect.fn('GitCommand.string')(function* (cwd: string, args: string[]) {
 			yield* Effect.annotateCurrentSpan({command: args[0] ?? 'git', cwd})
 			return yield* pipe(
 				Effect.scoped(
@@ -93,9 +91,7 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 
 						if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
 							return yield* GitError.make({
-								cause: new Error(
-									output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
-								)
+								cause: output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
 							})
 						}
 
@@ -108,7 +104,7 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 
 		const stringWithInput = Effect.fn('GitCommand.stringWithInput')(function* (
 			cwd: string,
-			args: readonly string[],
+			args: string[],
 			input: string
 		) {
 			yield* Effect.annotateCurrentSpan({command: args[0] ?? 'git', cwd})
@@ -148,9 +144,7 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 
 						if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
 							return yield* GitError.make({
-								cause: new Error(
-									output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
-								)
+								cause: output.stderr || output.stdout || `git ${Array.join(' ')(args)} exited with ${exitCode}`
 							})
 						}
 
@@ -162,7 +156,7 @@ class GitCommand extends Context.Service<GitCommand>()('@deslop/git/service/GitC
 		})
 
 		return {
-			lines: Effect.fn('GitCommand.lines')(function* (cwd: string, args: readonly string[]) {
+			lines: Effect.fn('GitCommand.lines')(function* (cwd: string, args: string[]) {
 				return pipe(yield* string(cwd, args), String.split(/\r?\n/u), Array.filter(String.isNonEmpty))
 			}),
 			string,
@@ -206,45 +200,46 @@ const reviewExclusionPathspecs = [
 const reviewDiffFlags = ['--ignore-all-space', '--ignore-blank-lines', '--ignore-cr-at-eol'] as const
 const checkpointCommit = {trailer: 'Deslop-Checkpoint: true'} as const
 
-type DiscoveredWorktree = {
-	readonly branch?: string
-	readonly gitDirectory: string
-	readonly main: boolean
-	readonly root: string
+type DiscoveredWorktree = {branch?: string; gitDirectory: string; main: boolean; root: string}
+
+function discoveredWorktree(input: {
+	branch?: string
+	gitDirectory: string
+	main: boolean
+	root: string
+}): DiscoveredWorktree {
+	return {branch: input.branch, gitDirectory: input.gitDirectory, main: input.main, root: input.root}
 }
 
-function readDirectoryEntries(directory: string) {
-	try {
-		return NodeFs.readdirSync(directory, {withFileTypes: true})
-	} catch {
-		return []
-	}
-}
-function readTextFile(filePath: string) {
-	try {
-		return NodeFs.readFileSync(filePath, 'utf8')
-	} catch {
-		return ''
-	}
-}
+type GitHubRepositoryResponse = typeof GitHubRepositoryResponse.Type
 const GitHubRepositoryResponse = Schema.Struct({name: Schema.String, owner: Schema.Struct({login: Schema.String})})
+
+type GitHubReviewThreadCommentResponse = typeof GitHubReviewThreadCommentResponse.Type
 const GitHubReviewThreadCommentResponse = Schema.Struct({
 	body: Schema.String,
-	line: Schema.optional(Schema.NullOr(Schema.Finite)),
-	originalLine: Schema.optional(Schema.NullOr(Schema.Finite)),
+	line: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
+	originalLine: Schema.OptionFromOptionalNullOr(Schema.Finite, {onNoneEncoding: 'omit'}),
 	path: Schema.String,
 	url: Schema.optional(Schema.String)
 })
+
+type GitHubReviewThreadResponse = typeof GitHubReviewThreadResponse.Type
 const GitHubReviewThreadResponse = Schema.Struct({
 	comments: Schema.Struct({nodes: Schema.Array(GitHubReviewThreadCommentResponse)}),
 	diffSide: Schema.optional(Schema.String),
 	id: Schema.String,
 	isResolved: Schema.Boolean
 })
+
+type GitHubPullRequestResponse = typeof GitHubPullRequestResponse.Type
 const GitHubPullRequestResponse = Schema.Struct({
 	reviewThreads: Schema.optional(Schema.Struct({nodes: Schema.Array(GitHubReviewThreadResponse)}))
 })
+
+type GitHubReviewRepositoryResponse = typeof GitHubReviewRepositoryResponse.Type
 const GitHubReviewRepositoryResponse = Schema.Struct({pullRequest: Schema.optional(GitHubPullRequestResponse)})
+
+type GitHubReviewThreadsResponse = typeof GitHubReviewThreadsResponse.Type
 const GitHubReviewThreadsResponse = Schema.Struct({
 	data: Schema.optional(Schema.Struct({repository: Schema.optional(GitHubReviewRepositoryResponse)}))
 })
@@ -256,15 +251,11 @@ function pathSlug(value: string) {
 	const slug = pipe(value, String.toLowerCase, String.replace(/[^a-z0-9-]+/gu, '-'), String.replace(/^-+|-+$/gu, ''))
 	return slug === '' ? 'worktree' : slug
 }
-function repositorySlug(root: string) {
-	const realRoot = NodeFs.realpathSync.native(root)
+function repositorySlug(realRoot: string) {
 	const hash = pipe(createHash('sha256').update(realRoot).digest('hex'), String.slice(0, 10))
 	return `${pathSlug(Option.getOrElse(Array.last(String.split('/')(realRoot)), () => realRoot))}-${hash}`
 }
-function branchSlug(branch: string) {
-	return pathSlug(branch)
-}
-function firstWorktreeRoot(worktrees: readonly {readonly root: string}[], fallback: string) {
+function firstWorktreeRoot(worktrees: {root: string}[], fallback: string) {
 	return pipe(
 		Array.head(worktrees),
 		Option.map(worktree => worktree.root),
@@ -274,7 +265,7 @@ function firstWorktreeRoot(worktrees: readonly {readonly root: string}[], fallba
 function validWorkbenchBranch(branch: string) {
 	return /^(feat|fix|refactor|perf|test|docs|chore)\/[a-z0-9-]+$/u.test(branch)
 }
-function sameProjectSnapshot(left: readonly GitProject[], right: readonly GitProject[]) {
+function sameProjectSnapshot(left: GitProject[], right: GitProject[]) {
 	if (Array.length(left) !== Array.length(right)) return false
 	return Array.every(left, (leftProject, projectIndex) => {
 		const rightProject = right[projectIndex]
@@ -298,10 +289,10 @@ function repositoryProbeOnlyPermissionErrors(stderr: string) {
 	return !Array.isReadonlyArrayEmpty(lines) && Array.every(lines, line => repositoryProbePermissionError.test(line))
 }
 function parseWorktreeFields(
-	fields: readonly string[],
-	current: {readonly branch: string; readonly hasHead: boolean; readonly root: string},
-	records: readonly {readonly branch: string; readonly hasHead: boolean; readonly root: string}[]
-): readonly {readonly branch: string; readonly hasHead: boolean; readonly root: string}[] {
+	fields: string[],
+	current: {branch: string; hasHead: boolean; root: string},
+	records: {branch: string; hasHead: boolean; root: string}[]
+): {branch: string; hasHead: boolean; root: string}[] {
 	const field = fields[0]
 	if (Predicate.isUndefined(field)) {
 		return String.isNonEmpty(current.root) && current.hasHead ? Array.append(records, current) : records
@@ -331,7 +322,11 @@ function parseWorktreeRecords(output: string) {
 }
 function isReviewExcludedPath(filePath: string) {
 	const parts = String.split('/')(filePath)
-	const basename = parts.at(-1) ?? filePath
+	const basename = pipe(
+		parts,
+		Array.last,
+		Option.getOrElse(() => filePath)
+	)
 	if (filePath === 'pnpm-lock.yaml') return true
 	if (String.endsWith('.gen.ts')(basename)) return true
 	for (const index of Array.range(0, parts.length - 2)) {
@@ -364,10 +359,10 @@ function patchPathspec() {
 function diffFromPatchChunk(chunk: string) {
 	const deleted = /^deleted file mode /mu.test(chunk)
 	const filePath =
-		(deleted ? chunk.match(/^--- a\/(.+)$/mu)?.[1] : undefined) ??
-		chunk.match(/^\+\+\+ b\/(.+)$/mu)?.[1] ??
-		chunk.match(/^--- a\/(.+)$/mu)?.[1] ??
-		chunk.match(/^diff --git a\/.+ b\/(.+)$/mu)?.[1] ??
+		(deleted ? firstMatch(chunk, /^--- a\/(.+)$/mu) : undefined) ??
+		firstMatch(chunk, /^\+\+\+ b\/(.+)$/mu) ??
+		firstMatch(chunk, /^--- a\/(.+)$/mu) ??
+		firstMatch(chunk, /^diff --git a\/.+ b\/(.+)$/mu) ??
 		''
 	const status = pipe(
 		Match.value(chunk),
@@ -387,9 +382,12 @@ function diffFromPatchChunk(chunk: string) {
 	)
 	return GitDiff.make({changeHash: changeHash(chunk), filePath, patch: chunk, status})
 }
+function firstMatch(value: string, expression: RegExp) {
+	return pipe(value, String.match(expression), Option.flatMap(Array.get(1)), Option.getOrUndefined)
+}
 function diffsFromPatch(patch: string) {
 	return pipe(
-		patch.split(/(?=^diff --git )/mu),
+		String.split(/(?=^diff --git )/mu)(patch),
 		Array.filter(chunk => /^diff --git /u.test(chunk)),
 		Array.map(diffFromPatchChunk),
 		Array.filter(diff => !isReviewExcludedPath(diff.filePath))
@@ -434,12 +432,12 @@ function commitsFromRecords(output: string) {
 		Array.filter(commit => String.isNonEmpty(commit.hash))
 	)
 }
-function porcelainBranchStatus(lines: readonly string[]) {
+function porcelainBranchStatus(lines: string[]) {
 	function header(name: string) {
 		return pipe(
 			lines,
 			Array.findFirst(line => String.startsWith(`${name} `)(line)),
-			Option.map(line => String.trim(line.slice(name.length + 1))),
+			Option.map(line => String.trim(String.slice(String.length(name) + 1)(line))),
 			Option.getOrUndefined
 		)
 	}
@@ -462,7 +460,7 @@ function porcelainBranchStatus(lines: readonly string[]) {
 	}
 }
 function gitHubString(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], cwd: string) {
-	function* runGh(args: readonly string[]) {
+	function* runGh(args: string[]) {
 		yield* Effect.annotateCurrentSpan({command: args[0] ?? 'gh', cwd})
 		return yield* pipe(
 			Effect.scoped(
@@ -492,7 +490,7 @@ function gitHubString(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'
 					)
 					if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
 						return yield* GitError.make({
-							cause: new Error(output.stderr || output.stdout || `gh ${Array.join(' ')(args)} exited with ${exitCode}`)
+							cause: output.stderr || output.stdout || `gh ${Array.join(' ')(args)} exited with ${exitCode}`
 						})
 					}
 					return output.stdout
@@ -510,6 +508,37 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+		const readDirectoryEntries = Effect.fnUntraced(function* (directory: string) {
+			const names = yield* pipe(
+				fs.readDirectory(directory),
+				Effect.orElseSucceed(() => Array.empty<string>())
+			)
+			return yield* pipe(
+				names,
+				Effect.forEach(
+					name =>
+						pipe(
+							fs.readLink(path.join(directory, name)),
+							Effect.as({name, type: 'SymbolicLink' as const}),
+							Effect.catch(() =>
+								pipe(
+									fs.stat(path.join(directory, name)),
+									Effect.map(info => ({name, type: info.type}))
+								)
+							),
+							Effect.option
+						),
+					{concurrency: 16}
+				),
+				Effect.map(Array.getSomes)
+			)
+		})
+		const readTextFile = Effect.fnUntraced(function* (filePath: string) {
+			return yield* pipe(
+				fs.readFileString(filePath),
+				Effect.orElseSucceed(() => '')
+			)
+		})
 		const home = yield* pipe(Config.string('HOME'), Config.withDefault(homedir()))
 		const projects = yield* SubscriptionRef.make(Array.empty<GitProject>())
 		const projectRefreshLock = yield* Semaphore.make(1)
@@ -521,7 +550,10 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 		const maintenanceProject = Effect.fn('GitWorkspace.maintenanceProject')(function* (cwd: string) {
 			yield* Effect.annotateCurrentSpan({cwd})
 
-			const root = yield* Effect.sync(() => NodeFs.realpathSync.native(cwd))
+			const root = yield* pipe(
+				fs.realPath(cwd),
+				Effect.mapError(cause => GitError.make({cause}))
+			)
 			yield* pipe(git.string(cwd, ['worktree', 'prune']), Effect.asVoid)
 			yield* pipe(git.string(cwd, ['fetch', '--all', '--prune']), Effect.asVoid)
 			const defaultBranch = yield* pipe(
@@ -551,8 +583,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				const track = fields[2] ?? ''
 				const worktreePath = fields[3] ?? ''
 				const worktreeRoot = String.isNonEmpty(worktreePath)
-					? yield* Effect.sync(() =>
-							NodeFs.existsSync(worktreePath) ? NodeFs.realpathSync.native(worktreePath) : worktreePath
+					? yield* pipe(
+							fs.realPath(worktreePath),
+							Effect.orElseSucceed(() => worktreePath)
 						)
 					: ''
 
@@ -619,7 +652,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 			)
 		})
 
-		const repositoryProbeOutput = Effect.fnUntraced(function* (searchRoots: readonly string[]) {
+		const repositoryProbeOutput = Effect.fnUntraced(function* (searchRoots: string[]) {
 			const args = ['--hidden', '--files', ...Array.flatMap(repositoryProbeGlobs, glob => ['-g', glob]), ...searchRoots]
 			return yield* Effect.scoped(
 				Effect.gen(function* () {
@@ -656,20 +689,24 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 					}
 
 					return yield* GitError.make({
-						cause: new Error(output.stderr || output.stdout || `rg ${Array.join(' ')(args)} exited with ${exitCode}`)
+						cause: output.stderr || output.stdout || `rg ${Array.join(' ')(args)} exited with ${exitCode}`
 					})
 				})
 			)
 		})
 		const directRepositoryRoot = Effect.fnUntraced(function* (root: string) {
-			return Array.head(NodeFs.existsSync(path.join(root, '.git')) ? [normalizePublicPath(root)] : [])
+			const exists = yield* pipe(
+				fs.exists(path.join(root, '.git')),
+				Effect.mapError(cause => GitError.make({cause}))
+			)
+			return exists ? Option.some(normalizePublicPath(root)) : Option.none()
 		})
 		const repositorySearchRoots = Effect.fn('GitWorkspace.repositorySearchRoots')(function* (root: string) {
 			if (root !== home) return [root]
 
 			return pipe(
-				readDirectoryEntries(root),
-				Array.filter(entry => entry.isDirectory()),
+				yield* readDirectoryEntries(root),
+				Array.filter(entry => entry.type === 'Directory'),
 				Array.map(entry => entry.name),
 				Array.filter(entry => !HashSet.has(excludedHomeDiscoveryEntries, entry)),
 				Array.filter(entry => !HashSet.has(excludedDiscoveryEntries, entry)),
@@ -677,87 +714,104 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				Array.map(entry => path.join(root, entry))
 			)
 		})
-		function linkedWorktrees(gitDirectory: string) {
+		const linkedWorktrees = Effect.fnUntraced(function* (gitDirectory: string) {
 			const worktreesDirectory = path.join(gitDirectory, 'worktrees')
-			return pipe(
-				readDirectoryEntries(worktreesDirectory),
-				Array.filter(entry => entry.isDirectory()),
-				Array.flatMap(entry => {
-					const metadataDirectory = path.join(worktreesDirectory, entry.name)
-					const gitdir = String.trim(readTextFile(path.join(metadataDirectory, 'gitdir')))
-					if (String.isEmpty(gitdir)) return Array.empty<DiscoveredWorktree>()
+			return yield* pipe(
+				yield* readDirectoryEntries(worktreesDirectory),
+				Array.filter(entry => entry.type === 'Directory'),
+				Effect.forEach(entry =>
+					Effect.gen(function* () {
+						const metadataDirectory = path.join(worktreesDirectory, entry.name)
+						const gitdir = String.trim(yield* readTextFile(path.join(metadataDirectory, 'gitdir')))
+						if (String.isEmpty(gitdir)) return Option.none<DiscoveredWorktree>()
 
-					const branch = /^ref: refs\/heads\/(.+)$/u.exec(
-						String.trim(readTextFile(path.join(metadataDirectory, 'HEAD')))
-					)?.[1]
-					return [
-						{
-							branch,
-							gitDirectory,
-							main: false,
-							root: normalizePublicPath(path.dirname(path.resolve(metadataDirectory, gitdir)))
-						} satisfies DiscoveredWorktree
-					]
-				})
+						const branch = firstMatch(
+							String.trim(yield* readTextFile(path.join(metadataDirectory, 'HEAD'))),
+							/^ref: refs\/heads\/(.+)$/u
+						)
+						return Option.some(
+							discoveredWorktree({
+								branch,
+								gitDirectory,
+								main: false,
+								root: normalizePublicPath(path.dirname(path.resolve(metadataDirectory, gitdir)))
+							})
+						)
+					})
+				),
+				Effect.map(Array.getSomes)
 			)
-		}
-		function worktreeFromRoot(root: string, entries = readDirectoryEntries(root)) {
+		})
+		const worktreeFromRoot = Effect.fnUntraced(function* (root: string, entries: {name: string; type: string}[]) {
 			const dotGit = Array.findFirst(entries, entry => entry.name === '.git')
 			if (Option.isNone(dotGit)) return
 
 			const dotGitPath = path.join(root, '.git')
-			if (dotGit.value.isDirectory()) {
+			if (dotGit.value.type === 'Directory') {
 				const gitDirectory = normalizePublicPath(dotGitPath)
-				const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
-				return {branch, gitDirectory, main: true, root: normalizePublicPath(root)} satisfies DiscoveredWorktree
+				const branch = firstMatch(
+					String.trim(yield* readTextFile(path.join(gitDirectory, 'HEAD'))),
+					/^ref: refs\/heads\/(.+)$/u
+				)
+				return discoveredWorktree({branch, gitDirectory, main: true, root: normalizePublicPath(root)})
 			}
-			if (!dotGit.value.isFile()) return
+			if (dotGit.value.type !== 'File') return
 
-			const gitDirectoryValue = /^gitdir:\s*(.+)$/mu.exec(readTextFile(dotGitPath))?.[1]
+			const gitDirectoryValue = firstMatch(yield* readTextFile(dotGitPath), /^gitdir:\s*(.+)$/mu)
 			if (Predicate.isUndefined(gitDirectoryValue)) return
 
 			const gitDirectory = normalizePublicPath(path.resolve(root, String.trim(gitDirectoryValue)))
-			const commonDirectoryValue = String.trim(readTextFile(path.join(gitDirectory, 'commondir')))
+			const commonDirectoryValue = String.trim(yield* readTextFile(path.join(gitDirectory, 'commondir')))
 			const commonDirectory = String.isEmpty(commonDirectoryValue)
 				? gitDirectory
 				: normalizePublicPath(path.resolve(gitDirectory, commonDirectoryValue))
-			const branch = /^ref: refs\/heads\/(.+)$/u.exec(String.trim(readTextFile(path.join(gitDirectory, 'HEAD'))))?.[1]
+			const branch = firstMatch(
+				String.trim(yield* readTextFile(path.join(gitDirectory, 'HEAD'))),
+				/^ref: refs\/heads\/(.+)$/u
+			)
 
-			return {
-				branch,
-				gitDirectory: commonDirectory,
-				main: false,
-				root: normalizePublicPath(root)
-			} satisfies DiscoveredWorktree
-		}
+			return discoveredWorktree({branch, gitDirectory: commonDirectory, main: false, root: normalizePublicPath(root)})
+		})
 		const discoverWorktreesFrom = Effect.fn('GitWorkspace.discoverWorktreesFrom')(function* (root: string) {
-			const directEntries = readDirectoryEntries(root)
-			const directWorktree = worktreeFromRoot(root, directEntries)
+			const directEntries = yield* readDirectoryEntries(root)
+			const directWorktree = yield* worktreeFromRoot(root, directEntries)
 			if (Predicate.isNotUndefined(directWorktree)) return [directWorktree]
 
-			const pending = [...(yield* repositorySearchRoots(root))]
-			const worktrees = Array.empty<DiscoveredWorktree>()
+			function search(
+				pending: string[],
+				worktrees: DiscoveredWorktree[]
+			): Effect.Effect<DiscoveredWorktree[], GitError> {
+				if (Array.isReadonlyArrayEmpty(pending)) return Effect.succeed(worktrees)
 
-			while (!Array.isReadonlyArrayEmpty(pending)) {
-				const directory = pending.pop()
-				if (Predicate.isUndefined(directory)) continue
+				const directory = pipe(pending, Array.last, Option.getOrThrow)
+				const remaining = Array.dropRight(pending, 1)
 
-				const entries = readDirectoryEntries(directory)
-				const worktree = worktreeFromRoot(directory, entries)
-				if (Predicate.isNotUndefined(worktree)) {
-					worktrees.push(worktree)
-					if (worktree.main) worktrees.push(...linkedWorktrees(worktree.gitDirectory))
-					continue
-				}
+				return Effect.gen(function* () {
+					const entries = yield* readDirectoryEntries(directory)
+					const worktree = yield* worktreeFromRoot(directory, entries)
+					if (Predicate.isNotUndefined(worktree)) {
+						const discovered = Array.append(worktrees, worktree)
+						const next = worktree.main
+							? Array.appendAll(discovered, yield* linkedWorktrees(worktree.gitDirectory))
+							: discovered
+						return yield* Effect.suspend(() => search(remaining, next))
+					}
 
-				for (const entry of entries) {
-					if (!entry.isDirectory()) continue
-					if (String.startsWith('.')(entry.name)) continue
-					if (HashSet.has(excludedDiscoveryEntries, entry.name)) continue
-
-					pending.push(path.join(directory, entry.name))
-				}
+					const children = pipe(
+						entries,
+						Array.filter(
+							entry =>
+								entry.type === 'Directory' &&
+								!String.startsWith('.')(entry.name) &&
+								!HashSet.has(excludedDiscoveryEntries, entry.name)
+						),
+						Array.map(entry => path.join(directory, entry.name))
+					)
+					return yield* Effect.suspend(() => search(Array.appendAll(remaining, children), worktrees))
+				})
 			}
+
+			const worktrees = yield* search(yield* repositorySearchRoots(root), Array.empty())
 
 			return pipe(
 				worktrees,
@@ -765,10 +819,10 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				Array.sortWith(worktree => worktree.root, Order.String)
 			)
 		})
-		const projectsFromWorktrees = Effect.fnUntraced(function* (worktrees: readonly DiscoveredWorktree[]) {
+		const projectsFromWorktrees = Effect.fnUntraced(function* (worktrees: DiscoveredWorktree[]) {
 			const groups = pipe(
 				worktrees,
-				Array.reduce(HashMap.empty<string, readonly DiscoveredWorktree[]>(), (current, worktree) =>
+				Array.reduce(HashMap.empty<string, DiscoveredWorktree[]>(), (current, worktree) =>
 					HashMap.set(
 						current,
 						worktree.gitDirectory,
@@ -863,8 +917,8 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				worktrees,
 				Array.map(worktree =>
 					GitWorktree.make({
-						branch: String.isNonEmpty(worktree.branch) ? worktree.branch : undefined,
-						root: normalizePublicPath(worktree.root)
+						root: normalizePublicPath(worktree.root),
+						...(String.isNonEmpty(worktree.branch) ? {branch: worktree.branch} : {})
 					})
 				)
 			)
@@ -963,9 +1017,9 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				})
 			}),
 			createWorktree: Effect.fn('GitWorkspace.createWorktree')(function* (input: {
-				readonly branch: string
-				readonly cwd: string
-				readonly source: GitWorktreeSource
+				branch: string
+				cwd: string
+				source: GitWorktreeSource
 			}) {
 				yield* Effect.annotateCurrentSpan({branch: input.branch, cwd: input.cwd})
 				if (input.source._tag === 'new' && !validWorkbenchBranch(input.branch)) {
@@ -974,12 +1028,16 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 							'New worktree branches must start with feat/, fix/, refactor/, perf/, test/, docs/, or chore/ and use lowercase letters, digits, and hyphens after the prefix.'
 					})
 				}
+				const repositoryRoot = yield* pipe(
+					fs.realPath(input.cwd),
+					Effect.mapError(cause => GitError.make({cause}))
+				)
 				const targetDirectory = path.join(
 					home,
 					'.deslop',
 					'worktrees',
-					repositorySlug(input.cwd),
-					branchSlug(input.branch)
+					repositorySlug(repositoryRoot),
+					pathSlug(input.branch)
 				)
 				const createdWorktreeRoot = pipe(
 					git.string(input.cwd, ['worktree', 'list', '--porcelain', '-z']),
@@ -1041,7 +1099,7 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				yield* refreshProjects
 				return yield* createdWorktreeRoot
 			}),
-			deleteWorktree: Effect.fn('GitWorkspace.deleteWorktree')(function* (input: {readonly cwd: string}) {
+			deleteWorktree: Effect.fn('GitWorkspace.deleteWorktree')(function* (input: {cwd: string}) {
 				yield* Effect.annotateCurrentSpan({cwd: input.cwd})
 				const worktrees = yield* pipe(
 					git.string(input.cwd, ['worktree', 'list', '--porcelain', '-z']),
@@ -1078,13 +1136,11 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 }
 
 export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/service/GitChanges', {
-	make: Effect.fn('GitChanges.make')(function* (config: {readonly cwd: string}) {
+	make: Effect.fn('GitChanges.make')(function* (config: {cwd: string}) {
 		const git = yield* GitCommand
 		const fs = yield* FileSystem.FileSystem
 		const path = yield* Path.Path
-		const refs = yield* Ref.make(
-			Array.empty<{readonly key: string; readonly ref: SubscriptionRef.SubscriptionRef<GitDiff[]>}>()
-		)
+		const refs = yield* Ref.make(Array.empty<{key: string; ref: SubscriptionRef.SubscriptionRef<GitDiff[]>}>())
 		const diffRefLock = yield* Semaphore.make(1)
 		const metadataRefreshLock = yield* Semaphore.make(1)
 		const fileContentCache = yield* Ref.make(HashMap.empty<string, GitDiff>())
@@ -1131,7 +1187,7 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			const status = yield* statusSnapshot
 			return status.upstream ?? (yield* branchDiffBase)
 		})
-		const gitDiffs = Effect.fn('GitChanges.gitDiffs')(function* (args: readonly string[]) {
+		const gitDiffs = Effect.fn('GitChanges.gitDiffs')(function* (args: string[]) {
 			const patch = yield* git.string(config.cwd, [
 				'diff',
 				...args,
@@ -1181,8 +1237,8 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			)
 		})
 		const fileContent = Effect.fn('GitChanges.fileContent')(function* (input: {
-			readonly diff: GitDiff
-			readonly target: GitReviewTarget
+			diff: GitDiff
+			target: GitReviewTarget
 		}) {
 			if (input.diff.status === 'deleted') return
 			if (input.target._tag === 'commit') {
@@ -1197,8 +1253,8 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 			)
 		})
 		const withFileContent = Effect.fn('GitChanges.withFileContent')(function* (input: {
-			readonly diffs: readonly GitDiff[]
-			readonly target: GitReviewTarget
+			diffs: GitDiff[]
+			target: GitReviewTarget
 		}) {
 			return yield* Effect.forEach(
 				input.diffs,
@@ -1383,7 +1439,7 @@ export class GitChanges extends Context.Service<GitChanges>()('@deslop/git/servi
 }
 
 export class GitReview extends Context.Service<GitReview>()('@deslop/git/service/GitReview', {
-	make: Effect.fn('GitReview.make')(function* (config: {readonly cwd: string}) {
+	make: Effect.fn('GitReview.make')(function* (config: {cwd: string}) {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 		const state = yield* SubscriptionRef.make(GitReviewState.make({comments: [], marks: []}))
 		const suppressedThreadIds = yield* Ref.make(HashSet.empty<string>())
@@ -1420,13 +1476,17 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 			const threads = response.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
 			return pipe(
 				threads,
-				Array.filter(thread => thread.isResolved === false && !HashSet.has(suppressed, thread.id)),
+				Array.filter(thread => !thread.isResolved && !HashSet.has(suppressed, thread.id)),
 				Array.flatMap(thread =>
 					Array.map(thread.comments.nodes, comment =>
 						GitReviewComment.make({
 							body: comment.body,
 							filePath: comment.path,
-							lineNumber: comment.line ?? comment.originalLine ?? 1,
+							lineNumber: pipe(
+								comment.line,
+								Option.orElse(() => comment.originalLine),
+								Option.getOrElse(() => 1)
+							),
 							side: thread.diffSide === 'LEFT' ? 'deletions' : 'additions',
 							source: 'github',
 							threadId: thread.id,
@@ -1454,9 +1514,9 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 		)
 		yield* Effect.forkScoped(pipe(refreshGitHubComments, Effect.ignore))
 		return {
-			mark: (marks: readonly GitReviewMark[]) =>
+			mark: (marks: GitReviewState['marks']) =>
 				SubscriptionRef.update(state, current => gitReviewStateMark(current, marks)),
-			resolveComments: Effect.fn('GitReview.resolveComments')(function* (comments: readonly GitReviewComment[]) {
+			resolveComments: Effect.fn('GitReview.resolveComments')(function* (comments: GitReviewState['comments']) {
 				const threadIds = pipe(
 					comments,
 					Array.filter(comment => comment.source === 'github' && Predicate.isString(comment.threadId)),
@@ -1493,7 +1553,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 				yield* SubscriptionRef.update(state, current => gitReviewStateSaveComment(current, comment))
 			}),
 			state,
-			unmark: (marks: readonly GitReviewMark[]) =>
+			unmark: (marks: GitReviewState['marks']) =>
 				SubscriptionRef.update(state, current => gitReviewStateUnmark(current, marks))
 		}
 	})
@@ -1502,7 +1562,7 @@ export class GitReview extends Context.Service<GitReview>()('@deslop/git/service
 }
 
 export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/service/GitPublish', {
-	make: Effect.fn('GitPublish.make')(function* (config: {readonly cwd: string}) {
+	make: Effect.fn('GitPublish.make')(function* (config: {cwd: string}) {
 		const git = yield* GitCommand
 		const hasWorktreeChanges = pipe(
 			git.lines(config.cwd, ['status', '--porcelain']),
@@ -1607,7 +1667,7 @@ export class GitPublish extends Context.Service<GitPublish>()('@deslop/git/servi
 					Effect.asVoid
 				)
 			}),
-			publish: Effect.fn('GitPublish.publish')(function* (input: {readonly message: string}) {
+			publish: Effect.fn('GitPublish.publish')(function* (input: {message: string}) {
 				const checkpoints = yield* headCheckpointCommits
 				const dirty = yield* hasWorktreeChanges
 				const inputMessage = String.trim(input.message)

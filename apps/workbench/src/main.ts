@@ -1,3 +1,5 @@
+// NodeHttpServer requires the native server constructor at the application boundary.
+// @effect-diagnostics-next-line nodeBuiltinImport:off
 import {createServer} from 'node:http'
 import {fileURLToPath} from 'node:url'
 
@@ -33,7 +35,7 @@ NodeRuntime.runMain(
 		Layer.provide(
 			NodeHttpServer.layerConfig(createServer, {
 				gracefulShutdownTimeout: Config.succeed('1500 millis'),
-				port: Config.port('PORT').pipe(Config.withDefault(5010))
+				port: pipe(Config.port('PORT'), Config.withDefault(5010))
 			})
 		),
 		Layer.launch

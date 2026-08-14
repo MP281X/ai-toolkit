@@ -1,4 +1,4 @@
-import {Array, Effect, Hash, Option, Order, Predicate, Record, Schema, Stream, pipe} from 'effect'
+import {Array, Effect, Hash, Option, Order, Record, Schema, Stream, flow, pipe} from 'effect'
 
 import {Atom} from 'effect/unstable/reactivity'
 
@@ -29,31 +29,29 @@ export const TerminalAttachAtomKey = Schema.Struct({
 	size: Schema.Struct({cols: Schema.Finite, rows: Schema.Finite})
 })
 
-function terminalSessionEnv(env: TerminalSessionInput['env']) {
-	if (Predicate.isUndefined(env)) return
-
-	return pipe(
-		env,
-		Record.toEntries,
-		Array.sortWith(entry => entry[0], Order.String),
-		Record.fromEntries
-	)
-}
-
 export function terminalSessionInput(input: TerminalSessionInput) {
-	const env = terminalSessionEnv(input.env)
-
 	return {
-		args: Predicate.isUndefined(input.args) ? undefined : [...input.args],
+		args: input.args && [...input.args],
 		command: input.command,
 		cwd: input.cwd,
-		env,
+		env: pipe(
+			input.env,
+			Option.fromUndefinedOr,
+			Option.map(
+				flow(
+					Record.toEntries,
+					Array.sortWith(entry => entry[0], Order.String),
+					Record.fromEntries
+				)
+			),
+			Option.getOrUndefined
+		),
 		sessionId: input.sessionId
 	}
 }
 
 export function terminalSessionKey(input: TerminalSessionInput) {
-	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(terminalSessionInput(input))
+	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(terminalSessionInput(input))
 }
 
 export function worktreeRouteId(root: string) {
@@ -102,7 +100,7 @@ const projectsAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('projects', void 0)),
+			Effect.map(client => client('projects', undefined)),
 			Stream.unwrap
 		)
 	)
@@ -112,13 +110,13 @@ const homeSidebarAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('home.sidebar', void 0)),
+			Effect.map(client => client('home.sidebar', undefined)),
 			Stream.unwrap
 		)
 	)
 )
 
-export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
+export const activeHomeAtom = Atom.family((worktreeId?: string) =>
 	Atom.keepAlive(
 		Atom.make(get =>
 			pipe(
@@ -145,7 +143,7 @@ export const activeHomeAtom = Atom.family((worktreeId: string | undefined) =>
 	)
 )
 
-export const activeSidebarAtom = Atom.family((worktreeId: string | undefined) =>
+export const activeSidebarAtom = Atom.family((worktreeId?: string) =>
 	Atom.keepAlive(
 		Atom.make(get =>
 			pipe(
@@ -203,7 +201,7 @@ export const systemUsageAtom = Atom.keepAlive(
 	RpcClient.runtime.atom(
 		pipe(
 			RpcClient,
-			Effect.map(client => client('usage.system', void 0)),
+			Effect.map(client => client('usage.system', undefined)),
 			Stream.unwrap
 		)
 	)

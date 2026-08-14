@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-export class TerminalError extends Schema.TaggedErrorClass<TerminalError>()('TerminalError', {
+export class TerminalError extends Schema.TaggedError<TerminalError>()('TerminalError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}

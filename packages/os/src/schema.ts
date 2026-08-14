@@ -1,6 +1,6 @@
 import {Schema} from 'effect'
 
-export class OsError extends Schema.TaggedErrorClass<OsError>()('OsError', {
+export class OsError extends Schema.TaggedError<OsError>()('OsError', {
 	cause: Schema.optional(Schema.Defect()),
 	message: Schema.optional(Schema.String)
 }) {}

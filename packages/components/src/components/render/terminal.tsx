@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, String, pipe} from 'effect'
+import {Array, Match, Number, Option, Predicate, String, pipe} from 'effect'
 
 import {ClipboardAddon} from '@xterm/addon-clipboard'
 import {FitAddon} from '@xterm/addon-fit'
@@ -32,24 +32,24 @@ function cssColor(element: HTMLElement, value: string) {
 	return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`
 }
 
-export type TerminalHandle = {readonly reset: () => void; readonly write: (data: string, done?: () => void) => void}
+export type TerminalHandle = {reset: () => void; write: (data: string, done?: () => void) => void}
 
 export function Terminal({
 	ref,
 	...input
 }: {
-	readonly ref?: React.Ref<TerminalHandle>
-	readonly className?: string
-	readonly onData: (data: string) => void
-	readonly onResize?: (size: {readonly cols: number; readonly rows: number}) => void
-	readonly state?: string
+	ref?: React.Ref<TerminalHandle>
+	className?: string
+	onData: (data: string) => void
+	onResize?: (size: {cols: number; rows: number}) => void
+	state?: string
 }) {
 	const elementRef = useRef<HTMLDivElement>(null)
 	const terminalRef = useRef<xterm.Terminal>(null)
 	const callbacksRef = useRef({onData: input.onData, onResize: input.onResize})
-	const animationFrameRef = useRef<number | null>(null)
+	const animationFrameRef = useRef<number>(null)
 	const disposedRef = useRef(false)
-	const lastSizeRef = useRef<{readonly cols: number; readonly rows: number} | null>(null)
+	const lastSizeRef = useRef<{cols: number; rows: number}>(null)
 
 	useEffect(() => {
 		callbacksRef.current = {onData: input.onData, onResize: input.onResize}
@@ -81,12 +81,19 @@ export function Terminal({
 		if (Predicate.isNullish(elementRef.current)) return
 
 		disposedRef.current = false
-		const timeouts = Array.empty<ReturnType<typeof setTimeout>>()
-
 		const style = getComputedStyle(elementRef.current)
 		const rootStyle = getComputedStyle(elementRef.current.ownerDocument.documentElement)
-		const fontSize = Number.parseFloat(style.fontSize)
-		const fontWeight = Number.parseInt(style.fontWeight, 10)
+		const fontSize = pipe(
+			style.fontSize,
+			String.replace(/px$/u, ''),
+			Number.parse,
+			Option.getOrElse(() => 14)
+		)
+		const fontWeight = pipe(
+			style.fontWeight,
+			Number.parse,
+			Option.getOrElse(() => 400)
+		)
 		const background = cssColor(elementRef.current, pipe(rootStyle.getPropertyValue('--background'), String.trim))
 		const selectionBackground = cssColor(elementRef.current, 'oklch(0.8214 0.1337 49.9802 / 30%)')
 		const terminal = new xterm.Terminal({
@@ -94,8 +101,8 @@ export function Terminal({
 			customGlyphs: true,
 			fastScrollSensitivity: 10,
 			fontFamily: style.fontFamily,
-			fontSize: Number.isNaN(fontSize) ? 14 : fontSize,
-			fontWeight: Number.isNaN(fontWeight) ? 400 : fontWeight,
+			fontSize,
+			fontWeight,
 			fontWeightBold: 600,
 			letterSpacing: 0,
 			lineHeight: 1,
@@ -111,8 +118,8 @@ export function Terminal({
 			if (!screen) return
 
 			if (Predicate.isNullish(elementRef.current)) return
-			const left = Math.floor(Math.max(0, elementRef.current.clientWidth - screen.offsetWidth) / 2)
-			const top = Math.floor(Math.max(0, elementRef.current.clientHeight - screen.offsetHeight) / 2)
+			const left = Math.floor(Number.max(0, elementRef.current.clientWidth - screen.offsetWidth) / 2)
+			const top = Math.floor(Number.max(0, elementRef.current.clientHeight - screen.offsetHeight) / 2)
 			screen.style.left = `${left}px`
 			screen.style.top = `${top}px`
 		}
@@ -175,9 +182,10 @@ export function Terminal({
 		})
 
 		resize()
-		for (const delay of [16, 50, 100, 250, 500]) {
-			timeouts.push(setTimeout(resize, delay))
-		}
+		const timeouts = pipe(
+			[16, 50, 100, 250, 500],
+			Array.map(delay => window.setTimeout(resize, delay))
+		)
 		terminalRef.current = terminal
 
 		function paste(event: ClipboardEvent) {
@@ -196,15 +204,16 @@ export function Terminal({
 		if (elementRef.current.parentElement) observer.observe(elementRef.current.parentElement)
 
 		elementRef.current.ownerDocument.defaultView?.addEventListener('resize', resize)
-		void elementRef.current.ownerDocument.fonts.ready.then(resize)
+		elementRef.current.ownerDocument.fonts.addEventListener('loadingdone', resize)
 
 		return () => {
 			disposedRef.current = true
 			terminalRef.current = null
-			for (const timeout of timeouts) clearTimeout(timeout)
+			pipe(timeouts, Array.forEach(window.clearTimeout))
 			if (Predicate.isNotNull(animationFrameRef.current)) cancelAnimationFrame(animationFrameRef.current)
 			animationFrameRef.current = null
 			terminal.element?.ownerDocument.defaultView?.removeEventListener('resize', resize)
+			terminal.element?.ownerDocument.fonts.removeEventListener('loadingdone', resize)
 			terminal.element?.removeEventListener('paste', paste, {capture: true})
 			observer.disconnect()
 			terminal.dispose()

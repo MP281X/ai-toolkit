@@ -5,6 +5,7 @@ import {
 	Effect,
 	Encoding,
 	Match,
+	Option,
 	Predicate,
 	Queue,
 	Record,
@@ -17,7 +18,7 @@ import {
 	pipe
 } from 'effect'
 
-import type {ImageContent, TextContent} from '@earendil-works/pi-ai'
+import type {ImageContent, StopReason, TextContent} from '@earendil-works/pi-ai'
 import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
 import {
 	DefaultResourceLoader,
@@ -26,16 +27,14 @@ import {
 	getAgentDir,
 	type AgentToolResult,
 	type AgentSessionEvent,
-	type AgentToolUpdateCallback,
-	type ExtensionContext,
 	type ToolDefinition
 } from '@earendil-works/pi-coding-agent'
 import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
 
-import {AiError, type AiStatus} from '../schema.ts'
-import {Ai} from '../service.ts'
+import {AiError, type AiStatus} from '#schema'
+import {Ai} from '#service'
 
-function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted') {
+function finishReason(reason: StopReason) {
 	return pipe(
 		Match.value(reason),
 		Match.when('stop', () => 'stop' as const),
@@ -43,6 +42,8 @@ function finishReason(reason: 'stop' | 'length' | 'toolUse' | 'error' | 'aborted
 		Match.when('error', () => 'error' as const),
 		Match.when('toolUse', () => 'tool-calls' as const),
 		Match.when('aborted', () => 'error' as const),
+		Match.when('pending', () => 'error' as const),
+		Match.when('deferred', () => 'error' as const),
 		Match.exhaustive
 	)
 }
@@ -65,10 +66,10 @@ function imageFromFilePart(part: Prompt.FilePart) {
 function textFromResult(result: unknown) {
 	if (Predicate.isString(result)) return result
 	if (Predicate.isUndefined(result)) return 'undefined'
-	return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(result)
+	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(result)
 }
 
-const piContentFromPromptParts = Effect.fnUntraced(function* (parts: readonly Prompt.Part[]) {
+const piContentFromPromptParts = Effect.fnUntraced(function* (parts: Prompt.UserMessage['content']) {
 	return Array.flatten(
 		yield* Effect.forEach(parts, part =>
 			pipe(
@@ -194,41 +195,38 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 	context: Context.Context<Tool.HandlerServices<ToolSet[string]>>
 ) {
 	function makeToolDefinition(name: string) {
-		const tool = toolkit.tools[name]
-		if (Predicate.isUndefined(tool)) throw new Error(`unknown tool ${name}`)
+		const tool = pipe(toolkit.tools[name], Option.fromUndefinedOr, Option.getOrThrow)
 
 		return {
 			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute: async (
-				_toolCallId: string,
-				params: Tool.Parameters<ToolSet[string]>,
-				_signal: AbortSignal | undefined,
-				onUpdate: AgentToolUpdateCallback<unknown> | undefined,
-				_ctx: ExtensionContext
-			) => {
-				const finalResult = await Effect.runPromiseWith(context)(
+			execute: (_toolCallId, params: Tool.Parameters<ToolSet[string]>, _signal, onUpdate, _ctx) =>
+				Effect.runPromiseWith(context)(
 					pipe(
 						toolkit.handle(name, params),
 						Effect.flatMap(stream =>
-							Stream.runFold<Tool.HandlerResult<ToolSet[string]> | undefined, Tool.HandlerResult<ToolSet[string]>>(
-								() => {},
+							Stream.runFold<Option.Option<Tool.HandlerResult<ToolSet[string]>>, Tool.HandlerResult<ToolSet[string]>>(
+								Option.none,
 								(current, result) => {
 									if (result.preliminary) {
 										onUpdate?.(agentToolResult(result.encodedResult))
 										return current
 									}
 
-									return result
+									return Option.some(result)
 								}
 							)(stream)
+						),
+						Effect.flatMap(
+							Option.match({
+								onNone: () => Effect.succeed(agentToolResult(undefined)),
+								onSome: finalResult =>
+									finalResult.isFailure
+										? Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
+										: Effect.succeed(agentToolResult(finalResult.encodedResult))
+							})
 						)
 					)
-				)
-
-				if (Predicate.isUndefined(finalResult)) return agentToolResult(void 0)
-				if (finalResult.isFailure) throw finalResult.encodedResult
-				return agentToolResult(finalResult.encodedResult)
-			},
+				),
 			label: name,
 			name,
 			parameters: Tool.getJsonSchema(tool)
@@ -241,7 +239,7 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
 	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const model = yield* SubscriptionRef.make(config.model)
-	const history = yield* SubscriptionRef.make<readonly Prompt.Message[]>([config.systemPrompt])
+	const history = yield* SubscriptionRef.make<Prompt.Message[]>([config.systemPrompt])
 	const promptLock = yield* Semaphore.make(1)
 	const handledToolkit = yield* config.toolkit
 	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[string]>>()
@@ -360,7 +358,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 						})
 
 						const events = yield* Queue.bounded<AgentSessionEvent>(1_024)
-						const finishPart = yield* Ref.make<Response.StreamPart<ToolSet> | undefined>(void 0)
+						const finishPart = yield* Ref.make(Option.none<Response.StreamPart<ToolSet>>())
 						const termination = yield* Ref.make<'active' | 'completed' | 'finalizer' | 'overflow'>('active')
 						const terminationLock = yield* Semaphore.make(1)
 						const assistantText = yield* Ref.make('')
@@ -442,7 +440,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 														)
 													),
 													Match.when({type: 'turn_end'}, turnEnd =>
-														Ref.set(finishPart, finishPartFromTurnEnd(turnEnd))
+														Ref.set(finishPart, Option.some(finishPartFromTurnEnd(turnEnd)))
 													),
 													Match.orElse(() => Effect.void)
 												)
@@ -453,8 +451,10 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 													const ownsTermination = yield* claimTermination('completed')
 													if (!ownsTermination) return
 
-													const finish = yield* Ref.get(finishPart)
-													if (Predicate.isNotUndefined(finish)) yield* Queue.offer(queue, finish)
+													yield* pipe(
+														yield* Ref.get(finishPart),
+														Option.match({onNone: () => Effect.void, onSome: finish => Queue.offer(queue, finish)})
+													)
 													yield* appendAssistantHistory(
 														yield* Ref.get(assistantText),
 														yield* Ref.get(assistantReasoning)

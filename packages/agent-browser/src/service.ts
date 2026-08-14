@@ -1,15 +1,17 @@
-import {readFile} from 'node:fs/promises'
 import {homedir} from 'node:os'
-import path from 'node:path'
 
 import {
 	Array,
+	Config,
 	Context,
 	Duration,
 	Effect,
+	FileSystem,
 	HashMap,
 	Layer,
+	Number,
 	Option,
+	Path,
 	Predicate,
 	Ref,
 	Schema,
@@ -24,30 +26,24 @@ import {Socket} from 'effect/unstable/socket'
 
 import {AgentBrowserError, agentBrowserOwnedTabLabels} from './schema.ts'
 
-function socketDir() {
-	return path.join(homedir(), '.agent-browser')
-}
-
-function agentBrowserEnableEnv(enable: string | undefined) {
+function agentBrowserEnableEnv(enable?: string) {
 	if (Predicate.isUndefined(enable) || String.isEmpty(enable)) return 'react-devtools'
 	if (String.includes('react-devtools')(enable)) return enable
 	return `${enable},react-devtools`
 }
 
-function agentBrowserEnv() {
-	return {...process.env, AGENT_BROWSER_ENABLE: agentBrowserEnableEnv(process.env['AGENT_BROWSER_ENABLE'])}
-}
-
 const streamPort = Effect.fn('AgentBrowser.streamPort')(function* (session: string) {
+	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
 	const source = yield* pipe(
-		Effect.tryPromise(() => readFile(path.join(socketDir(), `${session}.stream`), 'utf8')),
+		fs.readFileString(path.join(homedir(), '.agent-browser', `${session}.stream`)),
 		Effect.mapError(cause => AgentBrowserError.make({cause, message: `Unknown agent-browser session: ${session}`}))
 	)
-	const port = Number.parseInt(String.trim(source), 10)
-	if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+	const port = pipe(String.trim(source), Number.parse)
+	if (Option.isNone(port) || !Schema.is(Schema.Int)(port.value) || port.value <= 0 || port.value > 65_535) {
 		return yield* AgentBrowserError.make({message: `Invalid stream metadata for ${session}`})
 	}
-	return port
+	return port.value
 })
 
 function workbenchOrigin(request: HttpServerRequest.HttpServerRequest, session: string) {
@@ -81,7 +77,7 @@ function proxyStream(session: string) {
 
 			const outbound = yield* pipe(
 				Socket.makeWebSocket(`ws://127.0.0.1:${port.value}`),
-				Effect.provide(Socket.layerWebSocketConstructorGlobal),
+				Effect.provideService(Socket.WebSocketConstructor, (url, protocols) => new WebSocket(url, protocols)),
 				Effect.option
 			)
 			if (Option.isNone(outbound)) return HttpServerResponse.empty({status: 502})
@@ -103,7 +99,7 @@ function proxyStream(session: string) {
 						)
 					),
 					pipe(
-						inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+						inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : Uint8Array.from(message))),
 						Effect.catch(error =>
 							writeOutbound(
 								error.reason._tag === 'SocketCloseError'
@@ -122,13 +118,22 @@ function proxyStream(session: string) {
 	)
 }
 
-const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly string[]) {
+const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: string[]) {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+	const enable = yield* pipe(
+		Config.option(Config.string('AGENT_BROWSER_ENABLE')),
+		Effect.mapError(cause => AgentBrowserError.make({cause, message: 'failed to read agent-browser configuration'}))
+	)
 	return yield* Effect.scoped(
 		Effect.gen(function* () {
 			const handle = yield* pipe(
 				spawner.spawn(
-					ChildProcess.make('vpx', ['agent-browser', ...args], {env: agentBrowserEnv(), stderr: 'pipe', stdout: 'pipe'})
+					ChildProcess.make('vpx', ['agent-browser', ...args], {
+						env: {AGENT_BROWSER_ENABLE: agentBrowserEnableEnv(Option.getOrUndefined(enable))},
+						extendEnv: true,
+						stderr: 'pipe',
+						stdout: 'pipe'
+					})
 				),
 				Effect.mapError(cause => AgentBrowserError.make({cause, message: 'failed to spawn agent-browser'}))
 			)
@@ -156,47 +161,38 @@ const runAgentBrowser = Effect.fn('AgentBrowser.run')(function* (args: readonly 
 			const stderr = String.trim(output.stderr)
 			const stdout = String.trim(output.stdout)
 			return yield* AgentBrowserError.make({
-				cause: new Error(stderr || stdout || `vpx agent-browser ${Array.join(' ')(args)} exited with ${exitCode}`),
+				cause: stderr || stdout || `vpx agent-browser ${Array.join(' ')(args)} exited with ${exitCode}`,
 				message: stderr || stdout || 'agent-browser command failed'
 			})
 		})
 	)
 })
 
-function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], args: readonly string[]) {
+function runAgentBrowserWith(spawner: ChildProcessSpawner.ChildProcessSpawner['Service'], args: string[]) {
 	return pipe(runAgentBrowser(args), Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
 }
 
+type AgentBrowserCliTab = typeof AgentBrowserCliTab.Type
+const AgentBrowserCliTab = Schema.Struct({
+	label: Schema.OptionFromNullOr(Schema.String),
+	tabId: Schema.String,
+	url: Schema.String
+})
+
+type AgentBrowserCliTabsFromJson = typeof AgentBrowserCliTabsFromJson.Type
 const AgentBrowserCliTabsFromJson = Schema.fromJsonString(
-	Schema.Struct({
-		data: Schema.Struct({
-			tabs: Schema.Array(Schema.Struct({label: Schema.NullOr(Schema.String), tabId: Schema.String, url: Schema.String}))
-		})
-	})
+	Schema.Struct({data: Schema.Struct({tabs: Schema.Array(AgentBrowserCliTab)})})
 )
 
-function decodeAgentBrowserTabs(output: string) {
-	return pipe(
-		Schema.decodeUnknownOption(AgentBrowserCliTabsFromJson)(output),
-		Option.map(decoded =>
-			Array.map(decoded.data.tabs, tab => ({
-				label: Predicate.isNull(tab.label) ? undefined : tab.label,
-				tabId: tab.tabId,
-				url: tab.url
-			}))
-		),
-		Option.getOrElse(() =>
-			Array.empty<{readonly label: string | undefined; readonly tabId: string; readonly url: string}>()
-		)
-	)
-}
-
 const listTabs = Effect.fn('AgentBrowser.listTabs')(function* (input: {
-	readonly sessionId: string
-	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
+	sessionId: string
+	spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
-	return decodeAgentBrowserTabs(
-		yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
+	const output = yield* runAgentBrowserWith(input.spawner, ['--session', input.sessionId, '--json', 'tab'])
+	return yield* pipe(
+		Schema.decodeEffect(AgentBrowserCliTabsFromJson)(output),
+		Effect.map(decoded => decoded.data.tabs),
+		Effect.mapError(cause => AgentBrowserError.make({cause, message: 'invalid agent-browser tab response'}))
 	)
 })
 
@@ -227,15 +223,15 @@ function waitForReachable(url: string, attempts = 40): Effect.Effect<boolean> {
 }
 
 const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
-	readonly label: string
-	readonly origin: string
-	readonly sessionId: string
-	readonly spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
+	label: string
+	origin: string
+	sessionId: string
+	spawner: ChildProcessSpawner.ChildProcessSpawner['Service']
 }) {
 	const existingTabs = yield* listTabs(input)
 	const existingTab = pipe(
 		existingTabs,
-		Array.findFirst(tab => tab.label === input.label)
+		Array.findFirst(tab => Option.contains(input.label)(tab.label))
 	)
 	if (Option.isSome(existingTab)) return
 
@@ -256,10 +252,7 @@ const openOwnedTab = Effect.fn('AgentBrowser.openOwnedTab')(function* (input: {
 })
 
 export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent-browser/service/AgentBrowser', {
-	make: Effect.fn('AgentBrowser.make')(function* (input: {
-		readonly closeOnFinalize?: boolean
-		readonly sessionId: string
-	}) {
+	make: Effect.fn('AgentBrowser.make')(function* (input: {closeOnFinalize?: boolean; sessionId: string}) {
 		const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 		const labelsByOrigin = yield* Ref.make(HashMap.empty<string, string>())
 		if (input.closeOnFinalize === true) {
@@ -268,7 +261,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 			)
 		}
 		return {
-			openTabs(origins: readonly string[]) {
+			openTabs(origins: string[]) {
 				return pipe(
 					Ref.set(labelsByOrigin, agentBrowserOwnedTabLabels(origins)),
 					Effect.andThen(
@@ -320,8 +313,7 @@ export class AgentBrowser extends Context.Service<AgentBrowser>()('@deslop/agent
 		}
 	})
 }) {
-	public static layer = (input: {readonly closeOnFinalize?: boolean; readonly sessionId: string}) =>
-		Layer.effect(this, this.make(input))
+	public static layer = (input: {closeOnFinalize?: boolean; sessionId: string}) => Layer.effect(this, this.make(input))
 
 	public static middleware = Effect.fnUntraced(function* <E, R>(
 		app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>

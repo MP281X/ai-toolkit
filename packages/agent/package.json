@@ -3,6 +3,8 @@
 	"sideEffects": false,
 	"name": "@deslop/agent",
 
+	"imports": {"#schema": "./src/schema.ts"},
+
 	"exports": {
 		"./schema": "./src/schema.ts",
 		"./service": "./src/service.ts"

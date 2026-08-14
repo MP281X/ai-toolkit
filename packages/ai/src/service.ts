@@ -11,23 +11,23 @@ export declare namespace Ai {
 	export type Tools = Record<string, Tool.Any>
 
 	export type Config<ToolSet extends Tools> = {
-		readonly agent: AiAgent
-		readonly cwd: string
-		readonly model: AiModel
-		readonly systemPrompt: Prompt.SystemMessage
-		readonly toolkit: Toolkit.Toolkit<ToolSet>
+		agent: AiAgent
+		cwd: string
+		model: AiModel
+		systemPrompt: Prompt.SystemMessage
+		toolkit: Toolkit.Toolkit<ToolSet>
 	}
 }
 
 export class Ai extends Context.Service<
 	Ai,
 	{
-		readonly history: SubscriptionRef.SubscriptionRef<readonly Prompt.Message[]>
-		readonly model: SubscriptionRef.SubscriptionRef<AiModel>
-		readonly prompt: (message: Prompt.UserMessage) => Stream.Stream<Response.StreamPart<Ai.Tools>, AiError>
-		readonly queue: (message: Prompt.UserMessage) => Effect.Effect<void, AiError>
-		readonly status: SubscriptionRef.SubscriptionRef<AiStatus>
-		readonly steer: (message: Prompt.UserMessage) => Effect.Effect<void, AiError>
+		history: SubscriptionRef.SubscriptionRef<Prompt.Message[]>
+		model: SubscriptionRef.SubscriptionRef<AiModel>
+		prompt: (message: Prompt.UserMessage) => Stream.Stream<Response.StreamPart<Ai.Tools>, AiError>
+		queue: (message: Prompt.UserMessage) => Effect.Effect<void, AiError>
+		status: SubscriptionRef.SubscriptionRef<AiStatus>
+		steer: (message: Prompt.UserMessage) => Effect.Effect<void, AiError>
 	}
 >()('@deslop/ai/service/Ai') {
 	static override of<const Service extends Ai['Service']>(service: Service) {

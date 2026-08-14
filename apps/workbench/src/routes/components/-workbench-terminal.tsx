@@ -18,7 +18,7 @@ import {
 } from '#lib/state.ts'
 import {Terminal, type TerminalHandle} from '@deslop/components/render/terminal'
 
-export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput}) {
+export function WorkbenchTerminal(input: {session: TerminalSessionInput}) {
 	const resize = useAtomSet(RpcClient.mutation('terminal.resize'))
 	const write = useAtomSet(RpcClient.mutation('terminal.write'))
 	const sessionKey = terminalSessionKey(input.session)
@@ -27,32 +27,32 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 	)
 	const terminalRef = useRef<TerminalHandle>(null)
 	const nextAttachIdRef = useRef(0)
-	const sizeRef = useRef<{readonly cols: number; readonly rows: number} | null>(null)
-	const reattachTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
+	const sizeRef = useRef<{cols: number; rows: number}>(null)
+	const reattachTimeoutRef = useRef<number>(null)
 	const [attachment, setAttachment] = useState<{
-		readonly id: number
-		readonly sessionKey: string
-		readonly size: {readonly cols: number; readonly rows: number}
+		id: number
+		sessionKey: string
+		size: {cols: number; rows: number}
 	} | null>(null)
 
 	useEffect(
 		() => () => {
-			if (reattachTimeoutRef.current) clearTimeout(reattachTimeoutRef.current)
+			if (Predicate.isNotNull(reattachTimeoutRef.current)) window.clearTimeout(reattachTimeoutRef.current)
 			reattachTimeoutRef.current = null
 		},
 		[sessionKey]
 	)
 
-	function nextAttachment(size: {readonly cols: number; readonly rows: number}) {
+	function nextAttachment(size: {cols: number; rows: number}) {
 		nextAttachIdRef.current += 1
 		return {id: nextAttachIdRef.current, size}
 	}
 
 	function reattach() {
 		if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
-		if (reattachTimeoutRef.current) return
+		if (Predicate.isNotNull(reattachTimeoutRef.current)) return
 
-		reattachTimeoutRef.current = setTimeout(() => {
+		reattachTimeoutRef.current = window.setTimeout(() => {
 			reattachTimeoutRef.current = null
 			if (status.value.state === 'exited' || status.value.state === 'failed' || status.value.state === 'stopped') return
 			setAttachment(current => {
@@ -100,12 +100,12 @@ export function WorkbenchTerminal(input: {readonly session: TerminalSessionInput
 }
 
 function TerminalAttachment(input: {
-	readonly attachId: number
-	readonly currentSize: () => {readonly cols: number; readonly rows: number} | null
-	readonly onDone: () => void
-	readonly session: TerminalSessionInput
-	readonly size: {readonly cols: number; readonly rows: number}
-	readonly terminalRef: React.RefObject<TerminalHandle | null>
+	attachId: number
+	currentSize: () => {cols: number; rows: number} | null
+	onDone: () => void
+	session: TerminalSessionInput
+	size: {cols: number; rows: number}
+	terminalRef: React.RefObject<TerminalHandle | null>
 }) {
 	const framePull = terminalFramePullAtomFamily(
 		TerminalAttachAtomKey.make({
@@ -123,7 +123,7 @@ function TerminalAttachment(input: {
 		activeRef.current = true
 		lastSequenceRef.current = -1
 		writingRef.current = false
-		pullFrames(void 0)
+		pullFrames()
 
 		return () => {
 			activeRef.current = false
@@ -154,7 +154,7 @@ function TerminalAttachment(input: {
 
 			const next = terminalAttachmentOperations({frames: result.value.items, lastSequence: lastSequenceRef.current})
 			if (next.operations.length === 0) {
-				pullFrames(void 0)
+				pullFrames()
 				return
 			}
 
@@ -172,7 +172,7 @@ function TerminalAttachment(input: {
 				if (Predicate.isUndefined(operation)) {
 					lastSequenceRef.current = next.lastSequence
 					writingRef.current = false
-					pullFrames(void 0)
+					pullFrames()
 					return
 				}
 				if (Predicate.isNull(input.terminalRef.current)) {

@@ -1,4 +1,4 @@
-import {Array, Match, Predicate, pipe} from 'effect'
+import {Array, Match, pipe} from 'effect'
 
 import DOMPurify from 'dompurify'
 import {Marked} from 'marked'
@@ -10,7 +10,7 @@ import {cn} from '#lib/utils.ts'
 
 const marked = new Marked({async: false, breaks: true, gfm: true})
 
-export function Markdown(props: {readonly children: string; readonly className?: string}) {
+export function Markdown(props: {children: string; className?: string}) {
 	return (
 		<div className={cn('markdown text-wrap wrap-break-word select-text', props.className)}>
 			{Array.map(marked.lexer(props.children), (token, index) =>
@@ -26,7 +26,7 @@ export function Markdown(props: {readonly children: string; readonly className?:
 						<Code
 							key={`${token.type}:${index}:${code.lang ?? ''}:${code.text}`}
 							className="border-border border"
-							lang={Predicate.isString(code.lang) ? code.lang : undefined}
+							lang={code.lang}
 						>
 							{code.text}
 						</Code>
@@ -34,6 +34,8 @@ export function Markdown(props: {readonly children: string; readonly className?:
 					Match.orElse(other => (
 						<div
 							key={`${other.type}:${index}:${other.raw}`}
+							// Marked output is sanitized immediately before this React HTML boundary.
+							// oxlint-disable-next-line react/no-danger
 							dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(marked.parse(other.raw, {async: false}))}}
 						/>
 					))

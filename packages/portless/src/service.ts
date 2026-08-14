@@ -1,9 +1,8 @@
 import {createServer} from 'node:net'
-import path from 'node:path'
 
 import {NodeSocket} from '@effect/platform-node'
 
-import {Array, Context, Effect, HashMap, Layer, Option, Predicate, Ref, Semaphore, String, pipe} from 'effect'
+import {Array, Context, Effect, HashMap, Layer, Number, Option, Predicate, Ref, Semaphore, String, pipe} from 'effect'
 
 import {HttpServer, HttpServerRequest, HttpServerResponse} from 'effect/unstable/http'
 import {ChildProcess} from 'effect/unstable/process'
@@ -13,7 +12,10 @@ import {PortlessOrigin} from './schema.ts'
 
 export function portlessWorktreeId(cwd: string) {
 	const segment = pipe(
-		path.basename(cwd),
+		cwd,
+		String.split(/[\\/]/u),
+		Array.last,
+		Option.getOrElse(() => cwd),
 		String.toLowerCase,
 		String.replaceAll(/[^a-z0-9-]+/gu, '-'),
 		String.replace(/^-+|-+$/gu, '')
@@ -32,7 +34,7 @@ function loopDetectedResponse(hops: number) {
 
 const portlessInstrumentationLoader = `<script>(()=>{if(navigator.webdriver===true)return;const load=src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;(document.head||document.documentElement||document.body).appendChild(script)});void load('https://unpkg.com/react-scan/dist/auto.global.js').then(()=>{window.reactScan?.({allowInIframe:true,_debug:'verbose'});return load('https://unpkg.com/react-grab/dist/index.global.js')}).catch(()=>{})})()</script>`
 
-function htmlContentType(contentType: string | null | undefined) {
+function htmlContentType(contentType?: string | null) {
 	return pipe(contentType ?? '', String.toLowerCase, String.includes('text/html'))
 }
 
@@ -45,24 +47,24 @@ function rewritePortlessHtml(html: string) {
 	return `${portlessInstrumentationLoader}${html}`
 }
 
-export function rewritePortlessHtmlResponse(input: {
-	readonly contentType?: string | null
-	readonly html: string
-	readonly method: string
-}) {
+function rewritePortlessHtmlResponse(input: {contentType?: string | null; html: string; method: string}) {
 	if (input.method !== 'GET' || !htmlContentType(input.contentType)) return
 	return rewritePortlessHtml(input.html)
 }
 
 const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
 	const webRequest = yield* HttpServerRequest.toWeb(request)
-	const hops = Number.parseInt(webRequest.headers.get('x-portless-hops') ?? '', 10)
-	if ((Number.isFinite(hops) ? hops : 0) >= 5) return loopDetectedResponse(Number.isFinite(hops) ? hops : 0)
+	const hops = pipe(
+		webRequest.headers.get('x-portless-hops') ?? '',
+		Number.parse,
+		Option.getOrElse(() => 0)
+	)
+	if (hops >= 5) return loopDetectedResponse(hops)
 
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
+	const [pathname, search] = String.split(request.url, '?')
 	const headers = new Headers(webRequest.headers)
 	headers.set('host', new URL(origin).host)
-	headers.set('x-portless-hops', `${(Number.isFinite(hops) ? hops : 0) + 1}`)
+	headers.set('x-portless-hops', `${hops + 1}`)
 	const requestInit = {
 		body: webRequest.body,
 		duplex: 'half',
@@ -70,11 +72,16 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 		method: webRequest.method,
 		redirect: webRequest.redirect,
 		signal: webRequest.signal
-	} satisfies RequestInit & {readonly duplex: 'half'}
+	} satisfies RequestInit & {duplex: 'half'}
 	const upstream = yield* Effect.tryPromise(() =>
 		// Native fetch preserves the Web Request and streaming Response at the transparent proxy boundary.
 		// @effect-diagnostics-next-line globalFetchInEffect:off
-		fetch(new Request(`${origin}${pathname}${search ? `?${search}` : ''}`, requestInit))
+		fetch(
+			new Request(
+				`${origin}${pathname}${Predicate.isNotUndefined(search) && String.isNonEmpty(search) ? `?${search}` : ''}`,
+				requestInit
+			)
+		)
 	)
 	if (webRequest.method === 'GET' && htmlContentType(upstream.headers.get('content-type'))) {
 		const responseHeaders = new Headers(upstream.headers)
@@ -102,16 +109,20 @@ const proxy = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServer
 
 function webSocketBytes(message: NodeSocket.NodeWS.RawData) {
 	if (message instanceof ArrayBuffer) return new Uint8Array(message)
+	// The Node WebSocket boundary emits fragmented Buffer arrays.
+	// oxlint-disable-next-line eslint/no-restricted-properties
 	if (Array.isArray(message)) return Buffer.concat(message)
 	return message
 }
 
 const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.HttpServerRequest, origin: string) {
-	const [pathname = '/', search = ''] = String.split(request.url, '?')
+	const [pathname, search] = String.split(request.url, '?')
 	const upstreamUrl = new URL(origin)
 	upstreamUrl.protocol = upstreamUrl.protocol === 'https:' ? 'wss:' : 'ws:'
 	upstreamUrl.pathname = pathname
-	upstreamUrl.search = search
+	// URL.search is boundary data, not a prototype search operation.
+	// oxlint-disable-next-line eslint/no-restricted-properties
+	upstreamUrl.search = search ?? ''
 
 	const inbound = yield* request.upgrade
 	const outbound = yield* Effect.acquireRelease(
@@ -133,7 +144,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 				cleanup()
 				resume(Effect.succeed(socket))
 			}
-			function onError(cause: Error) {
+			function onError(cause: unknown) {
 				cleanup()
 				resume(Effect.fail(Socket.SocketError.make({reason: Socket.SocketOpenError.make({cause, kind: 'Unknown'})})))
 			}
@@ -180,8 +191,8 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 				)
 			)
 		}
-		function onError(cause: Error) {
-			closeInbound(1011, cause.message)
+		function onError() {
+			closeInbound(1011, 'upstream websocket failed')
 		}
 		function onClose(code: number, reason: Buffer) {
 			const closeReason = reason.toString()
@@ -215,7 +226,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 				cleanup()
 				resume(Effect.void)
 			}
-			function onError(cause: Error) {
+			function onError(cause: unknown) {
 				cleanup()
 				resume(Effect.fail(Socket.SocketError.make({reason: Socket.SocketWriteError.make({cause})})))
 			}
@@ -242,7 +253,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 		Effect.raceFirst(
 			readOutbound,
 			pipe(
-				inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : message.slice())),
+				inbound.runRaw(message => writeOutbound(Predicate.isString(message) ? message : Uint8Array.from(message))),
 				Effect.matchEffect({onFailure: closeOutbound, onSuccess: () => closeOutbound()})
 			)
 		),
@@ -252,7 +263,7 @@ const proxyWebSocket = Effect.fnUntraced(function* (request: HttpServerRequest.H
 	return HttpServerResponse.empty()
 })
 
-function hostname(host: string | undefined) {
+function hostname(host?: string) {
 	return pipe(
 		Option.fromUndefinedOr(host),
 		Option.flatMap(value => pipe(value, String.split(':'), Array.head))
@@ -260,21 +271,21 @@ function hostname(host: string | undefined) {
 }
 
 const hostPortAvailable = Effect.fnUntraced(function* (host: string, port: number) {
-	return yield* Effect.promise<boolean>(
-		() =>
-			new Promise(resolve => {
-				const server = createServer()
-				server.once('error', () => {
-					resolve(false)
-				})
-				server.once('listening', () => {
-					server.close(() => {
-						resolve(true)
-					})
-				})
-				server.listen({host, port})
+	return yield* Effect.callback<boolean>(resume => {
+		const server = createServer()
+		server.once('error', () => {
+			resume(Effect.succeed(false))
+		})
+		server.once('listening', () => {
+			server.close(() => {
+				resume(Effect.succeed(true))
 			})
-	)
+		})
+		server.listen({host, port})
+		return Effect.sync(() => {
+			server.close()
+		})
+	})
 })
 
 const portAvailable = Effect.fnUntraced(function* (port: number) {
@@ -290,8 +301,11 @@ function commandArg(command: ChildProcess.StandardCommand, index: number) {
 }
 
 function scriptName(taskId: string) {
-	const index = taskId.indexOf('#')
-	return index < 0 ? taskId : String.slice(index + 1)(taskId)
+	return pipe(
+		taskId,
+		String.indexOf('#'),
+		Option.match({onNone: () => taskId, onSome: index => String.slice(index + 1)(taskId)})
+	)
 }
 
 function acceptsPortFlags(command: ChildProcess.StandardCommand) {
@@ -315,7 +329,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 		const proxyPort =
 			server.address._tag === 'TcpAddress'
 				? server.address.port.toString()
-				: yield* Effect.die(new Error('portless requires a TCP HTTP server address'))
+				: yield* Effect.die('portless requires a TCP HTTP server address')
 		const ports = yield* Ref.make(Array.empty<number>())
 		const routes = yield* Ref.make(HashMap.empty<string, string>())
 		const portLock = yield* Semaphore.make(1)
@@ -328,11 +342,12 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 				Effect.gen(function* () {
 					const used = yield* Ref.get(ports)
 					for (const port of Array.range(4000, 4999)) {
-						if (Array.contains(used, port) || !(yield* portAvailable(port))) continue
-						yield* Ref.update(ports, Array.append(port))
-						return port
+						if (!Array.contains(used, port) && (yield* portAvailable(port))) {
+							yield* Ref.update(ports, Array.append(port))
+							return port
+						}
 					}
-					return yield* Effect.die(new Error('no portless app ports available'))
+					return yield* Effect.die('no portless app ports available')
 				}),
 				Semaphore.withPermit(portLock)
 			)
@@ -353,10 +368,7 @@ export class Portless extends Context.Service<Portless>()('@deslop/portless/serv
 
 		return {
 			middleware,
-			open: Effect.fn('Portless.open')(function* (input: {
-				readonly command: ChildProcess.StandardCommand
-				readonly segments: readonly string[]
-			}) {
+			open: Effect.fn('Portless.open')(function* (input: {command: ChildProcess.StandardCommand; segments: string[]}) {
 				const port = yield* allocatePort()
 				const id = pipe(input.segments, Array.join('.'))
 				const worktree = pipe(

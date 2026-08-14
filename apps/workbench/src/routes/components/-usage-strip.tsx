@@ -1,6 +1,6 @@
 import {useAtomSuspense} from '@effect/atom-react'
 
-import {DateTime, Option, Predicate, pipe} from 'effect'
+import {Array, DateTime, Number, Option, Predicate, pipe} from 'effect'
 
 import {AsyncResult} from 'effect/unstable/reactivity'
 
@@ -28,14 +28,14 @@ function utilizationClass(utilization: number) {
 	return 'text-foreground'
 }
 
-function WindowValue(input: {readonly icon: React.ReactNode; readonly window: AgentUsageWindow}) {
+function WindowValue(input: {icon: React.ReactNode; window: AgentUsageWindow}) {
 	const resets = pipe(Option.fromNullishOr(input.window.resetsAt), Option.flatMap(DateTime.make))
 
 	return (
 		<span className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2.5">
 			<span className="flex items-center gap-1.5">
 				<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">{input.icon}</span>
-				<span className={utilizationClass(input.window.utilization)}>{Math.round(input.window.utilization)}%</span>
+				<span className={utilizationClass(input.window.utilization)}>{Number.round(input.window.utilization, 0)}%</span>
 			</span>
 			{Option.isSome(resets) && (
 				<span className="text-muted-foreground min-w-0 truncate" title={`resets ${formatTimestamp(resets.value)}`}>
@@ -46,7 +46,7 @@ function WindowValue(input: {readonly icon: React.ReactNode; readonly window: Ag
 	)
 }
 
-function SubscriptionValue(input: {readonly layer: 'claude' | 'codex'}) {
+function SubscriptionValue(input: {layer: 'claude' | 'codex'}) {
 	const subscription = useAtomSuspense(usageSubscriptionAtom(input.layer), {includeFailure: true})
 
 	if (AsyncResult.isFailure(subscription)) {
@@ -73,12 +73,7 @@ function SubscriptionValue(input: {readonly layer: 'claude' | 'codex'}) {
 	)
 }
 
-function MetricValue(input: {
-	readonly compact?: boolean
-	readonly icon: React.ReactNode
-	readonly title?: string
-	readonly utilization: number
-}) {
+function MetricValue(input: {compact?: boolean; icon: React.ReactNode; title?: string; utilization: number}) {
 	return (
 		<span
 			className={
@@ -89,7 +84,7 @@ function MetricValue(input: {
 			title={input.title}
 		>
 			<span className="text-muted-foreground flex shrink-0 items-center [&_svg]:size-2.5">{input.icon}</span>
-			<span className={utilizationClass(input.utilization)}>{Math.round(input.utilization)}%</span>
+			<span className={utilizationClass(input.utilization)}>{Number.round(input.utilization, 0)}%</span>
 		</span>
 	)
 }
@@ -113,24 +108,29 @@ function SystemWindows() {
 
 	return (
 		<>
-			<MetricValue compact icon={<Cpu />} title={`CPU ${Math.round(usage.value.cpu)}%`} utilization={usage.value.cpu} />
+			<MetricValue
+				compact
+				icon={<Cpu />}
+				title={`CPU ${Number.round(usage.value.cpu, 0)}%`}
+				utilization={usage.value.cpu}
+			/>
 			<MetricValue
 				compact
 				icon={<MemoryStick />}
-				title={`System memory ${Math.round(usage.value.memory)}%`}
+				title={`System memory ${Number.round(usage.value.memory, 0)}%`}
 				utilization={usage.value.memory}
 			/>
 			<MetricValue
 				compact
 				icon={<Server />}
-				title={`Node heap ${Math.round(usage.value.nodeHeap)}%`}
+				title={`Node heap ${Number.round(usage.value.nodeHeap, 0)}%`}
 				utilization={usage.value.nodeHeap}
 			/>
 		</>
 	)
 }
 
-function ProviderWindows(input: {readonly layer: 'claude' | 'codex'}) {
+function ProviderWindows(input: {layer: 'claude' | 'codex'}) {
 	const usage = useAtomSuspense(usageAtom(input.layer), {includeFailure: true})
 
 	if (AsyncResult.isFailure(usage)) {
@@ -156,7 +156,7 @@ function ProviderWindows(input: {readonly layer: 'claude' | 'codex'}) {
 	)
 }
 
-function TokenMetricValue(input: {readonly icon?: React.ReactNode; readonly value: string}) {
+function TokenMetricValue(input: {icon?: React.ReactNode; value: string}) {
 	return (
 		<span className="flex min-w-0 flex-1 items-center justify-center gap-1 px-2.5">
 			{Predicate.isNotUndefined(input.icon) && (
@@ -167,7 +167,7 @@ function TokenMetricValue(input: {readonly icon?: React.ReactNode; readonly valu
 	)
 }
 
-function TokenWindows(input: {readonly layer: 'claude' | 'codex'}) {
+function TokenWindows(input: {layer: 'claude' | 'codex'}) {
 	const usage = useAtomSuspense(usageAtom(input.layer), {includeFailure: true})
 
 	if (AsyncResult.isFailure(usage)) {
@@ -208,7 +208,7 @@ export function UsageStripFallback() {
 				<LoadingValue />
 				<LoadingValue />
 			</div>
-			{providers.map(layer => (
+			{Array.map(providers, layer => (
 				<div key={layer} className="flex h-14 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
@@ -240,7 +240,7 @@ export function UsageStrip() {
 				</span>
 				<SystemWindows />
 			</div>
-			{providers.map(layer => (
+			{Array.map(providers, layer => (
 				<div key={layer} className="flex h-14 min-w-0 items-stretch divide-x">
 					<span className="flex w-8 shrink-0 items-center justify-center">
 						<AgentIcon layer={layer} />
