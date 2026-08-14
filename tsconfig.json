@@ -24,7 +24,7 @@
 		"moduleResolution": "bundler",
 
 		// imports / type checking and parsing / ...
-		"skipLibCheck": false,
+		"skipLibCheck": true,
 		"esModuleInterop": true,
 		"isolatedModules": true,
 		"resolveJsonModule": true,
