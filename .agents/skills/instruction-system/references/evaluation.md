@@ -1,20 +1,8 @@
 # Instruction evaluation
 
-## Structure
-
-| Owner       | Content                                                      |
-| ----------- | ------------------------------------------------------------ |
-| Frontmatter | Name · exact trigger · capability                            |
-| `SKILL.md`  | Cross-branch outcome · construction · exact reference routes |
-| Reference   | One conditional branch safely omitted elsewhere              |
-
-Group related topics. One policy, one semantic owner. Link every reference directly from its owner `SKILL.md`, one level deep, with an exhaustive predicate.
-
-Use the minimum surrounding example. Cross-check every instruction and valid example against enforcement, other examples, and current authoritative source. Reject stale APIs, incompatibility, semantic duplication, unsafe exceptions, trigger collision, and metadata drift.
-
 ## Protocol
 
-Evaluate task-specific fixtures through only the applicable generic lenses:
+Evaluate the parent skill's ownership contract through task-specific fixtures and only the applicable generic lenses. Use the minimum surrounding example. Cross-check every instruction and valid example against enforcement, other examples, and current authoritative source. Reject stale APIs, incompatibility, semantic duplication, unsafe exceptions, trigger collision, and metadata drift.
 
 | Lens      | Question                                                                                         |
 | --------- | ------------------------------------------------------------------------------------------------ |
@@ -47,7 +35,3 @@ Run at least three independent clean runs for semantic or routing changes; scale
 | Neutral synthetic task and fixture                     | Other-run artifacts                |
 
 Reject fixtures requiring invented domain values, defaults, compatibility, policy, or product structure.
-
-## Output
-
-Present material failures, shared causes, corrections, and changed holdout results. Omit unchanged artifacts and aggregate scores that hide failures.

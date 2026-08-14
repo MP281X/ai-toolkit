@@ -128,7 +128,9 @@ export function terminalTitleStatus(title: string) {
 function terminalProgressStatus(value: string) {
 	const progressState = pipe(
 		value,
-		Number.parse,
+		String.split(';'),
+		Array.head,
+		Option.flatMap(Number.parse),
 		Option.getOrElse(() => -1)
 	)
 	return pipe(

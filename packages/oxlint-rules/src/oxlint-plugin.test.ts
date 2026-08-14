@@ -60,7 +60,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							name: 'invalid.tsx',
 							source: pipe(
 								[
-									"import {Schema, SchemaTransformation, pipe} from 'effect'",
+									"import {Schema, SchemaGetter, SchemaTransformation, identity, pipe} from 'effect'",
 									"import * as React from 'react'",
 									"import {useRef, useState} from 'react'",
 									'',
@@ -70,11 +70,15 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const operations = {decode: Schema.decodeUnknownSync(Schema.String)}',
 									'class Codecs { decode = Schema.decodeUnknownSync(Schema.String) }',
 									'const decoders = [Schema.decodeUnknownSync(Schema.String)]',
+									'const IsString = Schema.is(Schema.String)',
+									'const AssertString = Schema.asserts(Schema.String)',
 									'let assigned = decode',
 									'assigned = Schema.decodeUnknownSync(Schema.String)',
 									'const MissingType = Schema.Struct({value: Schema.String})',
 									'const MissingFluent = Schema.String.annotate({description: "value"})',
 									'const MissingTransform = Schema.decodeTo(Schema.Number, SchemaTransformation.transform({decode: Number, encode: String}))(Schema.String)',
+									'const MissingDecode = Schema.decode({decode: SchemaGetter.transform(identity), encode: SchemaGetter.transform(identity)})(Schema.String)',
+									'const MissingEncode = Schema.encode({decode: SchemaGetter.transform(identity), encode: SchemaGetter.transform(identity)})(Schema.String)',
 									'type Explicit = {readonly values: readonly string[]}',
 									'type Mapped<T> = {readonly [K in keyof T]: T[K]}',
 									'type Index = {readonly [key: string]: string}',
@@ -93,7 +97,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'const state = useState(0)',
 									'const [fakeNamespace] = React.useState(() => ({current: null}))',
 									'const stateNamespace = React.useState(0)',
-									'export {Codecs, Input, MissingFluent, MissingTransform, MissingType, alias, assigned, callbacks, decode, decoded, decoders, directDecoded, fake, fakeNamespace, forward, input, namespaceRef, operations, ready, ref, run, stateNamespace}',
+									'export {AssertString, Codecs, Input, IsString, MissingDecode, MissingEncode, MissingFluent, MissingTransform, MissingType, alias, assigned, callbacks, decode, decoded, decoders, directDecoded, fake, fakeNamespace, forward, input, namespaceRef, operations, ready, ref, run, stateNamespace}',
 									'export type {Explicit, Index, Mapped}'
 								],
 								Array.join('\n')
@@ -118,6 +122,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'@deslop/oxlint-rules(no-stored-schema-operation)',
 									'@deslop/oxlint-rules(no-stored-schema-operation)',
 									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
+									'@deslop/oxlint-rules(no-stored-schema-operation)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
 									'@deslop/oxlint-rules(no-trivial-indirection)',
@@ -127,6 +133,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'@deslop/oxlint-rules(no-undestructured-use-state)',
 									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
 									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
+									'@deslop/oxlint-rules(schema-type-pair)',
+									'@deslop/oxlint-rules(schema-type-pair)',
 									'@deslop/oxlint-rules(schema-type-pair)',
 									'@deslop/oxlint-rules(schema-type-pair)',
 									'@deslop/oxlint-rules(schema-type-pair)'
@@ -142,8 +150,8 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							)
 						).toEqual(
 							Array.makeBy(
-								5,
-								() => 'Inline this Schema compiler at its consumption site; never store decoders or encoders.'
+								7,
+								() => 'Inline this Schema operation at its consumption site; never store compiled operations.'
 							)
 						)
 						expect(result.stderr).toBe('')
@@ -162,7 +170,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							name: 'valid.tsx',
 							source: pipe(
 								[
-									"import {Array, Schema, SchemaTransformation, identity, pipe} from 'effect'",
+									"import {Array, Schema, SchemaGetter, SchemaTransformation, identity, pipe} from 'effect'",
 									'',
 									'declare const input: unknown',
 									'declare function combine(left: string, right: string): string',
@@ -176,21 +184,29 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 									'export const Exported = Schema.Struct({name: Schema.String})',
 									'type Normalized = typeof Normalized.Type',
 									'const Normalized = pipe(Schema.Struct({value: Schema.String}), Schema.decodeTo(Schema.Struct({value: Schema.String}), SchemaTransformation.transform({decode: identity, encode: identity})))',
+									'type Decoded = typeof Decoded.Type',
+									'const Decoded = Schema.decode({decode: SchemaGetter.transform(identity), encode: SchemaGetter.transform(identity)})(Schema.String)',
+									'type Encoded = typeof Encoded.Type',
+									'const Encoded = Schema.encode({decode: SchemaGetter.transform(identity), encode: SchemaGetter.transform(identity)})(Schema.String)',
 									'const decoded = Schema.decodeUnknownEffect(User)(input)',
 									'const encoded = Schema.encodeUnknownSync(Schema.fromJsonString(User))(input)',
 									'const decodedMany = Array.map([input], value => Schema.decodeUnknownSync(User)(value))',
+									'const isUser = Schema.is(User)(input)',
+									'Schema.asserts(User, input)',
+									'const Formatter = Schema.toFormatter(User)',
+									'const Arbitrary = Schema.toArbitrary(User)',
 									'function transform(value: string) { return value.length }',
 									'function swap(left: string, right: string) { return combine(right, left) }',
 									'function withDefault(value = "ready") { return transform(value) }',
 									'const tuple = ["ready", 1] as const',
-									'export {Annotated, Normalized, decoded, decodedMany, encoded, swap, transform, tuple, withDefault}'
+									'export {Annotated, Arbitrary, Decoded, Encoded, Formatter, Normalized, decoded, decodedMany, encoded, isUser, swap, transform, tuple, withDefault}'
 								],
 								Array.join('\n')
 							)
 						})
-						expect(result.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
 						expect(customCodes(result.stdout)).toEqual([])
 						expect(result.stderr).toBe('')
+						expect(result.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
 					}),
 					Effect.scoped
 				),

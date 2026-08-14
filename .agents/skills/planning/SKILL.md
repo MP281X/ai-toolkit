@@ -1,9 +1,9 @@
 ---
 name: planning
-description: 'Use to challenge, discover, prototype, and resolve product or repository requirements with the user.'
+description: 'Mandatory when product or repository requirements remain unresolved, or when the user requests discovery, planning, or a prototype; never use for an approved implementation or review.'
 ---
 
-Challenge assumptions; treat proposals as discussion starters. Planning owns prototype decisions; Implementer owns prototype execution. Resolve uncertain or multi-command facts through Explorer.
+Challenge assumptions; treat proposals as discussion starters.
 
 ## Frontier
 
@@ -23,9 +23,9 @@ The user does not inspect repository code during planning.
 
 ## Prototype
 
-Use one persistent implementer for the MVP and every feedback delta. UI: at least five materially and structurally distinct variants through existing DevTools components. The user exercises prototypes manually; omit browser automation and assurance.
+Keep one persistent MVP candidate through every feedback delta. UI: at least five materially and structurally distinct variants through existing DevTools components. The user exercises prototypes manually.
 
-After explicit production approval: stop the prototype implementer; send the accepted contract and current candidate to a fresh persistent implementer for reconciliation and assurance.
+After explicit production approval, freeze the accepted contract and current candidate for production reconciliation.
 
 ## Output
 

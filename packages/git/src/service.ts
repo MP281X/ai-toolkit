@@ -518,8 +518,14 @@ export class GitWorkspace extends Context.Service<GitWorkspace>()('@deslop/git/s
 				Effect.forEach(
 					name =>
 						pipe(
-							fs.stat(path.join(directory, name)),
-							Effect.map(info => ({name, type: info.type})),
+							fs.readLink(path.join(directory, name)),
+							Effect.as({name, type: 'SymbolicLink' as const}),
+							Effect.catch(() =>
+								pipe(
+									fs.stat(path.join(directory, name)),
+									Effect.map(info => ({name, type: info.type}))
+								)
+							),
 							Effect.option
 						),
 					{concurrency: 16}

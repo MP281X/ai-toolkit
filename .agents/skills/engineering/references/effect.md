@@ -39,8 +39,6 @@ pipe(
 pipe(users, Array.filter(Struct.get('active')))
 ```
 
-Shape transformations require a contract boundary.
-
 ```ts
 // BAD
 pipe(user, value => ({id: value.id, name: value.name}))
@@ -99,23 +97,6 @@ const permissions = yield * authorize(input.session.user.id)
 
 return Effect.all({audit: audit(permissions), view: render(permissions)})
 ```
-
-## Immutable values
-
-```ts
-// BAD
-function normalize(input: Item[]) {
-	input.sort((left, right) => left.rank - right.rank)
-	return input
-}
-
-// GOOD
-function normalize(input: Item[]) {
-	return Array.sortWith(input, Struct.get('rank'), Order.Number)
-}
-```
-
-Arguments, props, returned values, and service values remain immutable without `readonly` syntax. Effect primitives own controlled mutation and lifecycle.
 
 ## Module map
 

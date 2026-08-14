@@ -1,11 +1,11 @@
 ---
 name: engineering
-description: 'Use inside implementer or assurance agents for product code, tests, UI, package topology, manifests, scripts, exports, or generated files.'
+description: 'Mandatory for every request to implement, change, fix, refactor, test, or review product code, UI, package topology, manifests, scripts, exports, or generated files.'
 ---
 
 Effect is the language and functional mental model: Effect owns behavior, immutable data, state, resources, concurrency, and failure; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
 
-- Trust typed values; decode unknown external data once at its boundary.
+- Trust typed values.
 - Preserve intact typed values; transform shape only when the contract requires it.
 - Omit states excluded by types or schemas.
 - Propagate the first reachable failure; retry or recover only when required by the contract.
@@ -99,14 +99,19 @@ Name distinct owners; omit import, type, property-access, and binding aliases. S
 
 ## References
 
-Read every matching reference completely once with `cat` before acting. Open the linked path directly relative to this file; never discover this directory. Continue only after reported truncation.
+Read every matching reference completely once with `cat` before acting. Open the linked path directly relative to this file; never discover this directory. Continue a read only after reported truncation.
 
-| Work                                                                              | Reference                                                                       |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Effect primitives, modules, operations, Stream, tracing, errors, concurrency      | [Effect](references/effect.md)                                                  |
-| Schema, missing values, public shapes, RPC contracts, boundaries                  | [Contracts](references/contracts.md) + [Effect data](references/effect-data.md) |
-| Services, Layers, resources, SubscriptionRef, keyed instances, caches             | [Services](references/effect-services.md)                                       |
-| Router, RPC client, Atom, React                                                   | [Frontend](references/react.md)                                                 |
-| Service or helper behavior tests                                                  | [Testing](references/testing.md)                                                |
-| Product interaction or visual design                                              | [UI design](references/ui-design.md)                                            |
-| Package topology, manifests, dependencies, scripts, exports, CLI, generated files | [Workspace](references/workspace.md)                                            |
+| Work                                                                                 | Reference                                 |
+| ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Effect operation selection, composition, Stream, tracing, errors, and concurrency    | [Effect](references/effect.md)            |
+| Schema-owned public shapes, public service interfaces, and RPC contracts             | [Contracts](references/contracts.md)      |
+| External boundary decoding and missing values                                        | [Effect data](references/effect-data.md)  |
+| Service implementations, Layers, resources, SubscriptionRef, keyed instances, caches | [Services](references/effect-services.md) |
+| Router, RPC client, Atom, React                                                      | [Frontend](references/react.md)           |
+| Service or helper behavior tests                                                     | [Testing](references/testing.md)          |
+| Product interaction or visual design                                                 | [UI design](references/ui-design.md)      |
+| Package topology, manifests, dependencies, scripts, exports, CLI, generated files    | [Workspace](references/workspace.md)      |
+
+## Output
+
+Return only the complete contract-preserving construction or material defect, its earliest shared cause, and unresolved reachable failures.

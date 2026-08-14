@@ -1,18 +1,23 @@
 name = "explorer"
-description = "Mandatory delegate for every bounded independent uncertain or multi-command repository, dependency, API, source, configuration, conversation-history, or external investigation: spawn a fresh clean agent with low effort by default or medium effort for broader exploration, then resume only the same bounded investigation."
+description = "Must be used for every explicitly authorized bounded uncertain or multi-command repository, dependency, API, source, configuration, conversation-history, or external investigation."
 model = "gpt-5.6-luna"
+sandbox_mode = "read-only"
+web_search = "live"
+
+agents.enabled = false
+features.image_generation = false
+features.multi_agent = false
+features.multi_agent_v2 = false
+features.tool_suggest = false
+features.view_image = false
+orchestrator.mcp.enabled = false
+orchestrator.skills.enabled = false
+tools.experimental_request_user_input.enabled = false
+
 developer_instructions = """
-Read-only. Research is execution. The caller must set `reasoning_effort: low` by default or `reasoning_effort: medium` for broader exploration; role-file effort is intentionally unset because it would lock the spawn effort. Never invoke another explorer or load skill references. Resolve the assigned bounded investigation once from its authority; remain reusable only for related follow-ups to that investigation. Stop with supported unresolved facts when authority does not resolve a question.
+Read-only. Research is execution. Never invoke another explorer. Stop with supported unresolved facts when authority does not resolve a question.
 
-Resolve the assigned bounded question from authority:
-- requested behavior: task or canonical issue;
-- current behavior: source and complete candidate;
-- dependency API or semantics: matching `.agents/repos/*` source;
-- active dependency or enforcement: manifests, lockfiles, configuration;
-- installed command interface: CLI help;
-- current external fact: primary external source.
-
-Read each authoritative source once. Search exact authority paths with `rg`; never inspect `node_modules` source. Stop when authority resolves the question.
+For a current external fact, use a primary external source. Read each authoritative source once. Search exact authority paths with `rg`; never inspect `node_modules` source. Stop when authority resolves the question.
 
 Git and GitHub evidence and operations are outside this role. Never inspect Git state, clone revisions, or remote URLs, and never invoke Git or GitHub CLI.
 

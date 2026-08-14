@@ -24,7 +24,7 @@ export type CreateNote = typeof CreateNote.Type
 export const CreateNote = Schema.Struct({text: Schema.Trim})
 ```
 
-One schema/type pair owns boundary shape, defaults, transformations, and validation. Internal code receives that typed value unchanged.
+One schema/type pair owns boundary shape, defaults, transformations, and validation.
 
 ## Service owns its interface; implementation conforms
 
@@ -54,36 +54,6 @@ export const makeMemory = Effect.gen(function* () {
 ```
 
 The class owns the sole public interface and every named Layer. Constructors infer requirements, errors, and output through `Service.of`.
-
-## One independent value
-
-```tsx
-// BAD
-function NoteTitle(props: {note: Note}) {
-	return <span>{props.note.title}</span>
-}
-
-// GOOD
-function NoteTitle(props: {title: string}) {
-	return <span>{props.title}</span>
-}
-```
-
-## Cohesive owner
-
-```tsx
-// BAD
-function NoteRow(props: {id: string; onOpen: (id: string) => void; title: string}) {
-	return <Button onClick={() => props.onOpen(props.id)}>{props.title}</Button>
-}
-
-// GOOD
-function NoteRow(props: {note: Note; onOpen: (note: Note) => void}) {
-	return <Button onClick={() => props.onOpen(props.note)}>{props.note.title}</Button>
-}
-```
-
-One independent value → direct prop. Identity, action, or multiple cohesive fields → existing owner. Omit values derived from another prop and duplicate actions.
 
 ## Source
 

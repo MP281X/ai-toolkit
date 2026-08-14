@@ -163,6 +163,10 @@ function schemaDefinitionMember(node: ESTree.Expression): Option.Option<ESTree.M
 	return Option.none()
 }
 
+function isSchemaDefinitionName(name: string) {
+	return !isSchemaOperationName(name) && !/^to[A-Z]/u.test(name)
+}
+
 function isSchemaDefinition(input: {context: Context; node: ESTree.Expression}): boolean {
 	if (
 		input.node.type === 'CallExpression' &&
@@ -181,26 +185,26 @@ function isSchemaDefinition(input: {context: Context; node: ESTree.Expression}):
 		schemaDefinitionMember(input.node),
 		Option.exists(member => {
 			if (!importedMember({context: input.context, importedName: 'Schema', node: member})) return false
-			return pipe(memberName(member), Option.match({onNone: () => true, onSome: name => !isSchemaCompilerName(name)}))
+			return pipe(memberName(member), Option.exists(isSchemaDefinitionName))
 		})
 	)
 }
 
-function isSchemaCompilerName(name: string) {
-	return /^(?:decode|encode)(?:Unknown)?(?:Effect|Exit|Option|Promise|Result|Sync)?$/u.test(name)
+function isSchemaOperationName(name: string) {
+	return /^(?:(?:decode|encode)(?:Unknown)?(?:Effect|Exit|Option|Promise|Result|Sync)|asserts|is)$/u.test(name)
 }
 
-function isSchemaCompilerCall(input: {context: Context; node: ESTree.CallExpression}) {
+function isSchemaOperationCall(input: {context: Context; node: ESTree.CallExpression}) {
 	if (
 		input.node.callee.type !== 'MemberExpression' ||
 		!importedMember({context: input.context, importedName: 'Schema', node: input.node.callee})
 	) {
 		return false
 	}
-	return pipe(memberName(input.node.callee), Option.exists(isSchemaCompilerName))
+	return pipe(memberName(input.node.callee), Option.exists(isSchemaOperationName))
 }
 
-function storedSchemaCompiler(node: ESTree.CallExpression) {
+function storedSchemaOperation(node: ESTree.CallExpression) {
 	return (
 		(node.parent.type === 'VariableDeclarator' && node.parent.init === node) ||
 		(node.parent.type === 'Property' && node.parent.value === node) ||
@@ -419,7 +423,7 @@ function redundantUseRefNullType(input: {context: Context; node: ESTree.CallExpr
 
 function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression}) {
 	if (
-		isSchemaCompilerCall(input) &&
+		isSchemaOperationCall(input) &&
 		input.node.callee.type === 'MemberExpression' &&
 		pipe(memberName(input.node.callee), Option.exists(String.startsWith('decode'))) &&
 		input.node.arguments[0]?.type === 'MemberExpression' &&
@@ -529,9 +533,9 @@ const plugin = definePlugin({
 		'no-stored-schema-operation': {
 			create: context => ({
 				CallExpression: node => {
-					if (isSchemaCompilerCall({context, node}) && storedSchemaCompiler(node)) {
+					if (isSchemaOperationCall({context, node}) && storedSchemaOperation(node)) {
 						context.report({
-							message: 'Inline this Schema compiler at its consumption site; never store decoders or encoders.',
+							message: 'Inline this Schema operation at its consumption site; never store compiled operations.',
 							node
 						})
 					}

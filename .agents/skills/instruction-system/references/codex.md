@@ -12,6 +12,6 @@
 | Spawn tool schema              | `.agents/repos/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs` |
 | Agent runtime                  | `.agents/repos/codex/codex-rs/core/src/agent/role.rs`                       |
 
-Open every applicable source directly and completely once. Use installed CLI help for the installed command interface. Skill-reference loading is local instruction work; never route it through Explorer. Use Explorer only for uncertain or multi-command repository, dependency, API, source, configuration, conversation-history, or external research.
+Open every applicable source directly and completely once. Use installed CLI help for the installed command interface.
 
 Project and global Codex configuration belong to configuration policy. A task about that policy does not authorize mutation of external or global state.
