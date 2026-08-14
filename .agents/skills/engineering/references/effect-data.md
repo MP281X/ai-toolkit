@@ -12,7 +12,7 @@ create: input => pipe(input, Schema.decodeUnknownEffect(CreateNote), Effect.flat
 
 // GOOD: schema.ts
 type CreateNote = typeof CreateNote.Type
-const CreateNote = Schema.Struct({text: pipe(Schema.Trim, Schema.withDecodingDefault(Effect.succeed('Untitled')))})
+const CreateNote = Schema.Struct({text: pipe(Schema.Trim, Schema.withDecodingDefault(Effect.succeed(defaultTitle)))})
 
 // GOOD: handlers.ts
 create: input => notes.create(input)

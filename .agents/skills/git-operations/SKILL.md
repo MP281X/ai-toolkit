@@ -1,17 +1,22 @@
 ---
 name: git-operations
-description: 'Use for Git or GitHub work.'
+description: 'Use before every Git or GitHub interaction, including reads, mutations, conflicts, and message drafting.'
 ---
+
+Every mutation requires an explicit request for that exact operation. Never infer another Git or GitHub operation: a commit request authorizes no branch, push, issue, or pull request. Ready and merge remain user-owned.
 
 ## Safety
 
-| Operation                                | Invariant                                                                   |
-| ---------------------------------------- | --------------------------------------------------------------------------- |
-| Any mutation                             | explicit request for exact operation; resolve target; inspect related state |
-| Default branch                           | read-only without explicit operation-specific authority                     |
-| Reset · discard · delete · local rewrite | explicit request and exact target                                           |
-| Published branch                         | preserve history; add normal commits                                        |
-| Conflict                                 | issue-required behavior and current APIs; never choose one side wholesale   |
+| Operation                                | Invariant                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Read                                     | non-mutating inspection                                                   |
+| Any mutation                             | exact explicit request; resolve target; inspect related state             |
+| Default branch                           | read-only without explicit operation-specific authority                   |
+| Reset · discard · delete · local rewrite | explicit request and exact target                                         |
+| Published branch                         | preserve history; add normal commits                                      |
+| Conflict                                 | issue-required behavior and current APIs; never choose one side wholesale |
+
+Never commit, push, create or switch branches, create or edit issues or pull requests, merge, reset, discard, delete, or rewrite Git state without exact authority.
 
 ## GitHub
 

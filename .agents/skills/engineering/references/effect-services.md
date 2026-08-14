@@ -42,7 +42,7 @@ Only the service implementation mutates its exposed `SubscriptionRef`.
 const workspaces = new Map<string, Workspace>()
 
 // GOOD
-const workspaces = yield * LayerMap.make(input => Workspace.layerLocal(input), {idleTimeToLive: Duration.minutes(5)})
+const workspaces = yield * LayerMap.make(input => Workspace.layerLocal(input), {idleTimeToLive})
 ```
 
 ```ts
@@ -50,7 +50,7 @@ const workspaces = yield * LayerMap.make(input => Workspace.layerLocal(input), {
 const sessions = new Map<string, Session>()
 
 // GOOD
-const sessions = yield * RcMap.make({lookup: input => Session.make(input), idleTimeToLive: Duration.minutes(5)})
+const sessions = yield * RcMap.make({lookup: input => Session.make(input), idleTimeToLive})
 ```
 
 ## Scoped resources

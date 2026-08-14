@@ -7,5 +7,8 @@
 - Skill selection: `.agents/repos/codex/codex-rs/skills/src/selection.rs`
 - Skill metadata: `.agents/repos/codex/codex-rs/skills/src/model.rs`
 - Native roles: `.agents/repos/codex/codex-rs/core/src/agent/role.rs`
-- Agent control: `.agents/repos/codex/codex-rs/core/src/tools/handlers/multi_agents`
+- Active subagent schema: current harness tool declaration
+- Agent handlers: `.agents/repos/codex/codex-rs/core/src/tools/handlers/multi_agents_v2`
+- Agent tool specification: `.agents/repos/codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
+- Agent mechanics: `.agents/repos/codex/codex-rs/core/src/tools/handlers/multi_agents_common.rs`
 - Configuration schema: `.agents/repos/codex/codex-rs/config/src/config_toml.rs`

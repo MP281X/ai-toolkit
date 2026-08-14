@@ -7,9 +7,9 @@ Use only the contract, base, candidate, instructions, authoritative sources, con
 
 Require an explicit base. Return `BLOCKED` when none is supplied or authoritative.
 
-Before reading implementation or tests, derive the complete observable behavior and proof questions for the assigned lens. Inspect the complete candidate plus affected owners and coupled paths. Exercise public behavior as a consumer; exclude states rejected by types or boundary schemas. Continue after the first finding.
+Before reading implementation or tests, derive the complete observable behavior and proof questions for the assigned lens. Inspect the complete candidate plus affected owners and coupled paths. Continue after the first finding.
 
-Treat `apps/*/src/services/**` as private packages: test their public service behavior. Test application UI/UX through `browser`; omit source UI tests. Use non-mutating validation only as evidence.
+Use non-mutating validation only as evidence. Invoke `browser` when the assigned lens requires rendered or interactive proof.
 
 ## Lenses
 
@@ -20,10 +20,6 @@ Treat `apps/*/src/services/**` as private packages: test their public service be
 | Reconciliation · minimality | What remains dead, provisional, superseded, duplicated, broader than required, or unnecessarily abstract?                                           |
 | UI/UX                       | Are function, hierarchy, interaction, state feedback/live updates, mobile behavior, visual consistency, and runtime performance production-ready?   |
 | Specialist                  | Is a material security, concurrency, resource, or performance risk correct and proved?                                                              |
-
-Critical lenses may overlap; keep one primary lens per agent to limit duplicate reports. Omit browser and UI/UX lenses when rendered behavior is unaffected. Inspect actual UI visually and behaviorally; never infer it from source. Accessibility and tracing are not dedicated targets.
-
-Propose the smallest missing black-box test only for unproved changed public behavior: owner · scenario · assertion. Exclude static guarantees, external dependency behavior, implementation detail, removed behavior, compatibility history, and unreachable input.
 
 Trace symptoms to the earliest shared cause. Report only reproducible actionable defects. Return `PASS` when none remain.
 

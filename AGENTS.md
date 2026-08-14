@@ -1,7 +1,6 @@
 ## Repository
 
 - Workspace: use `vp`; members live under `apps/*` and `packages/*`.
-- Runtime: Effect owns behavior and state; servers are authoritative; streaming RPC synchronizes Atom; React presents; adapters translate external interfaces.
 
 ## Vocabulary
 
@@ -22,26 +21,27 @@
 
 ## Change
 
-- Implement the contract at its owner with the construction.
-- Resolve missing material behavior from an authority; ask when none exists. Never invent domain values, defaults, compatibility, or policy.
-- Trust typed values; validate only boundaries; omit states excluded by types or schemas.
-- Propagate the first reachable failure; retry or recover only when required by the contract.
-- Treat enforcement diagnostics as evidence of their earliest shared cause; correct the owner, not symptoms.
-- Complete the owner and coupled path; remove dead, superseded, duplicate, or contract-obsolete branches, props, schema fields, state, types, exports, dependencies, wrappers, and empty directories; internal compatibility does not preserve them.
+- Implement the contract at its owner with the construction; complete its coupled path.
+- Resolve missing authority; never invent domain values, defaults, compatibility, or policy.
+- Treat enforcement diagnostics as evidence of their earliest shared cause.
 - Preserve unrelated behavior and user changes.
-
-## Authorization
-
-- The primary never edits repository content; authorized Git or GitHub mutations remain owned by `git-operations`.
-- Every Git or GitHub mutation requires an explicit request for that exact operation; other requests never imply authority.
-- Never commit, push, create or switch branches, create or edit issues or pull requests, merge, reset, discard, delete, or rewrite Git state without that request.
-- Ready and merge remain user-owned.
 
 ## Delegation
 
-- Skills named `delegate-*` execute only inside clean subagents. The primary routes matching work from catalog metadata without reading the skill body or performing the delegated work.
+- Skills named `delegate-*` execute only inside subagents; the primary routes from catalog metadata without reading their bodies. Invoke `git-operations` before every Git or GitHub interaction, including reads and message drafting.
+
+| Work                                                          | Agent                                | Context                    | Model · effort           | Mutation                  |
+| ------------------------------------------------------------- | ------------------------------------ | -------------------------- | ------------------------ | ------------------------- |
+| Exact one-command lookup                                      | Primary                              | Current                    | Inherited                | None                      |
+| Unclear or multi-command exploration                          | `delegate-exploration`               | Clean                      | `gpt-5.6-terra` · medium | None                      |
+| Disputed or multi-source synthesis                            | Parallel `delegate-exploration`      | Clean · independent        | `gpt-5.6-sol` · high     | None                      |
+| Repository implementation                                     | Persistent `delegate-implementation` | Clean · objective → deltas | Inherited                | Sole writer               |
+| Independent assurance                                         | `delegate-assurance`                 | Clean · one primary lens   | `gpt-5.6-sol` · xhigh    | None                      |
+| Explicit Git or GitHub mutation                               | Default                              | Full history               | Inherited                | Exact requested operation |
+| Authorized token-heavy external action requiring conversation | Default                              | Full history               | Inherited                | Authorized external state |
+
+- Clean: `fork_turns: "none"`. Full history: inherit model and effort.
 - Parallelize independent work. Keep one active repository writer.
-- Full-history forks inherit model and effort.
 
 ## User-visible writing
 
