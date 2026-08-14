@@ -1,5 +1,3 @@
-import {Option, pipe} from 'effect'
-
 import {RouterProvider, createRouter} from '@tanstack/react-router'
 import {StrictMode} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -25,8 +23,12 @@ declare module '@tanstack/react-router' {
 	}
 }
 
-createRoot(pipe(document.querySelector('#root'), Option.fromNullOr, Option.getOrThrow)).render(
-	<StrictMode>
-		<RouterProvider router={router} />
-	</StrictMode>
-)
+const root = document.querySelector('#root')
+
+if (root) {
+	createRoot(root).render(
+		<StrictMode>
+			<RouterProvider router={router} />
+		</StrictMode>
+	)
+}

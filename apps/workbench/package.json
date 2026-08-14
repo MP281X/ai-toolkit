@@ -23,25 +23,12 @@
 		"preview": "vp run build && node --env-file-if-exists=.env ./dist/server.js"
 	},
 
-	"dependencies": {
-		"@lydell/node-pty": "latest"
-	},
-
 	"devDependencies": {
 		"react": "^19",
 		"react-dom": "^19",
 
 		"@tanstack/react-router": "latest",
-		"@tanstack/react-hotkeys": "latest",
 
-		"@deslop/ai": "workspace:*",
-		"@deslop/agent": "workspace:*",
-		"@deslop/agent-browser": "workspace:*",
-		"@deslop/git": "workspace:*",
-		"@deslop/portless": "workspace:*",
-		"@deslop/scripts": "workspace:*",
-		"@deslop/os": "workspace:*",
-		"@deslop/terminal": "workspace:*",
 		"@deslop/components": "workspace:*",
 		"@deslop/opentelemetry": "workspace:*",
 		"@deslop/vite": "workspace:*"

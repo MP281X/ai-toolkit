@@ -5,37 +5,29 @@ import {fileURLToPath} from 'node:url'
 
 import {NodeHttpServer, NodeRuntime} from '@effect/platform-node'
 
-import {Config, Effect, Layer, pipe} from 'effect'
+import {Config, Layer, pipe} from 'effect'
 
 import {HttpRouter, HttpStaticServer} from 'effect/unstable/http'
 
 import HttpApplication from './main.server.ts'
 
-import {Portless} from '@deslop/portless/service'
-
 NodeRuntime.runMain(
 	pipe(
 		HttpRouter.serve(
-			pipe(
-				Layer.mergeAll(
-					HttpRouter.middleware(
-						Portless.use(portless => Effect.succeed(portless.middleware)),
-						{global: true}
-					),
-					HttpStaticServer.layer({
-						index: 'index.html',
-						root: fileURLToPath(new URL('./client', import.meta.url)),
-						spa: true
-					})
-				),
-				Layer.provideMerge(HttpApplication)
+			Layer.mergeAll(
+				HttpApplication,
+				HttpStaticServer.layer({
+					index: 'index.html',
+					root: fileURLToPath(new URL('./client', import.meta.url)),
+					spa: true
+				})
 			),
 			{disableLogger: true}
 		),
 		Layer.provide(
 			NodeHttpServer.layerConfig(createServer, {
 				gracefulShutdownTimeout: Config.succeed('1500 millis'),
-				port: pipe(Config.port('PORT'), Config.withDefault(5010))
+				port: pipe(Config.port('PORT'), Config.withDefault(5000))
 			})
 		),
 		Layer.launch

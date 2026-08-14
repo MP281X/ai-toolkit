@@ -5,7 +5,6 @@ import {Array, Config, Effect, FileSystem, Schema, pipe} from 'effect'
 import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
 
 const repositories = [
-	{name: 'agent-browser', url: 'https://github.com/vercel-labs/agent-browser'},
 	{name: 'base-ui', url: 'https://github.com/mui/base-ui'},
 	{name: 'codex', url: 'https://github.com/openai/codex'},
 	{name: 'effect', url: 'https://github.com/Effect-TS/effect'},
@@ -20,7 +19,6 @@ const repositories = [
 	{name: 'oxc', url: 'https://github.com/oxc-project/oxc'},
 	{name: 'pi', url: 'https://github.com/earendil-works/pi'},
 	{name: 'pierre-diffs', url: 'https://github.com/pierrecomputer/pierre'},
-	{name: 'portless', url: 'https://github.com/vercel-labs/portless'},
 	{name: 'react-doctor', url: 'https://github.com/millionco/react-doctor'},
 	{name: 'react', url: 'https://github.com/facebook/react'},
 	{name: 'superset', url: 'https://github.com/superset-sh/superset'},

@@ -10,8 +10,7 @@
 
 	"exports": {
 		"./schema": "./src/schema.ts",
-		"./service": "./src/service.ts",
-		"./utils": "./src/utils.ts"
+		"./service": "./src/service.ts"
 	},
 
 	"dependencies": {

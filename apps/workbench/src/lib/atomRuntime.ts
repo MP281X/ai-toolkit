@@ -29,8 +29,8 @@ export class RpcClient extends AtomRpc.Service<RpcClient>()('ApiClient', {
 	group: RpcContracts,
 	protocol: pipe(
 		Rpc.RpcClient.layerProtocolSocket({retryTransientErrors: true}),
-		Layer.provide(Socket.layerWebSocket(Effect.sync(() => `${location.origin}/api/rpc`))),
-		Layer.provide(Socket.layerWebSocketConstructorGlobal),
-		Layer.provide(LiveLayers)
+		Layer.provideMerge(Socket.layerWebSocket(Effect.sync(() => `${location.origin}/api/rpc`))),
+		Layer.provideMerge(Socket.layerWebSocketConstructorGlobal),
+		Layer.provideMerge(LiveLayers)
 	)
 }) {}
