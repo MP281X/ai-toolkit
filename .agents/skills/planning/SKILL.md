@@ -1,32 +1,17 @@
 ---
 name: planning
-description: 'Mandatory when product or repository requirements remain unresolved, or when the user requests discovery, planning, or a prototype; never use for an approved implementation or review.'
+description: 'Use for every new request or follow-up until an experiment is explicitly approved; re-enter when implementation exposes a new decision.'
 ---
 
-Challenge assumptions; treat proposals as discussion starters.
+Resolve only enough uncertainty to run the next useful experiment.
 
-## Frontier
-
-1. Derive every independent unresolved decision whose prerequisites are resolved.
-2. Prefer a working prototype when behavior or UI resolves the decision better than prose.
-3. Ask remaining independent questions together; no recommendations or multiple choice.
-4. Apply descriptive feedback once; remove resolved decisions.
-5. Repeat without duplicate, premature, dependent, or out-of-scope questions.
-
-| Decision                      | Present                                                          |
-| ----------------------------- | ---------------------------------------------------------------- |
-| Program design                | Minimal Mermaid graph, nested list, or self-contained TypeScript |
-| UI/UX or interactive behavior | Working prototype                                                |
-| Missing user authority        | Question beside the blocked decision                             |
-
-The user does not inspect repository code during planning.
-
-## Prototype
-
-Keep one persistent MVP candidate through every feedback delta. UI: at least five materially and structurally distinct variants through existing DevTools components. The user exercises prototypes manually.
-
-After explicit production approval, freeze the accepted contract and current candidate for production reconciliation.
+1. Identify the root problem and challenge assumptions, unnecessary scope, premature generality, and compatibility work.
+2. Present two to four materially different ingredients when a real choice exists. Explain useful combinations and recommend a synthesis; do not force approval or rejection of whole approaches.
+3. Ask only questions whose answers remain unresolved after the required investigation and would materially change the next experiment. Ask independent questions together.
+4. Prefer a small working experiment when experience will resolve a decision faster than further prose.
+5. Define the next experiment through its intended outcome, retained behavior, revised dimensions, and material exclusions. Wait for explicit approval before mutation.
+6. Present an unrequested possibility as a GitHub Markdown note labeled `Outside current scope`; discard it unless the user explicitly selects it.
 
 ## Output
 
-Return only current resolved contract, runnable prototype location or invocation, and unresolved frontier.
+Return only the current synthesis, meaningful ingredients and recommendation, explicit exclusions, and questions blocking the next experiment.
