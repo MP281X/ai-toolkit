@@ -2,13 +2,12 @@
 
 // Generator paths and CLI arguments are native Node boundaries.
 // @effect-diagnostics-next-line nodeBuiltinImport:off
-import {resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {parseArgs} from 'node:util'
 
-import {NodeFileSystem, NodeRuntime} from '@effect/platform-node'
+import {NodeRuntime} from '@effect/platform-node'
 
-import {Array, Context, Effect, FileSystem, Predicate, Record, String, pipe} from 'effect'
+import {Array, Context, Effect, Predicate, Record, String, pipe} from 'effect'
 
 import {createTemplate, runTemplateCLI} from 'bingo'
 import type {Template} from 'bingo'
@@ -85,20 +84,6 @@ NodeRuntime.runMain(
 			// oxlint-disable-next-line @typescript-eslint/consistent-type-assertions
 			runTemplateCLI(template as unknown as Template)
 		),
-		Effect.flatMap(status => {
-			if (status !== 0) return Effect.sync(() => (process.exitCode = status))
-
-			return Effect.gen(function* () {
-				const fileSystem = yield* FileSystem.FileSystem
-				yield* pipe(
-					fileSystem.readFileString(resolve(TemplateDirectory, 'package.json')),
-					Effect.map(content => replaceContent(content, options.name)),
-					Effect.flatMap(content => fileSystem.writeFileString(resolve(directory, 'package.json'), content))
-				)
-			})
-		}),
-		// This CLI entrypoint owns the filesystem runtime.
-		// @effect-diagnostics-next-line strictEffectProvide:off
-		Effect.provide(NodeFileSystem.layer)
+		Effect.tap(status => Effect.sync(() => (process.exitCode = status)))
 	)
 )

@@ -2,42 +2,35 @@
 	"name": "@deslop",
 	"type": "module",
 	"sideEffects": false,
-	
-	"engines": { "node": ">=26" },
-	"packageManager": "pnpm@11.18.0",
-	
 	"scripts": {
 		"build": "vp run -r build",
-		
-		"fix": "vp check --fix",
 		"check": "vp check && fallow dead-code --unused-files --unused-exports --unused-types --duplicate-exports --circular-deps --re-export-cycles --stale-suppressions --format compact --fail-on-issues",
-		"test": "vp test",
-		
+		"fix": "vp check --fix",
+		"prepare": "effect-tsgo patch --no-typescript --oxlint && node tools/clone-source-repos.ts",
 		"shadcn": "cd packages/components && vpx shadcn@latest",
-		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'",
-		
-		"prepare": "effect-tsgo patch --no-typescript --oxlint && node tools/clone-source-repos.ts"
+		"test": "vp test",
+		"upgrade": "sh -c 'rm -f pnpm-lock.yaml && find . -name node_modules -type d -prune -exec rm -rf {} + && vp install'"
 	},
-	
 	"dependencies": {
-		"effect": "^4.0.0-rc",
 		"@effect/atom-react": "^4.0.0-rc",
-		"@effect/platform-node": "^4.0.0-rc"
+		"@effect/platform-node": "^4.0.0-rc",
+		"effect": "^4.0.0-rc"
 	},
 	"devDependencies": {
-		"typescript": "latest",
+		"@deslop/oxlint-rules": "workspace:*",
 		"@effect/tsgo": "latest",
+		"@effect/vitest": "^4.0.0-rc",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-		
 		"fallow": "latest",
-		"@effect/vitest": "^4.0.0-rc",
 		"oxlint-plugin-react-doctor": "latest",
-		
+		"typescript": "latest",
 		"vite": "catalog:",
-		"vite-plus": "catalog:",
-
-		"@deslop/oxlint-rules": "workspace:*"
-	}
+		"vite-plus": "catalog:"
+	},
+	"engines": {
+		"node": ">=26"
+	},
+	"packageManager": "pnpm@11.21.0"
 }

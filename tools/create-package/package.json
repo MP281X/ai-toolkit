@@ -1,12 +1,10 @@
 {
-	"type": "module",
-	"sideEffects": false,
 	"name": "@deslop/create-package",
-
 	"version": "0.0.0",
 	"private": true,
 	"bin": "./bin/index.ts",
-
+	"type": "module",
+	"sideEffects": false,
 	"dependencies": {
 		"bingo": "^0.9.3",
 		"bingo-fs": "^0.5.6",

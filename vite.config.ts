@@ -189,7 +189,6 @@ export default defineConfig({
 	fmt: {
 		ignorePatterns: [
 			'**/*.gen.ts',
-			'**/package.json',
 			'packages/components/src/components/svgs/**',
 			'packages/components/src/components/ui/**'
 		],
@@ -200,6 +199,7 @@ export default defineConfig({
 		printWidth: 120,
 		semi: false,
 		singleQuote: true,
+		sortPackageJson: {sortScripts: true},
 		trailingComma: 'none',
 		useTabs: true,
 

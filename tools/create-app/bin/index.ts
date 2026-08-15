@@ -92,11 +92,6 @@ NodeRuntime.runMain(
 			return Effect.gen(function* () {
 				const root = resolve(directory)
 				const fileSystem = yield* FileSystem.FileSystem
-				yield* pipe(
-					fileSystem.readFileString(resolve(TemplateDirectory, 'package.json')),
-					Effect.map(content => replaceContent(content, options.name)),
-					Effect.flatMap(content => fileSystem.writeFileString(resolve(root, 'package.json'), content))
-				)
 				yield* fileSystem.copyFile(icon, resolve(root, 'src/routes/icon.png'))
 				yield* Effect.promise(() =>
 					new Generator({
