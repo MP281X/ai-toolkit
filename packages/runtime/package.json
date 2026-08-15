@@ -1,0 +1,40 @@
+{
+	"type": "module",
+	"sideEffects": false,
+	"name": "@deslop/runtime",
+
+	"exports": {
+		"./client": "./src/client.ts",
+		"./server": "./src/server.ts",
+		"./vite": "./src/vite/config.ts"
+	},
+
+	"dependencies": {
+		"@effect/opentelemetry": "^4.0.0-rc",
+
+		"@opentelemetry/sdk-trace-web": "latest",
+		"@opentelemetry/sdk-trace-node": "latest",
+		"@opentelemetry/sdk-trace-base": "latest",
+		"@opentelemetry/sdk-logs": "latest",
+		"@opentelemetry/exporter-trace-otlp-http": "latest",
+		"@opentelemetry/exporter-logs-otlp-http": "latest",
+
+		"@tanstack/react-router": "latest",
+
+		"@deslop/components": "workspace:*"
+	},
+
+	"devDependencies": {
+		"@rolldown/plugin-babel": "latest",
+		"@vitejs/plugin-react": "latest",
+		"babel-plugin-react-compiler": "latest",
+
+		"@tanstack/react-router": "latest",
+		"@tanstack/router-plugin": "latest",
+
+		"@tailwindcss/vite": "latest",
+
+		"react": "^19",
+		"react-dom": "^19"
+	}
+}

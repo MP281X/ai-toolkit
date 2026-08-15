@@ -7,8 +7,8 @@ import {createFileRoute} from '@tanstack/react-router'
 import {Atom} from 'effect/unstable/reactivity'
 import {Suspense, useEffect, useRef, useState, useSyncExternalStore} from 'react'
 
-import {RpcClient} from '#lib/atomRuntime.ts'
-import {portfolioPalette} from '#lib/utils.ts'
+import {portfolioPalette} from '#lib/portfolio.ts'
+import {RpcClient} from '#lib/utils.ts'
 import type {PortfolioTrail, PortfolioVisitor, PortfolioState} from '#rpcs/contracts.ts'
 import {Loading} from '@deslop/components/fallbacks'
 import {

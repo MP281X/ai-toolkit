@@ -1,12 +1,12 @@
 {
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/portfolio",
+	"name": "@deslop/template-app",
 
 	"version": "0.0.0",
 	"files": ["dist"],
 	"publishConfig": {"access": "public"},
-	"bin": {"portfolio": "dist/server.js"},
+	"bin": {"template-app": "dist/server.js"},
 	"repository": {"type": "git", "url": "https://github.com/MP281X/deslop"},
 
 	"imports": {
@@ -28,7 +28,6 @@
 		"react-dom": "^19",
 
 		"@tanstack/react-router": "latest",
-		"@tanstack/react-hotkeys": "latest",
 
 		"@deslop/runtime": "workspace:*",
 		"@deslop/components": "workspace:*"

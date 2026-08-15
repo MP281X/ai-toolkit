@@ -8,5 +8,5 @@ import * as ServerRuntime from '@deslop/runtime/server'
 
 export default pipe(
 	RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
-	Layer.provide(Layer.merge(RpcHandlers, ServerRuntime.layer('@deslop/portfolio')))
+	Layer.provide(Layer.merge(RpcHandlers, ServerRuntime.layer('@deslop/template-app')))
 )

@@ -3,7 +3,7 @@ import {AtomRpc} from 'effect/unstable/reactivity'
 import {RpcContracts} from '#rpcs/contracts.ts'
 import * as ClientRuntime from '@deslop/runtime/client'
 
-export class RpcClient extends AtomRpc.Service<RpcClient>()('@deslop/portfolio/RpcClient', {
+export class RpcClient extends AtomRpc.Service<RpcClient>()('@deslop/template-app/RpcClient', {
 	group: RpcContracts,
-	protocol: ClientRuntime.layer('@deslop/portfolio')
+	protocol: ClientRuntime.layer('@deslop/template-app')
 }) {}

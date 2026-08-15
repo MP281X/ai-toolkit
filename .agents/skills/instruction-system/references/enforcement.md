@@ -2,14 +2,14 @@
 
 ## Own
 
-| Tool                          | Active owner                                 | Available rules or source                            |
-| ----------------------------- | -------------------------------------------- | ---------------------------------------------------- |
-| TypeScript                    | `tsconfig.json`                              | `.agents/repos/typescript`                           |
-| Oxlint · Oxfmt                | `vite.config.ts`                             | `.agents/repos/oxc` · `.agents/repos/vite-plus`      |
-| Effect diagnostics            | `vite.config.ts`                             | `.agents/repos/effect-tsgo`                          |
-| React Compiler · React Doctor | `vite.config.ts`                             | `.agents/repos/react` · `.agents/repos/react-doctor` |
-| Fallow                        | `.fallowrc.json` · root `check` script       | `.agents/repos/fallow`                               |
-| Custom Oxlint                 | `packages/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                                      |
+| Tool                          | Active owner                              | Available rules or source                            |
+| ----------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| TypeScript                    | `tsconfig.json`                           | `.agents/repos/typescript`                           |
+| Oxlint · Oxfmt                | `vite.config.ts`                          | `.agents/repos/oxc` · `.agents/repos/vite-plus`      |
+| Effect diagnostics            | `vite.config.ts`                          | `.agents/repos/effect-tsgo`                          |
+| React Compiler · React Doctor | `vite.config.ts`                          | `.agents/repos/react` · `.agents/repos/react-doctor` |
+| Fallow                        | `.fallowrc.json` · root `check` script    | `.agents/repos/fallow`                               |
+| Custom Oxlint                 | `tools/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                                      |
 
 ## Choose
 

@@ -1,11 +1,26 @@
 # Workspace
 
+## Creation
+
+Create applications and packages only through the registered Vite+ generators:
+
+```bash
+vp create app -- --name <name>
+vp install
+vp create package -- --name <name>
+vp install
+```
+
+Names are unscoped kebab-case; generators derive `@deslop/<name>` and the canonical workspace directory. The app generator owns the React, TanStack Router, Effect RPC, telemetry, Vite, Docker, build, and publication baseline. The package generator owns manifest grouping, explicit subpath exports, and a same-named empty Effect service tagged `@deslop/<name>/service/<Service>`.
+
+Run `vp install` immediately after either generator changes workspace topology and before checks, development, builds, or previews.
+
 ## Topology
 
 ```text
 apps/<app>/src/
-	lib/atomRuntime.ts
-	lib/serverRuntime.ts
+	lib/utils.ts
+	main.server.ts
 	rpcs/contracts.ts
 	rpcs/handlers.ts
 	services/<name>/schema.ts
@@ -22,16 +37,16 @@ packages/<name>/src/
 
 Every package and application service owns this baseline separation. No `index.ts` or barrel exports.
 
-| File                   | Owner                                                |
-| ---------------------- | ---------------------------------------------------- |
-| `schema.ts`            | Frontend-safe schemas, associated types, errors      |
-| `lib/utils.ts`         | Frontend-safe pure operations                        |
-| `service.ts`           | Service interface and exposed implementation Layers  |
-| `internal/*`           | Private implementation and backend-only dependencies |
-| `rpcs/contracts.ts`    | Frontend-safe application RPC group                  |
-| `rpcs/handlers.ts`     | Server RPC implementation                            |
-| `lib/atomRuntime.ts`   | Client Atom RPC runtime                              |
-| `lib/serverRuntime.ts` | Server runtime and complete Layer graph              |
+| File                | Owner                                                |
+| ------------------- | ---------------------------------------------------- |
+| `schema.ts`         | Frontend-safe schemas, associated types, errors      |
+| `lib/utils.ts`      | Frontend-safe pure operations                        |
+| `service.ts`        | Service interface and exposed implementation Layers  |
+| `internal/*`        | Private implementation and backend-only dependencies |
+| `rpcs/contracts.ts` | Frontend-safe application RPC group                  |
+| `rpcs/handlers.ts`  | Server RPC implementation                            |
+| `lib/utils.ts`      | Client Atom RPC runtime and shared application logic |
+| `main.server.ts`    | Server entry module and complete Layer graph         |
 
 | Ownership             | Construction                                     |
 | --------------------- | ------------------------------------------------ |

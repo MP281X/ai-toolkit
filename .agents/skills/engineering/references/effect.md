@@ -83,6 +83,8 @@ const normalize = (input: Input) => pipe(input, decode, validate, persist)
 const normalize = flow(decode, validate, persist)
 ```
 
+Compose reusable pure decisions with `Predicate.and`, `Predicate.or`, and `Predicate.not`. Native `&&` and `||` remain correct for inline control flow, JSX gating, and value fallback; they are not interchangeable with reusable predicates.
+
 ## Evaluate once
 
 ```ts
