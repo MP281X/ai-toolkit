@@ -1,20 +1,19 @@
 packages:
   - apps/*
   - packages/*
+  - tools/*
 
 allowBuilds:
   msw: true
   protobufjs: true
   '@google/genai': true
   msgpackr-extract: true
-  agent-browser: true
 
 onlyBuiltDependencies:
   - msw
   - protobufjs
   - '@google/genai'
   - msgpackr-extract
-  - agent-browser
 
 catalogMode: prefer
 

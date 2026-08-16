@@ -40,13 +40,10 @@
 		"tsBuildInfoFile": ".tsbuildinfo"
 	},
 
-	"exclude": ["${configDir}/**/node_modules", "${configDir}/**/dist", "${configDir}/**/.output"],
-	"include": [
-		"${configDir}/src/**/*",
-		"${configDir}/apps/*/src/**/*",
-		"${configDir}/packages/*/src/**/*",
-		"${configDir}/*.config.*",
-		"${configDir}/codegen/**/*",
-		"${configDir}/scripts/**/*"
+	"exclude": [
+		"${configDir}/**/node_modules",
+		"${configDir}/**/dist",
+		"${configDir}/**/.output",
+		"${configDir}/tools/*/template/**/*"
 	]
 }

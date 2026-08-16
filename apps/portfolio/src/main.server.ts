@@ -1,15 +1,12 @@
 import {Layer, pipe} from 'effect'
 
-import {HttpMiddleware, HttpRouter} from 'effect/unstable/http'
 import {RpcServer} from 'effect/unstable/rpc'
 
-import {LiveLayers} from '#lib/serverRuntime.ts'
 import {RpcContracts} from '#rpcs/contracts.ts'
+import {RpcHandlers} from '#rpcs/handlers.ts'
+import * as ServerRuntime from '@deslop/runtime/server'
 
 export default pipe(
-	Layer.mergeAll(
-		RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
-		HttpRouter.middleware(HttpMiddleware.xForwardedHeaders, {global: true})
-	),
-	Layer.provide(LiveLayers)
+	RpcServer.layerHttp({group: RpcContracts, path: '/api/rpc', protocol: 'websocket'}),
+	Layer.provide(Layer.merge(RpcHandlers, ServerRuntime.layer('@deslop/portfolio')))
 )

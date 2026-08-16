@@ -1,31 +1,37 @@
 {
+	"name": "@deslop/portfolio",
+	"version": "0.0.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/MP281X/deslop"
+	},
+	"bin": {
+		"portfolio": "dist/server.js"
+	},
+	"files": [
+		"dist"
+	],
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/portfolio",
-
 	"imports": {
 		"#lib/*": "./src/lib/*",
 		"#rpcs/*": "./src/rpcs/*",
 		"#routes/*": "./src/routes/*"
 	},
-
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
-		"dev": "vp dev --host 0.0.0.0",
-
 		"build": "rm -rf dist && vp build && vp pack",
-
+		"dev": "vp dev --host 0.0.0.0",
 		"preview": "vp run build && node --env-file-if-exists=.env ./dist/server.js"
 	},
-
 	"devDependencies": {
-		"react": "^19",
-		"react-dom": "^19",
-
-		"@tanstack/react-router": "latest",
-		"@tanstack/react-hotkeys": "latest",
-
 		"@deslop/components": "workspace:*",
-		"@deslop/opentelemetry": "workspace:*",
-		"@deslop/vite": "workspace:*"
+		"@deslop/runtime": "workspace:*",
+		"@tanstack/react-hotkeys": "latest",
+		"@tanstack/react-router": "latest",
+		"react": "^19",
+		"react-dom": "^19"
 	}
 }

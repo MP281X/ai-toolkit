@@ -15,7 +15,7 @@ import {
 	pipe
 } from 'effect'
 
-import {appendPortfolioTrail, portfolioPalette, removePortfolioVisitor, upsertPortfolioVisitor} from '#lib/utils.ts'
+import {appendPortfolioTrail, portfolioPalette, removePortfolioVisitor, upsertPortfolioVisitor} from '#lib/portfolio.ts'
 import {PortfolioState, PortfolioTrail, PortfolioVisitor, RpcContracts} from '#rpcs/contracts.ts'
 
 const SERVER_BOTS = [

@@ -1,37 +1,36 @@
 # Workspace
 
-## Topology
+## Creation
 
-```text
-apps/<app>/src/
-	lib/atomRuntime.ts
-	lib/serverRuntime.ts
-	rpcs/contracts.ts
-	rpcs/handlers.ts
-	services/<name>/schema.ts
-	services/<name>/service.ts
-	services/<name>/lib/utils.ts
-	services/<name>/internal/*
+Create applications and packages only through the registered Vite+ generators:
 
-packages/<name>/src/
-	schema.ts
-	service.ts
-	lib/utils.ts
-	internal/*
+```bash
+vp create app -- --name <name>
+vp install
+vp create package -- --name <name>
+vp install
 ```
 
-Every package and application service owns this baseline separation. No `index.ts` or barrel exports.
+Names are unscoped kebab-case; generators derive `@deslop/<name>` and the canonical workspace directory. The app generator owns the React, TanStack Router, Effect RPC, telemetry, Vite, Docker, build, and publication baseline. The package generator owns manifest grouping, explicit subpath exports, and a same-named empty Effect service tagged `@deslop/<name>/service/<Service>`.
 
-| File                   | Owner                                                |
-| ---------------------- | ---------------------------------------------------- |
-| `schema.ts`            | Frontend-safe schemas, associated types, errors      |
-| `lib/utils.ts`         | Frontend-safe pure operations                        |
-| `service.ts`           | Service interface and exposed implementation Layers  |
-| `internal/*`           | Private implementation and backend-only dependencies |
-| `rpcs/contracts.ts`    | Frontend-safe application RPC group                  |
-| `rpcs/handlers.ts`     | Server RPC implementation                            |
-| `lib/atomRuntime.ts`   | Client Atom RPC runtime                              |
-| `lib/serverRuntime.ts` | Server runtime and complete Layer graph              |
+Run `vp install` immediately after either generator changes workspace topology and before checks, development, builds, or previews.
+
+## Generated ownership
+
+The generator owns baseline topology and configuration. Edit the existing owner required by the contract; do not recreate, normalize, or duplicate generated structure. A service root is `apps/<app>/src/services/<name>` or `packages/<name>/src`.
+
+| Concern                                           | Existing owner                     |
+| ------------------------------------------------- | ---------------------------------- |
+| Frontend-safe schemas, associated types, errors   | `<service>/schema.ts`              |
+| Frontend-safe pure service operations             | `<service>/lib/utils.ts`           |
+| Service interface and exposed Layers              | `<service>/service.ts`             |
+| Private implementation or backend dependencies    | `<service>/internal/*`             |
+| Application RPC group                             | `apps/<app>/src/rpcs/contracts.ts` |
+| Application RPC implementation                    | `apps/<app>/src/rpcs/handlers.ts`  |
+| Client Atom RPC runtime and shared app operations | `apps/<app>/src/lib/utils.ts`      |
+| Server entry module and complete Layer graph      | `apps/<app>/src/main.server.ts`    |
+
+No `index.ts` or barrel exports.
 
 | Ownership             | Construction                                     |
 | --------------------- | ------------------------------------------------ |

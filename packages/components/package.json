@@ -1,55 +1,40 @@
 {
+	"name": "@deslop/components",
 	"type": "module",
 	"sideEffects": false,
-	"name": "@deslop/components",
-
 	"imports": {
 		"#lib/*": "./src/lib/*",
 		"#hooks/*": "./src/hooks/*",
 		"#components/*": "./src/components/*"
 	},
-
 	"exports": {
 		"./*": "./src/components/*.tsx",
 		"./ui/*": "./src/components/ui/*.tsx",
 		"./utils": "./src/lib/utils.ts",
 		"./theme.css": "./src/theme.css"
 	},
-
 	"dependencies": {
-		"cmdk": "latest",
-		"sonner": "latest",
 		"@base-ui/react": "latest",
-		"react-resizable-panels": "latest",
-
+		"@fontsource-variable/jetbrains-mono": "latest",
 		"@legendapp/list": "^3.0.0-beta",
+		"@lexical/react": "latest",
+		"@pierre/diffs": "latest",
 		"@tanstack/react-form": "latest",
 		"@tanstack/react-hotkeys": "latest",
-
-		"lucide-react": "latest",
-
+		"class-variance-authority": "latest",
+		"clsx": "latest",
+		"cmdk": "latest",
+		"dompurify": "latest",
 		"lexical": "latest",
-		"@lexical/react": "latest",
-
+		"lucide-react": "latest",
 		"marked": "latest",
 		"mermaid": "latest",
-		"dompurify": "latest",
-		"@pierre/diffs": "latest",
-
-		"@xterm/xterm": "latest",
-		"@xterm/addon-fit": "latest",
-		"@xterm/addon-webgl": "latest",
-		"@xterm/addon-unicode11": "latest",
-		"@xterm/addon-web-links": "latest",
-		"@xterm/addon-clipboard": "latest",
-
-		"clsx": "latest",
+		"react-resizable-panels": "latest",
 		"shadcn": "latest",
-		"tailwindcss": "latest",
+		"sonner": "latest",
 		"tailwind-merge": "latest",
-		"tw-animate-css": "latest",
-		"class-variance-authority": "latest",
-		"@fontsource-variable/jetbrains-mono": "latest"
+		"tailwindcss": "latest",
+		"tw-animate-css": "latest"
 	},
 	"peerDependencies": {
 		"react": "^19",

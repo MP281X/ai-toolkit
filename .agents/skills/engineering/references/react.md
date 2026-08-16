@@ -65,7 +65,9 @@ function NotesList() {
 }
 ```
 
-`RpcClient` is the existing `AtomRpc.Service` from `apps/<app>/src/lib/atomRuntime.ts`. Feature code never declares another client service or transport Layer.
+`RpcClient` is the existing `AtomRpc.Service` from `apps/<app>/src/lib/utils.ts`. Feature code never declares another client service or transport Layer.
+
+Application entrypoints call `ClientRuntime.makeRouter(routeTree)`. The shared runtime owns the `#root` mount lookup and every global TanStack Router option; applications only register the returned router type and render its provider.
 
 ```ts
 // BAD: pull-oriented stream batches require explicit writes

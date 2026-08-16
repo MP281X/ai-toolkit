@@ -180,10 +180,15 @@ const noRestrictedProperties: NonNullable<NonNullable<ViteUserConfig['lint']>['r
 ]
 
 export default defineConfig({
+	create: {
+		templates: [
+			{name: 'app', description: 'Create a full-stack Deslop application', template: './tools/create-app'},
+			{name: 'package', description: 'Create a standard Deslop package', template: './tools/create-package'}
+		]
+	},
 	fmt: {
 		ignorePatterns: [
 			'**/*.gen.ts',
-			'**/package.json',
 			'packages/components/src/components/svgs/**',
 			'packages/components/src/components/ui/**'
 		],
@@ -194,6 +199,7 @@ export default defineConfig({
 		printWidth: 120,
 		semi: false,
 		singleQuote: true,
+		sortPackageJson: {sortScripts: true},
 		trailingComma: 'none',
 		useTabs: true,
 
@@ -241,6 +247,7 @@ export default defineConfig({
 		ignorePatterns: [
 			'.agents/repos/**',
 			'**/*.gen.ts',
+			'tools/*/template/**',
 			'packages/components/src/components/svgs/**',
 			'packages/components/src/components/ui/**'
 		],
@@ -252,7 +259,7 @@ export default defineConfig({
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off', 'sort-keys': 'off'}},
-			{files: ['packages/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
+			{files: ['tools/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{
 				files: ['**/*.tsx'],
@@ -668,7 +675,7 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
-		include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+		include: ['apps/*/src/**/*.test.ts', 'packages/*/src/**/*.test.ts', 'tools/*/src/**/*.test.ts'],
 		passWithNoTests: true,
 		pool: 'forks'
 	}
