@@ -3,7 +3,7 @@ name: agent-workflow-engineering
 description: 'Use for any change, review, or evaluation of AGENTS.md, skills, agents, configuration, enforcement, rules, or Workflow references.'
 ---
 
-Make the smallest approved change that causes independent runs to follow the intended workflow. Preserve every unaffected instruction and behavior; never treat a local correction as authority to redesign the complete system.
+Build the smallest approved Workflow that makes independent runs follow the Contract.
 
 ## Route
 
@@ -21,8 +21,8 @@ Applicable work routes to:
 | Owner                  | Surface                                                                                 |
 | ---------------------- | --------------------------------------------------------------------------------------- |
 | `AGENTS.md`            | Unconditional authority, vocabulary, loading, collaboration, scope, validation, writing |
-| Skill `description`    | Sole trigger for loading the skill                                                      |
-| Agent `description`    | Dispatch trigger and minimum inputs the parent must pass                                |
+| Skill `description`    | Sole loading trigger; never restates the body                                           |
+| Agent `description`    | Dispatch trigger plus non-derivable required inputs                                     |
 | Native agent body      | Bounded execution procedure after dispatch                                              |
 | Domain skill body      | Conditional workflow or engineering guidance                                            |
 | Skill reference        | One genuinely conditional branch                                                        |
@@ -30,22 +30,42 @@ Applicable work routes to:
 | Static enforcement     | Mechanically detectable repository constraints                                          |
 | Evaluation             | Generic proof of routing, behavior, integration, and stability                          |
 
-Keep only frequent, architectural, or routinely misapplied guidance. Prefer configuration for capabilities and maintained static enforcement for mechanical rules. Route to the sole semantic owner instead of duplicating identical, similar, or implied instructions across Workflow artifacts.
+## Construction
+
+| Lead        | Requirement                                                                                                                                              |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preserve    | Keep unaffected behavior and domain-specific rules, verified CLI instructions, canonical examples, progressive references, schemas, and evidence gates.  |
+| Select      | Keep frequent, architectural, or routinely misapplied guidance only.                                                                                     |
+| Classify    | Apply the `AGENTS.md` Writing grammar to each retained information type.                                                                                 |
+| Label       | Use a precise leading word when it reduces interpretation cost.                                                                                          |
+| Route       | Put capabilities in configuration, mechanical behavior in maintained static enforcement, and conditional guidance in one progressive reference.          |
+| Deduplicate | Remove no-op instructions, generic wrappers, ambiguous headings, metadata restatement, 1:1 duplication, semantic duplication, and conflicting ownership. |
+| Couple      | Update the Owner, call paths, configuration, enforcement, tests, and evaluation fixtures required by the changed behavior.                               |
+
+| Artifact            | Retain only                                                                   |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `AGENTS.md`         | Unconditional repository policy                                               |
+| Skill description   | Loading trigger                                                               |
+| Agent description   | Dispatch trigger and non-derivable input                                      |
+| Skill or agent body | Conditional procedure or bounded execution                                    |
+| Reference           | One conditional branch                                                        |
+| Configuration       | Runtime capability and tool policy                                            |
+| Enforcement         | Mechanically detectable constraint                                            |
+| Evaluation          | Neutral proof of routing, behavior, integration, migration, and repeatability |
 
 ## Workflow-first correction
 
-Treat every reported agent-behavior problem, including a failure of this skill, as a potential reusable Workflow defect. Workflow work opened during another task is a self-contained branch that preserves the parent state.
+Apply this skill alongside `iteration` whenever reported behavior may expose a reusable Workflow defect.
 
-1. Analyze the relevant current and previous parent and subagent conversations before diagnosing the issue. Reconstruct the accumulated contract, steering, orchestration, results, and accepted final state; do not infer the cause from the latest complaint alone.
-2. Verify that the reported issue exposes a reusable Workflow cause rather than only a local candidate preference.
-3. Propose the narrowest correction and wait for approval; unrequested extensions remain non-persistent out-of-scope notes.
-4. Change the narrowest Workflow owner before correcting affected product code.
-5. Give fresh Assurance the changed Workflow and unchanged defective candidate without the expected finding. If the defect is not independently detected, revise the Workflow owner.
-6. After detection, correct the product candidate and confirm the fix plus valid counterexamples.
-7. Resume the preserved parent task at its previous next step without asking for it again.
+```mermaid
+flowchart LR
+    H[Reconstruct history] --> C[Classify reusable cause]
+    C --> O[Select narrowest Owner]
+    O --> P[Approve correction]
+    P --> E[Correct enforcement or Workflow]
+    E --> A[Assurance detects unchanged defect]
+    A --> F[Correct Candidate]
+    F --> V[Confirm fix and counterexamples]
+```
 
-Run repeated holdout evaluation only when explicitly finalizing or evaluating the workflow, not during normal iteration.
-
-## Output
-
-Return only material behavioral changes, remaining conflicts or uncertainties, and the next decision.
+**Evaluation:** Run repeated holdouts only during explicit Workflow evaluation or finalization.

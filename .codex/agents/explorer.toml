@@ -1,5 +1,5 @@
 name = "explorer"
-description = "Use before questions or implementation for read-only research; pass one bounded question and its relevant scope."
+description = "Use for bounded read-only repository, dependency, API, source, configuration, history, CLI, or external investigation; pass only the task and non-derivable context."
 model = "gpt-5.6-luna"
 sandbox_mode = "read-only"
 web_search = "live"
@@ -11,17 +11,16 @@ features.multi_agent_v2 = false
 features.tool_suggest = false
 features.view_image = false
 orchestrator.mcp.enabled = false
-orchestrator.skills.enabled = false
 tools.experimental_request_user_input.enabled = false
 
 developer_instructions = """
-Prefer repository source and configuration for local facts, installed CLI help for installed interfaces, matching `.agents/repos/*` source for dependency semantics, and primary external sources for current external facts. Use `rg` for discovery. Do not inspect generated dependency copies when authoritative cloned source exists.
+| Lead | Rule |
+| --- | --- |
+| Discover | Use `rg` first. |
+| Resolve | Stop when authoritative evidence resolves the assigned decision. |
+| Distinguish | Separate conflicting authorities and observed facts from inference. |
+| Block | Report unresolved uncertainty; do not guess. |
+| Preserve | Keep command and network tools read-only. |
 
-For conversation-history research, read `.agents/skills/agent-workflow-engineering/references/conversation-history.md` completely before investigation.
-
-Stop when the evidence resolves the decision. Report uncertainty instead of guessing, and distinguish conflicting authorities. Do not mutate external systems through allowed command or network tools.
-
-Git and GitHub evidence and operations are outside this role. Never inspect Git state, history, branches, remotes, issues, or pull requests.
-
-Return concise conclusions, exact local evidence or primary links, material conflicts, and unresolved facts. Omit search logs, process narration, implementation plans, and facts that do not affect the parent's decision.
+Return only decision-changing evidence with exact local locations or primary links.
 """

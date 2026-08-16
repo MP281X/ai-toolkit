@@ -4,9 +4,12 @@ Keep every review boundary valid without rewriting published history.
 
 ## Topology
 
-- Root targets the default branch; each child targets its immediate parent.
-- Every pull request remains independently understandable and valid against its immediate base.
-- Inspect the complete topology before mutation.
+| Node  | Base             | Invariant                              |
+| ----- | ---------------- | -------------------------------------- |
+| Root  | Default branch   | Independently understandable and valid |
+| Child | Immediate parent | Independently understandable and valid |
+
+**Inspect:** Resolve the complete topology before mutation.
 
 ```bash
 gh stack add
@@ -18,9 +21,13 @@ In `gh stack submit`, set every pull request to draft; never use `--open`.
 
 ## Published alignment
 
-- Align root to tip, one node at a time.
-- Merge the updated immediate base into each published descendant; validate and push normally.
-- If intended conflict resolution is not provable, stop.
-- After a parent merges, retarget its direct child to the parent's destination and recheck the topology.
+```mermaid
+flowchart LR
+    R[Align root] --> D[Merge updated base into direct child]
+    D --> V[Validate and push]
+    V --> N{Next descendant?}
+    N -->|Yes| D
+    N -->|No| M[After parent merge, retarget direct child and verify topology]
+```
 
-Reject `gh stack sync`, rebase, amend, squash, reset, and force-push for published branches.
+**Conflict:** Stop when intended resolution is not provable. Apply the parent Safety table to every operation.

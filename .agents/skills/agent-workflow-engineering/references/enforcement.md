@@ -1,5 +1,7 @@
 # Static enforcement
 
+**Boundary:** Put mechanically detectable behavior in static enforcement and semantic behavior in a skill.
+
 ## Own
 
 | Tool                          | Active owner                              | Available rules or source                            |
@@ -11,14 +13,16 @@
 | Fallow                        | `.fallowrc.json` · root `check` script    | `.agents/repos/fallow`                               |
 | Custom Oxlint                 | `tools/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                                      |
 
-## Choose
+## Selection
 
-1. Configured maintained rule.
-2. Compatible maintained rule or option.
-3. Custom Oxlint.
-4. Domain skill.
+```mermaid
+flowchart LR
+    C[Configured maintained rule] --> M[Compatible maintained rule or option]
+    M --> O[Custom Oxlint]
+    O --> S[Domain skill]
+```
 
-## Custom Oxlint
+Add custom Oxlint only when every gate is satisfied:
 
 | Gate       | Requirement                   |
 | ---------- | ----------------------------- |
@@ -27,11 +31,10 @@
 | Ownership  | No maintained equivalent      |
 | Correction | Stable canonical construction |
 
-| Phase   | Required artifact                                     |
-| ------- | ----------------------------------------------------- |
-| Specify | Exact invalid form · architectural reason             |
-| Prove   | BAD cases · valid counterexamples · unsupported cases |
-| Detect  | Narrowest syntax · scope · path                       |
-| Report  | Root cause · canonical correction                     |
-
-Suppress only an irreducible boundary: narrow, inline, reasoned.
+| Evidence    | Requirement                                           |
+| ----------- | ----------------------------------------------------- |
+| Defect      | Exact invalid form and architectural reason           |
+| Proof       | Failing fixtures and valid counterexamples            |
+| Boundary    | Unsupported cases and narrowest syntax and path scope |
+| Correction  | One canonical Construction                            |
+| Suppression | Irreducible, narrow, inline, and reasoned             |

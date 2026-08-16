@@ -5,23 +5,29 @@ description: 'Use for every Git or GitHub read or mutation.'
 
 ## Safety
 
-| Operation                                | Invariant                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Any mutation                             | Resolve the exact operation and target; inspect relevant state and topology; preserve unrelated changes |
-| Default branch                           | Read-only without explicit operation-specific authority                                                 |
-| Reset, discard, delete, or rewrite       | Require an explicit request and exact resolved target                                                   |
-| Published branch                         | Never rebase, amend, squash, reset, or force-push                                                       |
-| Conflict                                 | Resolve from intended final state and current source, never by choosing a side mechanically             |
-| Commit, push, issue, PR, ready, or merge | Each requires separate explicit authority; never infer the next operation                               |
+| Operation group                         | Invariant                                                                                       |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Entirely read-only                      | No approval required                                                                            |
+| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group |
+| Successive or adjacent operation        | Requires new explicit approval; authority never carries forward                                 |
+| Protected or long-lived branch mutation | Requires explicit operation-specific approval                                                   |
+| Reset, discard, delete, or rewrite      | Require an explicit request and exact resolved target                                           |
+| Published branch                        | Never rebase, amend, squash, reset, or force-push                                               |
+| Conflict                                | Resolve from intended final state and current source, never by choosing a side mechanically     |
 
-Infer the repository from the checkout. Use the installed Git and `gh` interfaces. Keep an issue open until the pull request that owns its closure merges.
-
-Keep one semantic change per branch and pull request. Base independent work on the fetched remote default branch and dependent work on its immediate stack parent.
+| Lead       | Rule                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Repository | Infer it from the checkout; use installed `git` and `gh`.                                                     |
+| Issue      | Keep it open until the pull request that owns its closure merges.                                             |
+| Change     | Keep one semantic change per branch and pull request.                                                         |
+| Base       | Use the fetched remote default branch for independent work and the immediate stack parent for dependent work. |
 
 ## Conditional references
 
-- Branch, commit, issue, or pull-request naming and text → [Conventions](references/conventions.md)
-- Stack creation, publication, alignment, merge recovery, or retargeting → [Stacked pull requests](references/stacked-prs.md)
-- Preserving a branch or revision before replacement, deletion, rebase, or workflow change → [Archive branch](references/archive-branch.md)
+| Work                                                                               | Reference                                          |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Branch, commit, issue, or pull-request naming and text                             | [Conventions](references/conventions.md)           |
+| Stack creation, publication, alignment, merge recovery, or retargeting             | [Stacked pull requests](references/stacked-prs.md) |
+| Exact remote preservation before replacement, deletion, rebase, or Workflow change | [Snapshot tag](references/snapshot-tag.md)         |
 
-Return only the requested artifact, resulting state, or material blocker.
+**Result:** Return the requested Git artifact or resulting state with exact refs and revisions.

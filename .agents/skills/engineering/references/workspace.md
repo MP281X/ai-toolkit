@@ -15,38 +15,22 @@ Names are unscoped kebab-case; generators derive `@deslop/<name>` and the canoni
 
 Run `vp install` immediately after either generator changes workspace topology and before checks, development, builds, or previews.
 
-## Topology
+## Generated ownership
 
-```text
-apps/<app>/src/
-	lib/utils.ts
-	main.server.ts
-	rpcs/contracts.ts
-	rpcs/handlers.ts
-	services/<name>/schema.ts
-	services/<name>/service.ts
-	services/<name>/lib/utils.ts
-	services/<name>/internal/*
+The generator owns baseline topology and configuration. Edit the existing owner required by the contract; do not recreate, normalize, or duplicate generated structure. A service root is `apps/<app>/src/services/<name>` or `packages/<name>/src`.
 
-packages/<name>/src/
-	schema.ts
-	service.ts
-	lib/utils.ts
-	internal/*
-```
+| Concern                                           | Existing owner                     |
+| ------------------------------------------------- | ---------------------------------- |
+| Frontend-safe schemas, associated types, errors   | `<service>/schema.ts`              |
+| Frontend-safe pure service operations             | `<service>/lib/utils.ts`           |
+| Service interface and exposed Layers              | `<service>/service.ts`             |
+| Private implementation or backend dependencies    | `<service>/internal/*`             |
+| Application RPC group                             | `apps/<app>/src/rpcs/contracts.ts` |
+| Application RPC implementation                    | `apps/<app>/src/rpcs/handlers.ts`  |
+| Client Atom RPC runtime and shared app operations | `apps/<app>/src/lib/utils.ts`      |
+| Server entry module and complete Layer graph      | `apps/<app>/src/main.server.ts`    |
 
-Every package and application service owns this baseline separation. No `index.ts` or barrel exports.
-
-| File                | Owner                                                |
-| ------------------- | ---------------------------------------------------- |
-| `schema.ts`         | Frontend-safe schemas, associated types, errors      |
-| `lib/utils.ts`      | Frontend-safe pure operations                        |
-| `service.ts`        | Service interface and exposed implementation Layers  |
-| `internal/*`        | Private implementation and backend-only dependencies |
-| `rpcs/contracts.ts` | Frontend-safe application RPC group                  |
-| `rpcs/handlers.ts`  | Server RPC implementation                            |
-| `lib/utils.ts`      | Client Atom RPC runtime and shared application logic |
-| `main.server.ts`    | Server entry module and complete Layer graph         |
+No `index.ts` or barrel exports.
 
 | Ownership             | Construction                                     |
 | --------------------- | ------------------------------------------------ |
