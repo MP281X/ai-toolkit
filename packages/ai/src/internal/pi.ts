@@ -37,12 +37,11 @@ import {
 	type AgentToolResult
 } from '@earendil-works/pi-agent-core'
 import type {Api, AssistantMessage, ImageContent, Message, Model, StopReason, TextContent} from '@earendil-works/pi-ai'
-import {Type, createModels} from '@earendil-works/pi-ai'
-import {openaiCodexProvider} from '@earendil-works/pi-ai/providers/openai-codex'
+import {Type} from '@earendil-works/pi-ai'
 import {AiError, Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
 
 import {AiError as ServiceAiError, type AiAgentDefinition, type AiSkill, type AiStatus} from '#schema'
-import {Ai} from '#service'
+import type {Ai, Pi} from '#service'
 
 function finishReason(reason: StopReason) {
 	return pipe(
@@ -50,7 +49,11 @@ function finishReason(reason: StopReason) {
 		Match.when('stop', () => 'stop' as const),
 		Match.when('length', () => 'length' as const),
 		Match.when('toolUse', () => 'tool-calls' as const),
-		Match.orElse(() => 'error' as const)
+		Match.when('pending', () => 'error' as const),
+		Match.when('deferred', () => 'pause' as const),
+		Match.when('aborted', () => 'other' as const),
+		Match.when('error', () => 'error' as const),
+		Match.exhaustive
 	)
 }
 
@@ -184,50 +187,43 @@ function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
 		return Schema.is(selected.parametersSchema)(params)
 	}
 
-	function invoke<Name extends keyof ToolSet & string>(name: Name, params: unknown, toolCallId: string) {
-		if (!hasParameters(name, params)) {
-			return Effect.fail(
-				AiError.make({
-					method: `${name}.handle`,
-					module: 'Pi',
-					reason: AiError.ToolParameterValidationError.make({
-						description: 'Tool parameters do not match the configured schema',
-						toolName: name,
-						toolParams: params
-					})
-				})
-			)
-		}
-		return toolkit.handle(name, params, toolCallId)
-	}
-
 	return Array.map(names, name => {
 		const tool = pipe(toolkit.tools[name], Option.fromUndefinedOr, Option.getOrThrow)
 		const parameters = Type.Unsafe<unknown>(Tool.getJsonSchema(tool))
 		const definition: AgentTool = {
 			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute: (toolCallId, params, _signal, onUpdate) =>
-				Effect.runPromiseWith(context)(
+			execute: (toolCallId, params, _signal, onUpdate) => {
+				const execution = hasParameters(name, params)
+					? toolkit.handle(name, params, toolCallId)
+					: Effect.fail(
+							AiError.make({
+								method: `${name}.handle`,
+								module: 'Pi',
+								reason: AiError.ToolParameterValidationError.make({
+									description: 'Tool parameters do not match the configured schema',
+									toolName: name,
+									toolParams: params
+								})
+							})
+						)
+				return Effect.runPromiseWith(context)(
 					pipe(
-						invoke(name, params, toolCallId),
+						execution,
 						Effect.flatMap(stream =>
-							Stream.runFold(
-								() => Option.none<unknown>(),
-								(current, result) => {
-									const encodedResult = Predicate.hasProperty(result, 'encodedResult')
-										? result.encodedResult
-										: undefined
-									if (Predicate.hasProperty(result, 'preliminary') && result.preliminary === true) {
-										onUpdate?.(toolResult(encodedResult))
-										return current
-									}
-									return Option.some(encodedResult)
-								}
-							)(stream)
+							pipe(
+								stream,
+								Stream.tap(result =>
+									result.preliminary ? Effect.sync(() => onUpdate?.(toolResult(result.encodedResult))) : Effect.void
+								),
+								Stream.filter(result => !result.preliminary),
+								Stream.runLast
+							)
 						),
+						Effect.map(Option.map(result => result.encodedResult)),
 						Effect.map(value => toolResult(Option.getOrUndefined(value)))
 					)
-				),
+				)
+			},
 			executionMode: name === 'write' || name === 'edit' ? ('sequential' as const) : ('parallel' as const),
 			label: name,
 			name,
@@ -322,68 +318,62 @@ function usageFromMessage(message: AssistantMessage) {
 }
 
 function partsFromEvent<ToolSet extends Ai.Tools>(event: AgentEvent) {
-	return pipe(
-		Match.value(event),
-		Match.when({type: 'message_update'}, update =>
-			pipe(
-				Match.value(update.assistantMessageEvent),
-				Match.when({type: 'text_delta'}, delta =>
-					delta.delta === ''
-						? Array.empty<Response.StreamPart<ToolSet>>()
-						: [Response.makePart('text-delta', {delta: delta.delta, id: delta.partial.responseId ?? 'text'})]
-				),
-				Match.when({type: 'thinking_delta'}, delta =>
-					delta.delta === ''
-						? Array.empty<Response.StreamPart<ToolSet>>()
-						: [Response.makePart('reasoning-delta', {delta: delta.delta, id: delta.partial.responseId ?? 'reasoning'})]
-				),
-				Match.when({type: 'toolcall_end'}, call => [
-					Response.makePart('tool-call', {
-						id: call.toolCall.id,
-						name: call.toolCall.name,
-						params: call.toolCall.arguments,
-						providerExecuted: false
-					})
-				]),
-				Match.orElse(() => Array.empty<Response.StreamPart<ToolSet>>())
-			)
-		),
-		Match.when({type: 'tool_execution_update'}, update => [
+	if (event.type === 'message_update') {
+		const update = event.assistantMessageEvent
+		if (update.type === 'text_delta' && update.delta !== '') {
+			return [Response.makePart('text-delta', {delta: update.delta, id: update.partial.responseId ?? 'text'})]
+		}
+		if (update.type === 'thinking_delta' && update.delta !== '') {
+			return [Response.makePart('reasoning-delta', {delta: update.delta, id: update.partial.responseId ?? 'reasoning'})]
+		}
+		if (update.type === 'toolcall_end') {
+			return [
+				Response.makePart('tool-call', {
+					id: update.toolCall.id,
+					name: update.toolCall.name,
+					params: update.toolCall.arguments,
+					providerExecuted: false
+				})
+			]
+		}
+	}
+	if (event.type === 'tool_execution_update') {
+		return [
 			Response.makePart('tool-result', {
-				encodedResult: update.partialResult,
-				id: update.toolCallId,
+				encodedResult: event.partialResult,
+				id: event.toolCallId,
 				isFailure: false,
-				name: update.toolName,
+				name: event.toolName,
 				preliminary: true,
 				providerExecuted: false,
-				result: update.partialResult
+				result: event.partialResult
 			})
-		]),
-		Match.when({type: 'tool_execution_end'}, result => [
+		]
+	}
+	if (event.type === 'tool_execution_end') {
+		return [
 			Response.makePart('tool-result', {
-				encodedResult: result.result,
-				id: result.toolCallId,
-				isFailure: result.isError,
-				name: result.toolName,
+				encodedResult: event.result,
+				id: event.toolCallId,
+				isFailure: event.isError,
+				name: event.toolName,
 				preliminary: false,
 				providerExecuted: false,
-				result: result.result
+				result: event.result
 			})
-		]),
-		Match.when({type: 'message_end'}, end =>
-			end.message.role === 'assistant'
-				? [
-						Response.makePart('response-metadata', {
-							id: end.message.responseId,
-							modelId: end.message.model,
-							request: undefined,
-							timestamp: undefined
-						})
-					]
-				: Array.empty<Response.StreamPart<ToolSet>>()
-		),
-		Match.orElse(() => Array.empty<Response.StreamPart<ToolSet>>())
-	)
+		]
+	}
+	if (event.type === 'message_end' && event.message.role === 'assistant') {
+		return [
+			Response.makePart('response-metadata', {
+				id: event.message.responseId,
+				modelId: event.message.model,
+				request: undefined,
+				timestamp: undefined
+			})
+		]
+	}
+	return Array.empty<Response.StreamPart<ToolSet>>()
 }
 
 function finishPart(message: AgentMessage) {
@@ -400,16 +390,14 @@ function finishPart(message: AgentMessage) {
 	})
 }
 
-export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
+export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Pi.Config<ToolSet>) {
 	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
 	const model = yield* SubscriptionRef.make(config.model)
 	const history = yield* SubscriptionRef.make<Prompt.Message[]>([])
 	const promptLock = yield* Semaphore.make(1)
 	const handledToolkit = yield* config.toolkit
 	const toolContext = yield* Effect.context<Tool.HandlerServices<ToolSet[keyof ToolSet]>>()
-	const models = createModels({credentials: config.credentials})
-	models.setProvider(openaiCodexProvider())
-	const initialModel = models.getModel(config.model.provider, config.model.id)
+	const initialModel = config.models.getModel(config.model.provider, config.model.id)
 	if (Predicate.isUndefined(initialModel)) {
 		return yield* ServiceAiError.make({message: `Unknown model: ${config.model.id}`})
 	}
@@ -420,14 +408,43 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		Array.map(definition => [definition.name, definition] as const),
 		HashMap.fromIterable
 	)
+	const sessions = config.session?.repository ?? new InMemorySessionRepo()
 
 	const ownerContext = yield* Effect.context()
-	const makeRuntime = Effect.fnUntraced(function* (profile: AiAgentDefinition, allowSubagents: boolean) {
-		const repo = new InMemorySessionRepo()
-		const session = yield* Effect.tryPromise({
-			catch: cause => ServiceAiError.make({cause, message: 'Failed to create in-memory Pi session'}),
-			try: () => repo.create()
-		})
+	const makeRuntime = Effect.fnUntraced(function* (
+		profile: AiAgentDefinition,
+		allowSubagents: boolean,
+		resumeId?: string
+	) {
+		const session = yield* Predicate.isUndefined(resumeId)
+			? Effect.tryPromise({
+					catch: cause => ServiceAiError.make({cause, message: 'Failed to create Pi session'}),
+					try: () => sessions.create({})
+				})
+			: Effect.gen(function* () {
+					const metadata = pipe(
+						yield* Effect.tryPromise({
+							catch: cause => ServiceAiError.make({cause, message: 'Failed to find Pi session'}),
+							try: () => sessions.list()
+						}),
+						Array.findFirst(candidate => candidate.id === resumeId)
+					)
+					if (Option.isNone(metadata)) {
+						return yield* ServiceAiError.make({message: `Unknown Pi session: ${resumeId}`})
+					}
+					return yield* Effect.tryPromise({
+						catch: cause => ServiceAiError.make({cause, message: 'Failed to open Pi session'}),
+						try: () => sessions.open(metadata.value)
+					})
+				})
+		const initialMessages = pipe(
+			yield* Effect.tryPromise({
+				catch: cause => ServiceAiError.make({cause, message: 'Failed to read Pi session'}),
+				try: () => session.findEntriesOnBranch()
+			}),
+			buildSessionContext,
+			context => context.messages
+		)
 		const enabledNames = pipe(
 			Record.keys(handledToolkit.tools),
 			Array.filter(name => Array.some(profile.tools, configured => configured === name))
@@ -488,7 +505,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 						const result = getOrThrow(
 							yield* Effect.tryPromise({
 								catch: cause => ServiceAiError.make({cause, message: 'Pi compaction failed'}),
-								try: () => compact(preparation, models, activeModel, undefined, signal, config.model.reasoning)
+								try: () => compact(preparation, config.models, activeModel, undefined, signal, config.model.reasoning)
 							})
 						)
 						yield* Effect.tryPromise({
@@ -519,7 +536,9 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		}
 
 		const agent = new Agent({
+			...config.options,
 			initialState: {
+				messages: initialMessages,
 				model: activeModel,
 				systemPrompt: systemPrompt(profile, allowSubagents ? agentDefinitions : []),
 				thinkingLevel: config.model.reasoning,
@@ -529,9 +548,9 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 				catch: cause => ServiceAiError.make({cause, message: 'Failed to read Pi session metadata'}),
 				try: () => session.getMetadata()
 			})).id,
-			streamFn: models.streamSimple.bind(models),
-			toolExecution: 'parallel',
-			transformContext: compactContext
+			streamFn: config.models.streamSimple.bind(config.models),
+			toolExecution: config.options?.toolExecution ?? 'parallel',
+			transformContext: config.options?.transformContext ?? compactContext
 		})
 		agent.subscribe(event => {
 			if (event.type !== 'message_end') return
@@ -545,8 +564,11 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		return {agent, session}
 	})
 
-	const runtime = yield* makeRuntime(config.main, true)
+	const runtime = yield* makeRuntime(config.main, true, config.session?.id)
 	const sessionId = {agent: 'pi' as const, id: (yield* Effect.promise(() => runtime.session.getMetadata())).id}
+	yield* pipe(runtime.agent.state.messages, Array.filter(isPiMessage), Array.map(promptMessageFromPi), messages =>
+		SubscriptionRef.set(history, messages)
+	)
 	const setStatus = Effect.fnUntraced(function* (state: AiStatus['state']) {
 		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
 	})
@@ -569,7 +591,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		SubscriptionRef.changes(model),
 		Stream.runForEach(next =>
 			Effect.gen(function* () {
-				const resolved = models.getModel(next.provider, next.id)
+				const resolved = config.models.getModel(next.provider, next.id)
 				if (Predicate.isUndefined(resolved)) {
 					yield* setStatus('error')
 					return
@@ -597,7 +619,7 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		runtime.agent[mode === 'steer' ? 'steer' : 'followUp'](piMessage)
 	})
 
-	return Ai.of({
+	return {
 		history,
 		model,
 		prompt: message =>
@@ -653,5 +675,5 @@ export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(con
 		sessionId,
 		status,
 		steer: message => pipe(deliver(message, 'steer'), Effect.withSpan('Ai.steer'))
-	})
+	} satisfies Ai['Service']
 })

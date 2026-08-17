@@ -8,8 +8,7 @@
 	},
 	"exports": {
 		"./schema": "./src/schema.ts",
-		"./service": "./src/service.ts",
-		"./tools": "./src/tools.ts"
+		"./service": "./src/service.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-agent-core": "latest",

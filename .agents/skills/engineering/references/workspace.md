@@ -32,6 +32,8 @@ The generator owns baseline topology and configuration. Edit the existing owner 
 
 No `index.ts` or barrel exports.
 
+Frontend-safe owners contain contracts only. Runtime behavior and platform dependencies stay in `internal/*`.
+
 | Ownership             | Construction                                     |
 | --------------------- | ------------------------------------------------ |
 | Dependency            | Highest manifest shared by every direct consumer |

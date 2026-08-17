@@ -54,8 +54,9 @@ it.layer(TestService)('shared service lifecycle', it => {
 For `SubscriptionRef`, subscribe before mutation, use a `Deferred` readiness handshake, collect a finite stream, and compare `Stream.runCollect` directly as an array:
 
 ```ts
-it.effect('publishes current state and updates', () =>
-	Effect.gen(function* () {
+it.effect(
+	'publishes current state and updates',
+	Effect.fnUntraced(function* () {
 		const state = yield* SubscriptionRef.make(0)
 		const ready = yield* Deferred.make<void>()
 		const values = yield* SubscriptionRef.changes(state).pipe(
@@ -97,6 +98,10 @@ const makeClient = Effect.gen(function* () {
 ## Organization
 
 Colocate `name.test.ts` with `name.ts`. Packages and `apps/*/src/services/**` own durable service tests. Group shared public-behavior suites across implementations; each implementation supplies only its Layer. Applications may test their services, while UI and UX remain Browser acceptance.
+
+Keep tests that require paid services, external credentials, or nondeterministic live systems explicitly skipped. The skipped test must exercise the real public seam and state its runtime prerequisite. It supplements deterministic contract tests; it does not replace them.
+
+Pass `Effect.fnUntraced` directly when an Effect test callback branches or sequences. Use `_` as its unused parameter only when a test API requires one argument.
 
 ## Authoritative sources
 

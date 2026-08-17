@@ -140,6 +140,7 @@ Core source: `.agents/repos/effect/packages/effect/src/<Module>.ts`. Unstable so
 | Immediate linear composition         | `pipe`                                           |
 | Argument + direct delegation         | Arrow                                            |
 | Argument + branching or sequencing   | `Effect.fnUntraced`                              |
+| Callback that constructs an Effect   | `Effect.fnUntraced`                              |
 | Argument + public service checkpoint | Named `Effect.fn`                                |
 | Zero-input branching or sequencing   | `Effect.gen`                                     |
 | Zero-input traced checkpoint         | Name-first `Effect.withSpan` around `Effect.gen` |
