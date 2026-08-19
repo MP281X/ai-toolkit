@@ -1,11 +1,11 @@
 import {NodeServices} from '@effect/platform-node'
 import {expect, it} from '@effect/vitest'
 
-import {Array, Config, Effect, Layer, Result, Schema, Stream, String, pipe} from 'effect'
+import {Config, Effect, Layer, Schema, pipe} from 'effect'
 
 import {InMemoryCredentialStore, createModels} from '@earendil-works/pi-ai'
 import {openaiCodexProvider} from '@earendil-works/pi-ai/providers/openai-codex'
-import {Prompt, type Toolkit} from 'effect/unstable/ai'
+import {Prompt} from 'effect/unstable/ai'
 
 import {PiToolkit} from '#schema'
 import {Ai, type Pi} from '#service'
@@ -33,35 +33,22 @@ it.layer(NodeServices.layer)('Pi', test => {
 			)
 			const models = createModels({credentials})
 			models.setProvider(openaiCodexProvider())
-			const config: Pi.Config<Toolkit.Tools<typeof PiToolkit>> = {
+			const config: Pi.Config = {
 				main: {description: 'main', instructions: '', name: 'main', skills: [], tools: []},
 				model: {id: 'gpt-5.6-luna', provider: 'openai-codex', reasoning: 'low'},
 				models,
 				toolkit: PiToolkit
 			}
-			const program = Effect.gen(function* () {
-				const ai = yield* Ai
-				const parts = yield* pipe(
-					ai.prompt(Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: 'Reply with exactly OK.'})]})),
-					Stream.runCollect
-				)
-				const output = pipe(
-					parts,
-					Array.filterMap(part => {
-						if (part.type !== 'text-delta') return Result.failVoid
-						return Result.succeed(part.delta)
-					}),
-					Array.join(''),
-					String.trim
-				)
-
-				expect(output).toBe('OK')
-			})
-
-			const serviceContext = yield* Layer.build(
-				pipe(Ai.layerPi(config), Layer.provide(PiToolkit.toLayer(handlers('.'))))
+			const handlersContext = yield* Layer.build(PiToolkit.toLayer(handlers('.')))
+			const output = yield* pipe(
+				Ai.generateText(
+					config,
+					Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: 'Reply with exactly OK.'})]})
+				),
+				Effect.provide(handlersContext)
 			)
-			yield* pipe(program, Effect.provide(serviceContext))
+
+			expect(output).toBe('OK')
 		})
 	)
 })

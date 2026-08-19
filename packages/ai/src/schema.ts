@@ -8,10 +8,7 @@ export class AiError extends Schema.TaggedError<AiError>()('AiError', {
 }) {}
 
 export type AiStatus = typeof AiStatus.Type
-export const AiStatus = Schema.Struct({
-	state: Schema.Literals(['idle', 'running', 'retrying', 'stopping', 'awaiting_input', 'error']),
-	updatedAt: Schema.DateTimeUtc
-})
+export const AiStatus = Schema.Literals(['idle', 'running', 'stopping', 'error'] as const)
 
 export type AiAgent = typeof AiAgent.Type
 export const AiAgent = Schema.Literals(['pi'] as const)
@@ -124,4 +121,24 @@ export const Ls = Tool.make('ls', {
 	success: Schema.String
 })
 
-export const PiToolkit = Toolkit.make(Read, Write, Edit, Bash, Grep, Find, Ls)
+export const Skill = Tool.providerDefined({
+	args: Schema.Void,
+	customName: 'skill',
+	failure: Schema.Defect(),
+	id: 'pi.skill',
+	parameters: Schema.Struct({name: Schema.String}),
+	providerName: 'skill',
+	success: Schema.String
+})(undefined)
+
+export const Subagent = Tool.providerDefined({
+	args: Schema.Void,
+	customName: 'subagent',
+	failure: Schema.Defect(),
+	id: 'pi.subagent',
+	parameters: Schema.Struct({agent: Schema.String, prompt: Schema.String}),
+	providerName: 'subagent',
+	success: Schema.String
+})(undefined)
+
+export const PiToolkit = Toolkit.make(Read, Write, Edit, Bash, Grep, Find, Ls, Skill, Subagent)
