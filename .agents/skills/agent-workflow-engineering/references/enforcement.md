@@ -4,22 +4,25 @@
 
 ## Own
 
-| Tool                          | Active owner                              | Available rules or source                            |
-| ----------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| TypeScript                    | `tsconfig.json`                           | `.agents/repos/typescript`                           |
-| Oxlint · Oxfmt                | `vite.config.ts`                          | `.agents/repos/oxc` · `.agents/repos/vite-plus`      |
-| Effect diagnostics            | `vite.config.ts`                          | `.agents/repos/effect-tsgo`                          |
-| React Compiler · React Doctor | `vite.config.ts`                          | `.agents/repos/react` · `.agents/repos/react-doctor` |
-| Fallow                        | `.fallowrc.json` · root `check` script    | `.agents/repos/fallow`                               |
-| Custom Oxlint                 | `tools/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                                      |
+| Tool                          | Active owner                              | Available rules or source             |
+| ----------------------------- | ----------------------------------------- | ------------------------------------- |
+| TypeScript                    | `tsconfig.json`                           | `typescript` reference                |
+| Oxlint · Oxfmt                | `vite.config.ts`                          | `oxc` and `vite-plus` references      |
+| Effect diagnostics            | `vite.config.ts`                          | `effect-tsgo` reference               |
+| React Compiler · React Doctor | `vite.config.ts`                          | `react` and `react-doctor` references |
+| Fallow                        | `.fallowrc.json` · root `check` script    | `fallow` reference                    |
+| Custom Oxlint                 | `tools/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                       |
 
 ## Selection
 
 ```mermaid
-flowchart LR
-    C[Configured maintained rule] --> M[Compatible maintained rule or option]
-    M --> O[Custom Oxlint]
-    O --> S[Domain skill]
+flowchart TD
+	S{Configured maintained rule?} -->|Yes| C[Use configured rule]
+	S -->|No| O{Compatible maintained option?}
+	O -->|Yes| M[Use maintained option]
+	O -->|No| X{Custom Oxlint applicable?}
+	X -->|Yes| L[Use custom Oxlint]
+	X -->|No| D[Route to domain skill]
 ```
 
 Add custom Oxlint only when every gate is satisfied:

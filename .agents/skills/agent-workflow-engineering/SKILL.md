@@ -3,32 +3,32 @@ name: agent-workflow-engineering
 description: 'Use for any change, review, or evaluation of AGENTS.md, skills, agents, configuration, enforcement, rules, or Workflow references.'
 ---
 
-Build the smallest approved Workflow that makes independent runs follow the Contract.
+Build the smallest approved Workflow that makes independent runs follow the approved behavior.
 
 ## Route
 
 Applicable work routes to:
 
-| Work                                                             | Reference                                                  |
-| ---------------------------------------------------------------- | ---------------------------------------------------------- |
-| Diagnosing behavior from current or previous agent conversations | [Conversation history](references/conversation-history.md) |
-| Existing or custom static enforcement                            | [Enforcement](references/enforcement.md)                   |
-| Explicit final workflow evaluation                               | [Evaluation](references/evaluation.md)                     |
-| Codex prompting, configuration, skills, or agents                | [Codex](references/codex.md)                               |
+| Work                                               | Reference                                |
+| -------------------------------------------------- | ---------------------------------------- |
+| OpenCode session or conversation-history diagnosis | [OpenCode](references/opencode.md)       |
+| Existing or custom static enforcement              | [Enforcement](references/enforcement.md) |
+| Explicit final workflow evaluation                 | [Evaluation](references/evaluation.md)   |
 
 ## Ownership
 
-| Owner                  | Surface                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| `AGENTS.md`            | Unconditional authority, vocabulary, loading, collaboration, scope, validation, writing |
-| Skill `description`    | Sole loading trigger; never restates the body                                           |
-| Agent `description`    | Dispatch trigger plus non-derivable required inputs                                     |
-| Native agent body      | Bounded execution procedure after dispatch                                              |
-| Domain skill body      | Conditional workflow or engineering guidance                                            |
-| Skill reference        | One genuinely conditional branch                                                        |
-| Platform configuration | Runtime capability and tool policy                                                      |
-| Static enforcement     | Mechanically detectable repository constraints                                          |
-| Evaluation             | Generic proof of routing, behavior, integration, and stability                          |
+| Owner                  | Surface                                                       |
+| ---------------------- | ------------------------------------------------------------- |
+| Shared instruction     | Small unconditional behavior required by every ordinary agent |
+| Project `AGENTS.md`    | Project validation and scope                                  |
+| Skill `description`    | Sole loading trigger                                          |
+| Agent `description`    | Dispatch trigger and required non-derivable input             |
+| Agent body             | Role procedure and output contract                            |
+| Domain skill body      | Conditional workflow or engineering guidance                  |
+| Skill reference        | One conditional branch                                        |
+| Platform configuration | Models, capabilities, permissions, and references             |
+| Static enforcement     | Mechanically detectable repository constraints                |
+| Evaluation             | Routing, behavior, integration, and stability proof           |
 
 ## Construction
 
@@ -36,36 +36,29 @@ Applicable work routes to:
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Preserve    | Keep unaffected behavior and domain-specific rules, verified CLI instructions, canonical examples, progressive references, schemas, and evidence gates.  |
 | Select      | Keep frequent, architectural, or routinely misapplied guidance only.                                                                                     |
-| Classify    | Apply the `AGENTS.md` Writing grammar to each retained information type.                                                                                 |
+| Classify    | Apply the shared communication contract and the artifact's exact output needs.                                                                           |
 | Label       | Use a precise leading word when it reduces interpretation cost.                                                                                          |
 | Route       | Put capabilities in configuration, mechanical behavior in maintained static enforcement, and conditional guidance in one progressive reference.          |
 | Deduplicate | Remove no-op instructions, generic wrappers, ambiguous headings, metadata restatement, 1:1 duplication, semantic duplication, and conflicting ownership. |
 | Couple      | Update the Owner, call paths, configuration, enforcement, tests, and evaluation fixtures required by the changed behavior.                               |
 
-| Artifact            | Retain only                                                                   |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `AGENTS.md`         | Unconditional repository policy                                               |
-| Skill description   | Loading trigger                                                               |
-| Agent description   | Dispatch trigger and non-derivable input                                      |
-| Skill or agent body | Conditional procedure or bounded execution                                    |
-| Reference           | One conditional branch                                                        |
-| Configuration       | Runtime capability and tool policy                                            |
-| Enforcement         | Mechanically detectable constraint                                            |
-| Evaluation          | Neutral proof of routing, behavior, integration, migration, and repeatability |
+## Assurance
 
-## Workflow-first correction
+| Candidate state                                                                       | Assurance lifecycle                                                          |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Independent proof questions                                                           | Fresh Assurance agents dispatched in parallel by the primary.                |
+| First bounded proof                                                                   | Fresh Assurance agent.                                                       |
+| Any Workflow artifact, native-agent configuration, or enforcement changed after proof | Fresh Assurance agent for each affected proof question.                      |
+| Unchanged bounded follow-up                                                           | Reuse that Assurance agent.                                                  |
+| Explicit Workflow evaluation or finalization                                          | Independent bounded neutral proofs; never one combined whole-Candidate task. |
+| Assurance defect                                                                      | Correct the Workflow Owner, then repeat each affected proof.                 |
 
-Apply this skill alongside `iteration` whenever reported behavior may expose a reusable Workflow defect.
+## Workflow Correction
 
-```mermaid
-flowchart LR
-    H[Reconstruct history] --> C[Classify reusable cause]
-    C --> O[Select narrowest Owner]
-    O --> P[Approve correction]
-    P --> E[Correct enforcement or Workflow]
-    E --> A[Assurance detects unchanged defect]
-    A --> F[Correct Candidate]
-    F --> V[Confirm fix and counterexamples]
-```
-
-**Evaluation:** Run repeated holdouts only during explicit Workflow evaluation or finalization.
+1. Determine whether the correction is conversation-only or reusable.
+2. Reconstruct conversation history only when needed to establish the failure.
+3. Classify the reusable cause and sole Owner.
+4. Load `iteration` when the correction requires an unresolved material decision or new approval.
+5. Correct the Owner while preserving the unchanged defect fixture.
+6. Run fresh Assurance after any Workflow, agent configuration, or enforcement change.
+7. Correct each defect and repeat proof against the original defect and valid counterexamples.

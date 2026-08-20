@@ -3,7 +3,6 @@
 	"entry": ["**/main.*"],
 	"includeEntryExports": true,
 	"ignorePatterns": [
-		".agents/repos/**",
 		"**/*.gen.ts",
 		"packages/components/src/components/svgs/**",
 		"packages/components/src/components/ui/**",

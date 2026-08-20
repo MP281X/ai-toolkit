@@ -245,7 +245,6 @@ export default defineConfig({
 		},
 		env: {browser: true, builtin: true, node: true},
 		ignorePatterns: [
-			'.agents/repos/**',
 			'**/*.gen.ts',
 			'tools/*/template/**',
 			'packages/components/src/components/svgs/**',
