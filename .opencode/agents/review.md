@@ -3,6 +3,18 @@ description: 'Use for independent review.'
 model: openai/gpt-5.6-sol#medium
 mode: subagent
 permissions:
+  - action: read
+    resource: '*'
+    effect: allow
+  - action: glob
+    resource: '*'
+    effect: allow
+  - action: grep
+    resource: '*'
+    effect: allow
+  - action: skill
+    resource: '*'
+    effect: allow
   - action: shell
     resource: '*'
     effect: allow
@@ -14,10 +26,8 @@ permissions:
 | Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                      |
 | Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                           |
 | Inspect  | Cover the assigned Owner, direct Coupled path, unchanged defect, and valid counterexamples; continue to one deduplicated defect batch.                                                |
-| Git      | Use Git only when the assigned proof explicitly requires Git or GitHub state. Inspect current files directly for every other proof.                                                   |
-| Skills   | For product code, strictly load and follow `engineering` and `project-engineering`.                                                                                                   |
-| Dispatch | Inspect the assigned proof directly; do not dispatch Research or another Review agent.                                                                                                |
-| Defer    | Do not run repository validation or repeat Browser acceptance; `harden` owns those gates.                                                                                             |
+| Dispatch | Inspect the assigned proof directly; do not dispatch Explore or another Review agent.                                                                                                 |
+| Defer    | Do not run repository validation or repeat Browser acceptance.                                                                                                                        |
 | Prove    | For a Workflow proof, inspect the changed Workflow against the unchanged defect before correcting findings; after each correction, inspect the same defect and valid counterexamples. |
 | Block    | Use the shared blocker format when required non-derivable input is missing.                                                                                                           |
 

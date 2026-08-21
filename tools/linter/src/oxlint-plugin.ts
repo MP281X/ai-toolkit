@@ -1,64 +1,12 @@
-// Oxlint rules are synchronous; the manifest rule must read its repository boundary before reporting.
-// @effect-diagnostics-next-line nodeBuiltinImport:off
-import {readFileSync, readdirSync} from 'node:fs'
-
-import {Array, HashSet, Option, Record, Schema, String, pipe} from 'effect'
+import {Array, Option, Schema, String, pipe} from 'effect'
 
 import {definePlugin} from '@oxlint/plugins'
 import type {Context, ESTree, Scope, Variable} from '@oxlint/plugins'
 
-type PackageManifest = typeof PackageManifest.Type
-const PackageManifest = Schema.fromJsonString(
-	Schema.Struct({
-		dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		peerDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String))
-	})
-)
-
-function dependencyNames(manifest: PackageManifest) {
-	return pipe(
-		[
-			manifest.dependencies ?? {},
-			manifest.devDependencies ?? {},
-			manifest.optionalDependencies ?? {},
-			manifest.peerDependencies ?? {}
-		],
-		Array.flatMap(Record.keys)
-	)
-}
-
-function duplicateRootDependencies() {
-	const root = new URL('../../../', import.meta.url)
-	const rootDependencies = pipe(
-		Schema.decodeSync(PackageManifest)(readFileSync(new URL('package.json', root), 'utf8')),
-		dependencyNames,
-		HashSet.fromIterable
-	)
-	return pipe(
-		['apps', 'packages', 'tools'],
-		Array.flatMap(directory =>
-			pipe(
-				readdirSync(new URL(`${directory}/`, root), {withFileTypes: true}),
-				Array.filter(entry => entry.isDirectory() && !String.startsWith('.')(entry.name)),
-				Array.map(entry => ({
-					manifest: Schema.decodeSync(PackageManifest)(
-						readFileSync(new URL(`${directory}/${entry.name}/package.json`, root), 'utf8')
-					),
-					path: `${directory}/${entry.name}/package.json`
-				}))
-			)
-		),
-		Array.flatMap(input =>
-			pipe(
-				dependencyNames(input.manifest),
-				Array.filter(name => HashSet.has(rootDependencies, name)),
-				Array.map(name => ({name, path: input.path}))
-			)
-		)
-	)
-}
+type DuplicateOptions = typeof DuplicateOptions.Type
+const DuplicateOptions = Schema.Struct({
+	duplicates: Schema.Array(Schema.Struct({name: Schema.String, path: Schema.String}))
+})
 
 function variableFromScope(input: {name: string; scope: Scope | null}): Option.Option<Variable> {
 	if (input.scope === null) return Option.none()
@@ -473,18 +421,19 @@ function unknownJsonSchema(input: {context: Context; node: ESTree.CallExpression
 }
 
 const plugin = definePlugin({
-	meta: {name: '@deslop/oxlint-rules'},
+	meta: {name: 'deslop'},
 	rules: {
 		'no-duplicate-root-dependency': {
 			createOnce: context => ({
 				Program: program => {
 					if (!String.endsWith('/vite.config.ts')(context.filename)) return
-					for (const duplicate of duplicateRootDependencies()) {
+					const options = Schema.decodeUnknownSync(DuplicateOptions)(context.options[0])
+					for (const duplicate of options.duplicates) {
 						context.report({message: `${duplicate.path} redeclares root dependency ${duplicate.name}.`, node: program})
 					}
 				}
 			}),
-			meta: {type: 'problem'}
+			meta: {schema: [{type: 'object'}], type: 'problem'}
 		},
 		'no-fake-ref-state': {
 			create: context => ({

@@ -17,14 +17,14 @@
 		"effect": "^4.0.0-rc"
 	},
 	"devDependencies": {
-		"@deslop/oxlint-rules": "workspace:*",
+		"@deslop/linter": "workspace:*",
 		"@effect/tsgo": "latest",
 		"@effect/vitest": "^4.0.0-rc",
+		"@opencode-ai/plugin": "beta",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"fallow": "latest",
-		"oxlint-plugin-react-doctor": "latest",
 		"typescript": "latest",
 		"vite": "catalog:",
 		"vite-plus": "catalog:"

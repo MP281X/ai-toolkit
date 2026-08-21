@@ -1,9 +1,11 @@
 import {NodeServices} from '@effect/platform-node'
 import {describe, expect, it} from '@effect/vitest'
 
-import {Array, Effect, FileSystem, Path, Schema, Stream, String, pipe} from 'effect'
+import {Array, Effect, FileSystem, Path, Schema, String, pipe} from 'effect'
 
-import {ChildProcess, ChildProcessSpawner} from 'effect/unstable/process'
+import {ChildProcessSpawner} from 'effect/unstable/process'
+
+import {runLint} from './run-lint.ts'
 
 type OxlintOutput = typeof OxlintOutput.Type
 const OxlintOutput = Schema.Struct({
@@ -17,19 +19,12 @@ const lintSource = Effect.fnUntraced(function* (input: {name: string; source: st
 	const file = path.join(directory, input.name)
 	yield* fs.writeFileString(file, String.replace(/^((?:import[^\n]*\n)+)(?!\n)/u, '$1\n')(input.source))
 
-	const handle = yield* ChildProcess.make('vp', ['lint', file, '--format=json'], {
+	const result = yield* runLint({
+		arguments: ['--format=json'],
+		capture: true,
 		cwd: path.resolve(import.meta.dirname, '../../..'),
-		stderr: 'pipe',
-		stdout: 'pipe'
+		paths: [file]
 	})
-	const result = yield* Effect.all(
-		{
-			exitCode: handle.exitCode,
-			stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-			stdout: Stream.mkString(Stream.decodeText(handle.stdout))
-		},
-		{concurrency: 'unbounded'}
-	)
 	return {
 		exitCode: result.exitCode,
 		stderr: result.stderr,
@@ -40,13 +35,13 @@ const lintSource = Effect.fnUntraced(function* (input: {name: string; source: st
 function customCodes(output: OxlintOutput) {
 	return pipe(
 		customDiagnostics(output),
-		Array.map(diagnostic => diagnostic.code),
+		Array.map(diagnostic => String.replace(/^deslop[/(]([^)]*)\)?$/u, 'deslop($1)')(diagnostic.code)),
 		Array.sort(String.Order)
 	)
 }
 
 function customDiagnostics(output: OxlintOutput) {
-	return Array.filter(output.diagnostics, diagnostic => String.startsWith('@deslop/oxlint-rules(')(diagnostic.code))
+	return Array.filter(output.diagnostics, diagnostic => String.startsWith('deslop')(diagnostic.code))
 }
 
 describe('deslop Oxlint plugin', {concurrent: false}, () => {
@@ -107,37 +102,37 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 						expect(customCodes(result.stdout)).toEqual(
 							pipe(
 								[
-									'@deslop/oxlint-rules(no-fake-ref-state)',
-									'@deslop/oxlint-rules(no-fake-ref-state)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-readonly-type-syntax)',
-									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
-									'@deslop/oxlint-rules(no-redundant-use-ref-null-type)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-stored-schema-operation)',
-									'@deslop/oxlint-rules(no-trivial-indirection)',
-									'@deslop/oxlint-rules(no-trivial-indirection)',
-									'@deslop/oxlint-rules(no-trivial-indirection)',
-									'@deslop/oxlint-rules(no-trivial-indirection)',
-									'@deslop/oxlint-rules(no-trivial-indirection)',
-									'@deslop/oxlint-rules(no-undestructured-use-state)',
-									'@deslop/oxlint-rules(no-undestructured-use-state)',
-									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
-									'@deslop/oxlint-rules(no-unvalidated-json-decode)',
-									'@deslop/oxlint-rules(schema-type-pair)',
-									'@deslop/oxlint-rules(schema-type-pair)',
-									'@deslop/oxlint-rules(schema-type-pair)',
-									'@deslop/oxlint-rules(schema-type-pair)',
-									'@deslop/oxlint-rules(schema-type-pair)'
+									'deslop(no-fake-ref-state)',
+									'deslop(no-fake-ref-state)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-readonly-type-syntax)',
+									'deslop(no-redundant-use-ref-null-type)',
+									'deslop(no-redundant-use-ref-null-type)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-stored-schema-operation)',
+									'deslop(no-trivial-indirection)',
+									'deslop(no-trivial-indirection)',
+									'deslop(no-trivial-indirection)',
+									'deslop(no-trivial-indirection)',
+									'deslop(no-trivial-indirection)',
+									'deslop(no-undestructured-use-state)',
+									'deslop(no-undestructured-use-state)',
+									'deslop(no-unvalidated-json-decode)',
+									'deslop(no-unvalidated-json-decode)',
+									'deslop(schema-type-pair)',
+									'deslop(schema-type-pair)',
+									'deslop(schema-type-pair)',
+									'deslop(schema-type-pair)',
+									'deslop(schema-type-pair)'
 								],
 								Array.sort(String.Order)
 							)
@@ -145,7 +140,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 						expect(
 							pipe(
 								customDiagnostics(result.stdout),
-								Array.filter(diagnostic => diagnostic.code === '@deslop/oxlint-rules(no-stored-schema-operation)'),
+								Array.filter(diagnostic => diagnostic.code === 'deslop(no-stored-schema-operation)'),
 								Array.map(diagnostic => diagnostic.message)
 							)
 						).toEqual(
@@ -229,7 +224,7 @@ describe('deslop Oxlint plugin', {concurrent: false}, () => {
 							'{"dependencies":{"effect":"latest"},"name":"@deslop/duplicate"}'
 						)
 						const result = yield* lintSource({name: 'vite.config.ts', source: 'export default {}'})
-						expect(customCodes(result.stdout)).toEqual(['@deslop/oxlint-rules(no-duplicate-root-dependency)'])
+						expect(customCodes(result.stdout)).toEqual(['deslop(no-duplicate-root-dependency)'])
 					}),
 					Effect.scoped
 				),

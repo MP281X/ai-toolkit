@@ -1,6 +1,9 @@
-import {Array, Number, Option, pipe} from 'effect'
+import {useAtomSet} from '@effect/atom-react'
+
+import {Array, Effect, Number, Option, pipe} from 'effect'
 
 import * as tanstackForm from '@tanstack/react-form'
+import * as Atom from 'effect/unstable/reactivity/Atom'
 import {useState} from 'react'
 
 import {Button} from '#components/ui/button.tsx'
@@ -328,23 +331,26 @@ export declare namespace Form {
 	}
 }
 
+const submitForm = Atom.fn((form: Form.Props['form']) =>
+	pipe(
+		Effect.tryPromise(() => form.handleSubmit()),
+		Effect.matchEffect({
+			onFailure: error => Effect.sync(() => toast.error(formatError(error))),
+			onSuccess: () => Effect.sync(form.reset)
+		})
+	)
+)
+
 export function Form(props: Form.Props) {
-	async function submit() {
-		try {
-			await props.form.handleSubmit()
-			props.form.reset()
-		} catch (error) {
-			toast.error(formatError(error))
-		}
-	}
+	const submit = useAtomSet(submitForm)
 
 	return (
 		<props.form.AppForm>
 			<form
 				className={cn('flex flex-1 items-center justify-center', props.className)}
-				onSubmit={async event => {
+				onSubmit={event => {
 					event.preventDefault()
-					await submit()
+					submit(props.form)
 				}}
 			>
 				{props.children}

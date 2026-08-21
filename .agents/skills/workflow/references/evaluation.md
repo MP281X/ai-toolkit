@@ -13,17 +13,17 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Writing persistence  | Primary and subagent output remains compact, complete, unambiguous, and schema-conformant through a long tool-heavy turn.                                        |
 | Compaction           | After lossy compaction, each retained representation preserves its relationships, order, branching, mappings, hierarchy, scope, and validity without prose glue. |
-| Primary boundary     | Primary directly edits, validates, and performs approved Git operations while delegating only bounded Research, Review, and Browser work.                        |
-| Shared source        | Root `AGENTS.md` supplies Behavior, Communication, validation, and project scope to every agent; configuration has no shared instruction paths.                  |
-| Approved execution   | A complete approved Contract reaches a Safe checkpoint and Primary edits and validates without additional questions or repeated approval.                        |
+| Primary boundary     | Primary has only read, skill, and subagent tools and delegates mutation to Implementation and Git operations to Git.                                             |
+| Shared source        | The V2 context-hook plugin supplies ambient instructions to every agent; root `AGENTS.md` remains repository-specific.                                           |
+| Approved execution   | Implementation completes an approved Contract, runs exact repository validation, then runs `deslop-linter` for non-Markdown changes.                             |
 | Product design       | `engineering` loads for general design; `project-engineering` additionally loads only for this repository's architecture or visual system.                       |
 | Unrelated delegation | Independent work uses fresh applicable agents and preserves parallel dispatch.                                                                                   |
 | Related delegation   | A follow-up reuses its agent unless that assignment's evidence changed; a correction requires fresh Review only for affected proof questions.                    |
 | Review scope         | Each Review receives one bounded proof question; one request combining independent Owners or proof questions fails evaluation.                                   |
-| Git ownership        | Primary loads `git` for every Git or GitHub operation, and only operation-matching Git references load.                                                          |
+| Git ownership        | Git owns every Git or GitHub operation and loads only operation-matching references.                                                                             |
 | V2 reload            | Workflow changes do not require an OpenCode restart before proof.                                                                                                |
-| Research ownership   | Research returns only decision-relevant findings; Primary reads files it edits and rereads evidence only when required.                                          |
-| Research depth       | A defect investigation tests plausible causes and identifies the reusable cause and sole owner instead of stopping at a symptom.                                 |
+| Explore ownership    | Explore returns only decision-relevant findings for broad, external, multi-source, or conversation-history investigation.                                        |
+| Explore depth        | A defect investigation tests plausible causes and identifies the reusable cause and sole Owner instead of stopping at a symptom.                                 |
 | Representation scope | A request to shorten communicated paths does not change stored reference declarations.                                                                           |
 | Failure reporting    | Each agent reports every execution failure to its parent; the primary reports each distinct failure once, including recovered failures.                          |
 | Continuation         | Completion of a secondary objective continues the actionable approved parent objective.                                                                          |

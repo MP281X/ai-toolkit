@@ -9,28 +9,10 @@ Build the smallest approved Workflow that makes independent runs follow the appr
 
 Applicable work routes to:
 
-| Work                                               | Reference                                |
-| -------------------------------------------------- | ---------------------------------------- |
-| OpenCode session or conversation-history diagnosis | [OpenCode](references/opencode.md)       |
-| Existing or custom static enforcement              | [Enforcement](references/enforcement.md) |
-| Explicit final workflow evaluation                 | [Evaluation](references/evaluation.md)   |
-
-## Ownership
-
-| Owner                  | Surface                                                          |
-| ---------------------- | ---------------------------------------------------------------- |
-| Project `AGENTS.md`    | Shared Behavior and Communication, project validation, and scope |
-| Skill `description`    | Sole loading trigger                                             |
-| Agent `description`    | Dispatch trigger and required non-derivable input                |
-| Agent body             | Role procedure and output contract                               |
-| Primary                | Approved edits, validation, Git operations, and delegation       |
-| Implementation skill   | Conditional workspace edit and validation procedure              |
-| Git skill              | Conditional Git and GitHub policy and progressive references     |
-| Domain skill body      | Conditional workflow or engineering guidance                     |
-| Skill reference        | One conditional branch                                           |
-| Platform configuration | Models, capabilities, permissions, and references                |
-| Static enforcement     | Mechanically detectable repository constraints                   |
-| Evaluation             | Routing, behavior, integration, and stability proof              |
+| Work                                  | Reference                                |
+| ------------------------------------- | ---------------------------------------- |
+| Existing or custom static enforcement | [Enforcement](references/enforcement.md) |
+| Explicit final workflow evaluation    | [Evaluation](references/evaluation.md)   |
 
 ## Construction
 
@@ -49,6 +31,6 @@ Applicable work routes to:
 1. Determine whether the correction is conversation-only or reusable.
 2. Reconstruct conversation history only when needed to establish the failure.
 3. Classify the reusable cause and sole Owner.
-4. Load `prototype` when the correction requires an unresolved material decision or new approval.
+4. Return unresolved material decisions for approval.
 5. Correct the Owner while preserving the unchanged defect fixture.
 6. Preserve the defect and valid counterexamples for explicit finalization.
