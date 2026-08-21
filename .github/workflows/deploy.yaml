@@ -4,7 +4,6 @@ on: [push]
 
 permissions:
   contents: read
-  id-token: write
   packages: write
 
 jobs:
@@ -32,17 +31,6 @@ jobs:
       - name: Build
         if: github.ref == 'refs/heads/main'
         run: vp run build
-
-      - name: NPM
-        if: github.ref == 'refs/heads/main'
-        run: |
-          for app in workbench; do
-            cd ./apps/$app
-            version=$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
-            npm version ${version%.*}.${{ github.run_number }} --no-git-tag-version --workspaces=false
-            npm publish --access public --provenance --workspaces=false
-            cd ../..
-          done
 
       - name: Docker
         if: github.ref == 'refs/heads/main'
