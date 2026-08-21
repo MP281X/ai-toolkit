@@ -17,17 +17,16 @@ Use Effect v4, React, Effect Atom, and TanStack Router when the repository conta
 
 ## Workflow
 
-| Lead       | Requirement                                                                                                                   |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Inspect    | Establish surrounding code, configured dependencies, project conventions, and authoritative reference behavior before design. |
-| Decode     | Trust typed values. Decode unknown external data once at its boundary.                                                        |
-| Transform  | Preserve intact typed values. Transform shape only when approved requirements require it.                                     |
-| State      | Omit states excluded by types or schemas.                                                                                     |
-| Fail       | Propagate the first reachable failure. Retry or recover only when required.                                                   |
-| Mutability | Keep arguments, props, service values, and returned values immutable without `readonly` syntax.                               |
-| Name       | Use direct names, inferred local types, domain operations, and established repository conventions.                            |
-| Test       | Test durable behavior only when regression cost justifies it. Omit generated scaffolding and presentation-detail unit tests.  |
-| Comment    | Explain only a surprising constraint or non-obvious behavior.                                                                 |
+| Lead       | Requirement                                                                                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inspect    | Establish surrounding code, configured dependencies, project conventions, and authoritative reference behavior before design.                             |
+| Decode     | Decode unknown external data once at its boundary.                                                                                                        |
+| Transform  | Preserve intact typed values. Transform shape only when approved requirements require it.                                                                 |
+| Fail       | Compose Effect's typed error channel. Recover in Effect only when the current layer owns recovery. Otherwise preserve the error channel for its boundary. |
+| Mutability | Keep arguments, props, service values, and returned values immutable without `readonly` syntax.                                                           |
+| Name       | Use direct names, inferred local types, domain operations, and established repository conventions.                                                        |
+| Test       | Test durable behavior only when regression cost justifies it. Omit generated scaffolding and presentation-detail unit tests.                              |
+| Comment    | Explain only a surprising constraint or non-obvious behavior.                                                                                             |
 
 ## References
 

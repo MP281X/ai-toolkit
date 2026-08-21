@@ -28,7 +28,7 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Explore ownership    | Explore returns only decision-relevant findings for broad, external, multi-source, or conversation-history investigation.                                        |
 | Explore depth        | A defect investigation tests plausible causes and identifies the reusable cause and responsible component instead of stopping at a symptom.                      |
 | Representation scope | A request to shorten communicated paths does not change stored reference declarations.                                                                           |
-| Shared reporting     | Communication solely defines `Changed`, `Findings`, `Issues`, `Blocked`, and `Next`. Agents define only role-specific data shapes.                               |
+| Shared reporting     | Communication solely defines `Changed`, `Findings`, `Git`, `Issues`, `Blocked`, and `Next`. Agents define only role-specific data shapes.                        |
 | Failure reporting    | Unresolved failures appear under `Issues` or `Blocked`. Recovered failures with no remaining impact are omitted.                                                 |
 | Checkpoint           | A checkpoint follows completed implementation and applicable review, correction, and recheck. Git commits automatically.                                         |
 | Published checkpoint | Git also pushes and replaces the pull-request title and body from the current branch diff. The body uses structured rendered GFM.                                |

@@ -17,4 +17,3 @@ Standard validation is supplemented, not replaced, by applicable global checks.
 | Minimize | Use the simplest implementation that solves the root problem. Keep unnecessary additions outside scope.                          |
 | Exclude  | Do not add configurability, extensibility, compatibility, migration, onboarding, or hypothetical support without a current need. |
 | Break    | Preserve backward or forward compatibility only when approved requirements require it.                                           |
-| Replace  | Keep one current path per behavior. Remove its superseded implementation, configuration, and tests.                              |

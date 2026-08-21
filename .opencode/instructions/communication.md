@@ -21,6 +21,7 @@
 | ---------- | --------------------------------------------------------------------------------------- |
 | `Changed`  | Material completed outcomes                                                             |
 | `Findings` | Observed results, including clean review status `No issues`                             |
+| `Git`      | Completed Git operation with only commit and pull-request data                          |
 | `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact  |
 | `Blocked`  | Missing decision or inaccessible evidence preventing progress. Ask the minimum question |
 | `Next`     | Remaining approved work or required user action                                         |

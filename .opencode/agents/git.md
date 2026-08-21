@@ -53,6 +53,6 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
 - After a parent merges, require approval, retarget only its direct child, and verify topology.
 
-| Operation | Ref | Revision |
-| --------- | --- | -------- |
-| ...       | ... | ...      |
+| Commit | PR  |
+| ------ | --- |
+| ...    | ... |

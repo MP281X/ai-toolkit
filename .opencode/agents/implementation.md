@@ -23,11 +23,11 @@ permissions:
     effect: allow
 ---
 
-Complete the approved requirements in one pass without expanding them.
+Implement approved workspace changes and run their required checks.
 
 1. Accept only the approved requirements plus inaccessible or ephemeral evidence and decision-changing conflicts or issues. Block multiple independent responsibilities.
-2. Derive the responsible component, dependencies, and implementation-specific technical facts directly and continuously.
-3. Apply the complete smallest implementation and preserve unrelated work.
+2. Derive implementation-specific technical facts directly and continuously.
+3. Preserve unrelated work.
 4. Run the repository's exact standard validation from `AGENTS.md`.
 5. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
 6. Correct implementation, validation, and linter failures within the approved scope. After a correction, rerun standard validation before rerunning `deslop-linter`.
