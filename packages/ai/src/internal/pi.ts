@@ -1,49 +1,69 @@
 import type {Context} from 'effect'
 import {
 	Array,
+	Boolean,
 	DateTime,
 	Effect,
 	Encoding,
+	HashMap,
+	Inspectable,
 	Match,
 	Option,
 	Predicate,
-	Queue,
 	Record,
-	Ref,
+	Result,
 	Schema,
-	Semaphore,
 	Stream,
 	String,
 	SubscriptionRef,
 	pipe
 } from 'effect'
 
-import type {ImageContent, StopReason, TextContent} from '@earendil-works/pi-ai'
-import {OPENAI_CODEX_MODELS} from '@earendil-works/pi-ai/providers/openai-codex.models'
 import {
-	DefaultResourceLoader,
-	SessionManager,
-	createAgentSession,
-	getAgentDir,
-	type AgentToolResult,
-	type AgentSessionEvent,
-	type ToolDefinition
-} from '@earendil-works/pi-coding-agent'
+	Agent,
+	DEFAULT_COMPACTION_SETTINGS,
+	InMemorySessionRepo,
+	buildSessionContext,
+	compact,
+	estimateContextTokens,
+	getOrThrow,
+	prepareCompaction,
+	shouldCompact,
+	type AgentEvent,
+	type AgentMessage,
+	type AgentTool,
+	type AgentToolResult
+} from '@earendil-works/pi-agent-core'
+import type {
+	Api,
+	AssistantMessage,
+	ImageContent,
+	Message,
+	Model,
+	StopReason,
+	TextContent,
+	ThinkingContent,
+	ToolCall,
+	ToolResultMessage
+} from '@earendil-works/pi-ai'
+import {Type} from '@earendil-works/pi-ai'
 import {Prompt, Response, Tool, type Toolkit} from 'effect/unstable/ai'
 
-import {AiError, type AiStatus} from '#schema'
-import {Ai} from '#service'
+import {AiError as ServiceAiError, type AiAgentDefinition, type AiSkill, type AiStatus} from '#schema'
+import type {Ai, Pi} from '#service'
+
+import {makeReplay} from './replay.ts'
 
 function finishReason(reason: StopReason) {
 	return pipe(
 		Match.value(reason),
 		Match.when('stop', () => 'stop' as const),
 		Match.when('length', () => 'length' as const),
-		Match.when('error', () => 'error' as const),
 		Match.when('toolUse', () => 'tool-calls' as const),
-		Match.when('aborted', () => 'error' as const),
 		Match.when('pending', () => 'error' as const),
-		Match.when('deferred', () => 'error' as const),
+		Match.when('deferred', () => 'pause' as const),
+		Match.when('aborted', () => 'other' as const),
+		Match.when('error', () => 'error' as const),
 		Match.exhaustive
 	)
 }
@@ -51,9 +71,9 @@ function finishReason(reason: StopReason) {
 function imageDataFromFilePart(part: Prompt.FilePart) {
 	if (part.data instanceof URL) return
 	if (!Predicate.isString(part.data)) return Encoding.encodeBase64(part.data)
-
-	const dataUrlPrefix = `data:${part.mediaType};base64,`
-	return String.startsWith(dataUrlPrefix)(part.data) ? String.slice(String.length(dataUrlPrefix))(part.data) : part.data
+	const prefix = `data:${part.mediaType};base64,`
+	if (String.startsWith(prefix)(part.data)) return String.slice(String.length(prefix))(part.data)
+	return part.data
 }
 
 function imageFromFilePart(part: Prompt.FilePart) {
@@ -63,448 +83,600 @@ function imageFromFilePart(part: Prompt.FilePart) {
 	return {data, mimeType: part.mediaType, type: 'image'} satisfies ImageContent
 }
 
-function textFromResult(result: unknown) {
-	if (Predicate.isString(result)) return result
-	if (Predicate.isUndefined(result)) return 'undefined'
-	return Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(result)
-}
-
-const piContentFromPromptParts = Effect.fnUntraced(function* (parts: Prompt.UserMessage['content']) {
+const piContentFromPrompt = Effect.fnUntraced(function* (message: Prompt.UserMessage) {
 	return Array.flatten(
-		yield* Effect.forEach(parts, part =>
-			pipe(
-				Match.value(part),
-				Match.when({type: 'text'}, textPart =>
-					Effect.succeed([{text: textPart.text, type: 'text'} satisfies TextContent])
-				),
-				Match.when({type: 'file'}, filePart =>
-					Effect.gen(function* () {
-						const image = imageFromFilePart(filePart)
-						if (Predicate.isUndefined(image)) {
-							return yield* AiError.make({
-								message:
-									filePart.data instanceof URL
-										? 'Pi agent does not support URL file prompt parts'
-										: `Pi agent does not support ${filePart.mediaType} file prompt parts`
-							})
-						}
-						return [image]
-					})
-				),
-				Match.orElse(() => Effect.succeed(Array.empty<TextContent | ImageContent>()))
-			)
-		)
+		yield* Effect.forEach(message.content, (part): Effect.Effect<(TextContent | ImageContent)[], ServiceAiError> => {
+			if (part.type === 'text') return Effect.succeed([{text: part.text, type: 'text'} satisfies TextContent])
+			const image = imageFromFilePart(part)
+			if (Predicate.isNotUndefined(image)) return Effect.succeed([image])
+			return Effect.fail(ServiceAiError.make({message: `Pi does not support ${part.mediaType} prompt parts`}))
+		})
 	)
 })
 
-function agentToolResult(result: unknown) {
-	return {content: [{text: textFromResult(result), type: 'text'}], details: result} satisfies AgentToolResult<unknown>
+const piUserMessage = Effect.fnUntraced(function* (message: Prompt.UserMessage) {
+	return {
+		content: yield* piContentFromPrompt(message),
+		role: 'user',
+		timestamp: DateTime.toEpochMillis(yield* DateTime.now)
+	} satisfies Message
+})
+
+const piMessagesFromPrompt = Effect.fnUntraced(function* (prompt: Prompt.Prompt, model: Model<Api>) {
+	const timestamp = DateTime.toEpochMillis(yield* DateTime.now)
+	return Array.flatten(
+		yield* Effect.forEach(prompt.content, (message): Effect.Effect<Message[], ServiceAiError> => {
+			if (message.role === 'system') return Effect.succeed(Array.empty<Message>())
+			if (message.role === 'user') return pipe(piUserMessage(message), Effect.map(Array.of))
+			if (message.role === 'assistant') {
+				const content: (TextContent | ThinkingContent | ToolCall)[] = []
+				for (const part of message.content) {
+					if (part.type === 'text') content[Array.length(content)] = {text: part.text, type: 'text'}
+					if (part.type === 'reasoning') content[Array.length(content)] = {thinking: part.text, type: 'thinking'}
+					if (part.type === 'tool-call') {
+						const params = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))(part.params)
+						if (Option.isSome(params)) {
+							content[Array.length(content)] = {arguments: params.value, id: part.id, name: part.name, type: 'toolCall'}
+						}
+					}
+				}
+				return Effect.succeed([
+					{
+						api: model.api,
+						content,
+						model: model.id,
+						provider: model.provider,
+						role: 'assistant',
+						stopReason: 'stop',
+						timestamp,
+						usage: {
+							cacheRead: 0,
+							cacheWrite: 0,
+							cost: {cacheRead: 0, cacheWrite: 0, input: 0, output: 0, total: 0},
+							input: 0,
+							output: 0,
+							reasoning: 0,
+							totalTokens: 0
+						}
+					} satisfies AssistantMessage
+				])
+			}
+			return Effect.succeed(
+				Array.filterMap(message.content, part => {
+					if (part.type !== 'tool-result') return Result.failVoid
+					return Result.succeed({
+						content: [{text: textFromUnknown(part.result), type: 'text'}],
+						details: part.result,
+						isError: part.isFailure,
+						role: 'toolResult',
+						timestamp,
+						toolCallId: part.id,
+						toolName: part.name
+					} satisfies ToolResultMessage)
+				})
+			)
+		})
+	)
+})
+
+function textFromUnknown(value: unknown) {
+	if (Predicate.isString(value)) return value
+	if (Predicate.isUndefined(value)) return 'undefined'
+	return Inspectable.toStringUnknown(value)
 }
 
-function partFromEvent<ToolSet extends Ai.Tools>(event: AgentSessionEvent) {
+function isPiMessage(message: AgentMessage): message is Message {
+	return message.role === 'user' || message.role === 'assistant' || message.role === 'toolResult'
+}
+
+function promptUserMessage(message: AgentMessage) {
+	if (!isPiMessage(message) || message.role !== 'user') return
+	if (Predicate.isString(message.content)) {
+		return Prompt.makeMessage('user', {content: [Prompt.makePart('text', {text: message.content})]})
+	}
+	const content = pipe(
+		message.content,
+		Array.map(part => {
+			if (part.type === 'text') return Prompt.makePart('text', {text: part.text})
+			return Prompt.makePart('file', {data: part.data, mediaType: part.mimeType})
+		})
+	)
+	return Prompt.makeMessage('user', {content})
+}
+
+function toolResult(value: unknown) {
+	return {content: [{text: textFromUnknown(value), type: 'text'}], details: value} satisfies AgentToolResult<unknown>
+}
+
+function effectToolsFromToolkit(
+	toolkit: Toolkit.WithHandler<Ai.Tools>,
+	context: Context.Context<Tool.HandlerServices<Ai.Tools[keyof Ai.Tools]>>,
+	names: (keyof Ai.Tools)[]
+) {
 	return pipe(
-		Match.value(event),
-		Match.when({type: 'message_update'}, messageEvent =>
-			pipe(
-				Match.value(messageEvent.assistantMessageEvent),
-				Match.when({type: 'text_delta'}, update =>
-					update.delta === ''
-						? Array.empty<Response.StreamPart<ToolSet>>()
-						: [Response.makePart('text-delta', {delta: update.delta, id: update.partial.responseId ?? 'text'})]
-				),
-				Match.when({type: 'thinking_delta'}, update =>
-					update.delta === ''
-						? Array.empty<Response.StreamPart<ToolSet>>()
-						: [
-								Response.makePart('reasoning-delta', {
-									delta: update.delta,
-									id: update.partial.responseId ?? 'reasoning'
-								})
-							]
-				),
-				Match.when({type: 'toolcall_end'}, update => [
-					Response.makePart('tool-call', {
-						id: update.toolCall.id,
-						name: update.toolCall.name,
-						params: update.toolCall.arguments,
-						providerExecuted: false
-					})
-				]),
-				Match.orElse(() => Array.empty<Response.StreamPart<ToolSet>>())
-			)
+		names,
+		Array.filterMap(name => {
+			const selected = Record.get(toolkit.tools, name)
+			if (Option.isNone(selected) || Tool.isProviderDefined(selected.value)) return Result.failVoid
+			const tool = selected.value
+			let description: string = name
+			if (Predicate.isString(tool.description)) description = tool.description
+			return Result.succeed({
+				description,
+				execute: (toolCallId, params, _signal, onUpdate) =>
+					Effect.runPromiseWith(context)(
+						pipe(
+							Schema.decodeUnknownEffect(tool.parametersSchema)(params),
+							Effect.mapError(cause => ServiceAiError.make({cause, message: `Invalid ${name} parameters`})),
+							Effect.flatMap(input => toolkit.handle(name, input, toolCallId)),
+							Effect.flatMap(stream =>
+								pipe(
+									stream,
+									Stream.mapError(cause => ServiceAiError.make({cause, message: `${name} failed`})),
+									Stream.tap(result => {
+										if (!result.preliminary) return Effect.void
+										return Effect.sync(() => onUpdate?.(toolResult(result.encodedResult)))
+									}),
+									Stream.filter(result => !result.preliminary),
+									Stream.runLast
+								)
+							),
+							Effect.map(Option.map(result => result.encodedResult)),
+							Effect.map(value => toolResult(Option.getOrUndefined(value))),
+							Effect.mapError(cause => ServiceAiError.make({cause, message: `${name} failed`}))
+						)
+					),
+				executionMode: Boolean.match(name === 'write' || name === 'edit', {
+					onFalse: () => 'parallel',
+					onTrue: () => 'sequential'
+				}),
+				label: name,
+				name,
+				parameters: Type.Unsafe<unknown>(Tool.getJsonSchema(tool))
+			} satisfies AgentTool)
+		})
+	)
+}
+
+function formatSkills(skills: AiSkill[]) {
+	if (Array.length(skills) === 0) return ''
+	return Array.join('\n')([
+		'The skill tool exposes specialized instructions. Invoke a skill when its description matches the task.',
+		'<available_skills>',
+		...Array.map(
+			skills,
+			skill => `  <skill><name>${skill.name}</name><description>${skill.description}</description></skill>`
 		),
-		Match.when({type: 'tool_execution_end'}, toolEvent => [
+		'</available_skills>'
+	])
+}
+
+function formatAgents(agents: AiAgentDefinition[]) {
+	if (Array.length(agents) === 0) return ''
+	return Array.join('\n')([
+		'The subagent tool delegates one focused task to an isolated agent.',
+		'<available_agents>',
+		...Array.map(
+			agents,
+			agent => `  <agent><name>${agent.name}</name><description>${agent.description}</description></agent>`
+		),
+		'</available_agents>'
+	])
+}
+
+function systemPrompt(profile: AiAgentDefinition, agents: AiAgentDefinition[]) {
+	return pipe(
+		[profile.instructions, formatSkills(Array.fromIterable(profile.skills)), formatAgents(agents)],
+		Array.filter(String.isNonEmpty),
+		Array.join('\n\n')
+	)
+}
+
+function skillTool<R>(skills: AiSkill[], context: Context.Context<R>) {
+	return {
+		description: 'Load the complete instructions and embedded resources for one available skill.',
+		execute: (_toolCallId, params) =>
+			Effect.runPromiseWith(context)(
+				Effect.gen(function* () {
+					const input = yield* Schema.decodeUnknownEffect(Schema.Struct({name: Schema.String}))(params)
+					const skill = Array.findFirst(skills, candidate => candidate.name === input.name)
+					if (Option.isNone(skill)) return yield* ServiceAiError.make({message: `Unknown skill: ${input.name}`})
+					if (Predicate.isUndefined(skill.value.resources)) return toolResult(skill.value.instructions)
+					const resources = pipe(
+						Record.toEntries(skill.value.resources),
+						Array.map(([name, content]) => `<resource name="${name}">\n${content}\n</resource>`),
+						Array.join('\n')
+					)
+					return toolResult(`${skill.value.instructions}\n\n<resources>\n${resources}\n</resources>`)
+				})
+			),
+		executionMode: 'parallel',
+		label: 'skill',
+		name: 'skill',
+		parameters: Type.Object({name: Type.String({enum: Array.map(skills, skill => skill.name)})})
+	} satisfies AgentTool
+}
+
+function assistantText(messages: AgentMessage[]) {
+	const last = Array.findLast(messages, message => message.role === 'assistant')
+	if (Option.isNone(last)) return ''
+	return pipe(
+		last.value.content,
+		Array.filterMap(part => {
+			if (part.type === 'text') return Result.succeed(part.text)
+			return Result.failVoid
+		}),
+		Array.join('\n')
+	)
+}
+
+function usageFromMessage(message: AssistantMessage) {
+	return Response.Usage.make({
+		inputTokens: {
+			cacheRead: message.usage.cacheRead,
+			cacheWrite: message.usage.cacheWrite,
+			total: message.usage.input,
+			uncached: message.usage.input - message.usage.cacheRead
+		},
+		outputTokens: {reasoning: message.usage.reasoning, text: message.usage.output, total: message.usage.output}
+	})
+}
+
+function knownTool(name: string, tools: Ai.Tools): name is keyof Ai.Tools {
+	return Array.some(Record.keys(tools), candidate => candidate === name)
+}
+
+function partsFromEvent(event: AgentEvent, tools: Ai.Tools): (Prompt.UserMessage | Response.AnyPart)[] {
+	if (event.type === 'message_start') {
+		const message = promptUserMessage(event.message)
+		if (Predicate.isUndefined(message)) return []
+		return [message]
+	}
+	if (event.type === 'message_update') {
+		const update = event.assistantMessageEvent
+		if (update.type === 'text_delta' && String.isNonEmpty(update.delta)) {
+			return [Response.makePart('text-delta', {delta: update.delta, id: update.partial.responseId ?? 'text'})]
+		}
+		if (update.type === 'thinking_delta' && String.isNonEmpty(update.delta)) {
+			return [Response.makePart('reasoning-delta', {delta: update.delta, id: update.partial.responseId ?? 'reasoning'})]
+		}
+		if (update.type === 'toolcall_end' && knownTool(update.toolCall.name, tools)) {
+			return [
+				Response.makePart('tool-call', {
+					id: update.toolCall.id,
+					name: update.toolCall.name,
+					params: update.toolCall.arguments,
+					providerExecuted: false
+				})
+			]
+		}
+	}
+	if (event.type === 'tool_execution_end' && knownTool(event.toolName, tools)) {
+		let details: unknown
+		if (Predicate.hasProperty(event.result, 'details')) details = event.result.details
+		return [
 			Response.makePart('tool-result', {
-				encodedResult: toolEvent.result,
-				id: toolEvent.toolCallId,
-				isFailure: toolEvent.isError,
-				name: toolEvent.toolName,
+				encodedResult: details,
+				id: event.toolCallId,
+				isFailure: event.isError,
+				name: event.toolName,
 				preliminary: false,
 				providerExecuted: false,
-				result: toolEvent.result
+				result: details
 			})
-		]),
-		Match.when({type: 'message_end'}, messageEvent =>
-			messageEvent.message.role === 'assistant'
-				? [
-						Response.makePart('response-metadata', {
-							id: messageEvent.message.responseId,
-							modelId: messageEvent.message.model,
-							request: undefined,
-							timestamp: undefined
-						})
-					]
-				: Array.empty<Response.StreamPart<ToolSet>>()
-		),
-		Match.when({type: 'auto_retry_start'}, retryEvent => [
-			Response.makePart('error', {error: retryEvent.errorMessage})
-		]),
-		Match.when({type: 'compaction_end'}, compactionEvent =>
-			Predicate.isNotUndefined(compactionEvent.errorMessage)
-				? [Response.makePart('error', {error: compactionEvent.errorMessage})]
-				: Array.empty<Response.StreamPart<ToolSet>>()
-		),
-		Match.orElse(() => Array.empty<Response.StreamPart<ToolSet>>())
-	)
-}
-
-function finishPartFromTurnEnd(event: Extract<AgentSessionEvent, {type: 'turn_end'}>) {
-	return Response.makePart('finish', {
-		reason: event.message.role === 'assistant' ? finishReason(event.message.stopReason) : 'stop',
-		response: undefined,
-		usage:
-			event.message.role === 'assistant'
-				? Response.Usage.make({
-						inputTokens: {
-							cacheRead: event.message.usage.cacheRead,
-							cacheWrite: event.message.usage.cacheWrite,
-							total: event.message.usage.input,
-							uncached: event.message.usage.input - event.message.usage.cacheRead
-						},
-						outputTokens: {reasoning: undefined, text: event.message.usage.output, total: event.message.usage.output}
-					})
-				: Response.Usage.make({
-						inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
-						outputTokens: {reasoning: undefined, text: undefined, total: undefined}
-					})
-	})
-}
-
-function effectToolsFromToolkit<ToolSet extends Ai.Tools>(
-	toolkit: Toolkit.WithHandler<ToolSet>,
-	context: Context.Context<Tool.HandlerServices<ToolSet[string]>>
-) {
-	function makeToolDefinition(name: string) {
-		const tool = pipe(toolkit.tools[name], Option.fromUndefinedOr, Option.getOrThrow)
-
-		return {
-			description: Predicate.isString(tool.description) ? tool.description : name,
-			execute: (_toolCallId, params: Tool.Parameters<ToolSet[string]>, _signal, onUpdate, _ctx) =>
-				Effect.runPromiseWith(context)(
-					pipe(
-						toolkit.handle(name, params),
-						Effect.flatMap(stream =>
-							Stream.runFold<Option.Option<Tool.HandlerResult<ToolSet[string]>>, Tool.HandlerResult<ToolSet[string]>>(
-								Option.none,
-								(current, result) => {
-									if (result.preliminary) {
-										onUpdate?.(agentToolResult(result.encodedResult))
-										return current
-									}
-
-									return Option.some(result)
-								}
-							)(stream)
-						),
-						Effect.flatMap(
-							Option.match({
-								onNone: () => Effect.succeed(agentToolResult(undefined)),
-								onSome: finalResult =>
-									finalResult.isFailure
-										? Effect.fail(AiError.make({message: textFromResult(finalResult.encodedResult)}))
-										: Effect.succeed(agentToolResult(finalResult.encodedResult))
-							})
-						)
-					)
-				),
-			label: name,
-			name,
-			parameters: Tool.getJsonSchema(tool)
-		} satisfies ToolDefinition
-	}
-
-	return pipe(Record.keys(toolkit.tools), Array.map(makeToolDefinition))
-}
-
-export const makePi = Effect.fnUntraced(function* <ToolSet extends Ai.Tools>(config: Ai.Config<ToolSet>) {
-	const status = yield* SubscriptionRef.make<AiStatus>({state: 'idle', updatedAt: yield* DateTime.now})
-	const model = yield* SubscriptionRef.make(config.model)
-	const history = yield* SubscriptionRef.make<Prompt.Message[]>([config.systemPrompt])
-	const promptLock = yield* Semaphore.make(1)
-	const handledToolkit = yield* config.toolkit
-	const toolHandlerContext = yield* Effect.context<Tool.HandlerServices<ToolSet[string]>>()
-	const resourceLoader = new DefaultResourceLoader({
-		agentDir: getAgentDir(),
-		appendSystemPromptOverride: () => [],
-		cwd: config.cwd,
-		systemPromptOverride: () => config.systemPrompt.content
-	})
-	yield* Effect.tryPromise({
-		catch: cause => AiError.make({cause, message: 'failed to load pi agent resources'}),
-		try: () => resourceLoader.reload()
-	})
-
-	const result = yield* Effect.tryPromise({
-		catch: cause => AiError.make({cause, message: 'failed to create pi agent session'}),
-		try: () =>
-			createAgentSession({
-				customTools: effectToolsFromToolkit(handledToolkit, toolHandlerContext),
-				cwd: config.cwd,
-				model: OPENAI_CODEX_MODELS[config.model.id],
-				noTools: 'all',
-				resourceLoader,
-				sessionManager: SessionManager.inMemory(config.cwd),
-				thinkingLevel: config.model.reasoning,
-				tools: Record.keys(handledToolkit.tools)
-			})
-	})
-
-	yield* Effect.addFinalizer(() =>
-		Effect.sync(() => {
-			result.session.dispose()
-		})
-	)
-
-	const setStatus = Effect.fnUntraced(function* (state: AiStatus['state']) {
-		yield* SubscriptionRef.set(status, {state, updatedAt: yield* DateTime.now})
-	})
-	const reconcileModel = Effect.fnUntraced(function* () {
-		const current = yield* SubscriptionRef.get(model)
-		yield* Effect.tryPromise({
-			catch: cause => AiError.make({cause, message: `failed to set pi model ${current.provider}/${current.id}`}),
-			try: () => result.session.setModel(OPENAI_CODEX_MODELS[current.id])
-		})
-		yield* Effect.sync(() => {
-			result.session.setThinkingLevel(current.reasoning)
-		})
-	})
-	const appendAssistantHistory = Effect.fnUntraced(function* (text: string, reasoning: string) {
-		if (String.isEmpty(text) && String.isEmpty(reasoning)) return
-
-		const content = [
-			...(String.isEmpty(reasoning) ? [] : [Prompt.makePart('reasoning', {text: reasoning})]),
-			...(String.isEmpty(text) ? [] : [Prompt.makePart('text', {text})])
 		]
-		yield* SubscriptionRef.update(history, messages => [...messages, Prompt.makeMessage('assistant', {content})])
-	})
-	const deliver = Effect.fnUntraced(function* (message: Prompt.UserMessage, delivery: 'prompt' | 'steer' | 'queue') {
-		yield* reconcileModel()
-		const content = yield* piContentFromPromptParts(message.content)
-		if (delivery === 'prompt') {
-			yield* Effect.tryPromise({
-				catch: cause => AiError.make({cause, message: 'agent prompt failed'}),
-				try: () => result.session.sendUserMessage(content)
-			})
-			return
-		}
+	}
+	if (
+		event.type === 'message_end' &&
+		event.message.role === 'assistant' &&
+		Predicate.isString(event.message.errorMessage)
+	) {
+		return [Response.makePart('error', {error: event.message.errorMessage})]
+	}
+	return []
+}
 
-		if (!result.session.isStreaming) {
-			return yield* AiError.make({message: `cannot ${delivery} when the agent is idle`})
-		}
-
-		yield* Effect.tryPromise({
-			catch: cause => AiError.make({cause, message: `agent ${delivery} failed`}),
-			try: () => result.session.sendUserMessage(content, {deliverAs: delivery === 'steer' ? 'steer' : 'followUp'})
+function finishPart(message: AgentMessage) {
+	if (message.role === 'assistant') {
+		return Response.makePart('finish', {
+			reason: finishReason(message.stopReason),
+			response: undefined,
+			usage: usageFromMessage(message)
+		})
+	}
+	return Response.makePart('finish', {
+		reason: 'stop',
+		response: undefined,
+		usage: Response.Usage.make({
+			inputTokens: {cacheRead: undefined, cacheWrite: undefined, total: undefined, uncached: undefined},
+			outputTokens: {reasoning: undefined, text: undefined, total: undefined}
 		})
 	})
-	function abortSession(message: string) {
+}
+
+function eventsFromPrompt(prompt: Prompt.Prompt, tools: Ai.Tools) {
+	const events: (Prompt.UserMessage | Response.AnyPart)[] = []
+	let messageIndex = 0
+	for (const message of prompt.content) {
+		if (message.role === 'user') events[Array.length(events)] = message
+		if (message.role === 'assistant') {
+			let partIndex = 0
+			for (const part of message.content) {
+				if (part.type === 'text') {
+					events[Array.length(events)] = Response.makePart('text-delta', {
+						delta: part.text,
+						id: `history-${messageIndex}-${partIndex}`
+					})
+				}
+				if (part.type === 'reasoning') {
+					events[Array.length(events)] = Response.makePart('reasoning-delta', {
+						delta: part.text,
+						id: `history-${messageIndex}-${partIndex}`
+					})
+				}
+				if (part.type === 'tool-call' && knownTool(part.name, tools)) {
+					events[Array.length(events)] = Response.makePart('tool-call', {
+						id: part.id,
+						name: part.name,
+						params: part.params,
+						providerExecuted: part.providerExecuted
+					})
+				}
+				partIndex += 1
+			}
+		}
+		if (message.role === 'tool') {
+			for (const part of message.content) {
+				if (part.type === 'tool-result' && knownTool(part.name, tools)) {
+					events[Array.length(events)] = Response.makePart('tool-result', {
+						encodedResult: part.result,
+						id: part.id,
+						isFailure: part.isFailure,
+						name: part.name,
+						preliminary: false,
+						providerExecuted: part.providerExecuted,
+						result: part.result
+					})
+				}
+			}
+		}
+		messageIndex += 1
+	}
+	return events
+}
+
+function isUserMessage(event: Ai.Event): event is Prompt.UserMessage {
+	return Prompt.isMessage(event)
+}
+
+export const makePi = Effect.fnUntraced(function* (config: Pi.Config) {
+	const resolvedModel = config.models.getModel(config.model.provider, config.model.id)
+	if (Predicate.isUndefined(resolvedModel)) {
+		return yield* ServiceAiError.make({message: `Unknown model: ${config.model.id}`})
+	}
+	const model: Model<Api> = resolvedModel
+	const handledToolkit = yield* config.toolkit
+	const toolContext: Context.Context<Tool.HandlerServices<Ai.Tools[keyof Ai.Tools]>> = yield* Effect.context()
+	const ownerContext: Context.Context<Tool.HandlerServices<Ai.Tools[keyof Ai.Tools]>> = yield* Effect.context()
+	const status = yield* SubscriptionRef.make<AiStatus>('idle')
+	function decodeEvent(event: Prompt.UserMessage | Response.AnyPart): Effect.Effect<Ai.Event, ServiceAiError> {
+		if (Prompt.isMessage(event)) return Effect.succeed(event)
 		return pipe(
-			Effect.tryPromise({catch: cause => AiError.make({cause, message}), try: () => result.session.abort()}),
-			Effect.timeout('5 seconds'),
-			Effect.catch(error => Effect.logWarning(error.message))
+			Schema.decodeUnknownEffect(Response.StreamPart(config.toolkit))(event),
+			Effect.mapError(cause => ServiceAiError.make({cause, message: 'Invalid normalized Pi event'}))
 		)
 	}
-
-	yield* pipe(
-		SubscriptionRef.changes(model),
-		Stream.runForEach(() =>
-			pipe(
-				reconcileModel(),
-				Effect.catch(error => pipe(setStatus('error'), Effect.andThen(Effect.logError(error.message))))
-			)
-		),
-		Effect.forkScoped
+	const initialEvents = yield* Effect.forEach(
+		eventsFromPrompt(config.history ?? Prompt.empty, handledToolkit.tools),
+		decodeEvent
+	)
+	const replay = yield* makeReplay(initialEvents)
+	function setStatus(next: AiStatus) {
+		return SubscriptionRef.set(status, next)
+	}
+	const agentDefinitions = config.agents ?? []
+	const definitions = pipe(
+		agentDefinitions,
+		Array.map(definition => [definition.name, definition] as const),
+		HashMap.fromIterable
 	)
 
-	return Ai.of({
-		history,
-		model,
-		prompt: (message: Prompt.UserMessage) =>
-			Stream.callback<Response.StreamPart<ToolSet>, AiError>(queue =>
+	const makeRuntime = Effect.fnUntraced(function* (
+		profile: AiAgentDefinition,
+		allowSubagents: boolean,
+		history: Prompt.Prompt
+	) {
+		const session = yield* Effect.tryPromise({
+			catch: cause => ServiceAiError.make({cause, message: 'Failed to create Pi session'}),
+			try: () => new InMemorySessionRepo().create({})
+		})
+		const initialMessages = yield* piMessagesFromPrompt(history, model)
+		yield* Effect.forEach(
+			initialMessages,
+			message =>
+				Effect.tryPromise({
+					catch: cause => ServiceAiError.make({cause, message: 'Failed to initialize Pi history'}),
+					try: () => session.appendMessage(message)
+				}),
+			{discard: true}
+		)
+		const enabledNames = pipe(
+			Record.keys(handledToolkit.tools),
+			Array.filter(name => Array.some(profile.tools, configured => configured === name))
+		)
+		if (Array.length(enabledNames) !== Array.length(profile.tools)) {
+			return yield* ServiceAiError.make({message: `Agent ${profile.name} enables an unknown tool`})
+		}
+		const baseTools = effectToolsFromToolkit(handledToolkit, toolContext, enabledNames)
+		const tools: AgentTool[] = Array.fromIterable(baseTools)
+		if (Array.length(profile.skills) > 0) {
+			tools[Array.length(tools)] = skillTool(Array.fromIterable(profile.skills), ownerContext)
+		}
+		if (allowSubagents && Array.length(agentDefinitions) > 0) {
+			tools[Array.length(tools)] = {
+				description: 'Run one focused prompt with an isolated configured agent and return its final answer.',
+				execute: (_toolCallId, params) =>
+					Effect.runPromiseWith(ownerContext)(
+						Effect.gen(function* () {
+							const input = yield* Schema.decodeUnknownEffect(
+								Schema.Struct({agent: Schema.String, prompt: Schema.String})
+							)(params)
+							const definition = HashMap.get(definitions, input.agent)
+							if (Option.isNone(definition)) {
+								return yield* ServiceAiError.make({message: `Unknown agent: ${input.agent}`})
+							}
+							const child = yield* makeRuntime(definition.value, false, Prompt.empty)
+							yield* Effect.tryPromise({
+								catch: cause => ServiceAiError.make({cause, message: `Subagent ${input.agent} failed`}),
+								try: () => child.prompt(input.prompt)
+							})
+							return toolResult(assistantText(child.state.messages))
+						})
+					),
+				executionMode: 'parallel',
+				label: 'subagent',
+				name: 'subagent',
+				parameters: Type.Object({
+					agent: Type.String({enum: Array.map(agentDefinitions, definition => definition.name)}),
+					prompt: Type.String({description: 'Focused task for the selected agent'})
+				})
+			}
+		}
+
+		function compactContext(messages: AgentMessage[], signal?: AbortSignal) {
+			return Effect.runPromiseWith(ownerContext)(
 				pipe(
 					Effect.gen(function* () {
-						if (result.session.isStreaming) {
-							yield* Queue.offer(queue, Response.makePart('error', {error: 'agent is already running'}))
-							yield* Queue.end(queue)
-							return
-						}
-
-						const currentModel = yield* SubscriptionRef.get(model)
-						yield* Effect.annotateCurrentSpan({
-							cwd: config.cwd,
-							model: currentModel.id,
-							provider: currentModel.provider,
-							reasoning: currentModel.reasoning
-						})
-
-						const events = yield* Queue.bounded<AgentSessionEvent>(1_024)
-						const finishPart = yield* Ref.make(Option.none<Response.StreamPart<ToolSet>>())
-						const termination = yield* Ref.make<'active' | 'completed' | 'finalizer' | 'overflow'>('active')
-						const terminationLock = yield* Semaphore.make(1)
-						const assistantText = yield* Ref.make('')
-						const assistantReasoning = yield* Ref.make('')
-						const claimTermination = Effect.fnUntraced(function* (owner: 'completed' | 'finalizer' | 'overflow') {
-							return yield* Ref.modify(termination, current =>
-								current === 'active' ? [true, owner] : [false, current]
-							)
-						})
-						yield* SubscriptionRef.update(history, messages => [...messages, message])
-						yield* setStatus('running')
-						const unsubscribe = result.session.subscribe(event => {
-							if (Queue.offerUnsafe(events, event)) return
-
-							Effect.runForkWith(toolHandlerContext)(
-								Effect.gen(function* () {
-									const ownsTermination = yield* pipe(
-										Effect.gen(function* () {
-											const claimed = yield* claimTermination('overflow')
-											if (!claimed) return false
-
-											yield* setStatus('error')
-											yield* Queue.offer(queue, Response.makePart('error', {error: 'agent event queue overflow'}))
-											yield* Queue.end(queue)
-											return true
-										}),
-										Effect.uninterruptible,
-										Semaphore.withPermit(terminationLock)
-									)
-									if (!ownsTermination) return
-
-									yield* abortSession('failed to abort overflowing agent')
-								})
-							)
-						})
-						yield* Effect.addFinalizer(() =>
-							Effect.gen(function* () {
-								yield* Effect.sync(unsubscribe)
-								const ownsTermination = yield* pipe(
-									Effect.gen(function* () {
-										const claimed = yield* claimTermination('finalizer')
-										if (!claimed) return false
-
-										yield* setStatus('stopping')
-										return true
-									}),
-									Effect.uninterruptible,
-									Semaphore.withPermit(terminationLock)
-								)
-								if (!ownsTermination) return
-
-								yield* abortSession('failed to abort agent')
-								yield* setStatus('idle')
-							})
-						)
-						yield* Effect.forkScoped(
-							Effect.forever(
-								pipe(
-									Queue.take(events),
-									Effect.flatMap(event =>
-										pipe(
-											Effect.gen(function* () {
-												if ((yield* Ref.get(termination)) !== 'active') return
-
-												yield* pipe(
-													Match.value(event),
-													Match.when({type: 'auto_retry_start'}, () => setStatus('retrying')),
-													Match.when({type: 'agent_start'}, () => setStatus('running')),
-													Match.when({type: 'message_update'}, messageEvent =>
-														pipe(
-															Match.value(messageEvent.assistantMessageEvent),
-															Match.when({type: 'text_delta'}, update =>
-																Ref.update(assistantText, current => `${current}${update.delta}`)
-															),
-															Match.when({type: 'thinking_delta'}, update =>
-																Ref.update(assistantReasoning, current => `${current}${update.delta}`)
-															),
-															Match.orElse(() => Effect.void)
-														)
-													),
-													Match.when({type: 'turn_end'}, turnEnd =>
-														Ref.set(finishPart, Option.some(finishPartFromTurnEnd(turnEnd)))
-													),
-													Match.orElse(() => Effect.void)
-												)
-												yield* Effect.forEach(partFromEvent<ToolSet>(event), part => Queue.offer(queue, part), {
-													discard: true
-												})
-												if (event.type === 'agent_end' && !event.willRetry) {
-													const ownsTermination = yield* claimTermination('completed')
-													if (!ownsTermination) return
-
-													yield* pipe(
-														yield* Ref.get(finishPart),
-														Option.match({onNone: () => Effect.void, onSome: finish => Queue.offer(queue, finish)})
-													)
-													yield* appendAssistantHistory(
-														yield* Ref.get(assistantText),
-														yield* Ref.get(assistantReasoning)
-													)
-													yield* setStatus('idle')
-													yield* Queue.end(queue)
-												}
-											}),
-											Effect.uninterruptible,
-											Semaphore.withPermit(terminationLock)
-										)
-									)
-								)
+						const entries = yield* Effect.promise(() => session.findEntriesOnBranch())
+						const current = buildSessionContext(entries).messages
+						const usage = estimateContextTokens(current)
+						if (!shouldCompact(usage.tokens, model.contextWindow, DEFAULT_COMPACTION_SETTINGS)) return current
+						const preparation = getOrThrow(prepareCompaction(entries, DEFAULT_COMPACTION_SETTINGS))
+						if (Predicate.isUndefined(preparation)) return current
+						const result = getOrThrow(
+							yield* Effect.promise(() =>
+								compact(preparation, config.models, model, undefined, signal, config.model.reasoning)
 							)
 						)
-
-						yield* pipe(
-							deliver(message, 'prompt'),
-							Effect.catch(error =>
-								pipe(
-									Effect.gen(function* () {
-										const ownsTermination = yield* claimTermination('completed')
-										if (!ownsTermination) return
-
-										yield* setStatus('error')
-										yield* Queue.offer(queue, Response.makePart('error', {error: error.message}))
-										yield* Queue.end(queue)
-									}),
-									Effect.uninterruptible,
-									Semaphore.withPermit(terminationLock)
-								)
+						yield* Effect.promise(() =>
+							session.appendEntry(
+								{
+									details: result.details,
+									id: session.idGenerator.next(),
+									retainedTail: result.retainedTail,
+									summary: result.summary,
+									tokensBefore: result.tokensBefore,
+									type: 'compaction',
+									usage: result.usage
+								},
+								'main'
 							)
+						)
+						return pipe(
+							yield* Effect.promise(() => session.findEntriesOnBranch()),
+							buildSessionContext,
+							value => value.messages
 						)
 					}),
-					Semaphore.withPermit(promptLock),
-					Effect.withSpan('Ai.prompt')
+					Effect.orElseSucceed(() => messages)
 				)
-			),
-		queue: (message: Prompt.UserMessage) =>
-			pipe(
-				deliver(message, 'queue'),
-				Effect.andThen(SubscriptionRef.update(history, messages => [...messages, message])),
-				Effect.withSpan('Ai.queue')
-			),
-		status,
-		steer: (message: Prompt.UserMessage) =>
-			pipe(
-				deliver(message, 'steer'),
-				Effect.andThen(SubscriptionRef.update(history, messages => [...messages, message])),
-				Effect.withSpan('Ai.steer')
 			)
+		}
+
+		let subagents: AiAgentDefinition[] = []
+		if (allowSubagents) subagents = agentDefinitions
+		const agent = new Agent({
+			...config.options,
+			initialState: {
+				messages: initialMessages,
+				model,
+				systemPrompt: systemPrompt(profile, subagents),
+				thinkingLevel: config.model.reasoning,
+				tools
+			},
+			sessionId: (yield* Effect.promise(() => session.getMetadata())).id,
+			streamFn: config.models.streamSimple.bind(config.models),
+			toolExecution: config.options?.toolExecution ?? 'parallel',
+			transformContext: config.options?.transformContext ?? compactContext
+		})
+		agent.subscribe(event => {
+			if (event.type !== 'message_end') return
+			return Effect.runPromiseWith(ownerContext)(
+				Effect.asVoid(Effect.promise(() => session.appendMessage(event.message)))
+			)
+		})
+		return agent
 	})
+
+	const agent = yield* makeRuntime(config.main, true, config.history ?? Prompt.empty)
+	let lastTurn = Option.none<AgentMessage>()
+	const unsubscribe = agent.subscribe(event =>
+		Effect.runPromiseWith(ownerContext)(
+			Effect.gen(function* () {
+				for (const part of partsFromEvent(event, handledToolkit.tools)) {
+					yield* pipe(decodeEvent(part), Effect.flatMap(replay.publish))
+				}
+				if (event.type === 'turn_end') lastTurn = Option.some(event.message)
+				if (event.type !== 'agent_end') return
+				if (Option.isSome(lastTurn)) yield* replay.publish(finishPart(lastTurn.value))
+				yield* setStatus('idle')
+			})
+		)
+	)
+	yield* Effect.addFinalizer(() =>
+		Effect.sync(() => {
+			unsubscribe()
+			agent.abort()
+		})
+	)
+
+	const prompt = Effect.fn('Ai.prompt')(function* (message: Prompt.UserMessage) {
+		const input = yield* piUserMessage(message)
+		if (agent.state.isStreaming) {
+			agent.steer(input)
+			return
+		}
+		yield* setStatus('running')
+		yield* pipe(
+			Effect.tryPromise({
+				catch: cause => ServiceAiError.make({cause, message: 'Pi prompt failed'}),
+				try: () => agent.prompt(input)
+			}),
+			Effect.catch(error =>
+				Effect.gen(function* () {
+					yield* setStatus('error')
+					yield* replay.publish(Response.makePart('error', {error: error.message}))
+					return yield* error
+				})
+			)
+		)
+	})
+	const stop = Effect.gen(function* () {
+		if (!agent.state.isStreaming) return
+		yield* setStatus('stopping')
+		agent.abort()
+	})
+
+	return {events: replay.events, prompt, status, stop} satisfies Ai.Agent
+})
+
+export const generateTextPi = Effect.fn('Ai.generateText')(function* (config: Pi.Config, message: Prompt.UserMessage) {
+	const agent = yield* makePi({...config, history: Prompt.empty})
+	yield* agent.prompt(message)
+	const events = yield* pipe(
+		agent.events,
+		Stream.takeUntil(event => !isUserMessage(event) && event.type === 'finish'),
+		Stream.runCollect
+	)
+	const output = pipe(
+		events,
+		Array.filterMap(event => {
+			if (isUserMessage(event) || event.type !== 'text-delta') return Result.failVoid
+			return Result.succeed(event.delta)
+		}),
+		Array.join(''),
+		String.trim
+	)
+	if (String.isNonEmpty(output)) return output
+	return yield* ServiceAiError.make({message: 'The model returned no text'})
 })

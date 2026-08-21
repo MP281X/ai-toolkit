@@ -4,16 +4,9 @@ packages:
   - tools/*
 
 allowBuilds:
-  msw: true
-  protobufjs: true
-  '@google/genai': true
+  '@google/genai': false
   msgpackr-extract: true
-
-onlyBuiltDependencies:
-  - msw
-  - protobufjs
-  - '@google/genai'
-  - msgpackr-extract
+  protobufjs: false
 
 catalogMode: prefer
 
@@ -22,8 +15,6 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@latest
 overrides:
   vite: 'catalog:'
-  '@aws-sdk/client-bedrock-runtime>@aws-sdk/token-providers': 3.1079.0
-  '@aws-sdk/credential-provider-sso>@aws-sdk/token-providers': 3.1079.0
 peerDependencyRules:
   allowAny: [vite, typescript]
   allowedVersions: {vite: '*', typescript: '*'}
