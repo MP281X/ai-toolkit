@@ -25,7 +25,7 @@ vp install
 | Concern                                                  | Owner or path                                             |
 | -------------------------------------------------------- | --------------------------------------------------------- |
 | Baseline topology and configuration                      | Generator                                                 |
-| Contract change                                          | Existing semantic Owner                                   |
+| Behavior change                                          | Existing responsible component                            |
 | Service root                                             | `apps/<app>/src/services/<name>` or `packages/<name>/src` |
 | Recreated, normalized, or duplicated generated structure | Forbidden                                                 |
 

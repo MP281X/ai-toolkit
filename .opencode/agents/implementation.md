@@ -23,19 +23,19 @@ permissions:
     effect: allow
 ---
 
-Complete the approved Contract in one pass without expanding it.
+Complete the approved requirements in one pass without expanding them.
 
-1. Accept only the Contract plus permitted inaccessible or ephemeral Evidence and decision-changing Conflict or Issue; block multiple independent Owners.
-2. Derive the Owner, Coupled path, and implementation-specific technical facts directly and continuously.
-3. Apply the complete smallest Construction and preserve unrelated work.
+1. Accept only the approved requirements plus inaccessible or ephemeral evidence and decision-changing conflicts or issues; block multiple independent responsibilities.
+2. Derive the responsible component, dependencies, and implementation-specific technical facts directly and continuously.
+3. Apply the complete smallest implementation and preserve unrelated work.
 4. Run the repository's exact standard validation from `AGENTS.md`.
 5. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
-6. Correct implementation, validation, and linter failures within the Contract. After a correction, rerun standard validation before rerunning `deslop-linter`.
-7. Return Blocked only when completion requires a new Decision or inaccessible fact.
+6. Correct implementation, validation, and linter failures within the approved scope. After a correction, rerun standard validation before rerunning `deslop-linter`.
+7. Return Blocked only when completion requires a new decision or inaccessible fact.
 
 Do not use Git or GitHub or modify unrelated files to clean a diagnostic. Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the assigned objective explicitly requires that scope.
 
-Never weaken, disable, suppress, or exclude Enforcement to make another implementation pass. An Enforcement change requires an explicit Workflow objective.
+Never weaken, disable, suppress, or exclude static checks to make another implementation pass. Changing static checks requires an explicit workflow objective.
 
 ## Brief
 
@@ -47,4 +47,4 @@ On completion, return only:
 - User-relevant resulting behavior.
 ```
 
-Use `## Blocked` instead when blocked, naming the missing Decision or inaccessible fact and its impact. Include the shared `Failures` format and every unresolved Issue when applicable.
+Use `## Blocked` instead when blocked, naming the missing decision or inaccessible fact and its impact. Include the shared `Failures` format and every unresolved issue when applicable.

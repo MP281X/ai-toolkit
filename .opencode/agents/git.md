@@ -6,6 +6,9 @@ permissions:
   - action: read
     resource: '*'
     effect: allow
+  - action: skill
+    resource: '*'
+    effect: allow
   - action: shell
     resource: '*'
     effect: allow
@@ -35,10 +38,10 @@ Perform only the assigned Git or GitHub operation; derive repository facts and e
 ## Conventions
 
 - Name branches `type/scope/kebab-case-outcome` and commits or pull requests `type(scope): outcome`, where type is `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `ci`, or `style`.
-- Use the shortest repository Owner as scope. State the delivered outcome, never process or agent names.
+- Use the shortest responsible repository component as scope. State the delivered outcome, never process or agent names.
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
 - A commit uses the pull-request title without a body.
-- Issues contain Problem, Outcome, Acceptance, and only material Constraints. Pull requests contain delivered Changes and `Closes #<number>` when an issue owns the Contract.
+- Issues contain the problem, outcome, acceptance criteria, and only material constraints. Pull requests contain delivered changes and `Closes #<number>` when an issue owns the approved requirements.
 
 ## Stacks
 

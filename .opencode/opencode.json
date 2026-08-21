@@ -6,9 +6,7 @@
 	"plugins": [
 		{
 			"path": "./.opencode/instructions.ts",
-			"options": {
-				"instructions": ["instructions/behavior.md", "instructions/communication.md", "instructions/vocabulary.md"]
-			}
+			"options": {"instructions": ["instructions/behavior.md", "instructions/communication.md"]}
 		}
 	],
 	"agents": {

@@ -2,7 +2,7 @@
 
 Preserve an established design system. When none exists, establish one deliberate visual direction and use it consistently.
 
-## Construction
+## Implementation
 
 | Concern        | Requirement                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------------------- |

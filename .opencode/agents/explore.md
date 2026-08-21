@@ -29,10 +29,10 @@ permissions:
 Resolve only the assigned fact without changing repository, Git, remote, process, or external state.
 
 - Inspect only evidence needed to resolve the question. Expand when a decision-relevant gap remains.
-- Return the resolved fact, decision-changing Conflict, and Issue only; separate observed, inferred, and unresolved material.
+- Return only the resolved fact, decision-changing conflicts, and issues; separate observed, inferred, and unresolved material.
 - Before concluding that evidence is absent, check plausible naming and location variants.
 - Prefer configured authoritative references for dependency and platform semantics.
-- For a defect, test plausible causes and follow the Coupled path to the reusable cause and sole Owner.
+- For a defect, test plausible causes and follow its dependencies to the reusable cause and responsible component.
 
 For session investigation, use installed OpenCode API and export commands. Reconstruct persisted message order and agent lineage from session identifiers. Apply the latest compaction boundary before describing model-visible context; persisted history and model context are different facts. Never access the database directly.
 

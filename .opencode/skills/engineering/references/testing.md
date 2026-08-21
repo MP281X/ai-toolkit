@@ -1,11 +1,11 @@
 # Effect Behavior Tests
 
-## Contract
+## Requirements
 
 | Lead        | Requirement                                                 |
 | ----------- | ----------------------------------------------------------- |
 | Seam        | Narrowest public seam                                       |
-| Expectation | Derived independently from the Contract                     |
+| Expectation | Derived independently from approved requirements            |
 | Failure     | Every reachable typed failure                               |
 | Runtime     | Deterministic Effect state, lifetime, concurrency, and time |
 
@@ -31,7 +31,7 @@
 | Nested `it.effect` in `it.layer` | Fresh child scope | Cached block `TestClock` and `TestConsole` |
 | `it.live`                        | Fresh per test    | Live clock and console                     |
 
-| Operation                             | Contract                                                                                           |
+| Operation                             | Requirements                                                                                       |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `TestClock.adjust`                    | Advance scheduled work from epoch zero                                                             |
 | `TestConsole.logLines` / `errorLines` | Read flattened call parameters                                                                     |
@@ -41,13 +41,13 @@
 
 ## Layers and fixtures
 
-| Construction                | Ownership                                                                     |
+| Implementation              | Ownership                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------- |
 | `Layer.succeed(Key, value)` | Already constructed immutable test service                                    |
 | `Layer.effect(Key)(effect)` | Effectful or scoped service acquisition; the Layer owns the acquisition scope |
 | `it.layer(layer)`           | One memoized Layer context shared by all tests in its block, closed afterward |
 
-| Requirement                 | Construction                                                                      |
+| Requirement                 | Implementation                                                                    |
 | --------------------------- | --------------------------------------------------------------------------------- |
 | Scoped Layer acquisition    | `Layer.effect` with `Scope`; use `Effect.acquireRelease` or `Effect.addFinalizer` |
 | Default test fixture        | Fresh Layer per test                                                              |
@@ -105,7 +105,7 @@ it.effect(
 
 ## Generative And Schema Behavior
 
-| Requirement                           | Construction                                |
+| Requirement                           | Implementation                              |
 | ------------------------------------- | ------------------------------------------- |
 | Effectful property                    | `it.effect.prop`                            |
 | Input                                 | FastCheck arbitrary, Effect schema, or both |
@@ -124,7 +124,7 @@ it.effect.prop(
 
 ## Organization
 
-| Concern                    | Owner or construction                                     |
+| Concern                    | Owner or implementation                                   |
 | -------------------------- | --------------------------------------------------------- |
 | Test file                  | `name.test.ts` beside `name.ts`                           |
 | Durable behavior tests     | Location selected by repository convention                |

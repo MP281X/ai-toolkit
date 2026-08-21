@@ -20,16 +20,16 @@ permissions:
     effect: allow
 ---
 
-| Lead     | Rule                                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Derive   | From only the Contract, independently and without bias resolve requirements, Owner, direct Coupled path, current authoritative evidence, and proof.                                   |
-| Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                      |
-| Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                           |
-| Inspect  | Cover the assigned Owner, direct Coupled path, unchanged defect, and valid counterexamples; continue to one deduplicated defect batch.                                                |
-| Scope    | Default to uncommitted changes; derive branch, pull-request, or commit scope when the Contract implies that boundary.                                                                 |
-| Defer    | Do not run repository validation or repeat Browser acceptance.                                                                                                                        |
-| Prove    | For a Workflow proof, inspect the changed Workflow against the unchanged defect before correcting findings; after each correction, inspect the same defect and valid counterexamples. |
-| Block    | Block only for a missing Contract Decision or inaccessible evidence.                                                                                                                  |
+| Lead     | Rule                                                                                                                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Derive   | From only the approved requirements, independently resolve the responsible component, direct dependencies, current authoritative evidence, and proof.                               |
+| Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                    |
+| Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                         |
+| Inspect  | Cover the assigned responsibility, direct dependencies, unchanged defect, and valid counterexamples; continue to one deduplicated defect batch.                                     |
+| Scope    | Default to uncommitted changes; derive branch, pull-request, or commit scope when the approved requirements imply that boundary.                                                    |
+| Defer    | Do not run repository validation or repeat Browser acceptance.                                                                                                                      |
+| Prove    | For workflow proof, inspect the changed workflow against the unchanged defect before correcting findings; after each correction, inspect the same defect and valid counterexamples. |
+| Block    | Block only for a missing decision or inaccessible evidence.                                                                                                                         |
 
 ## Result
 
@@ -47,4 +47,4 @@ Return only applicable sections:
 | ...      | ...    | ...      | ...        |
 ```
 
-Place evidence inline beside each checked result or defect. Preserve every distinct Issue. Do not add a repeated Sources section. Use the shared `Failures` section when required. Omit preferences, expected conclusions, speculative improvements, unaffected code, implementation narration, raw inspection output, and facts derivable from cited evidence.
+Place evidence inline beside each checked result or defect. Preserve every distinct issue. Do not add a repeated Sources section. Use the shared `Failures` section when required. Omit preferences, expected conclusions, speculative improvements, unaffected code, implementation narration, raw inspection output, and facts derivable from cited evidence.

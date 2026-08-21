@@ -3,6 +3,12 @@ description: 'Use for rendered-interface work.'
 model: openai/gpt-5.6-luna#low
 mode: subagent
 permissions:
+  - action: read
+    resource: '*'
+    effect: allow
+  - action: skill
+    resource: '*'
+    effect: allow
   - action: shell
     resource: '*'
     effect: allow

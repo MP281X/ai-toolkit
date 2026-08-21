@@ -1,6 +1,6 @@
 ## Validation
 
-| Candidate                     | Exact command                               |
+| Changed files                 | Exact command                               |
 | ----------------------------- | ------------------------------------------- |
 | Only Markdown files changed   | `vp run fix`                                |
 | Any non-Markdown file changed | `vp run fix && vp run check && vp run test` |
@@ -14,7 +14,7 @@ Standard validation is supplemented, not replaced, by applicable global checks.
 | Lead     | Requirement                                                                                                                      |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Optimize | Serve only the user's actual personal-software workflow.                                                                         |
-| Minimize | Use the simplest Construction that solves the root problem. Keep unnecessary additions outside scope.                            |
+| Minimize | Use the simplest implementation that solves the root problem. Keep unnecessary additions outside scope.                          |
 | Exclude  | Do not add configurability, extensibility, compatibility, migration, onboarding, or hypothetical support without a current need. |
-| Break    | Preserve backward or forward compatibility only when the Contract requires it.                                                   |
-| Replace  | Keep one current path per behavior. Remove a superseded path across its Coupled path.                                            |
+| Break    | Preserve backward or forward compatibility only when approved requirements require it.                                           |
+| Replace  | Keep one current path per behavior. Remove its superseded implementation, configuration, and tests.                              |

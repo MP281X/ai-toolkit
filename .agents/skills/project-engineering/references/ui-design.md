@@ -1,8 +1,10 @@
 # UI design
 
+Apply this repository's visual system to functional application UI. The portfolio is exempt: preserve or deliberately evolve its own visual direction instead of imposing functional-app constraints.
+
 ## Visual System
 
-| Surface      | Construction                                                                              |
+| Surface      | Implementation                                                                            |
 | ------------ | ----------------------------------------------------------------------------------------- |
 | Typography   | Monospace everywhere                                                                      |
 | Density      | Compact; scan-first                                                                       |
@@ -13,7 +15,7 @@
 | Decoration   | Solid theme tokens; square corners; no gradients, shadows, blur, glass, or background art |
 | Feedback     | Minimal, immediate, unmistakable state and action response                                |
 
-Use current `@deslop/components` primitives, adapters, icons, and theme tokens.
+Use current `@deslop/components` primitives, adapters, and icons. Functional UI colors must use the shadcn semantic theme tokens exposed by `@deslop/components`; do not hard-code palette values in features.
 
 ```bash
 vp run shadcn add <component>

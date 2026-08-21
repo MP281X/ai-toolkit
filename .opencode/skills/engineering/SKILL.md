@@ -17,7 +17,7 @@ Use Effect v4, React, Effect Atom, and TanStack Router when the repository conta
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Inspect    | Establish surrounding code, configured dependencies, project conventions, and authoritative reference behavior before design. |
 | Decode     | Trust typed values; decode unknown external data once at its boundary.                                                        |
-| Transform  | Preserve intact typed values; transform shape only when the Contract requires it.                                             |
+| Transform  | Preserve intact typed values; transform shape only when approved requirements require it.                                     |
 | State      | Omit states excluded by types or schemas.                                                                                     |
 | Fail       | Propagate the first reachable failure; retry or recover only when required.                                                   |
 | Mutability | Keep arguments, props, service values, and returned values immutable without `readonly` syntax.                               |

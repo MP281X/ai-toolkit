@@ -38,5 +38,5 @@ Add custom Oxlint only when every gate is satisfied:
 | Defect      | Exact invalid form and architectural reason           |
 | Proof       | Failing fixtures and valid counterexamples            |
 | Boundary    | Unsupported cases and narrowest syntax and path scope |
-| Correction  | One canonical Construction                            |
+| Correction  | One canonical implementation                          |
 | Suppression | Irreducible, narrow, inline, and reasoned             |

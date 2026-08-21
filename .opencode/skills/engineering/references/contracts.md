@@ -1,4 +1,4 @@
-# Contract Shape
+# Public API Shape
 
 One schema/type pair owns each public boundary shape, defaults, transformations, and validation.
 
