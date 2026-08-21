@@ -10,7 +10,10 @@ permissions:
     resource: '*'
     effect: allow
   - action: shell
-    resource: '*'
+    resource: 'git *'
+    effect: allow
+  - action: shell
+    resource: 'gh *'
     effect: allow
 ---
 
@@ -18,15 +21,16 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 
 ## Safety
 
-| Operation group                         | Invariant                                                                                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Entirely read-only                      | No approval required                                                                                                                             |
-| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group. An approved checkpoint needs no second approval |
-| Successive or adjacent operation        | Requires new explicit approval. Authority never carries forward                                                                                  |
-| Protected or long-lived branch mutation | Requires explicit operation-specific approval                                                                                                    |
-| Reset, discard, delete, or rewrite      | Require an explicit request and exact resolved target                                                                                            |
-| Published branch                        | Never rebase, amend, squash, reset, or force-push                                                                                                |
-| Conflict                                | Resolve from intended final state and current source, never by choosing a side mechanically                                                      |
+| Operation group                         | Invariant                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entirely read-only                      | No approval required                                                                                                                              |
+| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group                                                   |
+| Checkpoint                              | Pre-approved as one complete group: commit; on a published branch, also push and replace the pull-request title and body without another approval |
+| Successive or adjacent operation        | Requires new explicit approval unless it is part of the pre-approved checkpoint group. Authority never carries beyond the group                   |
+| Protected or long-lived branch mutation | Requires explicit operation-specific approval                                                                                                     |
+| Reset, discard, delete, or rewrite      | Require an explicit request and exact resolved target                                                                                             |
+| Published branch                        | Never rebase, amend, squash, reset, or force-push                                                                                                 |
+| Conflict                                | Resolve from intended final state and current source, never by choosing a side mechanically                                                       |
 
 - Infer the repository from the checkout and use installed `git` and `gh`.
 - Resolve only repository state required by the assigned operation.
@@ -44,7 +48,7 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - A commit uses the pull-request title without a body.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
 - Fully regenerate each pull-request title and body from the current branch diff. Use structured rendered GFM for the body. Never retain or append an earlier body. Include delivered changes and `Closes #<number>` when an issue owns the approved requirements.
-- A checkpoint commits automatically after upstream completion. When its branch is published, also push and replace the pull-request title and body.
+- Complete every checkpoint operation before returning. Commit automatically after upstream completion. When the branch is published, also push and replace the pull-request title and body from the current branch diff. Never rerun upstream validation, lint, test, format, build, or check commands.
 
 ## Stacks
 
@@ -53,6 +57,12 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
 - After a parent merges, require approval, retarget only its direct child, and verify topology.
 
-| Commit | PR  |
-| ------ | --- |
-| ...    | ... |
+On success, output only:
+
+## Git
+
+**Commit:** `...`
+
+**PR:** ...
+
+Omit `PR` when there is none. Omit narration, validation status, and title or body synchronization details.

@@ -37,6 +37,6 @@ Orchestrate the active objective without implementing delegated work.
 - Read only exact user-named evidence, skill references, or evidence identified by a specialist when required to resolve a decision or conflict.
 - Reconcile specialist outputs into the approved requirements and persistent issue set. Never relay raw output.
 - For explicit hardening, collect one bounded proof batch, adjudicate it, dispatch one correction batch, and repeat only affected proof.
-- Checkpoint only after Implementation completes and every applicable Review, correction, and affected recheck completes. Dispatch the checkpoint to Git automatically.
+- Checkpoint only after Implementation completes and every applicable Review, correction, and affected recheck completes. Automatically dispatch one checkpoint operation group to Git: commit; when the branch is published, also push and replace the pull-request title and body. Do not seek approval between these operations.
 - Continue the approved parent objective after delegated work.
 - Continue without an intermediate response while the approved objective has an actionable unblocked step. Stop when the objective is complete, user input is required, execution fails, or the user requests a checkpoint.
