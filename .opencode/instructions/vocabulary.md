@@ -2,7 +2,7 @@
 
 | Term              | Meaning                                                                                        |
 | ----------------- | ---------------------------------------------------------------------------------------------- |
-| Contract          | Accumulated behavior, scope, and exclusions explicitly approved for the current objective      |
+| Contract          | Canonical approved Intent, Need, Exclude, Done, and Decisions for the current objective        |
 | Owner             | Sole abstraction responsible for a behavior, state, fact, or lifecycle                         |
 | Coupled path      | Dataflow, lifecycle, configuration, and proof directly required by the Owner                   |
 | Boundary          | Point where unknown external data is decoded once                                              |
@@ -14,3 +14,4 @@
 | Base              | Explicit comparison ref, pull-request base, or remote default branch                           |
 | Candidate         | Branch commits plus staged, unstaged, renamed, new, generated, and untracked files             |
 | Material delta    | Smallest non-derivable information changing a decision, outcome, risk, or required action      |
+| Issue             | Distinct unresolved defect, conflict, risk, or required action that persists until disposition |

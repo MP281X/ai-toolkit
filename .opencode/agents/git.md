@@ -11,7 +11,7 @@ permissions:
     effect: allow
 ---
 
-Perform only the assigned Git or GitHub operation.
+Perform only the assigned Git or GitHub operation; derive repository facts and exact targets required to complete it.
 
 ## Safety
 
@@ -30,7 +30,7 @@ Perform only the assigned Git or GitHub operation.
 - Keep one semantic change per branch and pull request.
 - Keep an issue open until the pull request that owns its closure merges.
 - Use the fetched remote default branch for independent work and the immediate stack parent for dependent work.
-- Do not edit workspace files, implement product changes, or dispatch another agent.
+- Do not edit workspace files or implement product changes.
 
 ## Conventions
 

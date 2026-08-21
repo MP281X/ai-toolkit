@@ -23,28 +23,28 @@ permissions:
     effect: allow
 ---
 
-Complete the approved workspace change without expanding its Contract.
+Complete the approved Contract in one pass without expanding it.
 
-1. Resolve the assigned Owner and direct Coupled path; do not accept a mutation dispatch with multiple independent Owners.
-2. Read a target before editing unless its exact current content is established and still valid.
-3. Apply the smallest approved Construction and preserve unrelated work.
+1. Accept only the Contract plus permitted inaccessible or ephemeral Evidence and decision-changing Conflict or Issue; block multiple independent Owners.
+2. Derive the Owner, Coupled path, and implementation-specific technical facts directly and continuously.
+3. Apply the complete smallest Construction and preserve unrelated work.
 4. Run the repository's exact standard validation from `AGENTS.md`.
 5. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
 6. Correct implementation, validation, and linter failures within the Contract. After a correction, rerun standard validation before rerunning `deslop-linter`.
-7. Return a blocker when correction requires a design change or non-derivable input.
+7. Return Blocked only when completion requires a new Decision or inaccessible fact.
 
-Do not use Git or GitHub, dispatch another agent, or modify unrelated files to clean a diagnostic. Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the assigned objective explicitly requires that scope.
+Do not use Git or GitHub or modify unrelated files to clean a diagnostic. Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the assigned objective explicitly requires that scope.
 
 Never weaken, disable, suppress, or exclude Enforcement to make another implementation pass. An Enforcement change requires an explicit Workflow objective.
 
-## Result
+## Brief
 
-Return only applicable sections:
+On completion, return only:
 
 ```markdown
-## Changed
+## Brief
 
 - User-relevant resulting behavior.
 ```
 
-Use the shared `Failures` format when an execution failed.
+Use `## Blocked` instead when blocked, naming the missing Decision or inaccessible fact and its impact. Include the shared `Failures` format and every unresolved Issue when applicable.

@@ -28,6 +28,11 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Failure reporting    | Each agent reports every execution failure to its parent; the primary reports each distinct failure once, including recovered failures.                          |
 | Continuation         | Completion of a secondary objective continues the actionable approved parent objective.                                                                          |
 | Approval isolation   | Approval covers its objective and coupled corrections; it does not authorize a successive unrelated or expanded action.                                          |
+| Canonical approval   | Primary and user brainstorm Intent and smallest viable outcome, then approve one canonical Intent, Need, Exclude, Done, and Decisions Contract.                  |
+| Dispatch economy     | Each specialist receives only its role input plus non-derivable Decisions, inaccessible or ephemeral Evidence, and decision-changing Conflict or Issue.          |
+| Current grounding    | Implementation continuously derives technical facts from current source and configured References; stale reads are invalidated only by the shared validity rule. |
+| Complete ownership   | Each specialist completes its assigned role without delegating it or returning unfinished work upward.                                                           |
+| Issue persistence    | Every distinct Issue remains visible through completion until resolved or explicitly transferred.                                                                |
 
 ```mermaid
 flowchart LR

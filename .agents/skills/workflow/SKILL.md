@@ -25,6 +25,8 @@ Applicable work routes to:
 | Route       | Put capabilities in configuration, mechanical behavior in maintained static enforcement, and conditional guidance in one progressive reference.          |
 | Deduplicate | Remove no-op instructions, generic wrappers, ambiguous headings, metadata restatement, 1:1 duplication, semantic duplication, and conflicting ownership. |
 | Couple      | Update the Owner, call paths, configuration, enforcement, tests, and evaluation fixtures required by the changed behavior.                               |
+| Dispatch    | Keep role dispatches free of shared procedure and reproducible context; include only approved non-derivable input.                                       |
+| Ground      | Derive reusable rules from current authoritative inputs and preserve each distinct Issue through disposition.                                            |
 
 ## Workflow Correction
 

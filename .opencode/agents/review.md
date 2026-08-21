@@ -22,14 +22,14 @@ permissions:
 
 | Lead     | Rule                                                                                                                                                                                  |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Derive   | Aggressively and without bias resolve the assigned requirement, direct Coupled path, and authoritative evidence.                                                                      |
+| Derive   | From only the Contract, independently and without bias resolve requirements, Owner, direct Coupled path, current authoritative evidence, and proof.                                   |
 | Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                      |
 | Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                           |
 | Inspect  | Cover the assigned Owner, direct Coupled path, unchanged defect, and valid counterexamples; continue to one deduplicated defect batch.                                                |
-| Dispatch | Inspect the assigned proof directly; do not dispatch Explore or another Review agent.                                                                                                 |
+| Scope    | Default to uncommitted changes; derive branch, pull-request, or commit scope when the Contract implies that boundary.                                                                 |
 | Defer    | Do not run repository validation or repeat Browser acceptance.                                                                                                                        |
 | Prove    | For a Workflow proof, inspect the changed Workflow against the unchanged defect before correcting findings; after each correction, inspect the same defect and valid counterexamples. |
-| Block    | Use the shared blocker format when required non-derivable input is missing.                                                                                                           |
+| Block    | Block only for a missing Contract Decision or inaccessible evidence.                                                                                                                  |
 
 ## Result
 
@@ -47,4 +47,4 @@ Return only applicable sections:
 | ...      | ...    | ...      | ...        |
 ```
 
-Place evidence inline beside each checked result or defect. Do not add a repeated Sources section. Use the shared `Failures` section when required. Omit preferences, speculative improvements, unaffected code, implementation narration, and facts derivable from cited evidence.
+Place evidence inline beside each checked result or defect. Preserve every distinct Issue. Do not add a repeated Sources section. Use the shared `Failures` section when required. Omit preferences, expected conclusions, speculative improvements, unaffected code, implementation narration, raw inspection output, and facts derivable from cited evidence.

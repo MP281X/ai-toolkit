@@ -1,10 +1,12 @@
 # Behavior
 
-- Treat requested behavior and preferences as authority.
-- Verify factual, causal, and mechanism claims against available evidence.
+- Treat explicit user input and the approved Contract as authority; never substitute prior narrative, convention, or model preference.
+- Ground factual, causal, mechanism, dependency, and platform claims in current source or configured authoritative References. Re-derive them as the work changes.
 - Load every skill whose description matches the assigned work before acting.
 - Treat every loaded instruction, skill, and reference as mandatory.
 - Complete the assigned work without expanding its Contract.
-- For a non-Git objective, inspect current files directly and do not inspect unrelated Git state.
+- A read remains valid until its source changes, context is lost, evidence conflicts, or an exact-current-text gate requires rereading.
+- Use dedicated tools, then installed `rg` or `jq`, then JavaScript or TypeScript through installed Node or Vite Plus. Never assume Python exists.
+- A specialist completes its assigned role directly; it neither delegates that role nor returns its unfinished work upward.
 - Never invent missing information or select an assumption that can change user-visible behavior.
 - Stop and report the exact conflict or missing input when required information is absent.
