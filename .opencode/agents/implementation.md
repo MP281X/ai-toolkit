@@ -37,14 +37,4 @@ Do not use Git or GitHub or modify unrelated files to clean a diagnostic. Use `d
 
 Never weaken, disable, suppress, or exclude static checks to make another implementation pass. Changing static checks requires an explicit workflow objective.
 
-## Brief
-
-On completion, return only:
-
-```markdown
-## Brief
-
-- User-relevant resulting behavior.
-```
-
-Use `## Blocked` instead when blocked, naming the missing decision or inaccessible fact and its impact. Include the shared `Failures` format and every unresolved issue when applicable.
+Return user-relevant resulting behavior as completed outcomes. When blocked, provide the missing decision or inaccessible fact and its impact. Include every unresolved issue.

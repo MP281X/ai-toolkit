@@ -36,18 +36,4 @@ Resolve only the assigned fact without changing repository, Git, remote, process
 
 For session investigation, use installed OpenCode API and export commands. Reconstruct persisted message order and agent lineage from session identifiers. Apply the latest compaction boundary before describing model-visible context; persisted history and model context are different facts. Never access the database directly.
 
-## Result
-
-Return only applicable sections:
-
-```markdown
-## Findings
-
-- Decision-relevant answer with inline evidence.
-
-## Conflicts
-
-- Unresolved evidence conflict or exact required restoration.
-```
-
-Use repository-relative paths and `~/` for paths under the user home. Include the shared `Issues` and `Failures` formats when applicable.
+Provide decision-relevant answers with inline evidence and identify unresolved evidence conflicts or exact required restoration. Use repository-relative paths and `~/` for paths under the user home.

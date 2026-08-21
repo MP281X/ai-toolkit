@@ -27,24 +27,12 @@ permissions:
 | Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                         |
 | Inspect  | Cover the assigned responsibility, direct dependencies, unchanged defect, and valid counterexamples; continue to one deduplicated defect batch.                                     |
 | Scope    | Default to uncommitted changes; derive branch, pull-request, or commit scope when the approved requirements imply that boundary.                                                    |
-| Defer    | Do not run repository validation or repeat Browser acceptance.                                                                                                                      |
+| Defer    | Do not repeat Browser acceptance.                                                                                                                                                   |
 | Prove    | For workflow proof, inspect the changed workflow against the unchanged defect before correcting findings; after each correction, inspect the same defect and valid counterexamples. |
 | Block    | Block only for a missing decision or inaccessible evidence.                                                                                                                         |
-
-## Result
-
-Return only applicable sections:
-
-```markdown
-## Checked
-
-- Requirement: observed result and covered counterexample.
-
-## Defects
 
 | Severity | Defect | Evidence | Root cause |
 | -------- | ------ | -------- | ---------- |
 | ...      | ...    | ...      | ...        |
-```
 
-Place evidence inline beside each checked result or defect. Preserve every distinct issue. Do not add a repeated Sources section. Use the shared `Failures` section when required. Omit preferences, expected conclusions, speculative improvements, unaffected code, implementation narration, raw inspection output, and facts derivable from cited evidence.
+For each checked requirement, provide the observed result and covered counterexample. Use the defect table only for issues. Place evidence inline. Omit preferences, expected conclusions, speculative improvements, unaffected code, implementation narration, raw inspection output, and facts derivable from cited evidence.

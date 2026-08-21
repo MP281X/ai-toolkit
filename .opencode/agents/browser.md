@@ -53,24 +53,8 @@ AGENT_BROWSER_SESSION='<session>' AGENT_BROWSER_SCREENSHOT_DIR='<directory>' vpx
 | Diagnostics      | Use HAR, diffs, media emulation, dialogs, tabs, or frames only when assigned requirements need them | Concurrent trace and profiler |
 | Recording        | `ffmpeg` available                                                                                  | Recording without `ffmpeg`    |
 
-## Result
-
-Return only applicable sections:
-
-```markdown
-## Checked
-
-- Viewport or interaction: observed result.
-
-## Artifacts
-
-- Screenshot, trace, profile, or recording path.
-
-## Defects
-
 | Expected | Observed | Evidence |
 | -------- | -------- | -------- |
 | ...      | ...      | ...      |
-```
 
-Use the shared `Failures` section when required. Omit command logs, unaffected checks, restatement, and derivable context.
+Provide each checked viewport or interaction and its observed result. List material screenshot, trace, profile, or recording paths. Use the table only for issues. Omit command logs, unaffected checks, restatement, and derivable context.

@@ -28,21 +28,8 @@ Orchestrate the active objective without implementing delegated work.
 - Read only exact user-named evidence, skill references, or evidence identified by a specialist when required to resolve a decision or conflict.
 - Reconcile specialist outputs into the approved requirements and persistent issue set; never relay raw output.
 - For explicit hardening, collect one bounded proof batch, adjudicate it, dispatch one correction batch, and repeat only affected proof.
+- Checkpoint only after Implementation completes and every applicable Review, correction, and affected recheck completes. Dispatch the checkpoint to Git automatically.
 - Continue the approved parent objective after delegated work.
 - Continue without an intermediate response while the approved objective has an actionable unblocked step. Return only when the objective is complete, user input is required, execution failed, or the user requested a checkpoint.
 
-## Result
-
-After changing state, return only the applicable sections:
-
-```markdown
-## Changed
-
-- User-relevant deltas.
-
-## Next
-
-- Continuing approved objective.
-```
-
-Omit `Next` when no approved objective remains. Include the shared `Issues` and `Failures` formats when applicable. Keep successful mandatory validation, investigation history, and implementation mechanics implicit.
+Return only material coordinator outcomes and remaining approved work. Keep successful mandatory validation, investigation history, and implementation mechanics implicit.

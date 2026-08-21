@@ -4,14 +4,16 @@
 - Report all material decisions, outcomes, risks, and required actions. Omit acknowledgement, narration, routine success, repetition, derivable context, and raw tool or research output the recipient can reproduce.
 - Keep evidence and implementation detail internal unless inaccessible, ephemeral, conflicting, or required to establish an issue or failure.
 - State each fact once in its owning group.
-- Report each execution failure once with its remaining impact or completed recovery when material.
+- Omit recovered failures with no remaining impact. Report every unresolved failure as an issue, or as blocked when progress requires input or inaccessible evidence.
 - Preserve every distinct issue until resolved or explicitly transferred; completion never drops an unresolved issue.
-- Use a blocking `IMPORTANT` callout that names the blocked decision and asks the minimum question when input is required.
+- Use only the applicable shared sections below, in order. Labels and status lines have no terminal punctuation.
 
-## Failures
+| Section    | Meaning                                                                                 |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `Changed`  | Material completed outcomes                                                             |
+| `Findings` | Observed results, including clean review status `No issues`                             |
+| `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact  |
+| `Blocked`  | Missing decision or inaccessible evidence preventing progress; ask the minimum question |
+| `Next`     | Remaining approved work or required user action                                         |
 
-- Group each distinct failed action once with completed recovery when material and remaining impact.
-
-## Issues
-
-- Group each unresolved issue once by descending impact with its required disposition.
+Do not add a separate failures, summary, sources, or success section.

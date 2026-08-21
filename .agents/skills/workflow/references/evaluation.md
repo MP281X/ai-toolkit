@@ -16,6 +16,7 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Primary boundary     | Primary has only read, skill, and subagent tools and delegates mutation to Implementation and Git operations to Git.                                             |
 | Shared source        | The V2 context-hook plugin supplies ambient instructions to every agent; root `AGENTS.md` remains repository-specific.                                           |
 | Approved execution   | Implementation completes approved requirements, runs exact repository validation, then runs `deslop-linter` for non-Markdown changes.                            |
+| Check ownership      | Only Implementation runs repository validation or linters; every other role trusts its completed results.                                                        |
 | Product design       | `engineering` loads for general design; `project-engineering` additionally loads only for this repository's architecture or visual system.                       |
 | Role capabilities    | Every role can load an applicable skill and read configured references; shared instructions enter each role's context once.                                      |
 | Visual scope         | Functional UI uses repository shadcn semantic tokens; portfolio work retains an independent visual direction.                                                    |
@@ -27,7 +28,10 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Explore ownership    | Explore returns only decision-relevant findings for broad, external, multi-source, or conversation-history investigation.                                        |
 | Explore depth        | A defect investigation tests plausible causes and identifies the reusable cause and responsible component instead of stopping at a symptom.                      |
 | Representation scope | A request to shorten communicated paths does not change stored reference declarations.                                                                           |
-| Failure reporting    | Each agent reports every execution failure to its parent; the primary reports each distinct failure once, including recovered failures.                          |
+| Shared reporting     | Communication solely defines `Changed`, `Findings`, `Issues`, `Blocked`, and `Next`; agents define only role-specific data shapes.                               |
+| Failure reporting    | Unresolved failures appear under `Issues` or `Blocked`; recovered failures with no remaining impact are omitted.                                                 |
+| Checkpoint           | A checkpoint follows completed implementation and applicable review, correction, and recheck; Git commits automatically.                                         |
+| Published checkpoint | Git also pushes and replaces the pull-request body with structured rendered GFM regenerated only from the current branch diff.                                   |
 | Continuation         | Completion of a secondary objective continues the actionable approved parent objective.                                                                          |
 | Approval isolation   | Approval covers its objective and coupled corrections; it does not authorize a successive unrelated or expanded action.                                          |
 | Canonical approval   | Primary and user brainstorm the goal and smallest viable outcome, then approve requirements, non-goals, acceptance criteria, and decisions once.                 |
