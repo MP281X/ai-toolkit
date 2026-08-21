@@ -17,6 +17,6 @@ Preserve an established design system. When none exists, establish one deliberat
 | Mobile         | Preserve complete hierarchy, interaction, and dense controls at narrow widths                     |
 | Performance    | Keep input response, rendering, layout, console, and network behavior clean                       |
 
-## Assurance
+## Review
 
 Rendered behavior is the final UI evidence. Inspect every affected flow at relevant desktop and mobile sizes; source inspection alone is insufficient.

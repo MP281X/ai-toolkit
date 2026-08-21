@@ -1,6 +1,6 @@
 ---
-name: deslop
-description: "Use for this repository's application architecture, Effect RPC boundary, workspace topology, test placement, component system, or visual design."
+name: project-engineering
+description: "Use with engineering for this repository's architecture, workspace, testing, components, or visual conventions."
 ---
 
 Extend the generic `engineering` skill with only this repository's selected architecture and conventions.

@@ -19,12 +19,11 @@
 		"@tanstack/react-router": "latest"
 	},
 	"devDependencies": {
-		"@rolldown/plugin-babel": "latest",
 		"@tailwindcss/vite": "latest",
 		"@tanstack/react-router": "latest",
 		"@tanstack/router-plugin": "latest",
 		"@vitejs/plugin-react": "latest",
-		"babel-plugin-react-compiler": "latest",
+		"oxc-transform-react": "latest",
 		"react": "^19",
 		"react-dom": "^19"
 	}

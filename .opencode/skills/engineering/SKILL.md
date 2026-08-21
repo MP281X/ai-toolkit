@@ -1,6 +1,6 @@
 ---
 name: engineering
-description: 'Use for product design, interaction, visual design, architecture, implementation, fixes, refactors, tests, or product-code review.'
+description: 'Use for product-code guidelines, architecture, coding style, implementation, testing, or review.'
 ---
 
 Use Effect v4, React, Effect Atom, and TanStack Router when the repository contains or selects them. Preserve every other established technology and boundary.
@@ -24,8 +24,6 @@ Use Effect v4, React, Effect Atom, and TanStack Router when the repository conta
 | Name       | Use direct names, inferred local types, domain operations, and established repository conventions.                            |
 | Test       | Test durable behavior only when regression cost justifies it; omit generated scaffolding and presentation-detail unit tests.  |
 | Comment    | Explain only a surprising constraint or non-obvious behavior.                                                                 |
-
-Before editing, resolve ownership, boundaries, lifecycle, concurrency, failures, performance, and proof. Load `iteration` when a material decision remains unresolved or an approved design must change.
 
 ## References
 

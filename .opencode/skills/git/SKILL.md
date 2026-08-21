@@ -1,6 +1,6 @@
 ---
-name: git-operations
-description: 'Use for every Git or GitHub read or mutation.'
+name: git
+description: 'Use for Git or GitHub operations.'
 ---
 
 ## Safety
@@ -22,7 +22,15 @@ description: 'Use for every Git or GitHub read or mutation.'
 | Change     | Keep one semantic change per branch and pull request.                                                         |
 | Base       | Use the fetched remote default branch for independent work and the immediate stack parent for dependent work. |
 
+- Resolve only repository state required by the assigned Git or GitHub operation. Do not inventory status, branches, remotes, history, or diffs without a direct requirement.
+- Perform read-only operations without approval.
+- Perform mutations only when the dispatch artifact contains the complete exact approved operation group and targets. Stop when approval or scope is missing.
+- Do not edit workspace files, implement product changes, or dispatch another agent.
+- Return the requested artifact or resulting state with exact refs and revisions.
+
 ## Conditional references
+
+Read only the reference matching the assigned operation.
 
 | Work                                                                               | Reference                                          |
 | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
@@ -30,4 +38,10 @@ description: 'Use for every Git or GitHub read or mutation.'
 | Stack creation, publication, alignment, merge recovery, or retargeting             | [Stacked pull requests](references/stacked-prs.md) |
 | Exact remote preservation before replacement, deletion, rebase, or Workflow change | [Snapshot tag](references/snapshot-tag.md)         |
 
-Return the requested Git artifact or resulting state with exact refs and revisions.
+## Result
+
+- **Operation:** ...
+- **Ref:** ...
+- **Revision:** ...
+
+Use the shared `Failures` section automatically.

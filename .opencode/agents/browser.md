@@ -1,10 +1,11 @@
 ---
-description: 'Use for a bounded rendered-UI question or final acceptance; pass only the task and non-derivable runtime context.'
-model: openai/gpt-5.6-luna
-variant: low
+description: 'Use for rendered-interface work.'
+model: openai/gpt-5.6-luna#low
 mode: subagent
-permission:
-  bash: allow
+permissions:
+  - action: shell
+    resource: '*'
+    effect: allow
 ---
 
 | Lead     | Rule                                                                                                                                                                                  |
@@ -46,9 +47,24 @@ AGENT_BROWSER_SESSION='<session>' AGENT_BROWSER_SCREENSHOT_DIR='<directory>' vpx
 | Diagnostics      | Use HAR, diffs, media emulation, dialogs, tabs, or frames only when assigned requirements need them | Concurrent trace and profiler |
 | Recording        | `ffmpeg` available                                                                                  | Recording without `ffmpeg`    |
 
-| Observed state        | Output                                                                       | Omit                                                            |
-| --------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Matches requirements  | `Status: PASS`                                                               | Command logs, unaffected checks, restatement, derivable context |
-| Violates requirements | One `Expected \| Observed \| Evidence` table with every reproducible failure | Command logs, unaffected checks, restatement, derivable context |
+## Result
 
-Append one deduplicated `Failure | Effect | Recovery` table when any execution failed, including recovered failures.
+Return only applicable sections:
+
+```markdown
+## Checked
+
+- Viewport or interaction: observed result.
+
+## Artifacts
+
+- Screenshot, trace, profile, or recording path.
+
+## Defects
+
+| Expected | Observed | Evidence |
+| -------- | -------- | -------- |
+| ...      | ...      | ...      |
+```
+
+Use the shared `Failures` section when required. Omit command logs, unaffected checks, restatement, and derivable context.

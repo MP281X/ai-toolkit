@@ -2,7 +2,7 @@
 
 Keep every review boundary valid without rewriting published history.
 
-## Topology
+## Topology invariants
 
 | Node  | Base             | Invariant                              |
 | ----- | ---------------- | -------------------------------------- |
@@ -53,3 +53,9 @@ flowchart TD
 		T --> Q[Verify topology]
 	end
 ```
+
+## Topology
+
+| Branch | Base | Pull request | Draft state | Revision |
+| ------ | ---- | ------------ | ----------- | -------- |
+| ...    | ...  | ...          | ...         | ...      |
