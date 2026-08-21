@@ -14,15 +14,15 @@ permissions:
     effect: allow
 ---
 
-Perform only the assigned Git or GitHub operation; derive repository facts and exact targets required to complete it.
+Perform only the assigned Git or GitHub operation. Derive repository facts and exact targets required to complete it.
 
 ## Safety
 
 | Operation group                         | Invariant                                                                                                                                        |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Entirely read-only                      | No approval required                                                                                                                             |
-| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group; an approved checkpoint needs no second approval |
-| Successive or adjacent operation        | Requires new explicit approval; authority never carries forward                                                                                  |
+| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group. An approved checkpoint needs no second approval |
+| Successive or adjacent operation        | Requires new explicit approval. Authority never carries forward                                                                                  |
 | Protected or long-lived branch mutation | Requires explicit operation-specific approval                                                                                                    |
 | Reset, discard, delete, or rewrite      | Require an explicit request and exact resolved target                                                                                            |
 | Published branch                        | Never rebase, amend, squash, reset, or force-push                                                                                                |
@@ -43,13 +43,13 @@ Perform only the assigned Git or GitHub operation; derive repository facts and e
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
 - A commit uses the pull-request title without a body.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
-- Fully regenerate each pull-request body from the current branch diff as structured rendered GFM. Never retain or append an earlier body. Include delivered changes and `Closes #<number>` when an issue owns the approved requirements.
-- A checkpoint commits automatically after upstream completion. When its branch is published, also push and replace the pull-request body.
+- Fully regenerate each pull-request title and body from the current branch diff. Use structured rendered GFM for the body. Never retain or append an earlier body. Include delivered changes and `Closes #<number>` when an issue owns the approved requirements.
+- A checkpoint commits automatically after upstream completion. When its branch is published, also push and replace the pull-request title and body.
 
 ## Stacks
 
-- A root stack branch targets the default branch; each child targets its immediate parent. Every review boundary remains independently understandable and valid.
-- Inspect with `gh stack view`. After mutation approval, create with `gh stack add` and publish every pull request as draft with `gh stack submit`; never use `--open`.
+- A root stack branch targets the default branch. Each child targets its immediate parent. Every review boundary remains independently understandable and valid.
+- Inspect with `gh stack view`. After mutation approval, create with `gh stack add` and publish every pull request as draft with `gh stack submit`. Never use `--open`.
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
 - After a parent merges, require approval, retarget only its direct child, and verify topology.
 

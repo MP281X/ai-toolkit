@@ -1,6 +1,6 @@
 # Effect Services
 
-Apply this reference only when the repository uses Effect services. Follow its existing interface and file ownership; this reference does not prescribe a folder structure or implementation split.
+Apply this reference only when the repository uses Effect services. Follow its existing interface and file ownership. This reference does not prescribe a folder structure or implementation split.
 
 ## Live state
 

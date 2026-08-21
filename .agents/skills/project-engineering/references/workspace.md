@@ -13,8 +13,8 @@ vp install
 
 | Generator | Name input          | Derived owner or output                                                                                                                                     |
 | --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App       | Unscoped kebab-case | `@deslop/<name>`; canonical directory; React, TanStack Router, Effect RPC, telemetry, Vite, Docker, build, publication baseline                             |
-| Package   | Unscoped kebab-case | `@deslop/<name>`; canonical directory; manifest groups, explicit subpath exports, empty same-named Effect service tagged `@deslop/<name>/service/<Service>` |
+| App       | Unscoped kebab-case | `@deslop/<name>`. Canonical directory. React, TanStack Router, Effect RPC, telemetry, Vite, Docker, build, publication baseline                             |
+| Package   | Unscoped kebab-case | `@deslop/<name>`. Canonical directory. Manifest groups, explicit subpath exports, empty same-named Effect service tagged `@deslop/<name>/service/<Service>` |
 
 | Topology change       | Immediate next action | Forbidden before action               |
 | --------------------- | --------------------- | ------------------------------------- |

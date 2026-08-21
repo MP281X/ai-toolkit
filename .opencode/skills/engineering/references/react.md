@@ -7,7 +7,7 @@
 | External or application operation             | Existing project boundary     |
 | Ephemeral DOM handle or input                 | React                         |
 
-Use the project's existing boundary when one exists; otherwise call the local application or service API. Do not introduce a transport without evidence that the project needs one.
+Use the project's existing boundary when one exists. Otherwise call the local application or service API. Do not introduce a transport without evidence that the project needs one.
 
 ## Presentation Actions
 

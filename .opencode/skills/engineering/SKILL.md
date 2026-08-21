@@ -3,6 +3,8 @@ name: engineering
 description: 'Use for product-code guidelines, architecture, coding style, implementation, testing, or review.'
 ---
 
+## Boundary
+
 Use Effect v4, React, Effect Atom, and TanStack Router when the repository contains or selects them. Preserve every other established technology and boundary.
 
 | Applicable owner | Responsibility                                                       |
@@ -13,23 +15,23 @@ Use Effect v4, React, Effect Atom, and TanStack Router when the repository conta
 | React            | Presentation and DOM-local interaction                               |
 | Adapter          | External interface translation                                       |
 
+## Workflow
+
 | Lead       | Requirement                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Inspect    | Establish surrounding code, configured dependencies, project conventions, and authoritative reference behavior before design. |
-| Decode     | Trust typed values; decode unknown external data once at its boundary.                                                        |
-| Transform  | Preserve intact typed values; transform shape only when approved requirements require it.                                     |
+| Decode     | Trust typed values. Decode unknown external data once at its boundary.                                                        |
+| Transform  | Preserve intact typed values. Transform shape only when approved requirements require it.                                     |
 | State      | Omit states excluded by types or schemas.                                                                                     |
-| Fail       | Propagate the first reachable failure; retry or recover only when required.                                                   |
+| Fail       | Propagate the first reachable failure. Retry or recover only when required.                                                   |
 | Mutability | Keep arguments, props, service values, and returned values immutable without `readonly` syntax.                               |
 | Name       | Use direct names, inferred local types, domain operations, and established repository conventions.                            |
-| Test       | Test durable behavior only when regression cost justifies it; omit generated scaffolding and presentation-detail unit tests.  |
+| Test       | Test durable behavior only when regression cost justifies it. Omit generated scaffolding and presentation-detail unit tests.  |
 | Comment    | Explain only a surprising constraint or non-obvious behavior.                                                                 |
 
 ## References
 
-Applicable work routes to:
-
-| Work                                                                                    | Reference                                 |
+| Condition                                                                               | Reference                                 |
 | --------------------------------------------------------------------------------------- | ----------------------------------------- |
 | Effect operation selection, composition, Stream, tracing, errors, and concurrency       | [Effect](references/effect.md)            |
 | Schema-owned public boundary shapes                                                     | [Contracts](references/contracts.md)      |

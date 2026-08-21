@@ -4,39 +4,39 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 
 | Gate          | Proof                                                                                                                                                       |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Routing       | A minimal positive trigger selects the component; a near miss does not; no collision or body policy exists in metadata.                                     |
+| Routing       | A minimal positive trigger selects the component. A near miss does not. Metadata contains no collision or body policy.                                      |
 | Behavior      | The component receives only decision-relevant information, derives available facts, and follows authority, tool, reference, and artifact boundaries.        |
 | Integration   | `AGENTS.md`, metadata, bodies, references, configuration, static checks, and neighbors have compatible interfaces and one responsible component per policy. |
-| Repeatability | Three independent runs converge through long context, local steering, and reconciliation; approval does not leak to a successive action.                    |
+| Repeatability | Three independent runs converge through long context, local steering, and reconciliation. Approval does not leak to a successive action.                    |
 
 | Neutral holdout      | Required behavior                                                                                                                                                |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Writing persistence  | Primary and subagent output remains compact, complete, unambiguous, and schema-conformant through a long tool-heavy turn.                                        |
 | Compaction           | After lossy compaction, each retained representation preserves its relationships, order, branching, mappings, hierarchy, scope, and validity without prose glue. |
 | Primary boundary     | Primary has only read, skill, and subagent tools and delegates mutation to Implementation and Git operations to Git.                                             |
-| Shared source        | The V2 context-hook plugin supplies ambient instructions to every agent; root `AGENTS.md` remains repository-specific.                                           |
+| Shared source        | The V2 context-hook plugin supplies ambient instructions to every agent. Root `AGENTS.md` remains repository-specific.                                           |
 | Approved execution   | Implementation completes approved requirements, runs exact repository validation, then runs `deslop-linter` for non-Markdown changes.                            |
-| Check ownership      | Only Implementation runs repository validation or linters; every other role trusts its completed results.                                                        |
-| Product design       | `engineering` loads for general design; `project-engineering` additionally loads only for this repository's architecture or visual system.                       |
-| Role capabilities    | Every role can load an applicable skill and read configured references; shared instructions enter each role's context once.                                      |
-| Visual scope         | Functional UI uses repository shadcn semantic tokens; portfolio work retains an independent visual direction.                                                    |
+| Check ownership      | Only Implementation runs repository validation or linters. Every other role trusts its completed results.                                                        |
+| Product design       | `engineering` loads for general design. `project-engineering` additionally loads only for this repository's architecture or visual system.                       |
+| Role capabilities    | Every role can load an applicable skill and read configured references. Shared instructions enter each role's context once.                                      |
+| Visual scope         | Functional UI uses repository shadcn semantic tokens. Portfolio work retains an independent visual direction.                                                    |
 | Unrelated delegation | Independent work uses fresh applicable agents and preserves parallel dispatch.                                                                                   |
-| Related delegation   | A follow-up reuses its agent unless that assignment's evidence changed; a correction requires fresh Review only for affected proof questions.                    |
-| Review scope         | Each Review receives one bounded proof question; one request combining independent Owners or proof questions fails evaluation.                                   |
+| Related delegation   | A follow-up reuses its agent unless that assignment's evidence changed. A correction requires fresh Review only for affected proof questions.                    |
+| Review scope         | Each Review receives one bounded proof question. One request combining independent Owners or proof questions fails evaluation.                                   |
 | Git ownership        | Git owns every Git or GitHub operation and loads only operation-matching references.                                                                             |
 | V2 reload            | Workflow changes do not require an OpenCode restart before proof.                                                                                                |
 | Explore ownership    | Explore returns only decision-relevant findings for broad, external, multi-source, or conversation-history investigation.                                        |
 | Explore depth        | A defect investigation tests plausible causes and identifies the reusable cause and responsible component instead of stopping at a symptom.                      |
 | Representation scope | A request to shorten communicated paths does not change stored reference declarations.                                                                           |
-| Shared reporting     | Communication solely defines `Changed`, `Findings`, `Issues`, `Blocked`, and `Next`; agents define only role-specific data shapes.                               |
-| Failure reporting    | Unresolved failures appear under `Issues` or `Blocked`; recovered failures with no remaining impact are omitted.                                                 |
-| Checkpoint           | A checkpoint follows completed implementation and applicable review, correction, and recheck; Git commits automatically.                                         |
-| Published checkpoint | Git also pushes and replaces the pull-request body with structured rendered GFM regenerated only from the current branch diff.                                   |
+| Shared reporting     | Communication solely defines `Changed`, `Findings`, `Issues`, `Blocked`, and `Next`. Agents define only role-specific data shapes.                               |
+| Failure reporting    | Unresolved failures appear under `Issues` or `Blocked`. Recovered failures with no remaining impact are omitted.                                                 |
+| Checkpoint           | A checkpoint follows completed implementation and applicable review, correction, and recheck. Git commits automatically.                                         |
+| Published checkpoint | Git also pushes and replaces the pull-request title and body from the current branch diff. The body uses structured rendered GFM.                                |
 | Continuation         | Completion of a secondary objective continues the actionable approved parent objective.                                                                          |
-| Approval isolation   | Approval covers its objective and coupled corrections; it does not authorize a successive unrelated or expanded action.                                          |
+| Approval isolation   | Approval covers its objective and coupled corrections. It does not authorize a successive unrelated or expanded action.                                          |
 | Canonical approval   | Primary and user brainstorm the goal and smallest viable outcome, then approve requirements, non-goals, acceptance criteria, and decisions once.                 |
 | Dispatch economy     | Each specialist receives only its role input plus non-derivable decisions, inaccessible or ephemeral evidence, and decision-changing conflicts or issues.        |
-| Current grounding    | Implementation continuously derives technical facts from current source and configured references; stale reads are invalidated only by the shared validity rule. |
+| Current grounding    | Implementation continuously derives technical facts from current source and configured references. The shared validity rule invalidates stale reads.             |
 | Complete ownership   | Each specialist completes its assigned role without delegating it or returning unfinished work upward.                                                           |
 | Issue persistence    | Every distinct issue remains visible through completion until resolved or explicitly transferred.                                                                |
 

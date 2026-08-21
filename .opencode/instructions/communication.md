@@ -22,7 +22,7 @@
 | `Changed`  | Material completed outcomes                                                             |
 | `Findings` | Observed results, including clean review status `No issues`                             |
 | `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact  |
-| `Blocked`  | Missing decision or inaccessible evidence preventing progress; ask the minimum question |
+| `Blocked`  | Missing decision or inaccessible evidence preventing progress. Ask the minimum question |
 | `Next`     | Remaining approved work or required user action                                         |
 
 Do not add a separate failures, summary, sources, or success section.

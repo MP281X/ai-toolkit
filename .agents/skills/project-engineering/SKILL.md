@@ -3,7 +3,9 @@ name: project-engineering
 description: "Use with engineering for this repository's architecture, workspace, testing, components, or visual conventions."
 ---
 
-Extend the generic `engineering` skill with only this repository's selected architecture and conventions.
+## Boundary
+
+Extend `engineering` with only this repository's selected architecture and conventions.
 
 | Owner       | Responsibility                                                       |
 | ----------- | -------------------------------------------------------------------- |
@@ -13,9 +15,13 @@ Extend the generic `engineering` skill with only this repository's selected arch
 | Effect Atom | Client synchronization and shared view state                         |
 | React       | Presentation                                                         |
 
+## Workflow
+
+Use the owner table to place behavior before implementation.
+
 ## References
 
-| Work                                                              | Reference                                  |
+| Condition                                                         | Reference                                  |
 | ----------------------------------------------------------------- | ------------------------------------------ |
 | Application boundaries, RPC, client runtime, and source placement | [Architecture](references/architecture.md) |
 | Repository test placement and acceptance ownership                | [Testing](references/testing.md)           |

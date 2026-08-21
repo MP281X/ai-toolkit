@@ -132,7 +132,7 @@ return Effect.all({audit: audit(permissions), view: render(permissions)})
 | `effect/unstable/socket`     | `Socket` · `SocketServer`                                                                                                                                       |
 | `effect/unstable/cli`        | `Command` · `Argument` · `Flag` · `Param` · `Primitive` · `CliConfig` · `CliError` · `CliOutput`                                                                |
 
-Resolve the configured `effect` reference. Core modules live at `packages/effect/src/<Module>.ts`; unstable APIs live under `packages/effect/src/unstable/<entrypoint>`.
+Resolve the configured `effect` reference. Core modules live at `packages/effect/src/<Module>.ts`. Unstable APIs live under `packages/effect/src/unstable/<entrypoint>`.
 
 ## Operation shape
 
