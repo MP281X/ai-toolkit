@@ -21,7 +21,7 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Role capabilities    | Every role can load an applicable skill and read configured references. Shared instructions enter each role's context once.                                      |
 | Visual scope         | Functional UI uses repository shadcn semantic tokens. Portfolio work retains an independent visual direction.                                                    |
 | Unrelated delegation | Independent work uses fresh applicable agents and preserves parallel dispatch.                                                                                   |
-| Related delegation   | A follow-up reuses its agent unless that assignment's evidence changed. A correction requires fresh Review only for affected proof questions.                    |
+| Related delegation   | A follow-up reuses its agent by default. Affected rechecks reuse Review. Changed effective instructions or configuration require a fresh role.                   |
 | Review scope         | Each Review receives one bounded proof question. One request combining independent Owners or proof questions fails evaluation.                                   |
 | Git ownership        | Git owns every Git or GitHub operation and loads only operation-matching references.                                                                             |
 | V2 reload            | Workflow changes do not require an OpenCode restart before proof.                                                                                                |

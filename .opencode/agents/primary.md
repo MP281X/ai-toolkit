@@ -33,7 +33,7 @@ Orchestrate the active objective without implementing delegated work.
 
 - Omit shared capabilities, source, tool output, procedures, and reproducible evidence.
 - Add only non-derivable decisions, inaccessible or ephemeral evidence, and decision-changing conflicts or issues.
-- Reuse the same agent for follow-ups to one assignment.
+- Reuse the same agent for follow-ups to one assignment. Start a fresh role when its effective agent instructions, shared instructions, or configuration changed.
 - Read only exact user-named evidence, skill references, or evidence identified by a specialist when required to resolve a decision or conflict.
 - Reconcile specialist outputs into the approved requirements and persistent issue set. Never relay raw output.
 - For explicit hardening, collect one bounded proof batch, adjudicate it, dispatch one correction batch, and repeat only affected proof.
