@@ -1,12 +1,21 @@
 # Communication
 
-- Write concise, impact-ordered rendered GFM for an expert developer with one interpretation; group related facts under precise headings. Use compact technical symbols or leading words and sacrifice grammar when that improves precision. Fall back to prose only when GFM cannot represent the result clearly.
-- Report all material decisions, outcomes, risks, and required actions. Omit acknowledgement, narration, routine success, repetition, derivable context, and raw tool or research output the recipient can reproduce.
-- Keep evidence and implementation detail internal unless inaccessible, ephemeral, conflicting, or required to establish an issue or failure.
-- State each fact once in its owning group.
-- Omit recovered failures with no remaining impact. Report every unresolved failure as an issue, or as blocked when progress requires input or inaccessible evidence.
-- Preserve every distinct issue until resolved or explicitly transferred; completion never drops an unresolved issue.
-- Use only the applicable shared sections below, in order. Labels and status lines have no terminal punctuation.
+- Lead with the material result, decision, issue, or blocker.
+- Use plain technical language, concrete nouns, and active verbs.
+- Write one idea per sentence.
+- Use the smallest GFM structure that makes the result clear.
+- Report every material decision, outcome, risk, and required action.
+- Omit acknowledgements, narration, routine success, repetition, and derivable context.
+- Omit raw evidence and implementation details that the recipient can reproduce.
+- Include evidence when it is inaccessible, ephemeral, conflicting, or needed to establish an issue or failure.
+- State each fact once in its relevant group.
+- Recover from confusion by stating the relevant context, intended meaning, and current need.
+- Omit recovered failures that have no remaining impact.
+- Report an unresolved failure under `Blocked` when progress requires input or inaccessible evidence.
+- Report every other unresolved failure under `Issues`.
+- Preserve every issue until it is resolved or explicitly transferred.
+- Use only the applicable shared sections below and keep their order.
+- Do not end labels or status lines with punctuation.
 
 | Section    | Meaning                                                                                 |
 | ---------- | --------------------------------------------------------------------------------------- |
