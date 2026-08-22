@@ -1,8 +1,3 @@
-import {useAtomSet} from '@effect/atom-react'
-
-import {Effect, pipe} from 'effect'
-
-import * as Atom from 'effect/unstable/reactivity/Atom'
 import {InfoIcon, OctagonAlert} from 'lucide-react'
 
 import {Alert, AlertDescription, AlertTitle} from '#components/ui/alert.tsx'
@@ -32,17 +27,13 @@ export function Loading() {
 
 export function Error(props: {error: unknown; reset: () => void}) {
 	const message = formatError(props.error)
-	const resetAndCopy = useAtomSet(
-		Atom.fn((text: string) =>
-			pipe(Effect.sync(props.reset), Effect.andThen(Effect.tryPromise(() => navigator.clipboard.writeText(text))))
-		)
-	)
 
 	return (
 		<Button
 			variant="ghost"
-			onClick={() => {
-				resetAndCopy(message)
+			onClick={async () => {
+				props.reset()
+				await navigator.clipboard.writeText(message)
 			}}
 			className="flex h-full w-full cursor-pointer items-center justify-center p-4 select-text"
 		>

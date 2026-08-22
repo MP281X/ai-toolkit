@@ -250,21 +250,124 @@ export default defineConfig({
 			'packages/components/src/components/svgs/**',
 			'packages/components/src/components/ui/**'
 		],
-		jsPlugins: [{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'}],
+		jsPlugins: [
+			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
+			{name: '@deslop/oxlint-rules', specifier: '@deslop/oxlint-rules/oxlint-plugin'},
+			{name: 'react-doctor', specifier: 'oxlint-plugin-react-doctor'}
+		],
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off', 'sort-keys': 'off'}},
-			{
-				files: ['.opencode/instructions.ts', 'tools/linter/src/oxlint-plugin.ts'],
-				rules: {'import/no-default-export': 'off', 'no-param-reassign': 'off'}
-			},
+			{files: ['tools/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
+			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{
 				files: ['**/*.tsx'],
-				rules: {'typescript/require-await': 'error', 'typescript/strict-void-return': 'off', 'unicorn/no-null': 'off'}
+				rules: {
+					'effecttsgo/async-function': 'off',
+					'typescript/require-await': 'error',
+					'typescript/strict-void-return': 'off',
+					'unicorn/no-null': 'off'
+				}
 			}
 		],
-		plugins: ['eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
+		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
+			// Repository invariants that maintained rules cannot express.
+			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
+			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
+			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
+			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
+			'@deslop/oxlint-rules/no-stored-schema-operation': 'error',
+			'@deslop/oxlint-rules/no-trivial-indirection': 'error',
+			'@deslop/oxlint-rules/no-undestructured-use-state': 'error',
+			'@deslop/oxlint-rules/no-unvalidated-json-decode': 'error',
+			'@deslop/oxlint-rules/schema-type-pair': 'error',
+
+			// Effect owns native capabilities in and outside generators.
+			'effecttsgo/crypto-random-uuid': 'error',
+			'effecttsgo/crypto-random-uuid-in-effect': 'error',
+			'effecttsgo/global-console': 'error',
+			'effecttsgo/global-console-in-effect': 'error',
+			'effecttsgo/global-date': 'error',
+			'effecttsgo/global-date-in-effect': 'error',
+			'effecttsgo/global-fetch': 'error',
+			'effecttsgo/global-fetch-in-effect': 'error',
+			'effecttsgo/global-random': 'error',
+			'effecttsgo/global-random-in-effect': 'error',
+			'effecttsgo/global-timers': 'error',
+			'effecttsgo/global-timers-in-effect': 'error',
+			'effecttsgo/node-builtin-import': 'error',
+			'effecttsgo/prefer-schema-over-json': 'error',
+			'effecttsgo/process-env': 'error',
+			'effecttsgo/process-env-in-effect': 'error',
+
+			// Effect programs retain work, requirements, and one direct composition path.
+			'effecttsgo/async-function': 'error',
+			'effecttsgo/duplicate-package': 'error',
+			'effecttsgo/effect-do-notation': 'error',
+			'effecttsgo/effect-fn-iife': 'error',
+			'effecttsgo/effect-fn-implicit-any': 'error',
+			'effecttsgo/effect-gen-uses-adapter': 'error',
+			'effecttsgo/effect-in-failure': 'error',
+			'effecttsgo/effect-in-void-success': 'error',
+			'effecttsgo/effect-map-flatten': 'error',
+			'effecttsgo/effect-map-void': 'error',
+			'effecttsgo/effect-succeed-with-void': 'error',
+			'effecttsgo/flat-map-to-map': 'error',
+			'effecttsgo/floating-effect': 'error',
+			'effecttsgo/floating-effect-in-vitest': 'error',
+			'effecttsgo/layer-merge-all-with-dependencies': 'error',
+			'effecttsgo/lazy-effect': 'error',
+			'effecttsgo/lazy-promise-in-effect-sync': 'error',
+			'effecttsgo/leaking-requirements': 'error',
+			'effecttsgo/missing-effect-context': 'error',
+			'effecttsgo/missing-layer-context': 'error',
+			'effecttsgo/missing-return-yield-star': 'error',
+			'effecttsgo/missing-star-in-yield-effect-gen': 'error',
+			'effecttsgo/multiple-effect-provide': 'error',
+			'effecttsgo/nested-effect-gen-yield': 'error',
+			'effecttsgo/outdated-api': 'error',
+			'effecttsgo/promise-in-effect-success': 'error',
+			'effecttsgo/return-effect-in-gen': 'error',
+			'effecttsgo/run-effect-inside-effect': 'error',
+			'effecttsgo/strict-effect-provide': 'error',
+			'effecttsgo/sync-to-succeed': 'error',
+			'effecttsgo/try-catch-in-effect-gen': 'error',
+			'effecttsgo/unsafe-effect-type-assertion': 'error',
+			'effecttsgo/unnecessary-effect-gen': 'error',
+			'effecttsgo/unnecessary-fail-yieldable-error': 'error',
+			'effecttsgo/unnecessary-pipe': 'error',
+			'effecttsgo/unnecessary-pipe-chain': 'error',
+
+			// Failures remain typed and recovery remains direct.
+			'effecttsgo/any-unknown-in-error-context': 'error',
+			'effecttsgo/catch-all-to-map-error': 'error',
+			'effecttsgo/catch-chain-to-first-success-of': 'error',
+			'effecttsgo/catch-tag-to-catch-reason': 'error',
+			'effecttsgo/catch-to-ignore': 'error',
+			'effecttsgo/catch-to-or-else-succeed': 'error',
+			'effecttsgo/catch-unfailable-effect': 'error',
+			'effecttsgo/missing-effect-error': 'error',
+			'effecttsgo/multiple-catch-tag': 'error',
+			'effecttsgo/redundant-map-error': 'error',
+			'effecttsgo/redundant-or-die': 'error',
+			'effecttsgo/unknown-in-effect-catch': 'error',
+
+			// Services and schemas use current, sound class and identity forms.
+			'effecttsgo/class-self-mismatch': 'error',
+			'effecttsgo/deterministic-keys': 'error',
+			'effecttsgo/generic-effect-services': 'error',
+			'effecttsgo/instance-of-schema': 'error',
+			'effecttsgo/new-schema-class': 'error',
+			'effecttsgo/overridden-schema-constructor': 'error',
+			'effecttsgo/prefer-schema-type-property': 'error',
+			'effecttsgo/prefer-typed-schema-decoder': 'error',
+			'effecttsgo/schema-literal-non-finite': 'error',
+			'effecttsgo/schema-number': 'error',
+			'effecttsgo/schema-struct-with-tag': 'error',
+			'effecttsgo/service-not-as-class': 'error',
+			'effecttsgo/unnecessary-typeof-type': 'error',
+
 			// TypeScript type shape
 			'@typescript-eslint/array-type': ['error', {default: 'array'}],
 			'@typescript-eslint/consistent-type-assertions': [
@@ -444,6 +547,54 @@ export default defineConfig({
 			'prefer-template': 'error',
 			'require-unicode-regexp': 'error',
 
+			// React Doctor JSX and component contracts
+			'react-doctor/no-call-component-as-function': 'error',
+			'react-doctor/no-create-context-in-render': 'error',
+			'react-doctor/no-default-props': 'error',
+			'react-doctor/no-inline-exhaustive-style': 'error',
+			'react-doctor/no-jsx-element-type': 'error',
+			'react-doctor/no-many-boolean-props': 'error',
+			'react-doctor/no-prop-types': 'error',
+			'react-doctor/no-uncontrolled-input': 'error',
+
+			// React Doctor effects and state
+			'react-doctor/no-async-effect-callback': 'error',
+			'react-doctor/no-derived-useState': 'error',
+			'react-doctor/no-effect-event-in-deps': 'error',
+			'react-doctor/no-effect-with-fresh-deps': 'error',
+			'react-doctor/no-mutable-in-deps': 'error',
+			'react-doctor/no-mutating-reducer-state': 'error',
+			'react-doctor/no-self-updating-effect': 'error',
+			'react-doctor/no-set-state-in-render': 'error',
+			'react-doctor/prefer-use-effect-event': 'error',
+			'react-doctor/rerender-functional-setstate': 'error',
+			'react-doctor/rerender-lazy-ref-init': 'error',
+			'react-doctor/rerender-lazy-state-init': 'error',
+			'react-doctor/effect-listener-cleanup-mismatch': 'error',
+			'react-doctor/no-create-object-url-without-revoke': 'error',
+			'react-doctor/no-effect-wrapper-discards-callback-cleanup-return': 'error',
+			'react-doctor/no-stale-timer-ref': 'error',
+
+			// React Doctor browser and legacy APIs
+			'react-doctor/no-event-handler': 'error',
+			'react-doctor/no-flush-sync': 'error',
+
+			// React Doctor rendering and compiler
+			'react-doctor/no-render-in-render': 'error',
+			'react-doctor/rendering-conditional-render': 'error',
+
+			// React Doctor visual performance and accessibility
+			'react-doctor/no-global-css-variable-animation': 'error',
+			'react-doctor/no-gray-on-colored-background': 'error',
+			'react-doctor/no-inline-bounce-easing': 'error',
+			'react-doctor/no-large-animated-blur': 'error',
+			'react-doctor/no-layout-property-animation': 'error',
+			'react-doctor/no-layout-transition-inline': 'error',
+			'react-doctor/no-long-transition-duration': 'error',
+			'react-doctor/no-outline-none': 'error',
+			'react-doctor/no-scale-from-zero': 'error',
+			'react-doctor/no-transition-all': 'error',
+
 			// React
 			'react/button-has-type': 'error',
 			'react/checked-requires-onchange-or-readonly': 'error',
@@ -464,6 +615,7 @@ export default defineConfig({
 			'react/no-react-children': 'error',
 			'react/no-unknown-property': 'error',
 			'react/no-unstable-nested-components': ['error', {allowAsProps: true}],
+			'react/react-compiler': 'error',
 			'react/rules-of-hooks': 'error',
 			'react/self-closing-comp': 'error',
 			'react/void-dom-elements-no-children': 'error',

@@ -1,6 +1,6 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-	"entry": ["**/main.*", ".opencode/instructions.ts"],
+	"entry": ["**/main.*"],
 	"includeEntryExports": true,
 	"ignorePatterns": [
 		"**/*.gen.ts",
@@ -11,8 +11,7 @@
 	"ignoreExports": [
 		{"exports": ["*"], "file": "packages/*/src/schema.ts"},
 		{"exports": ["*"], "file": "packages/components/src/components/**"},
-		{"exports": ["default"], "file": ".opencode/instructions.ts"},
-		{"exports": ["default"], "file": "tools/linter/src/oxlint-plugin.ts"}
+		{"exports": ["default"], "file": "tools/oxlint-rules/src/oxlint-plugin.ts"}
 	],
 	"rules": {"require-suppression-reason": "error"}
 }

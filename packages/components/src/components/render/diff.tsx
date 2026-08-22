@@ -1,13 +1,10 @@
-import {useAtomSet} from '@effect/atom-react'
-
 // fallow-ignore-file unused-file -- Public render component retained for the Workbench rebuild.
-import {Array, Effect, Match, Number, Option, Predicate, String, pipe} from 'effect'
+import {Array, Match, Number, Option, Predicate, String, pipe} from 'effect'
 
 import type {AnnotationSide} from '@pierre/diffs'
 import {getSingularPatch, setLanguageOverride} from '@pierre/diffs'
 import {File, FileDiff} from '@pierre/diffs/react'
 import {useHotkey} from '@tanstack/react-hotkeys'
-import * as Atom from 'effect/unstable/reactivity/Atom'
 import {CircleCheckIcon, CopyIcon, MessageSquareTextIcon} from 'lucide-react'
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 
@@ -166,9 +163,6 @@ function CommentAnnotation(props: {
 	onResolveComment?: (comment: PatchDiff.Comment) => void
 	onCloseDraft?: () => void
 }) {
-	const copyComment = useAtomSet(
-		Atom.fn((text: string) => Effect.tryPromise(() => navigator.clipboard.writeText(text)))
-	)
 	const inputRef = useRef<HTMLTextAreaElement>(null)
 	const [editing, setEditing] = useState(() => String.isEmpty(props.comment.body))
 
@@ -267,9 +261,9 @@ function CommentAnnotation(props: {
 					className="hover:bg-muted hover:text-foreground p-1"
 					aria-label="Copy comment"
 					title="Copy comment"
-					onClick={event => {
+					onClick={async event => {
 						event.stopPropagation()
-						copyComment(formatCopiedComment(props.comment))
+						await navigator.clipboard.writeText(formatCopiedComment(props.comment))
 					}}
 				>
 					<CopyIcon className="size-3" />

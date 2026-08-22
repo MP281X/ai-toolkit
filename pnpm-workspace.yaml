@@ -14,7 +14,6 @@ catalog:
   vite-plus: latest
   vite: npm:@voidzero-dev/vite-plus-core@latest
 overrides:
-  effect: 4.0.0-rc.111
   vite: 'catalog:'
 peerDependencyRules:
   allowAny: [vite, typescript]
