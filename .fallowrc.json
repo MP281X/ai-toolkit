@@ -6,7 +6,8 @@
 		"**/*.gen.ts",
 		"packages/components/src/components/svgs/**",
 		"packages/components/src/components/ui/**",
-		"tools/*/template/**"
+		"tools/*/template/**",
+		"tools/oxlint-rules/**"
 	],
 	"ignoreExports": [
 		{"exports": ["*"], "file": "packages/*/src/schema.ts"},

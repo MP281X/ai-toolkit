@@ -1,7 +1,65 @@
-import {Array, pipe} from 'effect'
+import {NodeServices} from '@effect/platform-node'
+
+import {Array, Effect, FileSystem, HashSet, ManagedRuntime, Path, Record, Schema, String, pipe} from 'effect'
 
 import {defineConfig} from 'vite-plus'
 import type {ViteUserConfig} from 'vite-plus'
+
+type PackageManifest = typeof PackageManifest.Type
+const PackageManifest = Schema.fromJsonString(
+	Schema.Struct({
+		dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+		peerDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String))
+	})
+)
+
+function dependencyNames(manifest: PackageManifest) {
+	return pipe(
+		[
+			manifest.dependencies ?? {},
+			manifest.devDependencies ?? {},
+			manifest.optionalDependencies ?? {},
+			manifest.peerDependencies ?? {}
+		],
+		Array.flatMap(Record.keys)
+	)
+}
+
+const duplicateRootDependencies = Effect.fnUntraced(function* () {
+	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
+	const root = import.meta.dirname
+	const rootManifest = yield* pipe(
+		fs.readFileString(path.join(root, 'package.json')),
+		Effect.flatMap(Schema.decodeEffect(PackageManifest))
+	)
+	const rootDependencies = pipe(rootManifest, dependencyNames, HashSet.fromIterable)
+	const manifests = yield* fs.glob('{apps,packages,tools}/*/package.json', {root})
+	return yield* pipe(
+		manifests,
+		Array.filter(file => !String.endsWith('tools/oxlint-rules/package.json')(file)),
+		Effect.forEach(file =>
+			pipe(
+				fs.readFileString(file),
+				Effect.flatMap(Schema.decodeEffect(PackageManifest)),
+				Effect.map(manifest =>
+					pipe(
+						dependencyNames(manifest),
+						Array.filter(name => HashSet.has(rootDependencies, name)),
+						Array.map(name => ({name, path: path.relative(root, file)}))
+					)
+				)
+			)
+		),
+		Effect.map(Array.flatten)
+	)
+})
+
+const nodeRuntime = ManagedRuntime.make(NodeServices.layer)
+const duplicateDependencies = await nodeRuntime.runPromise(duplicateRootDependencies())
+await nodeRuntime.dispose()
 
 const effectModuleObjects = [
 	'Array',
@@ -190,7 +248,8 @@ export default defineConfig({
 		ignorePatterns: [
 			'**/*.gen.ts',
 			'packages/components/src/components/svgs/**',
-			'packages/components/src/components/ui/**'
+			'packages/components/src/components/ui/**',
+			'tools/oxlint-rules/**'
 		],
 
 		arrowParens: 'avoid',
@@ -248,7 +307,8 @@ export default defineConfig({
 			'**/*.gen.ts',
 			'tools/*/template/**',
 			'packages/components/src/components/svgs/**',
-			'packages/components/src/components/ui/**'
+			'packages/components/src/components/ui/**',
+			'tools/oxlint-rules/**'
 		],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
@@ -273,7 +333,7 @@ export default defineConfig({
 		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// Repository invariants that maintained rules cannot express.
-			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
+			'@deslop/oxlint-rules/no-duplicate-root-dependency': ['error', {duplicates: duplicateDependencies}],
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
 			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
 			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
