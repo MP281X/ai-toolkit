@@ -30,7 +30,7 @@ Use the smallest neutral fixture derived from each agent or skill metadata and b
 | Representation scope | A request to shorten communicated paths does not change stored reference declarations.                                                                                                                                                                                                                                                                                                                                         |
 | Shared reporting     | Communication solely defines `Changed`, `Findings`, `Git`, `Issues`, `Blocked`, and `Next`. Agents define only role-specific data shapes.                                                                                                                                                                                                                                                                                      |
 | Failure reporting    | Unresolved failures appear under `Issues` or `Blocked`. Recovered failures with no remaining impact are omitted.                                                                                                                                                                                                                                                                                                               |
-| Message scope        | A commit message describes only its delta from the previous commit. A pull-request title and structured body describe the full branch diff and are regenerated.                                                                                                                                                                                                                                                                |
+| Message scope        | Git derives a commit title and bullet body only from the pending delta against `HEAD`. Git separately derives and regenerates a pull-request title and structured body from the complete branch diff against its target.                                                                                                                                                                                                       |
 | Git approval         | Normal non-protected mutations need no separate approval; protected branches are immutable; destructive or history changes, including force-push, are last-resort operations requiring direct user approval that agents cannot grant.                                                                                                                                                                                          |
 | Git output           | A completed commit reports its message and hash. A pull request reports its title and URL.                                                                                                                                                                                                                                                                                                                                     |
 | Continuation         | Completion of a secondary objective continues the actionable approved parent objective.                                                                                                                                                                                                                                                                                                                                        |
@@ -58,3 +58,14 @@ flowchart LR
 | Git history                | Excluded |
 | Expected findings          | Excluded |
 | Invented domain policy     | Excluded |
+
+## Message-scope fixture
+
+Given a branch that already adds query filtering and a pending delta that adds only a clear action:
+
+| Artifact     | Required result                                                                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| Commit       | Title `feat(search): add clear action`; bullet body mentions only clearing the active query              |
+| Pull request | Title `feat(search): add query controls`; body covers both query filtering and clearing the active query |
+
+The evaluation fails if the commit reuses the pull-request title or includes the earlier filtering change.

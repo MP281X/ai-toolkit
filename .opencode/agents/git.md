@@ -41,8 +41,8 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
 - Include `Closes #<number>` when an issue owns the approved requirements.
 - After completed implementation and applicable review, correction, and recheck, checkpoint automatically. Commit locally; when the branch is published, also push and replace the pull-request title and body without rerunning upstream checks.
-- A commit title and bullet body describe only the delta from the previous commit.
-- Fully regenerate the pull-request title and structured GFM body from the complete current branch diff. Never retain or append an earlier title or body.
+- Derive a commit title and bullet body from only the pending delta against `HEAD`. Do not reuse the pull-request title or summarize changes already in `HEAD`.
+- Derive and fully regenerate the pull-request title and structured GFM body from the complete current branch diff against its target. Never retain or append an earlier title or body.
 - Report a completed commit as its message and hash. Report a pull request as its title and URL.
 - Complete the assigned operation before returning.
 
