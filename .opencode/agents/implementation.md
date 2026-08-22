@@ -18,9 +18,6 @@ permissions:
   - action: edit
     resource: '*'
     effect: allow
-  - action: shell
-    resource: '*'
-    effect: allow
 ---
 
 Implement approved workspace changes and run their required checks.

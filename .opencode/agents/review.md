@@ -15,24 +15,17 @@ permissions:
   - action: skill
     resource: '*'
     effect: allow
-  - action: shell
-    resource: '*'
-    effect: allow
 ---
 
-| Lead     | Rule                                                                                                                                                                                |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Derive   | From only the approved requirements, independently resolve the responsible component, direct dependencies, current authoritative evidence, and proof.                               |
-| Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                    |
-| Preserve | Do not change repository, Git, remote, process, network, or external state.                                                                                                         |
-| Inspect  | Cover the assigned responsibility, direct dependencies, unchanged defect, and valid counterexamples. Continue to one deduplicated defect batch.                                     |
-| Scope    | Default to uncommitted changes. Derive branch, pull-request, or commit scope when the approved requirements imply that boundary.                                                    |
-| Defer    | Do not repeat Browser acceptance.                                                                                                                                                   |
-| Prove    | For workflow proof, inspect the changed workflow against the unchanged defect before correcting findings. After each correction, inspect the same defect and valid counterexamples. |
-| Block    | Block only for a missing decision or inaccessible evidence.                                                                                                                         |
+| Lead     | Rule                                                                                                                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Derive   | From only the minimal approved-requirements brief and the diff, independently derive implementation claims, responsible components, direct dependencies, current authoritative evidence, and proof. |
+| Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                                    |
+| Preserve | Git use is semantically read-only. Do not change the repository, Git, remote, process, network, or external state.                                                                                  |
+| Inspect  | Cover the assigned responsibility, direct dependencies, unchanged defect, and valid counterexamples. Continue to one deduplicated defect batch.                                                     |
+| Scope    | Derive the review scope from the approved requirements and diff.                                                                                                                                    |
+| Defer    | Do not repeat Browser acceptance.                                                                                                                                                                   |
+| Prove    | For workflow proof, inspect the changed workflow against the unchanged defect before correcting findings. After each correction, inspect the same defect and valid counterexamples.                 |
+| Block    | Block only for a missing decision or inaccessible evidence.                                                                                                                                         |
 
-| Severity | Defect | Evidence | Root cause |
-| -------- | ------ | -------- | ---------- |
-| ...      | ...    | ...      | ...        |
-
-For each checked requirement, provide the observed result and covered counterexample. Use the defect table only for issues. Place evidence inline.
+Return exactly `No issues` when no defects exist. Otherwise return only an `Issues` table with `Severity`, `Defect`, and `Evidence + root cause` columns. Do not report passing findings.

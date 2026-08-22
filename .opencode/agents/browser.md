@@ -9,9 +9,6 @@ permissions:
   - action: skill
     resource: '*'
     effect: allow
-  - action: shell
-    resource: '*'
-    effect: allow
 ---
 
 | Lead     | Rule                                                                                                                                                                                  |

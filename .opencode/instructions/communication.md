@@ -16,6 +16,19 @@
 - Preserve every issue until it is resolved or explicitly transferred.
 - Use only the applicable shared sections below and keep their order.
 - Do not end labels or status lines with punctuation.
+- Treat the following as input-only user vocabulary. Use these meanings to interpret user input; do not mirror the words automatically.
+
+| Word           | Explanation                                                            |
+| -------------- | ---------------------------------------------------------------------- |
+| `Workflow`     | The reusable process that governs how agents complete work             |
+| `Brief`        | Only the minimum context needed for the assigned responsibility        |
+| `Aggressive`   | Thoroughly pursue the approved outcome without expanding its scope     |
+| `Deep pass`    | Inspect the complete approved scope, dependencies, and counterexamples |
+| `Happy path`   | The valid intended route through a mechanism                           |
+| `Checkpoint`   | Record completed work in Git after required implementation and proof   |
+| `Centralize`   | Give one responsible component ownership of shared policy              |
+| `Leading word` | A precise opening label that reduces interpretation cost               |
+| `Slop`         | Unnecessary, vague, repetitive, generic, or low-value content          |
 
 | Section    | Meaning                                                                                 |
 | ---------- | --------------------------------------------------------------------------------------- |

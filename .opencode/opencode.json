@@ -16,7 +16,22 @@
 		"title": {"model": "openai/gpt-5.6-luna"},
 		"compaction": {"model": "openai/gpt-5.6-luna#low"}
 	},
-	"permissions": [{"action": "*", "resource": "*", "effect": "deny"}],
+	"permissions": [
+		{"action": "*", "resource": "*", "effect": "deny"},
+		{"action": "shell", "resource": "*", "effect": "allow"},
+		{"action": "shell", "resource": "npm *", "effect": "deny"},
+		{"action": "shell", "resource": "pnpm *", "effect": "deny"},
+		{"action": "shell", "resource": "yarn *", "effect": "deny"},
+		{"action": "shell", "resource": "bun *", "effect": "deny"},
+		{"action": "shell", "resource": "npx *", "effect": "deny"},
+		{"action": "shell", "resource": "bunx *", "effect": "deny"},
+		{"action": "shell", "resource": "gh *", "effect": "deny"},
+		{"action": "shell", "resource": "git commit", "effect": "deny"},
+		{"action": "shell", "resource": "git commit *", "effect": "deny"},
+		{"action": "shell", "resource": "git push", "effect": "deny"},
+		{"action": "shell", "resource": "git push *", "effect": "deny"},
+		{"action": "shell", "resource": "git merge *", "effect": "deny"}
+	],
 	"lsp": {"oxlint": {"disabled": true}},
 	"references": {
 		"base-ui": {

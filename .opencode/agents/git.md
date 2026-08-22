@@ -21,20 +21,13 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 
 ## Safety
 
-| Operation group                         | Invariant                                                                                                                                         |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Entirely read-only                      | No approval required                                                                                                                              |
-| Contains any mutation                   | Resolve every operation and target, then require explicit approval for the complete exact group                                                   |
-| Checkpoint                              | Pre-approved as one complete group: commit; on a published branch, also push and replace the pull-request title and body without another approval |
-| Successive or adjacent operation        | Requires new explicit approval unless it is part of the pre-approved checkpoint group. Authority never carries beyond the group                   |
-| Protected or long-lived branch mutation | Requires explicit operation-specific approval                                                                                                     |
-| Reset, discard, delete, or rewrite      | Require an explicit request and exact resolved target                                                                                             |
-| Published branch                        | Never rebase, amend, squash, reset, or force-push                                                                                                 |
-| Conflict                                | Resolve from intended final state and current source, never by choosing a side mechanically                                                       |
-
-- Infer the repository from the checkout and use installed `git` and `gh`.
 - Resolve only repository state required by the assigned operation.
 - Reuse reads while their source remains unchanged.
+- Use only installed `git` and `gh` for Git and GitHub operations.
+- Protected branches are immutable.
+- Read-only operations and normal mutations on non-protected branches require no separate approval once the objective is approved.
+- Resetting, discarding, deleting, rewriting history, and force-pushing require direct user approval for the exact operation and target. Agents cannot grant approval. Use these operations only as a last resort.
+- An approval applies only to its stated operation. It does not carry to a successive operation.
 - Keep one semantic change per branch and pull request.
 - Keep an issue open until the pull request that owns its closure merges.
 - Use the fetched remote default branch for independent work and the immediate stack parent for dependent work.
@@ -45,24 +38,27 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - Name branches `type/scope/kebab-case-outcome` and commits or pull requests `type(scope): outcome`, where type is `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `ci`, or `style`.
 - Use the shortest responsible repository component as scope. State the delivered outcome, never process or agent names.
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
-- A commit uses the pull-request title without a body.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
-- Fully regenerate each pull-request title and body from the current branch diff. Use structured rendered GFM for the body. Never retain or append an earlier body. Include delivered changes and `Closes #<number>` when an issue owns the approved requirements.
-- Complete every checkpoint operation before returning. Commit automatically after upstream completion. When the branch is published, also push and replace the pull-request title and body from the current branch diff. Never rerun upstream validation, lint, test, format, build, or check commands.
+- Include `Closes #<number>` when an issue owns the approved requirements.
+- After completed implementation and applicable review, correction, and recheck, checkpoint automatically. Commit locally; when the branch is published, also push and replace the pull-request title and body without rerunning upstream checks.
+- A commit title and bullet body describe only the delta from the previous commit.
+- Fully regenerate the pull-request title and structured GFM body from the complete current branch diff. Never retain or append an earlier title or body.
+- Report a completed commit as its message and hash. Report a pull request as its title and URL.
+- Complete the assigned operation before returning.
 
 ## Stacks
 
 - A root stack branch targets the default branch. Each child targets its immediate parent. Every review boundary remains independently understandable and valid.
-- Inspect with `gh stack view`. After mutation approval, create with `gh stack add` and publish every pull request as draft with `gh stack submit`. Never use `--open`.
+- Inspect with `gh stack view`. Create with `gh stack add` and publish every pull request as draft with `gh stack submit`. Never use `--open`.
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
-- After a parent merges, require approval, retarget only its direct child, and verify topology.
+- After a parent merges, retarget only its direct child and verify topology.
 
 On success, output only:
 
 ## Git
 
-**Commit:** `...`
+**Commit:** `message` (`hash`)
 
-**PR:** ...
+**PR:** [title](URL)
 
 Omit `PR` when there is none. Omit narration, validation status, and title or body synchronization details.
