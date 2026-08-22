@@ -18,6 +18,7 @@
 	},
 	"permissions": [
 		{"action": "*", "resource": "*", "effect": "deny"},
+		{"action": "external_directory", "resource": "~/.local/share/opencode/repos/**", "effect": "allow"},
 		{"action": "shell", "resource": "*", "effect": "allow"},
 		{"action": "shell", "resource": "npm *", "effect": "deny"},
 		{"action": "shell", "resource": "pnpm *", "effect": "deny"},
