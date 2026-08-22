@@ -20,6 +20,7 @@ Build the smallest approved workflow that makes independent runs follow approved
 | Couple      | Update the responsible component, call paths, configuration, static checks, tests, and evaluation fixtures required by the changed behavior.             |
 | Dispatch    | Keep role dispatches free of shared procedure and reproducible context. Include only approved non-derivable input.                                       |
 | Ground      | Derive reusable rules from current authoritative inputs and preserve each distinct issue through disposition.                                            |
+| Prove       | Inspect the changed workflow against the unchanged defect before correction. After correction, inspect that defect and every valid counterexample.       |
 
 ## References
 

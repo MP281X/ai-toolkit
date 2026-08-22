@@ -14,8 +14,13 @@
 - Report an unresolved failure under `Blocked` when progress requires input or inaccessible evidence.
 - Report every other unresolved failure under `Issues`.
 - Preserve every issue until it is resolved or explicitly transferred.
-- Use only the applicable shared sections below and keep their order.
+- Use only nonempty applicable shared sections below and keep their order.
 - Do not end labels or status lines with punctuation.
+- Keep heading levels monotonic: do not nest another H1 or skip a level.
+- Do not use pseudo-headings. Use real headings, tables, or inline labels supported by the surrounding structure.
+- Group related content explicitly instead of relying on proximity.
+- Put blank lines around headings, tables, lists, callouts, and code blocks, with consistent GFM spacing.
+- When embedding an artifact, adapt its heading levels to continue the host document hierarchy.
 - Treat the following as input-only user vocabulary. Use these meanings to interpret user input; do not mirror the words automatically.
 
 | Word           | Explanation                                                            |
@@ -33,7 +38,7 @@
 | Section    | Meaning                                                                                 |
 | ---------- | --------------------------------------------------------------------------------------- |
 | `Changed`  | Material completed outcomes                                                             |
-| `Findings` | Observed results, including clean review status `No issues`                             |
+| `Findings` | Observed results                                                                        |
 | `Git`      | Completed Git operation with only commit and pull-request data                          |
 | `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact  |
 | `Blocked`  | Missing decision or inaccessible evidence preventing progress. Ask the minimum question |

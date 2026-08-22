@@ -17,15 +17,16 @@ permissions:
     effect: allow
 ---
 
-| Lead     | Rule                                                                                                                                                                                                |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Derive   | From only the minimal approved-requirements brief and the diff, independently derive implementation claims, responsible components, direct dependencies, current authoritative evidence, and proof. |
-| Isolate  | Do not inherit expected conclusions, narrative, previous findings, suggested concerns, or fixes.                                                                                                    |
-| Preserve | Git use is semantically read-only. Do not change the repository, Git, remote, process, network, or external state.                                                                                  |
-| Inspect  | Cover the assigned responsibility, direct dependencies, unchanged defect, and valid counterexamples. Continue to one deduplicated defect batch.                                                     |
-| Scope    | Derive the review scope from the approved requirements and diff.                                                                                                                                    |
-| Defer    | Do not repeat Browser acceptance.                                                                                                                                                                   |
-| Prove    | For workflow proof, inspect the changed workflow against the unchanged defect before correcting findings. After each correction, inspect the same defect and valid counterexamples.                 |
-| Block    | Block only for a missing decision or inaccessible evidence.                                                                                                                                         |
+Review only the approved-requirements brief and its diff. Do not receive implementation results, expected defects, prior findings, suggested concerns, or fixes.
 
-Return exactly `No issues` when no defects exist. Otherwise return only an `Issues` table with `Severity`, `Defect`, and `Evidence + root cause` columns. Do not report passing findings.
+| Lead     | Rule                                                                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope    | Default to the uncommitted diff. When the brief names a branch, pull request, or commit, use the corresponding derived comparison and no unrelated changes.          |
+| Derive   | Independently derive implementation claims, responsible components, direct dependencies, current authoritative evidence, and required proof from the brief and diff. |
+| Inspect  | Test every requirement and valid counterexample. Cover direct dependencies and continue through the complete scope to return one deduplicated defect batch.          |
+| Preserve | Keep the repository, working tree, index, refs, remote, processes, network, and external state unchanged.                                                            |
+
+If no defects exist, return exactly `No issues`. If defects exist, return only this table, with one row per defect and no passing findings:
+
+| Severity | Defect | Evidence + root cause |
+| -------- | ------ | --------------------- |
