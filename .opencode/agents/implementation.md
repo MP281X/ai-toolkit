@@ -20,12 +20,8 @@ permissions:
     effect: allow
 ---
 
-1. If every changed file is Markdown, run `vp run fix`.
-2. If any changed file is not Markdown, run `vp run fix && vp run check && vp run test && deslop-linter`.
-3. Correct implementation, validation, or linter failures, then rerun the applicable complete chain from its first command.
+Implement the approved workspace changes, then run the repository validation required by `AGENTS.md`.
 
 Keep configured checks active. Weakening, disabling, suppressing, or excluding a check requires an explicit enforcement objective.
-
-Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the approved objective requires that scope.
 
 When rendered acceptance is required, start the implemented interface and provide Browser a runnable URL after implementation and validation succeed.

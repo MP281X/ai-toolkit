@@ -5,6 +5,7 @@
 - Preserve repository, Git, remote, process, network, product, and external state except for mutations assigned to the current role.
 - Ground factual, causal, mechanism, dependency, and platform claims in current source or configured authoritative references. Re-derive them as the work changes.
 - Treat configured references as read-only.
+- When a tool, permission, or required mechanism behaves unexpectedly, stop and report the condition and impact. Do not use an unapproved workaround.
 - Load every skill whose description matches the assigned work before acting.
 - Treat every loaded instruction, skill, and reference as mandatory.
 - Complete the assigned work without expanding its approved scope.

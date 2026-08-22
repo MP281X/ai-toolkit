@@ -20,6 +20,7 @@
 		"@deslop/oxlint-rules": "workspace:*",
 		"@effect/tsgo": "latest",
 		"@effect/vitest": "^4.0.0-rc",
+		"@opencode-ai/plugin": "beta",
 		"@types/node": "latest",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",

@@ -3,6 +3,7 @@
 	"entry": ["**/main.*"],
 	"includeEntryExports": true,
 	"ignorePatterns": [
+		".opencode/plugins/**",
 		"**/*.gen.ts",
 		"packages/components/src/components/svgs/**",
 		"packages/components/src/components/ui/**",

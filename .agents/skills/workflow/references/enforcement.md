@@ -4,13 +4,12 @@ Put mechanically detectable behavior in static enforcement and semantic behavior
 
 ## Owners
 
-| Tool                      | Active owner                           | Available rules or source        |
-| ------------------------- | -------------------------------------- | -------------------------------- |
-| TypeScript                | `tsconfig.json`                        | `typescript` reference           |
-| Generic Oxlint · Oxfmt    | `vite.config.ts`                       | `oxc` and `vite-plus` references |
-| Advanced anti-slop checks | `tools/linter/src/config.ts`           | `deslop-linter`                  |
-| Fallow                    | `.fallowrc.json` · root `check` script | `fallow` reference               |
-| Custom Oxlint             | `tools/linter/src/oxlint-plugin.ts`    | colocated tests                  |
+| Tool                   | Active owner                              | Available rules or source        |
+| ---------------------- | ----------------------------------------- | -------------------------------- |
+| TypeScript             | `tsconfig.json`                           | `typescript` reference           |
+| Generic Oxlint · Oxfmt | `vite.config.ts`                          | `oxc` and `vite-plus` references |
+| Fallow                 | `.fallowrc.json` · root `check` script    | `fallow` reference               |
+| Custom Oxlint          | `tools/oxlint-rules/src/oxlint-plugin.ts` | colocated tests                  |
 
 ## Selection
 

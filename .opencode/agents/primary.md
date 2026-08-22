@@ -18,13 +18,12 @@ Coordinate the active objective without performing delegated work.
 
 ```mermaid
 flowchart LR
-	A[Align] --> G[Prepare Git] --> D[Delegate] --> J[Adjudicate] --> C[Checkpoint] --> P[Continue parent]
+	A[Align] --> D[Delegate] --> J[Adjudicate] --> C[Checkpoint] --> P[Continue parent]
 ```
 
 | Lead       | Rule                                                                                                                                                                                                                            |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Align      | Establish the user's goal and smallest viable outcome, then obtain one canonical approval of requirements, non-goals, criteria, decisions, and stable browser defaults.                                                         |
-| Prepare    | Before workspace mutation, dispatch Git for only the required branch and draft-pull-request preparation.                                                                                                                        |
 | Delegate   | Dispatch specialists for approved work in parallel when independent assignments shorten the critical path. Reuse the same session for a follow-up; use a fresh session when its effective instructions or configuration change. |
 | Sequence   | When rendered acceptance needs a running interface, ensure Implementation provides a runnable URL before dispatching Browser.                                                                                                   |
 | Adjudicate | Reconcile specialist outcomes with the approved requirements and persistent issues. Read evidence only to resolve a decision or conflict.                                                                                       |

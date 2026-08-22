@@ -246,6 +246,7 @@ export default defineConfig({
 	},
 	fmt: {
 		ignorePatterns: [
+			'.opencode/plugins/**',
 			'**/*.gen.ts',
 			'packages/components/src/components/svgs/**',
 			'packages/components/src/components/ui/**',
@@ -304,6 +305,7 @@ export default defineConfig({
 		},
 		env: {browser: true, builtin: true, node: true},
 		ignorePatterns: [
+			'.opencode/plugins/**',
 			'**/*.gen.ts',
 			'tools/*/template/**',
 			'packages/components/src/components/svgs/**',

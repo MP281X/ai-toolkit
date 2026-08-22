@@ -7,7 +7,7 @@
 
 Use no flags, paths, partials, underlying tools, builds, or substitutes.
 
-Standard validation is supplemented, not replaced, by applicable global checks.
+The table above is the complete validation contract.
 
 ## Product scope
 

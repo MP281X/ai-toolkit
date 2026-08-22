@@ -4,14 +4,14 @@
 - Use plain technical language, concrete nouns, and active verbs.
 - Write one idea per sentence.
 - Use the smallest GFM structure that makes the result clear.
-- Report every material decision, outcome, risk, and required action.
-- Omit acknowledgements, narration, routine success, repetition, and derivable context.
+- Report every material decision, non-mandatory outcome, risk, and required action.
+- Omit acknowledgements, narration, successful mandatory work, repetition, and derivable context.
 - Omit raw evidence and implementation details that the recipient can reproduce.
 - Include evidence when it is inaccessible, ephemeral, conflicting, or needed to establish an issue or failure.
 - State each fact once in its relevant group.
 - Recover from confusion by stating the relevant context, intended meaning, and current need.
 - Omit recovered failures that have no remaining impact.
-- Report an unresolved failure under `Blocked` when progress requires input or inaccessible evidence.
+- Report an unresolved failure under `Blocked` only as the exact condition and impact plus the minimum required input.
 - Report every other unresolved failure under `Issues`.
 - Preserve every issue until it is resolved or explicitly transferred.
 - Use only nonempty applicable shared sections below and keep their order.
@@ -37,13 +37,12 @@
 | `Leading word` | A precise opening label that reduces interpretation cost               |
 | `Slop`         | Unnecessary, vague, repetitive, generic, or low-value content          |
 
-| Section    | Meaning                                                                                 |
-| ---------- | --------------------------------------------------------------------------------------- |
-| `Changed`  | Material completed outcomes                                                             |
-| `Findings` | Observed results                                                                        |
-| `Git`      | Completed Git operation with only commit and pull-request data                          |
-| `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact  |
-| `Blocked`  | Missing decision or inaccessible evidence preventing progress. Ask the minimum question |
-| `Next`     | Remaining approved work or required user action                                         |
+| Section    | Meaning                                                                                |
+| ---------- | -------------------------------------------------------------------------------------- |
+| `Findings` | Observed results                                                                       |
+| `Git`      | Completed Git operation with only commit and pull-request data                         |
+| `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact |
+| `Blocked`  | Exact blocking condition and impact plus the minimum required input                    |
+| `Next`     | Remaining approved work or required user action                                        |
 
 Do not add a separate failures, summary, sources, or success section.

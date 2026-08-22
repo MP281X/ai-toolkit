@@ -11,7 +11,7 @@ description: 'Use to improve reusable agent workflows.'
 | Align    | Obtain approval for unresolved material choices. Preserve unaffected ownership, behavior, examples, references, schemas, and evidence gates.                                                                                           |
 | Route    | Put shared conduct in Behavior, language and GFM in Communication, capabilities in configuration, mechanical rules in static enforcement, conditional depth in one reference, and platform mechanics in the applicable platform skill. |
 | Change   | Update the responsible owner and required integration points. Keep agent and skill metadata trigger-only. Keep bodies unique to their owner and remove superseded or duplicated policy.                                                |
-| Prove    | Select the independent static and/or runtime proof required by the changed mechanism. The proving role owns execution.                                                                                                                 |
+| Prove    | Select only independent proof that can change a decision or establish the changed mechanism. The proving role owns execution.                                                                                                          |
 
 | Good                                                                              | Bad                                                                            |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
