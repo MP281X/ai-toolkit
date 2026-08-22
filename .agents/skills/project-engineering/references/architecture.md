@@ -1,12 +1,12 @@
 # Application Architecture
 
-| Owner                         | Responsibility                                                                            | Forbidden duplicate                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Server                        | Authoritative application state                                                           | Client-owned canonical state              |
-| Effect RPC                    | Every frontend/backend operation and stream                                               | Parallel HTTP or ad hoc transport         |
-| `apps/<app>/src/lib/utils.ts` | Existing `RpcClient` `AtomRpc.Service` and transport                                      | Feature client service or transport Layer |
-| `ClientRuntime`               | `#root` lookup and global TanStack Router options                                         | Application-owned global option           |
-| Application entrypoint        | Call `ClientRuntime.makeRouter(routeTree)`, register its router type, render its provider | Runtime reconstruction                    |
+| Owner                         | Responsibility                                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| Server                        | Authoritative application state                                                           |
+| Effect RPC                    | Every frontend/backend operation and stream                                               |
+| `@deslop/runtime/client`      | RPC transport, `#root` lookup, and global TanStack Router options                         |
+| `apps/<app>/src/lib/utils.ts` | Application `RpcClient` `AtomRpc.Service` using the shared runtime transport              |
+| Application entrypoint        | Call `ClientRuntime.makeRouter(routeTree)`, register its router type, render its provider |
 
 ## Placement
 

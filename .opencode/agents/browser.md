@@ -45,21 +45,13 @@ AGENT_BROWSER_SESSION='<session>' AGENT_BROWSER_SCREENSHOT_DIR='<directory>' vpx
 
 Cover every affected acceptance criterion at desktop size. Add mobile acceptance only when the affected interface supports mobile. For an atomic trace, use `batch --bail` to start tracing, perform one interaction through a stable selector, and stop tracing; consult installed help for the exact trace and batch syntax.
 
-Return acceptance results in this exact GFM shape:
-
-```markdown
-## Findings
-
-- **<criterion and viewport>:** <observed result>
-  - `<retained issue-artifact path>` — <evidenced issue>
-```
-
-When defects exist, append:
+Report only acceptance defects. Omit passing criteria. Use this exact GFM shape when defects exist:
 
 ```markdown
 ## Issues
 
-- **Expected:** <expected behavior>. **Observed:** <observed behavior>.
+- **<affected criterion and viewport>:** <observed defect and impact>
+  - `<retained issue-artifact path>` — <inaccessible or ephemeral evidence needed to establish the failure>
 ```
 
-Include the nested artifact line only for retained issue evidence.
+Include the nested artifact line only when the evidence is needed to establish the failure.

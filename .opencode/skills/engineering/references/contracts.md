@@ -23,5 +23,3 @@ export const CreateNote = Schema.Struct({text: Schema.String})
 export type CreateNote = typeof CreateNote.Type
 export const CreateNote = Schema.Struct({text: Schema.Trim})
 ```
-
-Resolve the configured `effect` reference, then inspect `packages/effect/src/Schema.ts`.

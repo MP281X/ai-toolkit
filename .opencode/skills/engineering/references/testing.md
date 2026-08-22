@@ -29,7 +29,6 @@
 | -------------------------------- | ----------------- | ------------------------------------------ |
 | `it.effect`                      | Fresh per test    | Fresh `TestClock` and `TestConsole`        |
 | Nested `it.effect` in `it.layer` | Fresh child scope | Cached block `TestClock` and `TestConsole` |
-| `it.live`                        | Fresh per test    | Live clock and console                     |
 
 | Operation                             | Requirements                                                                                       |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -121,28 +120,3 @@ it.effect.prop(
 	{fastCheck: {numRuns: 200}}
 )
 ```
-
-## Organization
-
-| Concern                    | Owner or implementation                                   |
-| -------------------------- | --------------------------------------------------------- |
-| Test file                  | `name.test.ts` beside `name.ts`                           |
-| Durable behavior tests     | Location selected by repository convention                |
-| Cross-implementation suite | Shared public behavior. Implementation supplies its Layer |
-| Application service        | Application test                                          |
-| UI and UX                  | Rendered browser acceptance                               |
-
-| Condition                                           | Requirement                                                        |
-| --------------------------------------------------- | ------------------------------------------------------------------ |
-| Paid, credentialed, or nondeterministic live system | Explicitly skipped real-public-seam test with runtime prerequisite |
-| Deterministic contract coverage                     | Required. Live skipped test never replaces it                      |
-| Effect callback branches or sequences               | Pass `Effect.fnUntraced` directly                                  |
-| Test API requires one unused argument               | Name it `_`                                                        |
-
-## Authoritative Sources
-
-Resolve the configured `effect` reference, then inspect:
-
-- `packages/vitest/src/{index.ts,internal/internal.ts}`
-- `packages/effect/src/{Effect,Fiber,Ref,Deferred,Layer,Queue,PubSub,Semaphore,Stream,SubscriptionRef}.ts`
-- `packages/effect/src/testing/{TestClock,TestConsole,TestSchema}.ts`

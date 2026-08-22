@@ -3,22 +3,6 @@ name: project-engineering
 description: "Use with engineering for this repository's architecture, workspace, testing, components, or visual conventions."
 ---
 
-## Boundary
-
-Extend `engineering` with only this repository's selected architecture and conventions.
-
-| Owner       | Responsibility                                                       |
-| ----------- | -------------------------------------------------------------------- |
-| Effect      | Behavior, immutable data, state, resources, concurrency, and failure |
-| Server      | Authoritative application state                                      |
-| Effect RPC  | Frontend/backend operations and streaming boundary                   |
-| Effect Atom | Client synchronization and shared view state                         |
-| React       | Presentation                                                         |
-
-## Workflow
-
-Use the owner table to place behavior before implementation.
-
 ## References
 
 | Condition                                                         | Reference                                  |

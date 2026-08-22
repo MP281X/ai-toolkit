@@ -44,6 +44,4 @@ vp run upgrade
 {"exports": {"./schema": "./src/schema.ts", "./service": "./src/service.ts", "./lib/utils": "./src/lib/utils.ts"}}
 ```
 
-## Source
-
-Resolve the configured `effect` reference, then inspect `packages/effect/src/unstable/cli/index.ts`.
+Current owners are `tools/create-app`, `tools/create-package`, root workspace configuration, and package manifests and exports.
