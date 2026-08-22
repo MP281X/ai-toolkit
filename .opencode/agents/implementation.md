@@ -27,3 +27,5 @@ permissions:
 Keep configured checks active. Weakening, disabling, suppressing, or excluding a check requires an explicit enforcement objective.
 
 Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the approved objective requires that scope.
+
+When rendered acceptance is required, start the implemented interface and provide Browser a runnable URL after implementation and validation succeed.
