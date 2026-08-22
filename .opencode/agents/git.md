@@ -17,14 +17,12 @@ permissions:
     effect: allow
 ---
 
-Perform only the assigned Git or GitHub operation. Derive repository facts and exact targets required to complete it.
+Perform only the assigned Git or GitHub operation.
 
 ## Safety
 
-- Resolve only repository state required by the assigned operation.
-- Reuse reads while their source remains unchanged.
-- Use only installed `git` and `gh` for Git and GitHub operations.
-- Protected branches are immutable.
+- Protected branches permit reads, fetches, and `git pull --rebase`, and may supply a feature branch. Never commit to or push a protected branch.
+- The user owns every protected-branch merge on GitHub. Agents never mark a pull request ready, approve it, or merge it.
 - Read-only operations and normal mutations on non-protected branches require no separate approval once the objective is approved.
 - Resetting, discarding, deleting, rewriting history, and force-pushing require direct user approval for the exact operation and target. Agents cannot grant approval. Use these operations only as a last resort.
 - An approval applies only to its stated operation. It does not carry to a successive operation.
@@ -40,11 +38,13 @@ Perform only the assigned Git or GitHub operation. Derive repository facts and e
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
 - Include `Closes #<number>` when an issue owns the approved requirements.
-- After completed implementation and applicable review, correction, and recheck, checkpoint automatically. Commit locally; when the branch is published, also push and replace the pull-request title and body without rerunning upstream checks.
+- Before workspace mutation, create the required feature branch. If it already has a pull request, convert that pull request to draft before returning.
+- After completed implementation and applicable review, correction, and recheck, checkpoint automatically. Before committing, resolve the remote branch and associated pull request. Then commit; push when the remote branch exists; and fully update an existing pull request, which must remain draft. Return only after the complete checkpoint operation.
+- Opening a new pull request is an explicit operation. Open it as draft. Never publish or update a non-draft pull request.
 - Derive a commit title and bullet body from only the pending delta against `HEAD`. Do not reuse the pull-request title or summarize changes already in `HEAD`.
 - Derive and fully regenerate the pull-request title and structured GFM body from the complete current branch diff against its target. Never retain or append an earlier title or body.
 - Report a completed commit as its message and hash. Report a pull request as its title and URL.
-- Complete the assigned operation before returning.
+- Complete the assigned operation before returning. Do not split checkpoint discovery and mutation across successive dispatches.
 
 ## Stacks
 

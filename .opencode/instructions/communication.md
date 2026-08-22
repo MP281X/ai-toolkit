@@ -15,6 +15,8 @@
 - Report every other unresolved failure under `Issues`.
 - Preserve every issue until it is resolved or explicitly transferred.
 - Use only nonempty applicable shared sections below and keep their order.
+- When `Next` follows another section, place a thematic break immediately before `Next`. Do not use an empty wrapper or whitespace-only separator.
+- Present shared `Issues` as one flat impact-ordered list. A role-specific defect schema may require a table.
 - Do not end labels or status lines with punctuation.
 - Keep heading levels monotonic: do not nest another H1 or skip a level.
 - Do not use pseudo-headings. Use real headings, tables, or inline labels supported by the surrounding structure.
