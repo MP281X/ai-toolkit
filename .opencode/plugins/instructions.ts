@@ -1,6 +1,6 @@
-import {NodeServices} from '@effect/platform-node'
+import {readFile} from 'node:fs/promises'
 
-import {Array, Effect, FileSystem, Path, Schema, pipe} from 'effect'
+import {Array, Effect, Schema} from 'effect'
 
 import {Plugin} from '@opencode-ai/plugin/effect'
 
@@ -9,32 +9,20 @@ const RootConfig = Schema.fromJsonString(Schema.Struct({instructions: Schema.Arr
 
 export default Plugin.define({
 	effect: Effect.fnUntraced(function* (context) {
-		const instructions = yield* pipe(
-			Effect.gen(function* () {
-				const fs = yield* FileSystem.FileSystem
-				const path = yield* Path.Path
-				const configPath = new URL('../opencode.json', import.meta.url).pathname
-				const root = path.dirname(path.dirname(configPath))
-				const config = yield* pipe(
-					fs.readFileString(configPath),
-					Effect.flatMap(Schema.decodeEffect(RootConfig))
-				)
-				return yield* Effect.forEach(config.instructions, file =>
-					fs.readFileString(path.resolve(root, file))
-				)
-			}),
-			Effect.provide(NodeServices.layer),
-			Effect.orDie
-		)
 		yield* context.session.hook('context', event =>
-			Effect.sync(() => {
-				const native = pipe(
-					instructions,
-					Array.filter(text => !Array.some(event.system, part => part.text === text)),
-					Array.map(text => ({text, type: 'text' as const}))
-				)
-				event.system = [...event.system, ...native]
-			})
+			Effect.gen(function* () {
+				const configPath = new URL('../opencode.json', import.meta.url)
+				const root = new URL('../../', import.meta.url)
+				const configText = yield* Effect.tryPromise(() => readFile(configPath, 'utf8'))
+				const config = yield* Schema.decodeEffect(RootConfig)(configText)
+
+				for (const file of config.instructions) {
+					const text = yield* Effect.tryPromise(() => readFile(new URL(file, root), 'utf8'))
+					if (!Array.some(event.system, part => part.text === text)) {
+						event.system.push({text, type: 'text'})
+					}
+				}
+			}).pipe(Effect.orDie)
 		)
 	}),
 	id: 'deslop.instructions'
