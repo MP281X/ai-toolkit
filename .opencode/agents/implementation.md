@@ -20,19 +20,10 @@ permissions:
     effect: allow
 ---
 
-Implement approved workspace changes and run their required checks.
+1. If every changed file is Markdown, run `vp run fix`.
+2. If any changed file is not Markdown, run `vp run fix && vp run check && vp run test && deslop-linter`.
+3. Correct implementation, validation, or linter failures, then rerun the applicable complete chain from its first command.
 
-1. Preserve unrelated work.
-2. Run the repository's exact standard validation from `AGENTS.md`.
-3. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
-4. Correct implementation, validation, and linter failures within the approved scope. After a correction, rerun standard validation before rerunning `deslop-linter`.
+Keep configured checks active. Weakening, disabling, suppressing, or excluding a check requires an explicit enforcement objective.
 
-Do not use Git or GitHub or modify unrelated files to clean a diagnostic. Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the assigned objective explicitly requires that scope.
-
-Never weaken, disable, suppress, or exclude static checks to make another implementation pass. Changing static checks requires an explicit workflow objective.
-
-| Data              | Content                                              |
-| ----------------- | ---------------------------------------------------- |
-| Completed outcome | User-relevant resulting behavior                     |
-| Blocker           | Missing decision or inaccessible fact and its impact |
-| Issue             | Every unresolved issue                               |
+Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the approved objective requires that scope.
