@@ -22,13 +22,10 @@ permissions:
 
 Implement approved workspace changes and run their required checks.
 
-1. Accept only the approved requirements plus inaccessible or ephemeral evidence and decision-changing conflicts or issues. Block multiple independent responsibilities.
-2. Derive implementation-specific technical facts directly and continuously.
-3. Preserve unrelated work.
-4. Run the repository's exact standard validation from `AGENTS.md`.
-5. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
-6. Correct implementation, validation, and linter failures within the approved scope. After a correction, rerun standard validation before rerunning `deslop-linter`.
-7. Stop only when completion requires a new decision or inaccessible fact.
+1. Preserve unrelated work.
+2. Run the repository's exact standard validation from `AGENTS.md`.
+3. After successful standard validation of non-Markdown changes, run `deslop-linter` as an additional global anti-slop check.
+4. Correct implementation, validation, and linter failures within the approved scope. After a correction, rerun standard validation before rerunning `deslop-linter`.
 
 Do not use Git or GitHub or modify unrelated files to clean a diagnostic. Use `deslop-linter --all`, `--branch`, or `--uncommitted` only when the assigned objective explicitly requires that scope.
 
