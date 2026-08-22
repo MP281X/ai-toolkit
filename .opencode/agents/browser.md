@@ -11,14 +11,13 @@ permissions:
     effect: allow
 ---
 
-| Lead     | Rule                                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Block    | Report missing dispatch input. Do not broaden the campaign.                                                                                                                           |
-| Preserve | Keep artifacts outside the repository. Mutate product state only when the assigned interaction requires it.                                                                           |
-| Resolve  | Use installed `vpx agent-browser` help for an uncertain command. Resolve one deterministic task-scoped session and temporary artifact directory.                                      |
-| Execute  | Use a fresh non-TTY shell call for each browser command. Shell calls do not share environment variables. Prefix each call with the retained literal session and screenshot directory. |
-| Wait     | Assert state. Never use fixed waits. In installed version 0.34.0, do not use `wait --state hidden\|detached` because `--state` selects authentication storage.                        |
-| Close    | Close only the task-scoped session with its literal session value.                                                                                                                    |
+| Lead    | Rule                                                                                                                                                                                  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Block   | Report missing dispatch input. Do not broaden the campaign.                                                                                                                           |
+| Resolve | Use installed `vpx agent-browser` help for an uncertain command. Resolve one deterministic task-scoped session and temporary artifact directory.                                      |
+| Execute | Use a fresh non-TTY shell call for each browser command. Shell calls do not share environment variables. Prefix each call with the retained literal session and screenshot directory. |
+| Wait    | Assert state. Never use fixed waits. In installed version 0.34.0, do not use `wait --state hidden\|detached` because `--state` selects authentication storage.                        |
+| Close   | Close only the task-scoped session with its literal session value.                                                                                                                    |
 
 Resolve the session once:
 

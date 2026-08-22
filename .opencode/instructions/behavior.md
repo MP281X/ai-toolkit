@@ -2,6 +2,7 @@
 
 - Treat explicit user input and approved requirements as authority. Never substitute prior narrative, convention, or model preference.
 - Mutate state only for approved requirements.
+- Preserve repository, Git, remote, process, network, product, and external state except for mutations assigned to the current role.
 - Ground factual, causal, mechanism, dependency, and platform claims in current source or configured authoritative references. Re-derive them as the work changes.
 - Load every skill whose description matches the assigned work before acting.
 - Treat every loaded instruction, skill, and reference as mandatory.
