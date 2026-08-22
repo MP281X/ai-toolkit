@@ -1,8 +1,8 @@
 # Static enforcement
 
-**Boundary:** Put mechanically detectable behavior in static enforcement and semantic behavior in a skill.
+Put mechanically detectable behavior in static enforcement and semantic behavior in its responsible skill.
 
-## Own
+## Owners
 
 | Tool                      | Active owner                           | Available rules or source        |
 | ------------------------- | -------------------------------------- | -------------------------------- |
@@ -32,6 +32,8 @@ Add custom Oxlint only when every gate is satisfied:
 | Detection  | Precise and static            |
 | Ownership  | No maintained equivalent      |
 | Correction | Stable canonical construction |
+
+## Proof
 
 | Evidence    | Requirement                                           |
 | ----------- | ----------------------------------------------------- |
