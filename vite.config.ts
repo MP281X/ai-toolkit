@@ -1,65 +1,7 @@
-import {NodeServices} from '@effect/platform-node'
-
-import {Array, Effect, FileSystem, HashSet, ManagedRuntime, Path, Record, Schema, String, pipe} from 'effect'
+import {Array, pipe} from 'effect'
 
 import {defineConfig} from 'vite-plus'
 import type {ViteUserConfig} from 'vite-plus'
-
-type PackageManifest = typeof PackageManifest.Type
-const PackageManifest = Schema.fromJsonString(
-	Schema.Struct({
-		dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-		peerDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String))
-	})
-)
-
-function dependencyNames(manifest: PackageManifest) {
-	return pipe(
-		[
-			manifest.dependencies ?? {},
-			manifest.devDependencies ?? {},
-			manifest.optionalDependencies ?? {},
-			manifest.peerDependencies ?? {}
-		],
-		Array.flatMap(Record.keys)
-	)
-}
-
-const duplicateRootDependencies = Effect.fnUntraced(function* () {
-	const fs = yield* FileSystem.FileSystem
-	const path = yield* Path.Path
-	const root = import.meta.dirname
-	const rootManifest = yield* pipe(
-		fs.readFileString(path.join(root, 'package.json')),
-		Effect.flatMap(Schema.decodeEffect(PackageManifest))
-	)
-	const rootDependencies = pipe(rootManifest, dependencyNames, HashSet.fromIterable)
-	const manifests = yield* fs.glob('{apps,packages,tools}/*/package.json', {root})
-	return yield* pipe(
-		manifests,
-		Array.filter(file => !String.endsWith('tools/oxlint-rules/package.json')(file)),
-		Effect.forEach(file =>
-			pipe(
-				fs.readFileString(file),
-				Effect.flatMap(Schema.decodeEffect(PackageManifest)),
-				Effect.map(manifest =>
-					pipe(
-						dependencyNames(manifest),
-						Array.filter(name => HashSet.has(rootDependencies, name)),
-						Array.map(name => ({name, path: path.relative(root, file)}))
-					)
-				)
-			)
-		),
-		Effect.map(Array.flatten)
-	)
-})
-
-const nodeRuntime = ManagedRuntime.make(NodeServices.layer)
-const duplicateDependencies = await nodeRuntime.runPromise(duplicateRootDependencies())
-await nodeRuntime.dispose()
 
 const effectModuleObjects = [
 	'Array',
@@ -246,11 +188,9 @@ export default defineConfig({
 	},
 	fmt: {
 		ignorePatterns: [
-			'.opencode/plugins/**',
 			'**/*.gen.ts',
 			'packages/components/src/components/svgs/**',
-			'packages/components/src/components/ui/**',
-			'tools/oxlint-rules/**'
+			'packages/components/src/components/ui/**'
 		],
 
 		arrowParens: 'avoid',
@@ -305,12 +245,10 @@ export default defineConfig({
 		},
 		env: {browser: true, builtin: true, node: true},
 		ignorePatterns: [
-			'.opencode/plugins/**',
 			'**/*.gen.ts',
 			'tools/*/template/**',
 			'packages/components/src/components/svgs/**',
-			'packages/components/src/components/ui/**',
-			'tools/oxlint-rules/**'
+			'packages/components/src/components/ui/**'
 		],
 		jsPlugins: [
 			{name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin'},
@@ -320,6 +258,7 @@ export default defineConfig({
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off', 'sort-keys': 'off'}},
+			{files: ['.opencode/plugins/**/*.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['tools/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{
@@ -335,7 +274,7 @@ export default defineConfig({
 		plugins: ['effecttsgo', 'eslint', 'typescript', 'oxc', 'import', 'react', 'unicorn'],
 		rules: {
 			// Repository invariants that maintained rules cannot express.
-			'@deslop/oxlint-rules/no-duplicate-root-dependency': ['error', {duplicates: duplicateDependencies}],
+			'@deslop/oxlint-rules/no-duplicate-root-dependency': 'error',
 			'@deslop/oxlint-rules/no-fake-ref-state': 'error',
 			'@deslop/oxlint-rules/no-readonly-type-syntax': 'error',
 			'@deslop/oxlint-rules/no-redundant-use-ref-null-type': 'error',
@@ -662,6 +601,8 @@ export default defineConfig({
 			'react/checked-requires-onchange-or-readonly': 'error',
 			'react/exhaustive-deps': 'error',
 			'react/iframe-missing-sandbox': 'error',
+			'react/immutability': 'error',
+			'react/incompatible-library': 'error',
 			'react/jsx-boolean-value': ['error', 'never'],
 			'react/jsx-curly-brace-presence': ['error', {children: 'never', propElementValues: 'always', props: 'never'}],
 			'react/jsx-fragments': ['error', 'syntax'],
@@ -669,6 +610,7 @@ export default defineConfig({
 			'react/jsx-no-script-url': 'error',
 			'react/jsx-no-target-blank': 'error',
 			'react/jsx-no-useless-fragment': 'error',
+			'react/memo-dependencies': 'error',
 			'react/no-children-prop': 'error',
 			'react/no-array-index-key': 'error',
 			'react/no-clone-element': 'error',
@@ -677,9 +619,16 @@ export default defineConfig({
 			'react/no-react-children': 'error',
 			'react/no-unknown-property': 'error',
 			'react/no-unstable-nested-components': ['error', {allowAsProps: true}],
-			'react/react-compiler': 'error',
+			'react/preserve-manual-memoization': 'error',
+			'react/purity': 'error',
+			'react/refs': 'error',
 			'react/rules-of-hooks': 'error',
 			'react/self-closing-comp': 'error',
+			'react/set-state-in-effect': 'error',
+			'react/set-state-in-render': 'error',
+			'react/static-components': 'error',
+			'react/use-memo': 'error',
+			'react/void-use-memo': 'error',
 			'react/void-dom-elements-no-children': 'error',
 
 			// JavaScript object order

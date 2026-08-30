@@ -1,6 +1,5 @@
 {
 	"name": "@deslop/oxlint-rules",
-	"version": "0.0.0",
 	"type": "module",
 	"sideEffects": false,
 	"exports": {
@@ -8,8 +7,5 @@
 	},
 	"dependencies": {
 		"@oxlint/plugins": "latest"
-	},
-	"engines": {
-		"node": ">=26"
 	}
 }

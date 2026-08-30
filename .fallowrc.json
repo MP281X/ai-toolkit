@@ -1,16 +1,15 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-	"entry": ["**/main.*"],
+	"entry": [".opencode/plugins/**/*.ts", "**/main.*"],
 	"includeEntryExports": true,
 	"ignorePatterns": [
-		".opencode/plugins/**",
 		"**/*.gen.ts",
 		"packages/components/src/components/svgs/**",
 		"packages/components/src/components/ui/**",
-		"tools/*/template/**",
-		"tools/oxlint-rules/**"
+		"tools/*/template/**"
 	],
 	"ignoreExports": [
+		{"exports": ["default"], "file": ".opencode/plugins/**/*.ts"},
 		{"exports": ["*"], "file": "packages/*/src/schema.ts"},
 		{"exports": ["*"], "file": "packages/components/src/components/**"},
 		{"exports": ["default"], "file": "tools/oxlint-rules/src/oxlint-plugin.ts"}
