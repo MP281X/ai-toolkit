@@ -1,6 +1,19 @@
 ## Validation
 
-This is a Vite Plus monorepo backed by Node.js and pnpm; use `vp` and `vpx`, never pnpm directly.
+Environment: Debian 13.6 (trixie). Use dedicated tools first.
+
+Use `node` for ad hoc scripting; never use Python.
+
+| Use                  | Tool              |
+| -------------------- | ----------------- |
+| Search text          | `rg`              |
+| Process JSON         | `jq`              |
+| Run JavaScript       | `node`            |
+| Install dependencies | `vp install`      |
+| Run scripts          | `vp run <script>` |
+| Run package binaries | `vpx <binary>`    |
+
+Vite Plus only; never invoke another package manager.
 
 | Changed files                 | Exact command                               |
 | ----------------------------- | ------------------------------------------- |
@@ -21,18 +34,20 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 
 - The user-approved objective and mutation boundary are the authority for all work. Mutate only assigned state and preserve all other state.
 - Ground factual, causal, mechanism, dependency, and platform claims in current source or configured read-only authoritative references; re-derive them as the work changes and follow every loaded instruction, skill, and reference.
-- Delegation retains ownership with the delegating role. Pass only the objective, boundary, decisions, and inaccessible evidence; the receiving role's contract owns method and output.
+- The delegating role retains ownership; the receiving role's contract owns method and output.
+  - Fresh session: structure the complete standalone payload with only applicable `Objective`, `Boundary`, `Decisions`, and `Evidence` headings; no follow-up language.
+  - Reused session: send only changed context. Include changed `Objective`, `Boundary`, `Decisions`, or `Evidence` headings when applicable; omit unchanged headings, constraints, and facts.
 - Resolve recoverable failures and continue to the terminal outcome while no user action is required. Stop only when continuation would cross the approved boundary or state safety, or when an outcome-changing fact cannot be established; report the condition and impact.
 
 ## Communication
 
-- Default to a compact result, decision, blocker, or required question; lead with it and explain only when requested or needed for a decision.
-- Assume repository fluency and read relevant sources top to bottom before reporting.
-- Keep internal coordination and alternative comparison internal, reporting applicable unresolved or preventable failures in non-checkpoint outcomes. State each outcome or fact once in the smallest clear GFM structure; never follow a summary with changes, details, explanation, or another expanded version of the same information.
-- Include evidence only when it is inaccessible, ephemeral, conflicting, or needed to establish an issue.
-- Preserve unresolved issues until resolved or transferred.
-- Use only applicable sections from the table below. Order issues by impact.
-- Treat the following as input-only user vocabulary. Use these meanings to interpret user input; do not mirror the words automatically.
+- Output only outcomes, decisions, issues, required questions, and applicable Git metadata.
+- Optimize scan cost over grammar. Prefer fragments, leading labels, bullets, tables, graphs, exact names, values, and commands.
+- State one fact once. Put required context before its dependent question.
+- Omit explanation of clear artifacts and context already known or reproducible. Include evidence only when inaccessible, ephemeral, conflicting, or required to establish an issue.
+- Keep internal coordination and alternative comparison internal. Preserve unresolved issues until resolved or transferred.
+- Use only applicable sections below. Order issues by impact.
+- Interpret this input-only vocabulary without mirroring it automatically.
 
 | Word         | Explanation                                                            |
 | ------------ | ---------------------------------------------------------------------- |

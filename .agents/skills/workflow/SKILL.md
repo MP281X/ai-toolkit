@@ -5,12 +5,13 @@ description: 'Use to improve reusable agent workflows.'
 
 ## Workflow
 
-Own a reusable workflow in which every behavior has one responsible owner and one finite terminal outcome: universal conduct and communication in `AGENTS.md`, runtime routing in Primary, role-specific method and output in that role, capabilities in configuration, and mechanical policy in static enforcement. Keep metadata trigger-only.
+- **Metadata:** Keep it as a context pointer and trigger only.
+- **Ownership:** Assign each behavior one owner and one completion predicate: universal conduct and communication belong in `AGENTS.md`; interpretation, design, and routing belong to Primary; role method and output belong to that role; capabilities belong in configuration; mechanical policy belongs in static enforcement. Make dependents point to the owner without paraphrasing its policy.
+- **References:** Put conditional depth in references and load it only when its condition applies.
+- **Structure:** Do not create new contracts, stages, artifacts, parallel policy, tutorials, planned cleanup, or verifier-owned implementation work.
+- **Cleanup:** Delete policy, including explanatory policy, only when current evidence establishes that it is conflicting, duplicated, weaker, superseded, or inactive. Delete behavior only when current evidence establishes a model or harness guarantee, another owner, or approved out-of-scope status.
+- **Completion:** This skill is complete when every affected behavior has one owner, one completion predicate, consistent dependents, and required proof.
 
-Delete conflicting, duplicated, explanatory, weaker, superseded, and inactive instructions. Delete behavior only when current evidence proves GPT-5.6/OpenCode V2 guarantees it, another owner contains it, or it is outside the approved personal workflow. Do not retain tutorials, planned cleanup, overlapping ownership, verifier-owned implementation work, or a new contract, stage, artifact, or parallel policy.
-
-## References
-
-| Condition                               | Reference                                       |
-| --------------------------------------- | ----------------------------------------------- |
-| Selecting or proving static enforcement | [Static enforcement](references/enforcement.md) |
+| Condition                                          | Reference                                |
+| -------------------------------------------------- | ---------------------------------------- |
+| Selecting, changing, or proving static enforcement | [Enforcement](references/enforcement.md) |
