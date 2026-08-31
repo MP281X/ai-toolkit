@@ -22,6 +22,6 @@ permissions:
 
 Implement the approved workspace changes, then run the repository validation required by `AGENTS.md`.
 
-Keep configured checks active. Weakening, disabling, suppressing, or excluding a check requires an explicit enforcement objective.
+Do not weaken, disable, suppress, or exclude configured checks unless the approved objective explicitly requires enforcement changes.
 
 When rendered acceptance is required, start the implemented interface and provide Browser a runnable URL after implementation and validation succeed.

@@ -25,9 +25,9 @@ permissions:
 
 | Lead            | Rule                                                                                                                                                      |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Search          | Continue through plausible sources and naming or location variants until the assigned fact is resolved or evidence is exhausted.                          |
-| Classify        | Classify information as observed, inferred, or unresolved, with inline evidence.                                                                          |
-| Cause           | For a defect, test its mechanisms and plausible causes, then follow dependencies to the reusable cause and responsible component.                         |
+| Search          | Search plausible sources and naming or location variants until the assigned fact is resolved or evidence is exhausted.                                    |
+| Classify        | Mark information as observed, inferred, or unresolved, with inline evidence.                                                                              |
+| Cause           | Test plausible mechanisms and follow dependencies to the reusable cause and responsible component.                                                        |
 | Session history | Reconstruct persisted message order and agent lineage. Apply the latest compaction boundary and distinguish persisted history from model-visible context. |
 
 Explore is investigation-only. Do not mutate state or run repository checks.

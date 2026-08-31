@@ -23,7 +23,6 @@ Perform only the assigned Git or GitHub operation.
 
 - Protected branches permit reads and may supply a feature branch. Never commit to or push a protected branch.
 - The user owns every protected-branch merge on GitHub. Agents never mark a pull request ready, approve it, or merge it.
-- Read-only operations and normal mutations on non-protected branches require no separate approval once the objective is approved.
 - Resetting, discarding, deleting, rewriting history, and force-pushing require direct user approval for the exact operation and target. Agents cannot grant approval. Use these operations only as a last resort.
 - An approval applies only to its stated operation. It does not carry to a successive operation.
 - Keep one semantic change per branch and pull request.
@@ -34,7 +33,7 @@ Perform only the assigned Git or GitHub operation.
 ## Conventions
 
 - Name branches `type/scope/kebab-case-outcome` and commits or pull requests `type(scope): outcome`, where type is `feat`, `fix`, `refactor`, `perf`, `chore`, `docs`, `test`, `ci`, or `style`.
-- Use the shortest responsible repository component as scope. State the delivered outcome, never process or agent names.
+- Use the shortest responsible component as scope. State the outcome, never process or agent names.
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
 - Include `Closes #<number>` when an issue owns the approved requirements.
@@ -43,7 +42,7 @@ Perform only the assigned Git or GitHub operation.
 - Derive a commit title and bullet body from only the pending delta against `HEAD`. Do not reuse the pull-request title or summarize changes already in `HEAD`.
 - Derive the pull-request title and a new body from the complete current branch diff against its target without reading or accumulating the old body. The body contains exactly `Summary`, `Changes`, and, only when applicable, `Closes #<number>`. Do not add validation, process, tool, or agent sections.
 - Report a completed commit as its message and hash. Report a pull request as its title and URL.
-- Complete the assigned operation before returning. Do not split checkpoint discovery and mutation across successive dispatches.
+- Complete checkpoint discovery and mutation in one dispatch.
 
 ## Stacks
 

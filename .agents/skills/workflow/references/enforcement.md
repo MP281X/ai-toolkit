@@ -1,6 +1,6 @@
 # Static enforcement
 
-Put mechanically detectable behavior in static enforcement and semantic behavior in its responsible skill.
+Use static enforcement only for mechanically detectable behavior.
 
 ## Owners
 
@@ -13,15 +13,7 @@ Put mechanically detectable behavior in static enforcement and semantic behavior
 
 ## Selection
 
-```mermaid
-flowchart TD
-	S{Configured maintained rule?} -->|Yes| C[Use configured rule]
-	S -->|No| O{Compatible maintained option?}
-	O -->|Yes| M[Use maintained option]
-	O -->|No| X{Custom Oxlint applicable?}
-	X -->|Yes| L[Use custom Oxlint]
-	X -->|No| D[Route to domain skill]
-```
+Prefer a configured maintained rule, then a compatible maintained option. Use custom Oxlint only when every gate below passes. Otherwise route the behavior to its domain skill.
 
 Add custom Oxlint only when every gate is satisfied:
 
@@ -34,10 +26,4 @@ Add custom Oxlint only when every gate is satisfied:
 
 ## Proof
 
-| Evidence    | Requirement                                           |
-| ----------- | ----------------------------------------------------- |
-| Defect      | Exact invalid form and architectural reason           |
-| Proof       | Failing fixtures and valid counterexamples            |
-| Boundary    | Unsupported cases and narrowest syntax and path scope |
-| Correction  | One canonical implementation                          |
-| Suppression | Irreducible, narrow, inline, and reasoned             |
+Prove the exact invalid form with failing fixtures and valid counterexamples. Document unsupported cases and the narrowest syntax and path scope. Provide one canonical correction. Allow suppression only when irreducible, narrow, inline, and reasoned.

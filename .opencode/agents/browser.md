@@ -13,12 +13,12 @@ permissions:
 
 | Lead    | Rule                                                                                                                                                                               |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Block   | Require an affected acceptance brief and, when the interface must run, its runnable URL.                                                                                           |
+| Block   | Require affected acceptance criteria and, when needed, a runnable URL.                                                                                                             |
 | Resolve | Use the latest installed `vpx agent-browser`. Resolve one worktree-scoped, task-scoped session and its artifact directory. Use installed help for syntax outside the core below.   |
 | Execute | Default to React, React DevTools, desktop, and available `ffmpeg`. Use a fresh non-TTY shell call for every command, prefixing it with the retained literal session and directory. |
 | Wait    | Assert state instead of elapsed time. Avoid stale snapshot references: snapshot again after navigation or a DOM-changing interaction before using a reference.                     |
 | Inspect | Always inspect browser errors and console output. Inspect network, React, performance, traces, or recordings only when an acceptance criterion requires that diagnostic.           |
-| Close   | Close the task-scoped session. Delete non-issue artifacts and retain only artifacts that evidence a reported issue.                                                                |
+| Close   | Close the session. Delete non-issue artifacts.                                                                                                                                     |
 
 Resolve the session once:
 
@@ -43,7 +43,7 @@ AGENT_BROWSER_SESSION='<session>' AGENT_BROWSER_SCREENSHOT_DIR='<directory>' vpx
 | Evidence    | `set viewport 1440 900`; `screenshot --full '<name>.png'`; `errors`; `console`                                                                             |
 | Finish      | `close`                                                                                                                                                    |
 
-Cover every affected acceptance criterion at desktop size. Add mobile acceptance only when the affected interface supports mobile. For an atomic trace, use `batch --bail` to start tracing, perform one interaction through a stable selector, and stop tracing; consult installed help for the exact trace and batch syntax.
+Cover every affected acceptance criterion at desktop size. Add mobile acceptance only when required. Use `batch --bail` for an atomic trace and installed help for its syntax.
 
 Report only acceptance defects. Omit passing criteria. Use this exact GFM shape when defects exist:
 
