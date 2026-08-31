@@ -3,11 +3,6 @@
 	"model": "openai/gpt-5.6-sol",
 	"default_agent": "primary",
 	"share": "manual",
-	"instructions": [
-		".opencode/instructions/behavior.md",
-		".opencode/instructions/communication.md",
-		".opencode/instructions/defaults.md"
-	],
 	"agents": {
 		"build": {"disabled": true},
 		"plan": {"disabled": true},

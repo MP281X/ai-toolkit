@@ -258,7 +258,6 @@ export default defineConfig({
 		options: {denyWarnings: true, reportUnusedDisableDirectives: 'deny', typeAware: true, typeCheck: true},
 		overrides: [
 			{files: ['**/*.config.ts', '**/main.*'], rules: {'import/no-default-export': 'off', 'sort-keys': 'off'}},
-			{files: ['.opencode/plugins/**/*.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['tools/oxlint-rules/src/oxlint-plugin.ts'], rules: {'import/no-default-export': 'off'}},
 			{files: ['**/*.ts'], rules: {'react/rules-of-hooks': 'off'}},
 			{
@@ -308,6 +307,7 @@ export default defineConfig({
 			'effecttsgo/effect-do-notation': 'error',
 			'effecttsgo/effect-fn-iife': 'error',
 			'effecttsgo/effect-fn-implicit-any': 'error',
+			'effecttsgo/effect-fn-opportunity': 'error',
 			'effecttsgo/effect-gen-uses-adapter': 'error',
 			'effecttsgo/effect-in-failure': 'error',
 			'effecttsgo/effect-in-void-success': 'error',

@@ -1,5 +1,4 @@
 packages:
-  - .opencode
   - apps/*
   - packages/*
   - tools/*
