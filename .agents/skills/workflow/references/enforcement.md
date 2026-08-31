@@ -26,4 +26,4 @@ Add custom Oxlint only when every gate is satisfied:
 
 ## Implementation proof
 
-In the complete first pass, prove the exact invalid form with failing fixtures and valid counterexamples. Document unsupported cases and the narrowest syntax and path scope. Provide one canonical correction. Allow suppression only when irreducible, narrow, inline, and reasoned.
+In one complete pass, prove the exact invalid form with failing fixtures and valid counterexamples. Document unsupported cases and the narrowest syntax and path scope. Provide one canonical correction. Allow suppression only when irreducible, narrow, inline, and reasoned.

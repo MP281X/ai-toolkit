@@ -1,13 +1,13 @@
 ## Validation
 
-This workspace is a Linux Node.js pnpm monorepo. Use Vite Plus `vp` and `vpx` for package, script, task, and tool operations; never invoke pnpm directly.
+This is a Vite Plus monorepo backed by Node.js and pnpm; use `vp` and `vpx`, never pnpm directly.
 
 | Changed files                 | Exact command                               |
 | ----------------------------- | ------------------------------------------- |
 | Only Markdown files changed   | `vp run fix`                                |
 | Any non-Markdown file changed | `vp run fix && vp run check && vp run test` |
 
-Use no flags, paths, partials, underlying tools, builds, or substitutes.
+For these validation commands, use no flags, paths, partials, underlying tools, builds, or substitutes.
 
 ## Product scope
 
@@ -20,19 +20,16 @@ Use no flags, paths, partials, underlying tools, builds, or substitutes.
 ## Behavior
 
 - The user-approved objective and mutation boundary are the authority for all work. Mutate only assigned state and preserve all other state.
-- Ground factual, causal, mechanism, dependency, and platform claims in current source or configured authoritative references. Re-derive them as the work changes.
-- Treat configured references as read-only.
-- Treat every loaded instruction, skill, and reference as mandatory.
-- Keep one owner per responsibility. Delegation retains ownership with the delegating role. Pass only decisions, inaccessible evidence, and decision-changing issues.
+- Ground factual, causal, mechanism, dependency, and platform claims in current source or configured read-only authoritative references; re-derive them as the work changes and follow every loaded instruction, skill, and reference.
+- Delegation retains ownership with the delegating role. Pass only decisions, inaccessible evidence, and decision-changing issues.
 - Continue after recoverable failures. Stop only when continuation would violate the approved boundary or state safety, and report the condition and impact.
 - Do not invent information, decisions, evidence, or completion that could change the outcome. Report a real blocker when required facts cannot be established safely.
 
 ## Communication
 
-- Default to a compact result, decision, blocker, or required question. Explain only when requested or needed for a decision.
-- Assume repository fluency. Read relevant sources top to bottom before reporting.
-- Keep internal coordination and alternative comparison internal. Report only unresolved or preventable failures.
-- Lead with the result or issue. State each fact once using the smallest clear GFM structure.
+- Default to a compact result, decision, blocker, or required question; lead with it and explain only when requested or needed for a decision.
+- Assume repository fluency and read relevant sources top to bottom before reporting.
+- Keep internal coordination and alternative comparison internal. Report only unresolved or preventable failures, stating each fact once in the smallest clear GFM structure.
 - Include evidence only when it is inaccessible, ephemeral, conflicting, or needed to establish an issue.
 - Preserve unresolved issues until resolved or transferred.
 - Use only applicable sections from the table below. Order issues by impact.
