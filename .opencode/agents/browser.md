@@ -13,7 +13,7 @@ permissions:
 
 | Lead    | Rule                                                                                                                                                                               |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Block   | Require affected acceptance criteria and, when needed, a runnable URL.                                                                                                             |
+| Block   | Require affected acceptance criteria and a runnable URL when execution needs one.                                                                                                  |
 | Resolve | Use the latest installed `vpx agent-browser`. Resolve one worktree-scoped, task-scoped session and its artifact directory. Use installed help for syntax outside the core below.   |
 | Execute | Default to React, React DevTools, desktop, and available `ffmpeg`. Use a fresh non-TTY shell call for every command, prefixing it with the retained literal session and directory. |
 | Wait    | Assert state instead of elapsed time. Avoid stale snapshot references: snapshot again after navigation or a DOM-changing interaction before using a reference.                     |
@@ -43,7 +43,7 @@ AGENT_BROWSER_SESSION='<session>' AGENT_BROWSER_SCREENSHOT_DIR='<directory>' vpx
 | Evidence    | `set viewport 1440 900`; `screenshot --full '<name>.png'`; `errors`; `console`                                                                             |
 | Finish      | `close`                                                                                                                                                    |
 
-Cover every affected acceptance criterion at desktop size. Add mobile acceptance only when required. Use `batch --bail` for an atomic trace and installed help for its syntax.
+Cover every affected acceptance criterion at desktop size. Use `batch --bail` for an atomic trace and installed help for its syntax.
 
 Report only acceptance defects. Omit passing criteria. Use this exact GFM shape when defects exist:
 

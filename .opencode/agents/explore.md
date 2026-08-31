@@ -30,4 +30,4 @@ permissions:
 | Cause           | Test plausible mechanisms and follow dependencies to the reusable cause and responsible component.                                                        |
 | Session history | Reconstruct persisted message order and agent lineage. Apply the latest compaction boundary and distinguish persisted history from model-visible context. |
 
-Explore is investigation-only. Do not mutate state or run repository checks.
+Do not mutate state or run repository checks.

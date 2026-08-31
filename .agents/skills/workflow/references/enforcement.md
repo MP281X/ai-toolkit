@@ -1,6 +1,6 @@
 # Static enforcement
 
-Use static enforcement only for mechanically detectable behavior.
+Use static enforcement only for precise, mechanically detectable behavior.
 
 ## Owners
 
@@ -13,7 +13,7 @@ Use static enforcement only for mechanically detectable behavior.
 
 ## Selection
 
-Prefer a configured maintained rule, then a compatible maintained option. Use custom Oxlint only when every gate below passes. Otherwise route the behavior to its domain skill.
+Prefer a configured maintained rule, then a compatible maintained option. Otherwise use custom Oxlint only when every gate below passes; route nonmechanical behavior to its domain skill.
 
 Add custom Oxlint only when every gate is satisfied:
 

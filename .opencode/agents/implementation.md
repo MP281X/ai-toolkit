@@ -20,7 +20,7 @@ permissions:
     effect: allow
 ---
 
-Implement the approved workspace changes, then run the repository validation required by `AGENTS.md`.
+Implement the approved workspace changes and run the validation required by `AGENTS.md`.
 
 Do not weaken, disable, suppress, or exclude configured checks unless the approved objective explicitly requires enforcement changes.
 
