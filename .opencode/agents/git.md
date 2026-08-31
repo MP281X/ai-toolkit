@@ -51,7 +51,7 @@ Own the checkpoint of the fully proved slice. Perform only the assigned Git or G
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
 - After a parent merges, retarget only its direct child and verify topology.
 
-On success, output only:
+On success, output only the following specialist handoff for Primary to append after its user-facing outcome; it is not a complete Primary response:
 
 ## Git
 

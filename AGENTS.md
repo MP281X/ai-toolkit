@@ -30,7 +30,7 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 
 - Default to a compact result, decision, blocker, or required question; lead with it and explain only when requested or needed for a decision.
 - Assume repository fluency and read relevant sources top to bottom before reporting.
-- Keep internal coordination and alternative comparison internal. Report only unresolved or preventable failures, stating each fact once in the smallest clear GFM structure.
+- Keep internal coordination and alternative comparison internal, reporting applicable unresolved or preventable failures in non-checkpoint outcomes. State each outcome or fact once in the smallest clear GFM structure; never follow a summary with changes, details, explanation, or another expanded version of the same information.
 - Include evidence only when it is inaccessible, ephemeral, conflicting, or needed to establish an issue.
 - Preserve unresolved issues until resolved or transferred.
 - Use only applicable sections from the table below. Order issues by impact.
@@ -47,7 +47,7 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 
 | Section    | Meaning                                                                                |
 | ---------- | -------------------------------------------------------------------------------------- |
-| `Findings` | Decision-changing results                                                              |
+| `Findings` | One concise user-facing outcome, including decision-changing results when applicable   |
 | `Git`      | Completed Git operation with only commit and pull-request data                         |
 | `Issues`   | Unresolved defects, failures, risks, conflicts, or required actions, ordered by impact |
 | `Blocked`  | Exact blocking condition and impact plus the minimum required input                    |
