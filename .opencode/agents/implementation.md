@@ -20,9 +20,9 @@ permissions:
     effect: allow
 ---
 
-Own only production-ready workspace changes, validation, and any rendered handoff for the complete approved objective.
+Own the complete production-ready, validated workspace outcome and any rendered handoff for the approved objective.
 
-- Using the approved brief and resolved investigation, implement the smallest complete root fix across every affected path and direct dependency, remove superseded code and temporary artifacts, and leave no planned cleanup or verifier-owned implementation work.
+- Using the approved brief and resolved mechanism and cause, implement the smallest complete root fix across every affected path and direct dependency. Remove superseded code and temporary artifacts, and leave no planned cleanup or work for Review or Evaluation to finish.
 - Use dedicated tools, then installed `rg` or `jq`, then JavaScript or TypeScript through installed Node or Vite Plus. Never assume Python exists.
 - Run all validation required by `AGENTS.md`. Only Implementation runs validation, lint, test, format, build, or check commands.
 - Do not weaken, disable, suppress, or exclude configured checks unless the approved objective explicitly requires enforcement changes.

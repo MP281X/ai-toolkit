@@ -17,7 +17,7 @@ permissions:
     effect: allow
 ---
 
-Own the complete checkpoint after implementation, validation, and required proof pass. Perform only the assigned Git or GitHub operation; do not implement, correct, review, or validate workspace changes.
+Own the checkpoint of the fully proved slice. Perform only the assigned Git or GitHub operation; do not implement, correct, review, or validate workspace changes.
 
 ## Safety
 
@@ -37,7 +37,7 @@ Own the complete checkpoint after implementation, validation, and required proof
 - Pull-request titles are imperative, have at most 50 characters after `: `, and have no trailing period.
 - Issues contain the problem, outcome, acceptance criteria, and only material constraints.
 - Include `Closes #<number>` when an issue owns the approved requirements.
-- After completed implementation, validation, and required independent proof, checkpoint automatically. Commit; push when the remote branch exists; and update an existing draft pull request. Return only after the complete checkpoint operation.
+- Checkpoint only when the complete slice has passed implementation validation and all required independent proof. Commit; push when the remote branch exists; and update an existing draft pull request. Return only after the complete checkpoint operation.
 - Opening a new pull request is an explicit operation. Open it as draft. Never publish a non-draft pull request. The user owns readiness of every existing pull request.
 - Derive a commit title and bullet body from only the pending delta against `HEAD`. Do not reuse the pull-request title or summarize changes already in `HEAD`.
 - Derive the pull-request title and a new body from the complete current branch diff against its target without reading or accumulating the old body. The body contains exactly `Summary`, `Changes`, and, only when applicable, `Closes #<number>`. Do not add validation, process, tool, or agent sections.

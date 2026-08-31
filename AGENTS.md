@@ -23,6 +23,7 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 - Ground factual, causal, mechanism, dependency, and platform claims in current source or configured read-only authoritative references; re-derive them as the work changes and follow every loaded instruction, skill, and reference.
 - Delegation retains ownership with the delegating role. Pass only the objective, boundary, decisions, and inaccessible evidence; the receiving role's contract owns method and output.
 - Continue after recoverable failures. Stop only when continuation would violate the approved boundary or state safety, and report the condition and impact.
+- Continue user-free actionable work automatically to its terminal outcome; do not stop at an intermediate result or leave another role to finish an owner's responsibility.
 - Do not invent information, decisions, evidence, or completion that could change the outcome. Report a real blocker when required facts cannot be established safely.
 
 ## Communication

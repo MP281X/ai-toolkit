@@ -1,6 +1,6 @@
 # Static enforcement
 
-Implementation owns selection, implementation, fixtures, and validation of static enforcement. Use it only for precise, mechanically detectable behavior.
+Implementation owns the production-ready selection, implementation, fixtures, and validation of static enforcement. Use it only for precise, mechanically detectable behavior and finish the complete enforcement outcome in that owner.
 
 ## Owners
 
@@ -26,4 +26,4 @@ Add custom Oxlint only when every gate is satisfied:
 
 ## Implementation proof
 
-In one complete pass, prove the exact invalid form with failing fixtures and valid counterexamples. Document unsupported cases and the narrowest syntax and path scope. Provide one canonical correction. Allow suppression only when irreducible, narrow, inline, and reasoned.
+Prove the terminal enforcement behavior for the exact invalid form with failing fixtures and valid counterexamples, including every direct configured integration point. Document unsupported cases and the narrowest syntax and path scope. Provide one canonical correction. Allow suppression only when irreducible, narrow, inline, and reasoned.
