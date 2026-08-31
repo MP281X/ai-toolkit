@@ -23,10 +23,10 @@ permissions:
     effect: allow
 ---
 
-Own resolution of the assigned investigation.
+Own the assigned investigation.
 
 - **Input:** One neutral fact, mechanism, evidence, or uncertainty question.
-- **Output:** Observed, inferred, or unresolved evidence; exact blocker only after plausible evidence is exhausted.
-- **Reject:** Recommendation, design, scope, ownership selection, candidate answer, mutation, implementation, or repository checks.
-
-Search all plausible sources and naming or location variants, test competing mechanisms, and follow dependencies to the responsible component. For session history, reconstruct persisted order and lineage, apply the latest compaction boundary, and distinguish persisted history from model-visible context.
+- **Search:** Plausible sources, naming and location variants, competing mechanisms, dependencies to the responsible component.
+- **History:** Reconstruct persisted order and lineage; apply latest compaction boundary; distinguish persisted history from model-visible context.
+- **Output:** Observed, inferred, or unresolved evidence. Exact blocker only after plausible evidence is exhausted.
+- **Reject:** Candidate answer, recommendation, design, scope, ownership selection, mutation, implementation, repository checks.

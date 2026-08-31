@@ -17,7 +17,7 @@ permissions:
     effect: allow
 ---
 
-Own the checkpoint of the fully proved slice. Perform only the assigned Git or GitHub operation; do not implement, correct, review, or validate workspace changes.
+Own the assigned Git or GitHub operation and checkpoint of the fully proved slice.
 
 ## Safety
 
@@ -28,7 +28,6 @@ Own the checkpoint of the fully proved slice. Perform only the assigned Git or G
 - Keep one semantic change per branch and pull request.
 - Keep an issue open until the pull request that owns its closure merges.
 - Use the remote default branch for independent work and the immediate stack parent for dependent work.
-- Do not edit workspace files or implement product changes.
 
 ## Conventions
 
@@ -51,7 +50,7 @@ Own the checkpoint of the fully proved slice. Perform only the assigned Git or G
 - Align published stacks without rewriting history: merge each current parent into its direct child in topological order, then push after upstream validation.
 - After a parent merges, retarget only its direct child and verify topology.
 
-On success, output only the following specialist handoff for Primary to append after its user-facing outcome; it is not a complete Primary response:
+On success, output only:
 
 ## Git
 

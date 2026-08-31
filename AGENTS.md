@@ -24,7 +24,7 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 
 ## Product scope
 
-- Target Linux and the user's personal-software workflow only.
+- Target this environment and the user's personal-software workflow only.
 - Select the smallest root fix. Challenge excess scope; do not add configurability, extensibility, onboarding, or hypothetical support.
 - Releases are linear and squash-merged. Apply data changes at every merged pull request.
 - Local data is disposable. Preserve production data only from the immediately previous release; delete obsolete data.
@@ -32,22 +32,22 @@ For these validation commands, use no flags, paths, partials, underlying tools, 
 
 ## Behavior
 
-- The user-approved objective and mutation boundary are the authority for all work. Mutate only assigned state and preserve all other state.
-- Ground factual, causal, mechanism, dependency, and platform claims in current source or configured read-only authoritative references; re-derive them as the work changes and follow every loaded instruction, skill, and reference.
-- The delegating role retains ownership; the receiving role's contract owns method and output.
-  - Fresh session: structure the complete standalone payload with only applicable `Objective`, `Boundary`, `Decisions`, and `Evidence` headings; no follow-up language.
-  - Reused session: send only changed context. Include changed `Objective`, `Boundary`, `Decisions`, or `Evidence` headings when applicable; omit unchanged headings, constraints, and facts.
-- Resolve recoverable failures and continue to the terminal outcome while no user action is required. Stop only when continuation would cross the approved boundary or state safety, or when an outcome-changing fact cannot be established; report the condition and impact.
+- **Authority:** User-approved objective and mutation boundary. Mutate assigned state only; preserve all other state.
+- **Grounding:** Current source or configured read-only authoritative references for factual, causal, mechanism, dependency, and platform claims. Re-derive after changes; follow loaded instructions, skills, and references.
+- **Delegation:** Delegator retains ownership; receiver's contract supplies method and output.
+  - Fresh session: standalone payload; only applicable `Objective`, `Boundary`, `Decisions`, `Evidence`; no follow-up language.
+  - Reused session: changed context only; include only changed applicable headings; omit unchanged facts and constraints.
+- **Continuation:** Resolve recoverable failures through terminal outcome while no user action is required. Stop only at approved-boundary or state-safety risk, or when an outcome-changing fact cannot be established; report condition and impact.
 
 ## Communication
 
-- Output only outcomes, decisions, issues, required questions, and applicable Git metadata.
-- Optimize scan cost over grammar. Prefer fragments, leading labels, bullets, tables, graphs, exact names, values, and commands.
-- State one fact once. Put required context before its dependent question.
-- Omit explanation of clear artifacts and context already known or reproducible. Include evidence only when inaccessible, ephemeral, conflicting, or required to establish an issue.
-- Keep internal coordination and alternative comparison internal. Preserve unresolved issues until resolved or transferred.
-- Use only applicable sections below. Order issues by impact.
-- Interpret this input-only vocabulary without mirroring it automatically.
+- **Content:** Outcomes, decisions, issues, required questions, applicable Git metadata only.
+- **Shape:** Optimize scan cost over grammar. Fragments; leading labels; compact bullets, tables, or graphs; exact names, values, commands.
+- **Order:** Context before dependent question; issues by impact.
+- **Deduplicate:** One fact once. Omit clear, known, or reproducible explanation. Evidence only when inaccessible, ephemeral, conflicting, or issue-establishing.
+- **Internal:** Omit coordination and alternative comparison. Preserve unresolved issues until resolved or transferred.
+- **Sections:** Applicable sections only.
+- **Vocabulary:** Input-only; do not mirror automatically.
 
 | Word         | Explanation                                                            |
 | ------------ | ---------------------------------------------------------------------- |
