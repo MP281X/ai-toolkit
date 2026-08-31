@@ -30,4 +30,4 @@ permissions:
 | Cause           | Test plausible mechanisms and follow dependencies to the reusable cause and responsible component.                                                        |
 | Session history | Reconstruct persisted message order and agent lineage. Apply the latest compaction boundary and distinguish persisted history from model-visible context. |
 
-Do not mutate state or run repository checks.
+Complete the assigned investigation in one pass and return resolved evidence or a real blocker after plausible evidence is exhausted. Do not mutate state, decide scope, implement, or run repository checks.

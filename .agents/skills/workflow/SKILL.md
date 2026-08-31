@@ -5,10 +5,11 @@ description: 'Use to improve reusable agent workflows.'
 
 ## Workflow
 
-1. Locate the reusable failure's root cause in ambient policy, one role, one skill, configuration, static enforcement, or a platform skill.
-2. Route shared conduct to Behavior, language to Communication, capabilities to configuration, mechanical rules to static enforcement, conditional depth to one reference, and platform mechanics to its platform skill.
-3. Change the responsible owner and integration points. Keep metadata trigger-only. Delete conflicting, duplicated, default, explanatory, and superseded policy.
-4. Select only independent proof that can establish the changed mechanism or change a decision. The proving role executes it.
+Route each responsibility to exactly one owner: Primary owns intent, scope, and routing; Explore resolves assigned evidence; Implementation completes production-ready changes and validation; Review performs one independent static defect pass; Evaluation proves runtime mechanisms; Browser proves rendered acceptance; and Git completes the checkpoint.
+
+The lifecycle is Primary routing → one responsible owner completes its full responsibility → applicable independent proof → checkpoint. Primary alone routes roles and continues actionable corrections and affected proof reruns. Implementation returns its validated result and optional runnable URL to Primary and never dispatches downstream roles. Do not create overlapping objectives, light passes, planned correction loops, or verifier-owned implementation work.
+
+Place universal conduct in `AGENTS.md`, communication there, capabilities in configuration, mechanical rules in static enforcement, and conditional depth with its responsible role or reference. Keep metadata trigger-only. Delete conflicting, duplicated, explanatory, default, and superseded instructions.
 
 ## References
 

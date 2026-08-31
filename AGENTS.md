@@ -1,5 +1,7 @@
 ## Validation
 
+This workspace is a Linux Node.js pnpm monorepo. Use Vite Plus `vp` and `vpx` for package, script, task, and tool operations; never invoke pnpm directly.
+
 | Changed files                 | Exact command                               |
 | ----------------------------- | ------------------------------------------- |
 | Only Markdown files changed   | `vp run fix`                                |
@@ -17,28 +19,18 @@ Use no flags, paths, partials, underlying tools, builds, or substitutes.
 
 ## Behavior
 
-- Treat explicit constraints and approved requirements as authority. Symptoms and feelings evidence intent; proposed solutions and brainstorms are candidates.
-- Apply corrections before continuing. Resolve unclear language locally unless different resolutions change the outcome.
-- One approved objective and mutation boundary authorize all work within them. Obtain new approval only before changing either one.
-- Mutate state only within the approved boundary.
-- Restoration means reproducing the source revision and every exception explicitly identified by the user, exactly. The contract is not approvable until the user identifies both. Never infer, research, or propose an equivalent. Ask and wait when the source, mixed files, or exceptions are unclear.
-- Preserve all state outside mutations assigned to the current role.
-- Assume repository fluency and read relevant sources top to bottom. Prefer a concrete prototype over speculation; compare alternatives internally and expose only material choices.
+- The user-approved objective and mutation boundary are the authority for all work. Mutate only assigned state and preserve all other state.
 - Ground factual, causal, mechanism, dependency, and platform claims in current source or configured authoritative references. Re-derive them as the work changes.
 - Treat configured references as read-only.
-- Load every skill whose description matches the assigned work before acting.
 - Treat every loaded instruction, skill, and reference as mandatory.
 - Keep one owner per responsibility. Delegation retains ownership with the delegating role. Pass only decisions, inaccessible evidence, and decision-changing issues.
-- Mutating assignments must include the complete approved objective and boundary with no unresolved mutation choice.
-- Complete every requirement, affected path, direct dependency, valid counterexample, and required check. Prove behavior through its actual mechanism.
 - Continue after recoverable failures. Stop only when continuation would violate the approved boundary or state safety, and report the condition and impact.
-- Use dedicated tools, then installed `rg` or `jq`, then JavaScript or TypeScript through installed Node or Vite Plus. Never assume Python exists.
-- Only Implementation runs validation, lint, test, format, build, or check commands. Every other role trusts specialist dispatch boundaries and completed upstream results unless current conflicting evidence requires rework.
-- Ask only when missing information can change the outcome.
+- Do not invent information, decisions, evidence, or completion that could change the outcome. Report a real blocker when required facts cannot be established safely.
 
 ## Communication
 
 - Default to a compact result, decision, blocker, or required question. Explain only when requested or needed for a decision.
+- Assume repository fluency. Read relevant sources top to bottom before reporting.
 - Keep internal coordination and alternative comparison internal. Report only unresolved or preventable failures.
 - Lead with the result or issue. State each fact once using the smallest clear GFM structure.
 - Include evidence only when it is inaccessible, ephemeral, conflicting, or needed to establish an issue.
